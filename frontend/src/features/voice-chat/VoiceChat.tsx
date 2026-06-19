@@ -47,9 +47,15 @@ export function VoiceChat() {
 
   const { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech } = useVoiceWebSocket({
     onTranscription: (text) => addMessage('user', text),
-    onAnswer: (text) => addMessage('assistant', text),
+    onAnswer: (text) => {
+      if (text) addMessage('assistant', text)
+      setVoiceState('idle')
+    },
     onAudio: playAudio,
-    onError: (error) => console.error('Voice error:', error),
+    onError: (error) => {
+      console.error('Voice error:', error)
+      setVoiceState('idle')
+    },
   })
 
   const { state: recorderState, startRecording, stopRecording, reset: resetRecorder } = useAudioRecorder({

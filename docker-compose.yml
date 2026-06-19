@@ -6,26 +6,24 @@ services:
       POSTGRES_USER: voicesupport
       POSTGRES_PASSWORD: voicesupport
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  ollama:
-    image: ollama/ollama:latest
+  voice-agent:
+    build: ./voice-agent
     ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
-  piper:
-    image: rhasspy/wyoming-piper:latest
-    ports:
-      - "10200:10200"
-    command: --voice fr_FR-siwis-medium
-    volumes:
-      - piper_data:/data
+      - "8765:8765"
+      - "8766:8766"
+    environment:
+      GRADIUM_API_KEY: ${GRADIUM_API_KEY}
+      GRADIUM_VOICE_ID: ${GRADIUM_VOICE_ID:-default}
+      BACKEND_URL: http://host.docker.internal:8081
+      VOICE_AGENT_HOST: "0.0.0.0"
+      VOICE_AGENT_PORT: "8765"
+      TWILIO_WS_PORT: "8766"
+    depends_on:
+      - postgres
 
 volumes:
   pgdata:
-  ollama_data:
-  piper_data:

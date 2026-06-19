@@ -14,8 +14,8 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null)
 
   const connect = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/voice`
+    const voiceAgentUrl = import.meta.env.VITE_VOICE_AGENT_URL ?? 'ws://localhost:8765'
+    const wsUrl = voiceAgentUrl
 
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'

@@ -1,0 +1,13 @@
+[project]
+name = "voice-support-agent"
+version = "0.1.0"
+description = "Pipecat voice agent for Telecom support using Gradium STT/TTS"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[gradium,websocket,silero]",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.scripts]
+voice-agent = "agent.main:main"

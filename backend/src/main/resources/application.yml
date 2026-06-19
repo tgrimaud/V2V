@@ -3,7 +3,7 @@ spring:
     name: voice-support-bot
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/voicesupport
+    url: jdbc:postgresql://localhost:5433/voicesupport
     username: voicesupport
     password: voicesupport
 
@@ -18,7 +18,7 @@ spring:
     ollama:
       base-url: http://localhost:11434
       chat:
-        model: llama3.1
+        model: llama3.1:8b
         options:
           temperature: 0.3
       embedding:
@@ -29,9 +29,10 @@ spring:
         dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance
+        initialize-schema: true
 
 server:
-  port: 8080
+  port: 8081
 
 voice-support:
   tts:
