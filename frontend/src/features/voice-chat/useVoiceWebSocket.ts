@@ -15,6 +15,7 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null)
   const optionsRef = useRef(options)
   optionsRef.current = options
+  const pendingLanguageRef = useRef<string | null>(null)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
@@ -28,6 +29,9 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
 
     ws.onopen = () => {
       setConnectionState('connected')
+      if (pendingLanguageRef.current) {
+        ws.send(JSON.stringify({ type: 'set_language', language: pendingLanguageRef.current }))
+      }
     }
 
     ws.onmessage = (event) => {
@@ -82,6 +86,7 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
   }, [])
 
   const sendLanguage = useCallback((language: string) => {
+    pendingLanguageRef.current = language
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'set_language', language }))
     }

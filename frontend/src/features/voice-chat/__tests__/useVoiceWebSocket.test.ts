@@ -15,22 +15,10 @@ class MockWebSocket {
   onclose: (() => void) | null = null
   sentMessages: unknown[] = []
 
-  send(data: unknown) {
-    this.sentMessages.push(data)
-  }
-
-  close() {
-    this.readyState = MockWebSocket.CLOSED
-    this.onclose?.()
-  }
-
-  simulateOpen() {
-    this.onopen?.()
-  }
-
-  simulateMessage(data: unknown) {
-    this.onmessage?.({ data })
-  }
+  send(data: unknown) { this.sentMessages.push(data) }
+  close() { this.readyState = MockWebSocket.CLOSED; this.onclose?.() }
+  simulateOpen() { this.onopen?.() }
+  simulateMessage(data: unknown) { this.onmessage?.({ data }) }
 }
 
 let mockWsInstance: MockWebSocket
@@ -57,72 +45,105 @@ describe('useVoiceWebSocket', () => {
     onLanguageChanged: vi.fn(),
   }
 
-  it('connects on mount and sets state to connected', () => {
+  it('should_set_connected_state_when_ws_opens', () => {
+    // GIVEN
     const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
 
+    // WHEN
     act(() => mockWsInstance.simulateOpen())
 
+    // THEN
     expect(result.current.connectionState).toBe('connected')
   })
 
-  it('dispatches transcription messages to onTranscription', () => {
+  it('should_dispatch_transcription_to_callback', () => {
+    // GIVEN
     renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
 
-    act(() => {
-      mockWsInstance.simulateMessage(JSON.stringify({ type: 'transcription', text: 'Bonjour' }))
-    })
+    // WHEN
+    act(() => mockWsInstance.simulateMessage(JSON.stringify({ type: 'transcription', text: 'Bonjour' })))
 
+    // THEN
     expect(defaultOptions.onTranscription).toHaveBeenCalledWith('Bonjour')
   })
 
-  it('dispatches answer messages to onAnswer', () => {
+  it('should_dispatch_answer_to_callback', () => {
+    // GIVEN
     renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
 
-    act(() => {
-      mockWsInstance.simulateMessage(JSON.stringify({ type: 'answer', text: 'Réponse' }))
-    })
+    // WHEN
+    act(() => mockWsInstance.simulateMessage(JSON.stringify({ type: 'answer', text: 'Réponse' })))
 
+    // THEN
     expect(defaultOptions.onAnswer).toHaveBeenCalledWith('Réponse')
   })
 
-  it('dispatches binary messages to onAudio', () => {
+  it('should_dispatch_binary_audio_to_callback', () => {
+    // GIVEN
     renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
-
     const audioData = new ArrayBuffer(100)
+
+    // WHEN
     act(() => mockWsInstance.simulateMessage(audioData))
 
+    // THEN
     expect(defaultOptions.onAudio).toHaveBeenCalledWith(audioData)
   })
 
-  it('sendLanguage sends set_language JSON message', () => {
+  it('should_send_set_language_json_and_store_pending', () => {
+    // GIVEN
     const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
 
+    // WHEN
     act(() => result.current.sendLanguage('en'))
 
+    // THEN
     expect(mockWsInstance.sentMessages).toContainEqual(
       JSON.stringify({ type: 'set_language', language: 'en' })
     )
   })
 
-  it('sendEndOfSpeech sends END_OF_SPEECH string', () => {
+  it('should_resend_language_on_reconnect', () => {
+    // GIVEN
+    const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
+    act(() => mockWsInstance.simulateOpen())
+    act(() => result.current.sendLanguage('en'))
+    mockWsInstance.sentMessages = []
+
+    // WHEN — simulate reconnection (new onopen)
+    act(() => mockWsInstance.simulateOpen())
+
+    // THEN
+    expect(mockWsInstance.sentMessages).toContainEqual(
+      JSON.stringify({ type: 'set_language', language: 'en' })
+    )
+  })
+
+  it('should_send_END_OF_SPEECH_string', () => {
+    // GIVEN
     const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
 
+    // WHEN
     act(() => result.current.sendEndOfSpeech())
 
+    // THEN
     expect(mockWsInstance.sentMessages).toContain('END_OF_SPEECH')
   })
 
-  it('sets state to disconnected on close', () => {
+  it('should_set_disconnected_state_on_close', () => {
+    // GIVEN
     const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
     act(() => mockWsInstance.simulateOpen())
 
+    // WHEN
     act(() => mockWsInstance.close())
 
+    // THEN
     expect(result.current.connectionState).toBe('disconnected')
   })
 })
