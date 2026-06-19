@@ -16,13 +16,19 @@ spring:
 
   ai:
     ollama:
-      base-url: http://localhost:11434
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
-        model: llama3.1:8b
+        model: ${OLLAMA_MODEL:llama3.1:8b}
         options:
           temperature: 0.3
       embedding:
-        model: nomic-embed-text
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+    mistralai:
+      api-key: ${MISTRAL_API_KEY:}
+      chat:
+        options:
+          model: ${MISTRAL_MODEL:mistral-small-latest}
+          temperature: 0.3
 
     vectorstore:
       pgvector:
@@ -35,6 +41,8 @@ server:
   port: 8081
 
 voice-support:
+  llm:
+    provider: ${LLM_PROVIDER:mistral-api}
   tts:
     provider: piper
     piper:

@@ -21,6 +21,7 @@ dist/
 
 # Environment
 .env
+backend/.env
 
 # Python
 .venv/
