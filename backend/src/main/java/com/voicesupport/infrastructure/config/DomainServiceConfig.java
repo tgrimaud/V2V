@@ -18,6 +18,9 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.mistralai.MistralAiChatModel;
 import org.springframework.ai.mistralai.MistralAiChatOptions;
 import org.springframework.ai.mistralai.api.MistralAiApi;
+import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,6 +44,27 @@ public class DomainServiceConfig {
                         .temperature(temperature)
                         .build())
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
+    public OllamaChatModel ollamaChatModel(
+            OllamaApi ollamaApi,
+            @Value("${spring.ai.ollama.chat.model:llama3.1:8b}") String model,
+            @Value("${spring.ai.ollama.chat.options.temperature:0.3}") double temperature) {
+        return OllamaChatModel.builder()
+                .ollamaApi(ollamaApi)
+                .defaultOptions(OllamaOptions.builder()
+                        .model(model)
+                        .temperature(temperature)
+                        .build())
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
+    public OllamaApi ollamaApi(@Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl) {
+        return OllamaApi.builder().baseUrl(baseUrl).build();
     }
 
     @Bean
