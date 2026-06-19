@@ -22,13 +22,205 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 | STT (Speech-to-Text) | **[Gradium](https://gradium.ai)** (API cloud, WebSocket) | Transcription ultra-low latency |
 | TTS (Text-to-Speech) | **[Gradium](https://gradium.ai)** (API cloud, WebSocket) | Synthèse vocale naturelle |
 | Backend RAG | Java 21, Spring Boot 3.4, Spring AI 1.0 | Retrieval + LLM + domain logic |
-| LLM | Ollama (llama3.1:8b) | Génération de réponses |
+| LLM | **Mistral AI** (API, défaut) ou Ollama (local) | Génération de réponses |
 | Embeddings | nomic-embed-text (Ollama) | Vectorisation sémantique |
 | Vector Store | PostgreSQL 16 + pgvector (HNSW) | Recherche de similarité |
 | Téléphonie | Twilio Media Streams → Pipecat | Appels téléphoniques |
 | Frontend | React 19, TypeScript, Vite 6, TailwindCSS 4 | Interface web |
 
 ## Architecture
+
+### Diagramme de dépendances (Hexagonal)
+
+```mermaid
+classDiagram
+    direction TB
+
+    %% ─── DOMAIN LAYER (pure Java, no framework) ───
+    namespace Domain {
+        class AskQuestionUseCase {
+            <<port in>>
+            +ask(question, conversationId) ConversationResponse
+        }
+        class IngestKnowledgeUseCase {
+            <<port in>>
+            +ingest(content, source) int
+        }
+        class LlmPort {
+            <<port out>>
+            +generateAnswer(question, context, history) String
+        }
+        class VectorSearchPort {
+            <<port out>>
+            +search(query, topK) List~KnowledgeChunk~
+        }
+        class VectorStorePort {
+            <<port out>>
+            +store(chunks) void
+        }
+        class ConversationEventStore {
+            <<port out>>
+            +save(event) void
+        }
+        class SpeechToTextPort {
+            <<port out>>
+            +transcribe(audio) String
+        }
+        class TextToSpeechPort {
+            <<port out>>
+            +synthesize(text) byte[]
+        }
+        class ConversationService {
+            <<service>>
+        }
+        class KnowledgeIngestionService {
+            <<service>>
+        }
+        class EscalationDetector {
+            <<service>>
+        }
+        class ConversationResponse {
+            <<model>>
+        }
+        class Citation {
+            <<model>>
+        }
+        class KnowledgeChunk {
+            <<model>>
+        }
+    }
+
+    %% ─── INFRASTRUCTURE: INBOUND ADAPTERS ───
+    namespace Inbound {
+        class ConversationController {
+            <<REST>>
+            POST /api/conversation/ask
+        }
+        class KnowledgeController {
+            <<REST>>
+            POST /api/knowledge/ingest
+        }
+        class AdminDashboardController {
+            <<REST>>
+            GET /api/admin/*
+        }
+        class HealthController {
+            <<REST>>
+            GET /api/health
+        }
+        class VoiceWebSocketHandler {
+            <<WebSocket>>
+        }
+        class TwilioWebhookController {
+            <<Twilio>>
+        }
+    }
+
+    %% ─── INFRASTRUCTURE: OUTBOUND ADAPTERS ───
+    namespace Outbound {
+        class MistralLlmAdapter {
+            <<adapter>>
+            Mistral AI API
+        }
+        class OllamaLlmAdapter {
+            <<adapter>>
+            Ollama local
+        }
+        class PgVectorStoreAdapter {
+            <<adapter>>
+            PostgreSQL + pgvector
+        }
+        class InMemoryConversationEventStore {
+            <<adapter>>
+        }
+        class DeepgramSttAdapter {
+            <<adapter>>
+        }
+        class PiperTtsAdapter {
+            <<adapter>>
+        }
+    }
+
+    %% ─── CONFIGURATION ───
+    namespace Config {
+        class DomainServiceConfig {
+            <<Spring @Configuration>>
+            wires ports to adapters
+        }
+        class VoiceConfig {
+            <<Spring @Configuration>>
+        }
+    }
+
+    %% ─── RELATIONSHIPS ───
+
+    %% Services implement ports in
+    ConversationService ..|> AskQuestionUseCase
+    KnowledgeIngestionService ..|> IngestKnowledgeUseCase
+
+    %% Services depend on ports out
+    ConversationService --> LlmPort
+    ConversationService --> VectorSearchPort
+    ConversationService --> ConversationEventStore
+    ConversationService --> EscalationDetector
+    KnowledgeIngestionService --> VectorStorePort
+
+    %% Services produce domain models
+    ConversationService --> ConversationResponse
+    ConversationResponse --> Citation
+    VectorSearchPort --> KnowledgeChunk
+
+    %% Adapters implement ports out
+    MistralLlmAdapter ..|> LlmPort
+    OllamaLlmAdapter ..|> LlmPort
+    PgVectorStoreAdapter ..|> VectorStorePort
+    PgVectorStoreAdapter ..|> VectorSearchPort
+    InMemoryConversationEventStore ..|> ConversationEventStore
+    DeepgramSttAdapter ..|> SpeechToTextPort
+    PiperTtsAdapter ..|> TextToSpeechPort
+
+    %% Inbound adapters use ports in
+    ConversationController --> AskQuestionUseCase
+    KnowledgeController --> IngestKnowledgeUseCase
+    AdminDashboardController --> ConversationEventStore
+
+    %% Config wires everything
+    DomainServiceConfig ..> ConversationService
+    DomainServiceConfig ..> MistralLlmAdapter
+    DomainServiceConfig ..> OllamaLlmAdapter
+    DomainServiceConfig ..> PgVectorStoreAdapter
+    VoiceConfig ..> DeepgramSttAdapter
+    VoiceConfig ..> PiperTtsAdapter
+```
+
+### Flux principal (séquence)
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant VA as Voice Agent (Python)
+    participant STT as Gradium STT
+    participant BE as Java Backend
+    participant VS as pgvector
+    participant LLM as Mistral / Ollama
+    participant TTS as Gradium TTS
+
+    B->>VA: Audio PCM 16kHz (WebSocket)
+    B->>VA: "END_OF_SPEECH"
+    VA->>STT: POST /api/post/speech/asr
+    STT-->>VA: NDJSON words
+    VA->>BE: POST /api/conversation/ask {question}
+    BE->>VS: Similarity search (top 5)
+    VS-->>BE: KnowledgeChunk[]
+    BE->>LLM: System prompt + context + question
+    LLM-->>BE: Answer text
+    BE-->>VA: {answer, citations}
+    VA->>TTS: WebSocket setup + text
+    TTS-->>VA: Audio base64 chunks
+    VA-->>B: JSON {answer} + WAV binary
+```
+
+### Vue simplifiée (ASCII)
 
 ```
 Browser/Téléphone
@@ -258,15 +450,16 @@ voice-support-bot/
 | `VOICE_AGENT_PORT` | Port WebSocket navigateur | `8765` |
 | `TWILIO_WS_PORT` | Port WebSocket Twilio | `8766` |
 
-### Backend Java (`application.yml`)
+### Backend Java (`backend/.env` ou variables d'environnement)
 
-| Propriété | Description | Défaut |
-|-----------|-------------|--------|
-| `server.port` | Port du backend | 8081 |
-| `spring.ai.ollama.base-url` | URL d'Ollama | http://localhost:11434 |
-| `spring.ai.ollama.chat.model` | Modèle LLM | llama3.1:8b |
-| `spring.ai.ollama.embedding.model` | Modèle d'embeddings | nomic-embed-text |
-| `spring.ai.vectorstore.pgvector.dimensions` | Dimensions des vecteurs | 768 |
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `LLM_PROVIDER` | Provider LLM (`mistral-api` ou `ollama`) | `mistral-api` |
+| `MISTRAL_API_KEY` | Clé API Mistral (obligatoire si provider=mistral-api) | — |
+| `MISTRAL_MODEL` | Modèle Mistral | `mistral-small-latest` |
+| `OLLAMA_BASE_URL` | URL d'Ollama (si provider=ollama) | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Modèle LLM Ollama | `llama3.1:8b` |
+| `OLLAMA_EMBEDDING_MODEL` | Modèle d'embeddings | `nomic-embed-text` |
 
 ## Tests
 
@@ -282,9 +475,9 @@ cd frontend && npx tsc --noEmit
 
 - [ ] Streaming inter-étapes (commencer le TTS avant la fin de la génération LLM)
 - [ ] Mémoire conversationnelle persistante (JPA)
-- [ ] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
+- [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
 - [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
-- [ ] Fallback OpenAI quand Ollama est trop lent
+- [x] Fallback Mistral API quand Ollama est trop lent (configurable via `LLM_PROVIDER`)
 - [ ] Ingestion PDF (extraction structurée)
 - [ ] Guardrails : détection "hors sujet" avec score de confiance
 - [ ] Observabilité : traces OpenTelemetry sur le pipeline
