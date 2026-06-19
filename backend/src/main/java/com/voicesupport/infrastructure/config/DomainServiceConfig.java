@@ -28,7 +28,7 @@ import org.springframework.context.annotation.Configuration;
 public class DomainServiceConfig {
 
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api")
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
     public MistralAiChatModel mistralChatModel(
             @Value("${spring.ai.mistralai.api-key}") String apiKey,
             @Value("${spring.ai.mistralai.chat.options.model:mistral-small-latest}") String model,
@@ -49,7 +49,7 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api")
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
     public LlmPort mistralLlmPort(ChatClient chatClient) {
         return new MistralLlmAdapter(chatClient);
     }
