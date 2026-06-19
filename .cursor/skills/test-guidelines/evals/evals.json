@@ -1,0 +1,20 @@
+{
+  "skill_name": "test-guidelines",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a unit test for the DateRange value object. It validates that start <= end and max 30 days. It's a Java record in com.cursor.dashboard.domain.model.valueobject.",
+      "expected_output": "Test class with underscore naming, GIVEN/WHEN/THEN comments, fixed dates (not LocalDate.now()), success + error cases, precise assertions, fits on screen"
+    },
+    {
+      "id": 2,
+      "prompt": "Write a test for the Button React component. It has variants (primary, secondary, destructive), sizes (sm, md, lg), isLoading, and disabled props.",
+      "expected_output": "Jest/Vitest test with underscore naming, GIVEN/WHEN/THEN comments, no toMatchSnapshot(), specific assertions on roles/text, success + edge cases"
+    },
+    {
+      "id": 3,
+      "prompt": "Review this test and tell me what's wrong:\n\n```java\n@Test\nvoid testCalculateDiscount() {\n    var service = new PricingService(mock(TaxPort.class), mock(DiscountPort.class), mock(CurrencyPort.class), mock(AuditPort.class), mock(NotificationPort.class));\n    when(discountPort.getDiscount(any())).thenReturn(10.0);\n    var result = service.calculateDiscount(new Order(LocalDate.now(), List.of()));\n    assertThat(result).isEqualTo(new DiscountResult(10.0, 0.0, \"USD\", true, LocalDate.now(), \"STANDARD\", null, 0));\n}\n```",
+      "expected_output": "Identifies: camelCase name, no GIVEN/WHEN/THEN, 5 mocks = coupling smell, LocalDate.now() = non-deterministic, over-assertion on full object, no error case"
+    }
+  ]
+}

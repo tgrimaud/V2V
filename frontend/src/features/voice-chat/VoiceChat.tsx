@@ -175,17 +175,18 @@ export function VoiceChat() {
       {/* Connection indicator + Language selector */}
       <div className="px-4 py-2 flex items-center justify-between text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{
+          <span className="w-2 h-2 rounded-full" aria-hidden="true" style={{
             backgroundColor: connectionState === 'connected' ? 'var(--color-success)' : 'var(--color-danger)'
           }} />
           <span style={{ color: 'var(--color-text-muted)' }}>
             {connectionState === 'connected' ? t.connected : t.disconnected}
           </span>
         </div>
-        <div className="flex items-center gap-1 rounded-full p-0.5" style={{ backgroundColor: 'var(--color-border)' }}>
+        <div className="flex items-center gap-1 rounded-full p-0.5" role="group" aria-label="Language selection" style={{ backgroundColor: 'var(--color-border)' }}>
           <button
             onClick={() => handleLanguageChange('fr')}
             className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+            aria-pressed={language === 'fr'}
             style={{
               backgroundColor: language === 'fr' ? 'var(--color-primary)' : 'transparent',
               color: language === 'fr' ? 'white' : 'var(--color-text-muted)',
@@ -196,6 +197,7 @@ export function VoiceChat() {
           <button
             onClick={() => handleLanguageChange('en')}
             className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+            aria-pressed={language === 'en'}
             style={{
               backgroundColor: language === 'en' ? 'var(--color-primary)' : 'transparent',
               color: language === 'en' ? 'white' : 'var(--color-text-muted)',
@@ -211,7 +213,7 @@ export function VoiceChat() {
         {messages.length === 0 && (
           <div className="h-full flex items-center justify-center text-center">
             <div>
-              <div className="text-4xl mb-4">🎙️</div>
+              <div className="text-4xl mb-4" aria-hidden="true">🎙️</div>
               <p className="text-lg font-medium" style={{ color: 'var(--color-text)' }}>
                 {t.greeting}
               </p>
@@ -254,7 +256,7 @@ export function VoiceChat() {
                 style={{ animation: 'pulse-ring 1.5s infinite', backgroundColor: stateColors[voiceState] }}
               />
             )}
-            <span className="relative z-10">
+            <span className="relative z-10" aria-hidden="true">
               {voiceState === 'recording' ? '⏹' : voiceState === 'processing' ? '⏳' : voiceState === 'speaking' ? '🔊' : '🎙️'}
             </span>
           </button>
@@ -265,7 +267,11 @@ export function VoiceChat() {
 
         {/* Text input fallback */}
         <form onSubmit={handleTextSubmit} className="flex gap-2">
+          <label htmlFor="voice-chat-input" className="sr-only">
+            {t.placeholder}
+          </label>
           <input
+            id="voice-chat-input"
             type="text"
             value={textInput}
             onChange={e => setTextInput(e.target.value)}

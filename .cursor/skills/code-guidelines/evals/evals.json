@@ -1,0 +1,20 @@
+{
+  "skill_name": "code-guidelines",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a service method that processes a batch of orders: validate each, apply discounts for premium users, check stock, reserve inventory, calculate totals, and persist. The Order has items, a user, and a coupon code.",
+      "expected_output": "Method stays under 20 lines by extracting helpers. No nesting beyond 3. No explanatory comments. No list.get(index). Class stays compact."
+    },
+    {
+      "id": 2,
+      "prompt": "I want to add the Apache Commons Lang library to the project for StringUtils. Can you add it to the pom.xml?",
+      "expected_output": "Refuses to add without tech lead approval. Mentions vetting checklist (public repo, maintenance, license). Suggests alternatives already in the project or in the JDK."
+    },
+    {
+      "id": 3,
+      "prompt": "Review this code and tell me what's wrong:\n\n```java\npublic class OrderProcessor {\n    // Process all orders\n    public void processOrders(List<Order> orders) {\n        for (int i = 0; i < orders.size(); i++) {\n            Order order = orders.get(i);\n            if (order != null) {\n                if (order.getStatus().equals(\"PENDING\")) {\n                    for (Item item : order.getItems()) {\n                        if (item.getQuantity() > 0) {\n                            // Check if item is in stock\n                            if (inventory.check(item.getSku())) {\n                                // Reserve the item\n                                inventory.reserve(item.getSku(), item.getQuantity());\n                                // Update the status\n                                item.setStatus(\"RESERVED\");\n                            }\n                        }\n                    }\n                    order.setStatus(\"PROCESSING\");\n                }\n            }\n        }\n    }\n}\n```",
+      "expected_output": "Flags: nesting depth 5 (exceeds 3), list access by index (orders.get(i)), explanatory comments that restate code, method likely exceeds 20 lines. Suggests refactoring with streams/early returns and extracting methods."
+    }
+  ]
+}

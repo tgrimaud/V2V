@@ -1,61 +1,38 @@
-"""Bridge WebSocket server — translates the frontend's custom protocol to Pipecat frames.
+"""Bridge WebSocket server — translates the frontend's custom protocol to Gradium + RAG.
 
 Frontend protocol:
   - Client sends: binary audio chunks (PCM 16kHz 16-bit mono)
   - Client sends: text "END_OF_SPEECH" when done speaking
+  - Client sends: JSON {"type":"set_language","language":"fr|en"}
   - Server sends: JSON {"type":"transcription","text":"..."} after STT
   - Server sends: JSON {"type":"answer","text":"..."} after RAG
-  - Server sends: binary audio (PCM 16kHz) for TTS playback
-
-This server sits between the browser and the Gradium STT/TTS + RAG backend pipeline.
+  - Server sends: binary audio (WAV 16kHz) for TTS playback
 """
 
 import asyncio
 import json
 import os
-import struct
 import sys
 
 import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
+from agent.gradium_stt import transcribe_audio
+from agent.gradium_tts import synthesize_speech
 
 load_dotenv()
 
 GRADIUM_API_KEY = os.getenv("GRADIUM_API_KEY")
-GRADIUM_VOICE_ID = os.getenv("GRADIUM_VOICE_ID", "default")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8081")
 WS_HOST = os.getenv("VOICE_AGENT_HOST", "0.0.0.0")
 WS_PORT = int(os.getenv("VOICE_AGENT_PORT", "8765"))
 
-SAMPLE_RATE = 16000
-TTS_SAMPLE_RATE = 16000
-
 VOICE_MAP = {
-    "fr": os.getenv("GRADIUM_VOICE_FR", "b35yykvVppLXyw_l"),  # Elise
-    "en": os.getenv("GRADIUM_VOICE_EN", "YTpq7expH9539ERJ"),  # Emma
+    "fr": os.getenv("GRADIUM_VOICE_FR", "b35yykvVppLXyw_l"),
+    "en": os.getenv("GRADIUM_VOICE_EN", "YTpq7expH9539ERJ"),
 }
 DEFAULT_LANGUAGE = "fr"
-
-
-def pcm_to_wav(pcm_data: bytes, sample_rate: int = TTS_SAMPLE_RATE) -> bytes:
-    """Wrap raw PCM 16-bit mono data in a WAV header so the browser can decode it."""
-    num_channels = 1
-    bits_per_sample = 16
-    byte_rate = sample_rate * num_channels * bits_per_sample // 8
-    block_align = num_channels * bits_per_sample // 8
-    data_size = len(pcm_data)
-    file_size = 36 + data_size
-
-    header = struct.pack(
-        '<4sI4s4sIHHIIHH4sI',
-        b'RIFF', file_size, b'WAVE',
-        b'fmt ', 16, 1, num_channels,
-        sample_rate, byte_rate, block_align, bits_per_sample,
-        b'data', data_size,
-    )
-    return header + pcm_data
 
 
 async def handle_client(websocket):
@@ -72,166 +49,85 @@ async def handle_client(websocket):
                 audio_buffer.extend(message)
             elif isinstance(message, str):
                 if message == "END_OF_SPEECH":
-                    if not audio_buffer:
-                        await websocket.send(json.dumps({
-                            "type": "answer",
-                            "text": "",
-                        }))
-                        continue
-
-                    audio_data = bytes(audio_buffer)
+                    await _handle_end_of_speech(websocket, backend, audio_buffer, language)
                     audio_buffer.clear()
-
-                    print(f"[STT] Transcribing {len(audio_data)} bytes (lang={language})...", flush=True)
-                    transcription = await transcribe_audio(audio_data, language)
-
-                    if transcription:
-                        print(f"[STT] Result: '{transcription}'", flush=True)
-                        await websocket.send(json.dumps({
-                            "type": "transcription",
-                            "text": transcription,
-                        }))
-
-                        answer, audio_response = await process_question(
-                            backend, transcription, language
-                        )
-
-                        await websocket.send(json.dumps({
-                            "type": "answer",
-                            "text": answer,
-                        }))
-
-                        if audio_response:
-                            await websocket.send(audio_response)
-                    else:
-                        print("[STT] No transcription returned (silence?)", flush=True)
-                        await websocket.send(json.dumps({
-                            "type": "answer",
-                            "text": "",
-                        }))
                 else:
-                    try:
-                        data = json.loads(message)
-                        if data.get("type") == "set_language":
-                            new_lang = data.get("language", DEFAULT_LANGUAGE)
-                            if new_lang in VOICE_MAP:
-                                language = new_lang
-                                print(f"[CLIENT] Language set to '{language}'", flush=True)
-                                await websocket.send(json.dumps({
-                                    "type": "language_changed",
-                                    "language": language,
-                                }))
-                    except (json.JSONDecodeError, KeyError):
-                        pass
+                    await _handle_json_message(websocket, message, language)
+                    language = _extract_language(message, language)
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
         await backend.close()
-        print(f"[CLIENT] Disconnected", flush=True)
+        print("[CLIENT] Disconnected", flush=True)
 
 
-async def transcribe_audio(audio_data: bytes, language: str = DEFAULT_LANGUAGE) -> str | None:
-    """Send audio to Gradium STT REST endpoint and return transcription."""
-    import httpx
+async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
+    """Process buffered audio: STT → RAG → TTS → send responses."""
+    if not audio_buffer:
+        await websocket.send(json.dumps({"type": "answer", "text": ""}))
+        return
 
+    audio_data = bytes(audio_buffer)
+    print(f"[STT] Transcribing {len(audio_data)} bytes (lang={language})...", flush=True)
+
+    transcription = await transcribe_audio(audio_data, language, GRADIUM_API_KEY)
+
+    if not transcription:
+        print("[STT] No transcription returned (silence?)", flush=True)
+        await websocket.send(json.dumps({"type": "answer", "text": ""}))
+        return
+
+    print(f"[STT] Result: '{transcription}'", flush=True)
+    await websocket.send(json.dumps({"type": "transcription", "text": transcription}))
+
+    answer, audio_response = await _process_question(backend, transcription, language)
+    await websocket.send(json.dumps({"type": "answer", "text": answer}))
+
+    if audio_response:
+        await websocket.send(audio_response)
+
+
+async def _handle_json_message(websocket, message, language):
+    """Handle JSON control messages (e.g. set_language)."""
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.gradium.ai/api/post/speech/asr",
-                headers={"x-api-key": GRADIUM_API_KEY},
-                params={
-                    "model_name": "default",
-                    "input_format": "pcm_16000",
-                    "json_config": json.dumps({"language": language}),
-                },
-                content=audio_data,
-            )
-
-            if r.status_code != 200:
-                print(f"[STT] HTTP {r.status_code}: {r.text[:200]}", flush=True)
-                return None
-
-            words = []
-            for line in r.text.strip().split("\n"):
-                if not line:
-                    continue
-                data = json.loads(line)
-                if data.get("type") == "text":
-                    word = data.get("text", "")
-                    if word:
-                        words.append(word)
-
-            result = " ".join(words)
-            return result.strip() if result.strip() else None
-
-    except Exception as e:
-        print(f"[STT] Error: {e}", flush=True)
-        return None
+        data = json.loads(message)
+        if data.get("type") == "set_language":
+            new_lang = data.get("language", DEFAULT_LANGUAGE)
+            if new_lang in VOICE_MAP:
+                print(f"[CLIENT] Language set to '{new_lang}'", flush=True)
+                await websocket.send(json.dumps({
+                    "type": "language_changed",
+                    "language": new_lang,
+                }))
+    except (json.JSONDecodeError, KeyError):
+        pass
 
 
-async def process_question(backend: RAGBackendClient, question: str, language: str = DEFAULT_LANGUAGE) -> tuple[str, bytes | None]:
-    """Send question to RAG backend and synthesize answer via Gradium TTS."""
+def _extract_language(message: str, current: str) -> str:
+    """Extract language from a set_language message, or return current."""
+    try:
+        data = json.loads(message)
+        if data.get("type") == "set_language":
+            new_lang = data.get("language", current)
+            return new_lang if new_lang in VOICE_MAP else current
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return current
+
+
+async def _process_question(backend, question, language):
+    """Send question to RAG backend and synthesize answer via TTS."""
     try:
         lang_hint = " (Please answer in English.)" if language == "en" else ""
         result = await backend.ask(question + lang_hint)
         answer = result.get("answer", "Désolé, je n'ai pas compris.")
     except Exception as e:
-        print(f"[RAG] Error: {e}")
-        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue. Veuillez réessayer."
-
-    audio = await synthesize_speech(answer, language)
-    return answer, audio
-
-
-async def synthesize_speech(text: str, language: str = DEFAULT_LANGUAGE) -> bytes | None:
-    """Send text to Gradium TTS via WebSocket and return WAV audio."""
-    import base64
+        print(f"[RAG] Error: {e}", flush=True)
+        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue."
 
     voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
-
-    try:
-        async with websockets.connect(
-            "wss://api.gradium.ai/api/speech/tts",
-            additional_headers={"x-api-key": GRADIUM_API_KEY},
-        ) as ws:
-            setup_msg = json.dumps({
-                "type": "setup",
-                "model_name": "default",
-                "voice_id": voice_id,
-                "output_format": "pcm_16000",
-            })
-            await ws.send(setup_msg)
-
-            ready = await ws.recv()
-            ready_data = json.loads(ready)
-            if ready_data.get("type") != "ready":
-                print(f"[TTS] Setup failed: {ready_data}", flush=True)
-                return None
-
-            await ws.send(json.dumps({
-                "type": "text",
-                "text": text,
-            }))
-            await ws.send(json.dumps({"type": "end_of_stream"}))
-
-            audio_chunks = []
-            async for msg in ws:
-                data = json.loads(msg)
-                if data.get("type") == "audio":
-                    audio_b64 = data.get("audio", "")
-                    if audio_b64:
-                        audio_chunks.append(base64.b64decode(audio_b64))
-                elif data.get("type") == "end_of_stream":
-                    break
-
-            if audio_chunks:
-                pcm_data = b"".join(audio_chunks)
-                return pcm_to_wav(pcm_data, TTS_SAMPLE_RATE)
-            return None
-
-    except Exception as e:
-        print(f"[TTS] Error: {e}")
-        return None
+    audio = await synthesize_speech(answer, voice_id, GRADIUM_API_KEY)
+    return answer, audio
 
 
 async def main():
@@ -244,7 +140,7 @@ async def main():
     print(f"  Backend: {BACKEND_URL}", flush=True)
 
     async with websockets.serve(handle_client, WS_HOST, WS_PORT):
-        await asyncio.Future()  # run forever
+        await asyncio.Future()
 
 
 if __name__ == "__main__":
