@@ -13,60 +13,68 @@ L'architecture est **hybride** :
 
 ```mermaid
 graph TB
-    subgraph clients ["👤 Clients (entrants)"]
-        Browser[Browser]
-        Twilio[Twilio]
+    %% ─── Clients ───
+    Browser["👤 Browser"]
+    Twilio["👤 Twilio"]
+
+    %% ─── Notre code : Frontend ───
+    subgraph frontend ["🟢 Frontend — React/TypeScript"]
+        VoiceChat[VoiceChat + useAudioQueue]
     end
 
-    subgraph app ["🟢 NOTRE CODE"]
-        subgraph frontend [Frontend — React/TypeScript]
-            VoiceChat[VoiceChat + useAudioQueue]
-        end
+    %% ─── Notre code : Voice Agent ───
+    subgraph voiceAgent ["🟢 Voice Agent — Python"]
+        BridgeServer[bridge_server.py]
+        SttClient[gradium_stt.py]
+        TtsClient[gradium_tts.py]
+        SentenceSplitter[sentence_splitter.py]
+        TTSWorker[TTS Worker Queue]
+        BackendClient[backend_client.py]
+    end
 
-        subgraph voiceAgent [Voice Agent — Python]
-            BridgeServer[bridge_server.py]
-            SttClient[gradium_stt.py]
-            TtsClient[gradium_tts.py]
-            SentenceSplitter[sentence_splitter.py]
-            TTSWorker[TTS Worker Queue]
-            BackendClient[backend_client.py]
-        end
+    %% ─── Externe : Gradium (proche du voice agent qui l'appelle) ───
+    subgraph gradium ["🔴 Gradium Cloud API"]
+        GradiumSTT[STT — api.gradium.ai]
+        GradiumTTS[TTS — wss://api.gradium.ai]
+    end
 
-        subgraph backend [Java Backend — Spring Boot]
-            subgraph adaptersIn [Adapters IN]
-                ConvController[ConversationController]
-                StreamController[StreamingConversationController]
-            end
-            subgraph domain [Domain]
-                ConvService[ConversationService]
-                StreamService[StreamingConversationService]
-                EscDetector[EscalationDetector]
-            end
-            subgraph adaptersOut [Adapters OUT]
-                MistralAdapter[MistralLlmAdapter]
-                OllamaAdapter[OllamaLlmAdapter]
-                PgVecAdapter[PgVectorStoreAdapter]
-            end
+    %% ─── Notre code : Java Backend ───
+    subgraph backend ["🟢 Java Backend — Spring Boot"]
+        subgraph adaptersIn [Adapters IN]
+            ConvController[ConversationController]
+            StreamController[StreamingConversationController]
+        end
+        subgraph domain [Domain]
+            ConvService[ConversationService]
+            StreamService[StreamingConversationService]
+            EscDetector[EscalationDetector]
+        end
+        subgraph adaptersOut [Adapters OUT]
+            MistralAdapter[MistralLlmAdapter]
+            OllamaAdapter[OllamaLlmAdapter]
+            PgVecAdapter[PgVectorStoreAdapter]
         end
     end
 
-    subgraph external ["🔴 SERVICES EXTERNES"]
-        MistralAPI[Mistral AI Cloud]
-        Ollama[Ollama Local :11434]
-        PgVector[PostgreSQL + pgvector :5433]
-        GradiumAPI[Gradium Cloud API]
-    end
+    %% ─── Externes : LLM + DB (proches du backend qui les appelle) ───
+    MistralAPI["🔴 Mistral AI Cloud"]
+    Ollama["🔴 Ollama Local :11434"]
+    PgVector["🔴 PostgreSQL + pgvector :5433"]
 
+    %% ─── Flux entrants ───
     Browser -->|"ws:8765"| VoiceChat
     VoiceChat -->|"ws:8765 PCM + JSON"| BridgeServer
     Twilio -->|"ws:8766 μ-law"| BridgeServer
 
+    %% ─── Voice Agent → Gradium (externe) ───
     BridgeServer --> SttClient
-    SttClient -->|"HTTPS POST"| GradiumAPI
+    SttClient -->|"HTTPS POST"| GradiumSTT
 
+    %% ─── Voice Agent → Backend (interne) ───
     BridgeServer --> BackendClient
     BackendClient -->|"GET SSE /ask-stream"| StreamController
 
+    %% ─── Backend interne ───
     StreamController --> StreamService
     StreamService --> EscDetector
     StreamService --> MistralAdapter
@@ -77,18 +85,19 @@ graph TB
     ConvService --> OllamaAdapter
     ConvService --> PgVecAdapter
 
+    %% ─── Voice Agent → TTS (externe) ───
     BridgeServer --> SentenceSplitter
     SentenceSplitter --> TTSWorker
     TTSWorker --> TtsClient
-    TtsClient -->|"WSS"| GradiumAPI
+    TtsClient -->|"WSS"| GradiumTTS
 
+    %% ─── Backend → Services externes ───
     MistralAdapter -->|"HTTPS streaming"| MistralAPI
     OllamaAdapter -->|"HTTP streaming"| Ollama
-    PgVecAdapter -->|"SQL"| PgVector
+    PgVecAdapter -->|"SQL + HNSW"| PgVector
 ```
 
-> **Légende** : Le cadre vert (`NOTRE CODE`) contient tout ce qu'on développe et maintient.
-> Le cadre rouge (`SERVICES EXTERNES`) contient les APIs et infrastructures qu'on appelle mais qu'on ne possède pas.
+> **Légende** : 🟢 = notre code · 🔴 = service externe
 
 ## Flux sortants (Outbound)
 
