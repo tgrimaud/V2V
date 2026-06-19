@@ -128,7 +128,10 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 curl http://localhost:8081/api/health
 docker compose ps
 
-# Lancer l'agent vocal (navigateur)
+# Lancer l'agent vocal (navigateur — bridge mode)
+cd voice-agent && python -u -m agent.bridge_server
+
+# Lancer l'agent vocal (navigateur — Pipecat natif, sans bridge)
 cd voice-agent && python -m agent.ws_server
 
 # Lancer l'agent vocal (Twilio)
