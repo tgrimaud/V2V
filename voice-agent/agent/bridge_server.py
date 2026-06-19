@@ -127,52 +127,41 @@ async def handle_client(websocket):
 
 
 async def transcribe_audio(audio_data: bytes, language: str = DEFAULT_LANGUAGE) -> str | None:
-    """Send audio to Gradium STT via WebSocket and return transcription."""
-    import base64
+    """Send audio to Gradium STT REST endpoint and return transcription."""
+    import httpx
 
     try:
-        async with websockets.connect(
-            "wss://api.gradium.ai/api/speech/asr",
-            additional_headers={"x-api-key": GRADIUM_API_KEY},
-        ) as ws:
-            setup_msg = json.dumps({
-                "type": "setup",
-                "model_name": "default",
-                "input_format": "pcm_16000",
-                "json_config": {"language": language},
-            })
-            await ws.send(setup_msg)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.gradium.ai/api/post/speech/asr",
+                headers={"x-api-key": GRADIUM_API_KEY},
+                params={
+                    "model_name": "default",
+                    "input_format": "pcm_16000",
+                    "json_config": json.dumps({"language": language}),
+                },
+                content=audio_data,
+            )
 
-            ready = await ws.recv()
-            ready_data = json.loads(ready)
-            if ready_data.get("type") != "ready":
-                print(f"[STT] Unexpected setup response: {ready_data}", flush=True)
+            if r.status_code != 200:
+                print(f"[STT] HTTP {r.status_code}: {r.text[:200]}", flush=True)
+                return None
 
-            chunk_size = 3200  # 100ms of PCM 16kHz 16-bit mono
-            for i in range(0, len(audio_data), chunk_size):
-                chunk = audio_data[i:i + chunk_size]
-                audio_b64 = base64.b64encode(chunk).decode()
-                await ws.send(json.dumps({
-                    "type": "audio",
-                    "audio": audio_b64,
-                }))
-
-            await ws.send(json.dumps({"type": "end_of_stream"}))
-
-            full_text = ""
-            async for msg in ws:
-                data = json.loads(msg)
+            words = []
+            for line in r.text.strip().split("\n"):
+                if not line:
+                    continue
+                data = json.loads(line)
                 if data.get("type") == "text":
-                    full_text += data.get("text", "")
-                elif data.get("type") == "end_text":
-                    full_text += data.get("text", "")
-                elif data.get("type") == "end_of_stream":
-                    break
+                    word = data.get("text", "")
+                    if word:
+                        words.append(word)
 
-            return full_text.strip() if full_text.strip() else None
+            result = " ".join(words)
+            return result.strip() if result.strip() else None
 
     except Exception as e:
-        print(f"[STT] Error: {e}")
+        print(f"[STT] Error: {e}", flush=True)
         return None
 
 
