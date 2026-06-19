@@ -6,80 +6,116 @@ Voice Support Bot est un agent vocal intelligent qui répond aux questions de su
 
 L'architecture est **hybride** :
 - Un **backend Java** (hexagonal) gère la logique métier, le RAG, et l'administration
-- Un **agent vocal Python** (Pipecat) orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
+- Un **agent vocal Python** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
+- Un **frontend React** fournit l'interface utilisateur avec WebSocket audio + streaming texte
 
 ## Diagramme d'architecture
 
+```mermaid
+graph TB
+    subgraph clients [Clients]
+        Browser[Browser React]
+        Twilio[Twilio]
+    end
+
+    subgraph voiceAgent [Voice Agent — Python]
+        BridgeServer[bridge_server.py]
+        GradiumSTT[Gradium STT]
+        GradiumTTS[Gradium TTS]
+        SentenceSplitter[Sentence Splitter]
+        TTSWorker[TTS Worker Queue]
+    end
+
+    subgraph backend [Java Backend — Spring Boot]
+        subgraph adaptersIn [Adapters IN — REST]
+            ConvController[ConversationController]
+            StreamController[StreamingConversationController]
+        end
+        subgraph domain [Domain — Pure Java]
+            ConvService[ConversationService]
+            StreamService[StreamingConversationService]
+            EscDetector[EscalationDetector]
+        end
+        subgraph portsOut [Ports OUT]
+            LlmPort[LlmPort]
+            StreamPort[LlmStreamingPort]
+            VecSearch[VectorSearchPort]
+            EventStore[ConversationEventStore]
+        end
+        subgraph adaptersOut [Adapters OUT]
+            MistralAdapter[MistralLlmAdapter]
+            OllamaAdapter[OllamaLlmAdapter]
+            PgVecAdapter[PgVectorStoreAdapter]
+        end
+    end
+
+    subgraph external [Services Externes]
+        MistralAPI[Mistral API]
+        Ollama[Ollama Local]
+        PgVector[PostgreSQL + pgvector]
+        GradiumAPI[Gradium Cloud API]
+    end
+
+    Browser -->|"ws:8765 PCM audio"| BridgeServer
+    Twilio -->|"ws:8766 μ-law"| BridgeServer
+    BridgeServer -->|"REST batch"| GradiumSTT
+    GradiumSTT -->|transcription| BridgeServer
+    BridgeServer -->|"GET SSE /ask-stream"| StreamController
+    StreamController --> StreamService
+    StreamService --> EscDetector
+    StreamService --> VecSearch
+    StreamService --> StreamPort
+    StreamPort --> MistralAdapter
+    StreamPort --> OllamaAdapter
+    BridgeServer --> SentenceSplitter
+    SentenceSplitter --> TTSWorker
+    TTSWorker -->|"WS text-to-audio"| GradiumTTS
+    MistralAdapter -->|"HTTPS streaming"| MistralAPI
+    OllamaAdapter -->|"HTTP streaming"| Ollama
+    PgVecAdapter -->|"SQL + HNSW"| PgVector
+    GradiumSTT -.->|"HTTPS"| GradiumAPI
+    GradiumTTS -.->|"WSS"| GradiumAPI
+    ConvController --> ConvService
+    ConvService --> LlmPort
+    ConvService --> VecSearch
+    ConvService --> EventStore
+    LlmPort --> MistralAdapter
+    LlmPort --> OllamaAdapter
+    VecSearch --> PgVecAdapter
 ```
-                              ┌───────────────────────────────────────────────┐
-                              │           VOICE AGENT (Python)                │
-                              │                Pipecat 1.4                    │
- ┌──────────┐                 │  ┌──────────────────────────────────────┐    │
- │ Browser  │──ws:8765───────▶│  │     WebSocket Server Transport       │    │
- └──────────┘                 │  └───────────┬────────────────┬─────────┘    │
-                              │              │                │               │
- ┌──────────┐                 │  ┌───────────▼──┐    ┌───────▼────────┐     │
- │ Twilio   │──ws:8766───────▶│  │  Gradium STT │    │  Gradium TTS   │     │
- └──────────┘                 │  └───────────┬──┘    └───────▲────────┘     │
-                              │              │               │               │
-                              │  ┌───────────▼───────────────┴──────────┐   │
-                              │  │           RAG Processor               │   │
-                              │  │   (HTTP POST /api/conversation/ask)   │   │
-                              │  └───────────────────┬──────────────────┘   │
-                              └─────────────────────┼───────────────────────┘
-                                                    │ HTTP
-                              ┌─────────────────────▼───────────────────────┐
-                              │           JAVA BACKEND (Spring Boot)         │
-                              │                                              │
- ┌──────────┐                 │  ┌─────────────────────────────────────┐    │
- │ curl/UI  │─http:8081──────▶│  │    ConversationController (REST)     │    │
- └──────────┘                 │  └──────────────┬──────────────────────┘    │
-                              │                 │                            │
-                              │     ╔═══════════╪══════════════════════╗     │
-                              │     ║  PORTS IN │                      ║     │
-                              │     ║   ┌───────▼──────────┐          ║     │
-                              │     ║   │AskQuestionUseCase │          ║     │
-                              │     ║   └───────┬──────────┘          ║     │
-                              │     ║           │                      ║     │
-                              │     ║  ╔════════╪══════════════╗       ║     │
-                              │     ║  ║ DOMAIN │              ║       ║     │
-                              │     ║  ║  ┌─────▼─────────────┐║       ║     │
-                              │     ║  ║  │ConversationService ║       ║     │
-                              │     ║  ║  │+ EscalationDetect  ║       ║     │
-                              │     ║  ║  └──┬─────┬──────┬───┘║       ║     │
-                              │     ║  ╚════╪═════╪══════╪════╝       ║     │
-                              │     ║       │     │      │            ║     │
-                              │     ║  PORTS OUT  │      │            ║     │
-                              │     ║  ┌────▼──┐ ┌▼───┐ ┌▼──────┐    ║     │
-                              │     ║  │LlmPort│ │Vec │ │EventSt│    ║     │
-                              │     ║  └───┬───┘ └─┬──┘ └───┬───┘    ║     │
-                              │     ╚══════╪═══════╪════════╪═════════╝     │
-                              │            │       │        │                │
-                              │  ┌─────────▼──┐ ┌──▼────────▼──┐           │
-                              │  │OllamaLlm   │ │PgVectorStore  │           │
-                              │  │Adapter      │ │Adapter        │           │
-                              │  └─────┬──────┘ └──────┬────────┘           │
-                              └────────┼───────────────┼────────────────────┘
-                                       │               │
-                              ┌────────▼──┐    ┌───────▼────┐
-                              │  Ollama   │    │ PostgreSQL │
-                              │  (LLM)   │    │ + pgvector │
-                              └───────────┘    └────────────┘
-```
+
+## Flux sortants (Outbound)
+
+Le système appelle les services externes suivants :
+
+| Flux | Protocole | Source → Destination | Contenu |
+|------|-----------|---------------------|---------|
+| **LLM Generation** | HTTPS (streaming) | `MistralLlmAdapter` → Mistral API | Prompt + contexte RAG → tokens streamés |
+| **LLM Generation (alt)** | HTTP (streaming) | `OllamaLlmAdapter` → Ollama local :11434 | Prompt + contexte → tokens streamés |
+| **Vector Search** | SQL (TCP :5433) | `PgVectorStoreAdapter` → PostgreSQL/pgvector | Query embedding → top-K chunks HNSW |
+| **Embedding Generation** | HTTP | Spring AI → Ollama (nomic-embed-text) | Texte → vecteur 768 dimensions |
+| **STT Transcription** | HTTPS POST | `gradium_stt.py` → `api.gradium.ai/api/post/speech/asr` | Audio PCM → NDJSON words |
+| **TTS Synthesis** | WSS | `gradium_tts.py` → `wss://api.gradium.ai/api/speech/tts` | Texte → PCM audio chunks |
+| **RAG Query (streaming)** | HTTP SSE | `bridge_server.py` → Backend :8081 `/api/conversation/ask-stream` | Question → SSE token stream |
+| **RAG Query (fallback)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
 
 ## Séparation des responsabilités
 
 | Composant | Langage | Responsabilité |
 |-----------|---------|---------------|
-| **Voice Agent** | Python (Pipecat) | Orchestration audio temps réel, transports WebSocket, VAD |
+| **Frontend React** | TypeScript | Interface utilisateur, enregistrement audio, audio queue playback, streaming texte |
+| **Voice Agent** | Python | Orchestration audio, STT/TTS via Gradium, sentence splitting, SSE consumer |
 | **Gradium** | API cloud | STT (transcription) et TTS (synthèse vocale) |
-| **Backend Java** | Java (Spring Boot) | RAG, LLM, logique métier, escalade, admin, persistence |
+| **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), logique métier, escalade, admin |
+| **Mistral AI** | API cloud | LLM génération (provider par défaut, streaming) |
+| **Ollama** | Local | LLM inférence locale (alternative configurable) |
 | **PostgreSQL + pgvector** | — | Stockage vectoriel et recherche de similarité |
-| **Ollama** | — | Inférence LLM locale |
 
 ## Couche domaine (Pure Java)
 
-Le domaine ne contient **aucune annotation Spring**, **aucune dépendance externe**. Il est testable avec de simples fakes.
+Le domaine ne contient **aucune annotation Spring**. Il est testable avec de simples fakes.
+
+> **Exception** : `LlmStreamingPort` utilise `Flux<String>` (Reactor) pour le streaming — compromis pragmatique accepté pour le POC.
 
 ### Modèles
 
@@ -95,7 +131,8 @@ Le domaine ne contient **aucune annotation Spring**, **aucune dépendance extern
 
 | Service | Responsabilité |
 |---------|---------------|
-| `ConversationService` | Orchestre le pipeline RAG : retrieval → génération → tracking |
+| `ConversationService` | Pipeline RAG synchrone : retrieval → génération blocking → tracking |
+| `StreamingConversationService` | Pipeline RAG streaming : retrieval → `Flux<String>` token stream → tracking post-complétion |
 | `KnowledgeIngestionService` | Découpe les documents en chunks et les indexe |
 | `EscalationDetector` | Détecte les demandes nécessitant un transfert humain |
 
@@ -108,55 +145,80 @@ Le domaine ne contient **aucune annotation Spring**, **aucune dépendance extern
 
 ### Ports OUT (dépendances inversées)
 
-| Port | Contrat | Adapter actuel |
-|------|---------|----------------|
-| `LlmPort` | Générer une réponse à partir d'un contexte | `OllamaLlmAdapter` |
+| Port | Contrat | Adapters |
+|------|---------|----------|
+| `LlmPort` | Générer une réponse complète (blocking `.call()`) | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmStreamingPort` | Streamer les tokens de réponse (`Flux<String>` via `.stream()`) | `MistralLlmAdapter`, `OllamaLlmAdapter` |
 | `VectorSearchPort` | Chercher les chunks pertinents | `PgVectorStoreAdapter` |
 | `VectorStorePort` | Stocker un chunk avec ses embeddings | `PgVectorStoreAdapter` |
 | `ConversationEventStore` | Persister les événements de conversation | `InMemoryConversationEventStore` |
 
-> **Note** : Les ports `SpeechToTextPort` et `TextToSpeechPort` ne sont plus utilisés côté Java.
-> Le STT et TTS sont désormais gérés par l'agent Pipecat (Python) via Gradium.
+> **Note** : Chaque adapter LLM implémente **les deux ports** (`LlmPort` + `LlmStreamingPort`). Un seul bean Spring satisfait les deux interfaces.
+> Les ports `SpeechToTextPort` et `TextToSpeechPort` ne sont plus utilisés côté Java — STT/TTS sont gérés par l'agent Python via Gradium.
 
 ## Pipeline de traitement
 
-### Mode texte (REST)
+### Mode texte (REST — synchrone)
 
 ```
-Client → ConversationController.ask()
+Client → POST /api/conversation/ask
          → ConversationService.ask()
            → EscalationDetector.shouldEscalate()  [court-circuit si oui]
            → VectorSearchPort.searchRelevant()     [retrieval]
-           → LlmPort.generateAnswer()             [generation]
+           → LlmPort.generateAnswer()             [generation blocking]
            → ConversationEventStore.save()         [tracking]
-         ← ConversationResponse (answer + citations)
+         ← JSON { answer, citations, conversationId }
 ```
 
-### Mode vocal (WebSocket — Pipecat + Gradium)
+### Mode vocal (SSE streaming — pipeline optimisé)
 
-```
-Client (Browser)              Voice Agent (Pipecat)         Java Backend
-  │                              │                              │
-  │──── audio PCM 16kHz ────────▶│                              │
-  │                              │                              │
-  │                              │── Gradium STT → texte        │
-  │                              │                              │
-  │                              │── HTTP POST ────────────────▶│
-  │                              │   /api/conversation/ask      │
-  │                              │                              │── RAG → LLM
-  │                              │◀─── JSON response ──────────│
-  │                              │                              │
-  │                              │── Gradium TTS → audio PCM    │
-  │                              │── PCM → WAV (header 44B)     │
-  │                              │                              │
-  │◀──── audio WAV 16kHz ──────│                              │
-  │── decodeAudioData() → play  │                              │
-  │                              │                              │
+```mermaid
+sequenceDiagram
+    participant FE as Frontend React
+    participant BR as Bridge Python
+    participant STT as Gradium STT
+    participant BE as Backend Java
+    participant LLM as Mistral API
+    participant TTS as Gradium TTS
+
+    FE->>BR: PCM audio + END_OF_SPEECH
+    BR->>STT: POST /api/post/speech/asr
+    STT-->>BR: NDJSON transcription (~200ms)
+    BR->>FE: {"type":"transcription","text":"..."}
+
+    BR->>BE: GET /api/conversation/ask-stream?question=...
+    Note over BE: Vector search (~200ms)
+    BE->>LLM: ChatClient.stream()
+    LLM-->>BE: token stream
+
+    loop Pour chaque phrase detectee
+        BE-->>BR: SSE event:chunk {"text":"token..."}
+        Note over BR: Sentence Splitter accumule
+        BR->>FE: {"type":"answer_chunk","text":"phrase complete"}
+        BR->>TTS: WSS text -> audio PCM
+        TTS-->>BR: PCM chunks
+        BR->>FE: Binary WAV (1 phrase)
+        Note over FE: Audio Queue joue immediatement
+    end
+
+    BE-->>BR: SSE event:done
+    BR->>FE: {"type":"answer_done","text":"reponse complete"}
 ```
 
-> **Note** : Le bridge server enveloppe le PCM reçu de Gradium dans un header WAV
-> avant de l'envoyer au navigateur. `AudioContext.decodeAudioData()` requiert
-> un format auto-descriptif — le PCM brut ne peut pas être décodé directement.
+**Gain de latence perçue :** L'utilisateur entend la première phrase en **~700ms** au lieu de ~2.2s dans le mode séquentiel.
+
+### Protocole WebSocket (Frontend ↔ Bridge)
+
+| Direction | Message | Format | Quand |
+|-----------|---------|--------|-------|
+| Client → | Audio | Binary (PCM 16kHz mono) | Pendant enregistrement |
+| Client → | Fin | Text `"END_OF_SPEECH"` | Fin d'enregistrement |
+| Client → | Langue | JSON `{"type":"set_language","language":"fr\|en"}` | Toggle langue |
+| → Client | Transcription | JSON `{"type":"transcription","text":"..."}` | Après STT |
+| → Client | Chunk texte | JSON `{"type":"answer_chunk","text":"..."}` | Chaque phrase (streaming) |
+| → Client | Audio phrase | Binary (WAV 16kHz mono) | Après TTS de chaque phrase |
+| → Client | Fin réponse | JSON `{"type":"answer_done","text":"..."}` | Fin génération complète |
+| → Client | Langue ack | JSON `{"type":"language_changed","language":"..."}` | Après set_language |
 
 ### Mode téléphonie (Twilio → Pipecat + Gradium)
 
@@ -214,23 +276,39 @@ Limitation actuelle : la mémoire est volatile (in-memory). La persistence JPA e
 
 ## Budget latence
 
-| Étape | Temps typique | Composant |
-|-------|---------------|-----------|
-| Gradium STT (streaming WebSocket) | ~200ms | Voice Agent (Pipecat) |
-| RAG retrieval (pgvector HNSW) | ~200ms | Java Backend |
-| LLM generation (Ollama local) | ~1500ms | Java Backend |
-| Gradium TTS (streaming WebSocket) | ~300ms | Voice Agent (Pipecat) |
-| **Total** | **~2.2s** | Cible : <2s avec streaming inter-étapes |
+### Mode streaming (pipeline optimisé — production)
 
-### Avantages de Gradium vs Deepgram/Piper
+| Étape | Temps | Composant | Impact perçu |
+|-------|-------|-----------|-------------|
+| Gradium STT (REST batch) | ~200ms | Voice Agent | Bloquant |
+| Vector search (pgvector HNSW) | ~200ms | Java Backend | Bloquant |
+| LLM first token (Mistral API) | ~150ms | Java Backend → Mistral | Bloquant |
+| Sentence detection | ~100ms | Voice Agent (splitter) | Accumulation tokens |
+| TTS première phrase | ~200ms | Voice Agent → Gradium | |
+| **Première phrase audible** | **~700ms** | | |
+| LLM complète (total) | ~1200ms | Java Backend → Mistral | En parallèle avec TTS |
+| TTS toutes phrases | ~400ms | Voice Agent → Gradium | Séquentiel par phrase |
 
-| Critère | Deepgram + Piper (ancien) | Gradium (actuel) |
-|---------|--------------------------|------------------|
-| Latence STT | ~300ms | ~200ms (semantic VAD) |
-| Latence TTS | ~500ms (local) | ~300ms (cloud, first-byte) |
-| Format téléphonie | Conversion nécessaire | Support natif `ulaw_8000` |
-| Multiplexage | Non | Oui (plusieurs sessions sur 1 WS) |
-| Qualité voix FR | Moyenne (Piper) | Haute (Gradium) |
+### Mode synchrone (fallback / mode texte)
+
+| Étape | Temps | Composant |
+|-------|-------|-----------|
+| Gradium STT | ~200ms | Voice Agent |
+| Vector search | ~200ms | Java Backend |
+| LLM complète (Mistral API) | ~1200ms | Java Backend |
+| Gradium TTS (texte complet) | ~300ms | Voice Agent |
+| **Total** | **~1.9s** | |
+
+## Configuration LLM
+
+Le provider LLM est configurable via `voice-support.llm.provider` :
+
+| Provider | Valeur | Streaming | Latence first token | Usage |
+|----------|--------|-----------|--------------------|----|
+| **Mistral API** (défaut) | `mistral-api` | Oui (SSE) | ~150ms | Production |
+| Ollama local | `ollama` | Oui (SSE) | ~500ms | Développement offline |
+
+Les deux adapters implémentent `LlmPort` (blocking) et `LlmStreamingPort` (reactive `Flux<String>`).
 
 ## Extensibilité
 
@@ -238,33 +316,18 @@ Limitation actuelle : la mémoire est volatile (in-memory). La persistence JPA e
 
 Pour ajouter un nouveau provider LLM (ex: OpenAI) :
 
-1. Créer `OpenAILlmAdapter implements LlmPort` dans `adapter/out/llm/`
+1. Créer `OpenAILlmAdapter implements LlmPort, LlmStreamingPort` dans `adapter/out/llm/`
 2. Ajouter un `@Bean` conditionnel dans `DomainServiceConfig` (ex: `@ConditionalOnProperty`)
 3. Ajouter la configuration dans `application.yml`
 4. Aucune modification du domaine requise
 
 ### Remplacer Gradium (STT/TTS)
 
-Pipecat supporte de nombreux fournisseurs via ses extras :
-
-```python
-# pyproject.toml — changer l'extra
-dependencies = [
-    "pipecat-ai[deepgram,cartesia,websocket,silero]",  # Deepgram STT + Cartesia TTS
-]
-```
-
-Modifier `ws_server.py` pour instancier le service correspondant (ex: `DeepgramSTTService`, `CartesiaTTSService`).
+Modifier `voice-agent/agent/gradium_stt.py` et `gradium_tts.py` pour appeler un autre fournisseur. Le contrat interne (fonctions `transcribe_audio()` et `synthesize_speech()`) reste le même.
 
 ### Ajouter un transport
 
-Pipecat supporte Daily (WebRTC), Twilio, LiveKit, etc. Chaque transport est un composant pipeable :
-
-```python
-from pipecat.transports.services.daily import DailyTransport
-# ou
-from pipecat.transports.network.websocket_server import WebSocketServerTransport
-```
+Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pour ajouter un nouveau transport (ex: SIP, LiveKit), créer un nouveau handler WebSocket dans le bridge.
 
 ## Décisions d'architecture (ADR)
 
@@ -295,14 +358,14 @@ from pipecat.transports.network.websocket_server import WebSocketServerTransport
 
 ### ADR-003 : Architecture hybride Java + Python
 
-**Contexte** : Pipecat est Python-only, le backend RAG est Java.
+**Contexte** : Le STT/TTS et l'orchestration audio sont mieux servis par Python, le RAG par Java.
 
-**Décision** : Garder les deux : Java backend comme "cerveau" (RAG), Pipecat comme "bouche/oreille" (voix).
+**Décision** : Garder les deux : Java backend comme "cerveau" (RAG), Python comme "bouche/oreille" (voix).
 
 **Raisons** :
-- Le backend Java est déjà mature (hexagonal, tests, Spring AI intégré)
-- Pipecat excelle dans l'orchestration audio temps réel (VAD, streaming, transports)
-- Couplage lâche via HTTP (le RAG Processor appelle `/api/conversation/ask`)
+- Le backend Java est mature (hexagonal, tests, Spring AI intégré)
+- Python excelle dans l'orchestration audio temps réel
+- Couplage lâche via HTTP/SSE (streaming) et HTTP POST (fallback)
 - Chaque composant est déployable et scalable indépendamment
 - Pas de réécriture nécessaire du code existant
 
@@ -317,3 +380,17 @@ from pipecat.transports.network.websocket_server import WebSocketServerTransport
 - Pas de migration de schéma à gérer
 - Suffisant pour le volume MVP
 - Le port `ConversationEventStore` permet de basculer vers JPA sans toucher au domaine
+
+### ADR-005 : Streaming inter-étapes (SSE + sentence splitting)
+
+**Contexte** : Le pipeline séquentiel (STT → RAG complet → TTS complet) prenait ~2.2s avant la première syllabe audible.
+
+**Décision** : Streamer les tokens LLM via SSE, les découper en phrases, et lancer le TTS par phrase en parallèle.
+
+**Raisons** :
+- Réduit la latence perçue de ~2.2s à ~700ms (première phrase)
+- L'utilisateur perçoit une conversation naturelle (réponse quasi-immédiate)
+- Le sentence splitting (`find_sentence_boundary`) produit des phrases TTS-friendly (≥20 chars, pas de coupure numérique)
+- Le TTS worker concurrent (`asyncio.Queue`) permet de synthétiser la phrase N+1 pendant que la phrase N est jouée
+- Le frontend `useAudioQueue` chaîne les chunks audio WAV sans gap audible
+- Backward-compatible : fallback automatique vers POST /ask si SSE échoue
