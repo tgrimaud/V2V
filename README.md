@@ -6,7 +6,7 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 
 ## Fonctionnalités
 
-- **Chat vocal web** — bouton micro dans le navigateur, réponse audio en streaming
+- **Chat vocal web** — bouton micro dans le navigateur, réponse audio (voix Gradium, format WAV 16kHz)
 - **Chat texte** — fallback texte pour tester ou pour les contextes non-vocaux
 - **Téléphonie Twilio** — réponse vocale sur un numéro de téléphone classique
 - **RAG sur base de connaissance** — réponses factuelles avec citations sourcées
@@ -253,7 +253,7 @@ voice-support-bot/
 | Variable | Description | Défaut |
 |----------|-------------|--------|
 | `GRADIUM_API_KEY` | Clé API Gradium (obligatoire) | — |
-| `GRADIUM_VOICE_ID` | ID de la voix Gradium | `default` |
+| `GRADIUM_VOICE_ID` | ID de la voix Gradium (voir catalogue) | `b35yykvVppLXyw_l` (Elise, FR) |
 | `BACKEND_URL` | URL du backend Java | `http://localhost:8081` |
 | `VOICE_AGENT_PORT` | Port WebSocket navigateur | `8765` |
 | `TWILIO_WS_PORT` | Port WebSocket Twilio | `8766` |

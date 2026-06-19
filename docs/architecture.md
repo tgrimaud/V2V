@@ -146,11 +146,17 @@ Client (Browser)              Voice Agent (Pipecat)         Java Backend
   │                              │                              │── RAG → LLM
   │                              │◀─── JSON response ──────────│
   │                              │                              │
-  │                              │── Gradium TTS → audio        │
+  │                              │── Gradium TTS → audio PCM    │
+  │                              │── PCM → WAV (header 44B)     │
   │                              │                              │
-  │◀──── audio PCM 16kHz ───────│                              │
+  │◀──── audio WAV 16kHz ──────│                              │
+  │── decodeAudioData() → play  │                              │
   │                              │                              │
 ```
+
+> **Note** : Le bridge server enveloppe le PCM reçu de Gradium dans un header WAV
+> avant de l'envoyer au navigateur. `AudioContext.decodeAudioData()` requiert
+> un format auto-descriptif — le PCM brut ne peut pas être décodé directement.
 
 ### Mode téléphonie (Twilio → Pipecat + Gradium)
 

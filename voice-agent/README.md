@@ -63,7 +63,7 @@ python -m agent.twilio_server
 | Variable | Défaut | Description |
 |----------|--------|-------------|
 | `GRADIUM_API_KEY` | — | Clé API Gradium (obligatoire) |
-| `GRADIUM_VOICE_ID` | `default` | ID de la voix Gradium |
+| `GRADIUM_VOICE_ID` | `b35yykvVppLXyw_l` | ID de la voix Gradium ([catalogue](https://docs.gradium.ai/guides/voices/all-voices)) |
 | `BACKEND_URL` | `http://localhost:8081` | URL du backend Java |
 | `VOICE_AGENT_HOST` | `0.0.0.0` | Host d'écoute WebSocket |
 | `VOICE_AGENT_PORT` | `8765` | Port WebSocket (navigateur) |
@@ -83,3 +83,26 @@ python -m agent.twilio_server
 |-----------|--------|-------------|
 | Navigateur (WebSocket) | PCM 16-bit | 16 kHz |
 | Twilio (Media Streams) | μ-law | 8 kHz |
+
+## Notes techniques
+
+### Voix Gradium
+
+Le `voice_id` doit être un identifiant valide du [catalogue Gradium](https://docs.gradium.ai/guides/voices/all-voices). La valeur `"default"` n'existe pas et provoque l'erreur `Embeddings not found`.
+
+Voix françaises recommandées :
+| Nom | Voice ID | Genre |
+|-----|----------|-------|
+| Elise | `b35yykvVppLXyw_l` | Féminin |
+| Leo | `axlOaUiFyOZhy4nv` | Masculin |
+
+### Protocole TTS WebSocket
+
+Le bridge server respecte le protocole Gradium TTS :
+1. Envoi du message `setup` (avec `voice_id` + `output_format`)
+2. **Attente du message `ready`** (obligatoire avant d'envoyer le texte)
+3. Envoi du texte + `end_of_stream`
+4. Réception des chunks audio base64
+5. Wrapping PCM → WAV (header 44 octets) avant envoi au navigateur
+
+Le navigateur utilise `AudioContext.decodeAudioData()` qui nécessite un format auto-descriptif (WAV), pas du PCM brut.

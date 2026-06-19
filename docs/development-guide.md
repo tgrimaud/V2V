@@ -119,6 +119,8 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 | Ingestion lente | Ollama génère les embeddings | Normal au premier appel (~1s/chunk), ensuite caché |
 | Frontend ne se connecte pas au voice agent | URL incorrecte | Vérifier `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
 | `GRADIUM_API_KEY not set` | Variable manquante | `cp voice-agent/.env.example voice-agent/.env` et configurer |
+| `Embeddings not found for default` | `GRADIUM_VOICE_ID` invalide | Utiliser un vrai ID du [catalogue](https://docs.gradium.ai/guides/voices/all-voices) (ex: `b35yykvVppLXyw_l` pour Elise FR) |
+| Audio TTS non joué dans le navigateur | PCM brut non décodable par `decodeAudioData` | Le bridge doit wrapper le PCM dans un header WAV (44 octets) avant envoi |
 | Agent Pipecat ne démarre pas | Dépendances manquantes | `cd voice-agent && uv pip install -e .` |
 
 ## Commandes utiles
