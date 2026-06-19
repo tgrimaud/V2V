@@ -48,7 +48,7 @@ uv pip install -e .
 
 **Mode WebSocket (navigateur) :**
 ```bash
-python -m agent.ws_server
+python -u -m agent.bridge_server
 # → écoute sur ws://localhost:8765
 ```
 

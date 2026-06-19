@@ -73,6 +73,10 @@ async def handle_client(websocket):
             elif isinstance(message, str):
                 if message == "END_OF_SPEECH":
                     if not audio_buffer:
+                        await websocket.send(json.dumps({
+                            "type": "answer",
+                            "text": "",
+                        }))
                         continue
 
                     audio_data = bytes(audio_buffer)
@@ -168,11 +172,12 @@ async def transcribe_audio(audio_data: bytes, language: str = DEFAULT_LANGUAGE) 
 async def process_question(backend: RAGBackendClient, question: str, language: str = DEFAULT_LANGUAGE) -> tuple[str, bytes | None]:
     """Send question to RAG backend and synthesize answer via Gradium TTS."""
     try:
-        result = await backend.ask(question)
+        lang_hint = " (Please answer in English.)" if language == "en" else ""
+        result = await backend.ask(question + lang_hint)
         answer = result.get("answer", "Désolé, je n'ai pas compris.")
     except Exception as e:
         print(f"[RAG] Error: {e}")
-        answer = "Désolé, une erreur est survenue. Veuillez réessayer."
+        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue. Veuillez réessayer."
 
     audio = await synthesize_speech(answer, language)
     return answer, audio
@@ -200,7 +205,8 @@ async def synthesize_speech(text: str, language: str = DEFAULT_LANGUAGE) -> byte
             ready = await ws.recv()
             ready_data = json.loads(ready)
             if ready_data.get("type") != "ready":
-                print(f"[TTS] Unexpected setup response: {ready_data}", flush=True)
+                print(f"[TTS] Setup failed: {ready_data}", flush=True)
+                return None
 
             await ws.send(json.dumps({
                 "type": "text",

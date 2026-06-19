@@ -34,6 +34,9 @@ export function VoiceChat() {
         audioContextRef.current = new AudioContext()
       }
       const ctx = audioContextRef.current
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
+      }
       const decoded = await ctx.decodeAudioData(audioBuffer)
       const source = ctx.createBufferSource()
       source.buffer = decoded
@@ -46,13 +49,23 @@ export function VoiceChat() {
     }
   }, [])
 
+  const answerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const { connectionState, sendAudio, sendEndOfSpeech, sendLanguage } = useVoiceWebSocket({
     onTranscription: (text) => addMessage('user', text),
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
-      setVoiceState('idle')
+      answerTimeoutRef.current = setTimeout(() => {
+        setVoiceState((current) => current === 'processing' ? 'idle' : current)
+      }, 500)
     },
-    onAudio: playAudio,
+    onAudio: (audio) => {
+      if (answerTimeoutRef.current) {
+        clearTimeout(answerTimeoutRef.current)
+        answerTimeoutRef.current = null
+      }
+      playAudio(audio)
+    },
     onLanguageChanged: (lang) => setLanguage(lang as 'fr' | 'en'),
     onError: (error) => {
       console.error('Voice error:', error)

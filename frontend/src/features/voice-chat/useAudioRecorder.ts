@@ -19,11 +19,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions) {
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true }
+        audio: { channelCount: 1, echoCancellation: true }
       })
       streamRef.current = stream
 
-      const audioContext = new AudioContext({ sampleRate: 16000 })
+      const audioContext = new AudioContext()
       audioContextRef.current = audioContext
 
       const source = audioContext.createMediaStreamSource(stream)
@@ -31,11 +31,27 @@ export function useAudioRecorder(options: UseAudioRecorderOptions) {
       processorRef.current = processor
       chunksRef.current = []
 
+      const nativeSampleRate = audioContext.sampleRate
+      const targetSampleRate = 16000
+
       processor.onaudioprocess = (event) => {
         const float32 = event.inputBuffer.getChannelData(0)
-        const int16 = new Int16Array(float32.length)
-        for (let i = 0; i < float32.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32[i]))
+
+        let resampled: Float32Array
+        if (nativeSampleRate !== targetSampleRate) {
+          const ratio = nativeSampleRate / targetSampleRate
+          const newLength = Math.floor(float32.length / ratio)
+          resampled = new Float32Array(newLength)
+          for (let i = 0; i < newLength; i++) {
+            resampled[i] = float32[Math.floor(i * ratio)] ?? 0
+          }
+        } else {
+          resampled = float32
+        }
+
+        const int16 = new Int16Array(resampled.length)
+        for (let i = 0; i < resampled.length; i++) {
+          const s = Math.max(-1, Math.min(1, resampled[i] ?? 0))
           int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
         chunksRef.current.push(int16)
