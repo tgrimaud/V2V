@@ -7,6 +7,7 @@ interface UseVoiceWebSocketOptions {
   onAnswer: (text: string) => void
   onAudio: (audio: ArrayBuffer) => void
   onError: (error: string) => void
+  onLanguageChanged?: (language: string) => void
 }
 
 export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
@@ -39,6 +40,8 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
             optionsRef.current.onTranscription(message.text)
           } else if (message.type === 'answer') {
             optionsRef.current.onAnswer(message.text)
+          } else if (message.type === 'language_changed') {
+            optionsRef.current.onLanguageChanged?.(message.language)
           } else if (message.error) {
             optionsRef.current.onError(message.error)
           }
@@ -78,10 +81,16 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     }
   }, [])
 
+  const sendLanguage = useCallback((language: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'set_language', language }))
+    }
+  }, [])
+
   useEffect(() => {
     connect()
     return () => disconnect()
   }, [connect, disconnect])
 
-  return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech }
+  return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech, sendLanguage }
 }

@@ -15,6 +15,7 @@ export function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [textInput, setTextInput] = useState('')
+  const [language, setLanguage] = useState<'fr' | 'en'>('fr')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -45,13 +46,14 @@ export function VoiceChat() {
     }
   }, [])
 
-  const { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech } = useVoiceWebSocket({
+  const { connectionState, sendAudio, sendEndOfSpeech, sendLanguage } = useVoiceWebSocket({
     onTranscription: (text) => addMessage('user', text),
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
       setVoiceState('idle')
     },
     onAudio: playAudio,
+    onLanguageChanged: (lang) => setLanguage(lang as 'fr' | 'en'),
     onError: (error) => {
       console.error('Voice error:', error)
       setVoiceState('idle')
@@ -73,6 +75,40 @@ export function VoiceChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const handleLanguageChange = (lang: 'fr' | 'en') => {
+    setLanguage(lang)
+    sendLanguage(lang)
+  }
+
+  const labels = {
+    fr: {
+      idle: 'Appuyez pour parler',
+      recording: 'Écoute en cours...',
+      processing: 'Réflexion...',
+      speaking: 'Réponse en cours...',
+      greeting: 'Bonjour ! Comment puis-je vous aider ?',
+      hint: 'Posez votre question sur votre box, forfait ou connexion',
+      placeholder: 'Ou tapez votre question ici...',
+      send: 'Envoyer',
+      connected: 'Connecté',
+      disconnected: 'Déconnecté',
+    },
+    en: {
+      idle: 'Press to speak',
+      recording: 'Listening...',
+      processing: 'Thinking...',
+      speaking: 'Speaking...',
+      greeting: 'Hello! How can I help you?',
+      hint: 'Ask about your router, plan, or connection',
+      placeholder: 'Or type your question here...',
+      send: 'Send',
+      connected: 'Connected',
+      disconnected: 'Disconnected',
+    },
+  }
+
+  const t = labels[language]
 
   const handleMicClick = () => {
     if (voiceState === 'recording') {
@@ -115,22 +151,46 @@ export function VoiceChat() {
   }
 
   const stateLabels: Record<VoiceState, string> = {
-    idle: 'Appuyez pour parler',
-    recording: 'Écoute en cours...',
-    processing: 'Réflexion...',
-    speaking: 'Réponse en cours...',
+    idle: t.idle,
+    recording: t.recording,
+    processing: t.processing,
+    speaking: t.speaking,
   }
 
   return (
     <div className="rounded-2xl shadow-lg overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
-      {/* Connection indicator */}
-      <div className="px-4 py-2 flex items-center gap-2 text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <span className="w-2 h-2 rounded-full" style={{
-          backgroundColor: connectionState === 'connected' ? 'var(--color-success)' : 'var(--color-danger)'
-        }} />
-        <span style={{ color: 'var(--color-text-muted)' }}>
-          {connectionState === 'connected' ? 'Connecté' : 'Déconnecté'}
-        </span>
+      {/* Connection indicator + Language selector */}
+      <div className="px-4 py-2 flex items-center justify-between text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{
+            backgroundColor: connectionState === 'connected' ? 'var(--color-success)' : 'var(--color-danger)'
+          }} />
+          <span style={{ color: 'var(--color-text-muted)' }}>
+            {connectionState === 'connected' ? t.connected : t.disconnected}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 rounded-full p-0.5" style={{ backgroundColor: 'var(--color-border)' }}>
+          <button
+            onClick={() => handleLanguageChange('fr')}
+            className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: language === 'fr' ? 'var(--color-primary)' : 'transparent',
+              color: language === 'fr' ? 'white' : 'var(--color-text-muted)',
+            }}
+          >
+            FR
+          </button>
+          <button
+            onClick={() => handleLanguageChange('en')}
+            className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: language === 'en' ? 'var(--color-primary)' : 'transparent',
+              color: language === 'en' ? 'white' : 'var(--color-text-muted)',
+            }}
+          >
+            EN
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -140,10 +200,10 @@ export function VoiceChat() {
             <div>
               <div className="text-4xl mb-4">🎙️</div>
               <p className="text-lg font-medium" style={{ color: 'var(--color-text)' }}>
-                Bonjour ! Comment puis-je vous aider ?
+                {t.greeting}
               </p>
               <p className="mt-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Posez votre question sur votre box, forfait ou connexion
+                {t.hint}
               </p>
             </div>
           </div>
@@ -196,7 +256,7 @@ export function VoiceChat() {
             type="text"
             value={textInput}
             onChange={e => setTextInput(e.target.value)}
-            placeholder="Ou tapez votre question ici..."
+            placeholder={t.placeholder}
             className="flex-1 px-4 py-2 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500"
             style={{
               border: '1px solid var(--color-border)',
@@ -209,7 +269,7 @@ export function VoiceChat() {
             className="px-4 py-2 rounded-full text-sm text-white font-medium disabled:opacity-50"
             style={{ backgroundColor: 'var(--color-primary)' }}
           >
-            Envoyer
+            {t.send}
           </button>
         </form>
       </div>
