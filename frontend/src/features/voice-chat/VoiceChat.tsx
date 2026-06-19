@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { useVoiceWebSocket } from './useVoiceWebSocket'
 import { useAudioRecorder } from './useAudioRecorder'
+import { useAudioQueue } from './useAudioQueue'
 import { MessageList } from './MessageList'
 import { labels } from './i18n'
 import type { Language } from './i18n'
@@ -10,6 +11,7 @@ interface Message {
   role: 'user' | 'assistant'
   text: string
   timestamp: Date
+  streaming?: boolean
 }
 
 type VoiceState = 'idle' | 'recording' | 'processing' | 'speaking'
@@ -19,49 +21,49 @@ export function VoiceChat() {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [textInput, setTextInput] = useState('')
   const [language, setLanguage] = useState<Language>('fr')
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const answerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const t = labels[language]
 
+  const { enqueue: enqueueAudio, clear: clearAudioQueue, state: audioState } = useAudioQueue()
+
+  if (audioState === 'playing' && voiceState !== 'speaking') {
+    setVoiceState('speaking')
+  } else if (audioState === 'idle' && voiceState === 'speaking') {
+    setVoiceState('idle')
+  }
+
   const addMessage = useCallback((role: 'user' | 'assistant', text: string) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, text, timestamp: new Date() }])
-  }, [])
-
-  const playAudio = useCallback(async (audioBuffer: ArrayBuffer) => {
-    try {
-      if (!audioContextRef.current) audioContextRef.current = new AudioContext()
-      const ctx = audioContextRef.current
-      if (ctx.state === 'suspended') await ctx.resume()
-      const decoded = await ctx.decodeAudioData(audioBuffer)
-      const source = ctx.createBufferSource()
-      source.buffer = decoded
-      source.connect(ctx.destination)
-      source.onended = () => setVoiceState('idle')
-      setVoiceState('speaking')
-      source.start()
-    } catch {
-      setVoiceState('idle')
-    }
   }, [])
 
   const { connectionState, sendAudio, sendEndOfSpeech, sendLanguage } = useVoiceWebSocket({
     onTranscription: (text) => addMessage('user', text),
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
-      answerTimeoutRef.current = setTimeout(() => {
-        setVoiceState((cur) => cur === 'processing' ? 'idle' : cur)
-      }, 500)
+      setVoiceState('idle')
+    },
+    onAnswerChunk: (text) => {
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.streaming) {
+          return prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, text: m.text + text } : m
+          )
+        }
+        return [...prev, { id: crypto.randomUUID(), role: 'assistant' as const, text, timestamp: new Date(), streaming: true }]
+      })
+    },
+    onAnswerDone: () => {
+      setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m))
+      if (audioState !== 'playing') {
+        setVoiceState('idle')
+      }
     },
     onAudio: (audio) => {
-      if (answerTimeoutRef.current) {
-        clearTimeout(answerTimeoutRef.current)
-        answerTimeoutRef.current = null
-      }
-      playAudio(audio)
+      enqueueAudio(audio)
     },
     onLanguageChanged: (lang) => setLanguage(lang as Language),
-    onError: (error) => { console.error('Voice error:', error); setVoiceState('idle') },
+    onError: (error) => { console.error('Voice error:', error); setVoiceState('idle'); clearAudioQueue() },
   })
 
   const { state: recorderState, startRecording, stopRecording, reset: resetRecorder } = useAudioRecorder({

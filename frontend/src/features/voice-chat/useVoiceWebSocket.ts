@@ -5,6 +5,8 @@ type ConnectionState = 'disconnected' | 'connected' | 'error'
 interface UseVoiceWebSocketOptions {
   onTranscription: (text: string) => void
   onAnswer: (text: string) => void
+  onAnswerChunk?: (text: string) => void
+  onAnswerDone?: (fullText: string) => void
   onAudio: (audio: ArrayBuffer) => void
   onError: (error: string) => void
   onLanguageChanged?: (language: string) => void
@@ -42,6 +44,10 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
           const message = JSON.parse(event.data)
           if (message.type === 'transcription') {
             optionsRef.current.onTranscription(message.text)
+          } else if (message.type === 'answer_chunk') {
+            optionsRef.current.onAnswerChunk?.(message.text)
+          } else if (message.type === 'answer_done') {
+            optionsRef.current.onAnswerDone?.(message.text)
           } else if (message.type === 'answer') {
             optionsRef.current.onAnswer(message.text)
           } else if (message.type === 'language_changed') {

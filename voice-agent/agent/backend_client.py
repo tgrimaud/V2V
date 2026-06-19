@@ -1,5 +1,8 @@
 """RAG backend client — calls the Java Spring Boot backend for conversation."""
 
+import json
+from collections.abc import AsyncGenerator
+
 import httpx
 
 
@@ -18,6 +21,36 @@ class RAGBackendClient:
         )
         response.raise_for_status()
         return response.json()
+
+    async def ask_stream(
+        self, question: str, conversation_id: str = "pipecat"
+    ) -> AsyncGenerator[dict, None]:
+        """Stream the RAG backend response via SSE. Yields dicts with 'event' and 'data' keys."""
+        params = {"question": question, "conversation_id": conversation_id}
+        async with self._client.stream(
+            "GET",
+            "/api/conversation/ask-stream",
+            params=params,
+            headers={"Accept": "text/event-stream"},
+            timeout=60.0,
+        ) as response:
+            response.raise_for_status()
+            event_name = ""
+            data_buffer = ""
+
+            async for line in response.aiter_lines():
+                if line.startswith("event:"):
+                    event_name = line[6:].strip()
+                elif line.startswith("data:"):
+                    data_buffer = line[5:].strip()
+                elif line == "" and data_buffer:
+                    try:
+                        parsed = json.loads(data_buffer)
+                        yield {"event": event_name, "data": parsed}
+                    except json.JSONDecodeError:
+                        yield {"event": event_name, "data": {"text": data_buffer}}
+                    event_name = ""
+                    data_buffer = ""
 
     async def health(self) -> bool:
         """Check if the backend is reachable."""

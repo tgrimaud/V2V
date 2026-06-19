@@ -40,6 +40,8 @@ describe('useVoiceWebSocket', () => {
   const defaultOptions = {
     onTranscription: vi.fn(),
     onAnswer: vi.fn(),
+    onAnswerChunk: vi.fn(),
+    onAnswerDone: vi.fn(),
     onAudio: vi.fn(),
     onError: vi.fn(),
     onLanguageChanged: vi.fn(),
@@ -145,5 +147,29 @@ describe('useVoiceWebSocket', () => {
 
     // THEN
     expect(result.current.connectionState).toBe('disconnected')
+  })
+
+  it('should_dispatch_answer_chunk_to_callback', () => {
+    // GIVEN
+    renderHook(() => useVoiceWebSocket(defaultOptions))
+    act(() => mockWsInstance.simulateOpen())
+
+    // WHEN
+    act(() => mockWsInstance.simulateMessage(JSON.stringify({ type: 'answer_chunk', text: 'Bonjour, ' })))
+
+    // THEN
+    expect(defaultOptions.onAnswerChunk).toHaveBeenCalledWith('Bonjour, ')
+  })
+
+  it('should_dispatch_answer_done_to_callback', () => {
+    // GIVEN
+    renderHook(() => useVoiceWebSocket(defaultOptions))
+    act(() => mockWsInstance.simulateOpen())
+
+    // WHEN
+    act(() => mockWsInstance.simulateMessage(JSON.stringify({ type: 'answer_done', text: 'Full answer.' })))
+
+    // THEN
+    expect(defaultOptions.onAnswerDone).toHaveBeenCalledWith('Full answer.')
   })
 })

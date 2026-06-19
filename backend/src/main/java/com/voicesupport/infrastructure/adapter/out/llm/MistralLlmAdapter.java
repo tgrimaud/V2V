@@ -1,11 +1,13 @@
 package com.voicesupport.infrastructure.adapter.out.llm;
 
 import com.voicesupport.domain.port.out.LlmPort;
+import com.voicesupport.domain.port.out.LlmStreamingPort;
 import org.springframework.ai.chat.client.ChatClient;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
-public class MistralLlmAdapter implements LlmPort {
+public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
 
     private static final String SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI.
@@ -41,6 +43,21 @@ public class MistralLlmAdapter implements LlmPort {
                 .system(systemMessage)
                 .user(question + history)
                 .call()
+                .content();
+    }
+
+    @Override
+    public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+        String context = String.join("\n---\n", contextChunks);
+        String history = conversationHistory.isEmpty() ? "" :
+                "\n\nHistorique de la conversation :\n" + String.join("\n", conversationHistory);
+
+        String systemMessage = SYSTEM_PROMPT.replace("{context}", context);
+
+        return chatClient.prompt()
+                .system(systemMessage)
+                .user(question + history)
+                .stream()
                 .content();
     }
 }

@@ -5,8 +5,10 @@ Frontend protocol:
   - Client sends: text "END_OF_SPEECH" when done speaking
   - Client sends: JSON {"type":"set_language","language":"fr|en"}
   - Server sends: JSON {"type":"transcription","text":"..."} after STT
-  - Server sends: JSON {"type":"answer","text":"..."} after RAG
-  - Server sends: binary audio (WAV 16kHz) for TTS playback
+  - Server sends: JSON {"type":"answer_chunk","text":"..."} per sentence (streaming)
+  - Server sends: binary audio (WAV 16kHz) per sentence (streaming)
+  - Server sends: JSON {"type":"answer_done","text":"..."} when generation complete
+  - Server sends: JSON {"type":"answer","text":"..."} fallback (non-streaming)
 """
 
 import asyncio
@@ -20,6 +22,7 @@ from dotenv import load_dotenv
 from agent.backend_client import RAGBackendClient
 from agent.gradium_stt import transcribe_audio
 from agent.gradium_tts import synthesize_speech
+from agent.sentence_splitter import find_sentence_boundary
 
 load_dotenv()
 
@@ -62,9 +65,9 @@ async def handle_client(websocket):
 
 
 async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
-    """Process buffered audio: STT → RAG → TTS → send responses."""
+    """Process buffered audio: STT → streaming RAG → streaming TTS."""
     if not audio_buffer:
-        await websocket.send(json.dumps({"type": "answer", "text": ""}))
+        await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
         return
 
     audio_data = bytes(audio_buffer)
@@ -74,17 +77,90 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
 
     if not transcription:
         print("[STT] No transcription returned (silence?)", flush=True)
-        await websocket.send(json.dumps({"type": "answer", "text": ""}))
+        await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
         return
 
     print(f"[STT] Result: '{transcription}'", flush=True)
     await websocket.send(json.dumps({"type": "transcription", "text": transcription}))
 
-    answer, audio_response = await _process_question(backend, transcription, language)
-    await websocket.send(json.dumps({"type": "answer", "text": answer}))
+    lang_hint = " (Please answer in English.)" if language == "en" else ""
+    question = transcription + lang_hint
 
-    if audio_response:
-        await websocket.send(audio_response)
+    try:
+        await _stream_answer(websocket, backend, question, language)
+    except Exception as e:
+        print(f"[STREAM] SSE failed ({e}), falling back to POST", flush=True)
+        await _fallback_non_streaming(websocket, backend, question, language)
+
+
+async def _stream_answer(websocket, backend, question, language):
+    """Consume SSE from backend, split into sentences, TTS each concurrently."""
+    voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
+    sentence_buffer = ""
+    full_answer = ""
+    tts_queue = asyncio.Queue()
+
+    async def tts_worker():
+        """Process TTS requests from queue and send audio to client."""
+        while True:
+            sentence = await tts_queue.get()
+            if sentence is None:
+                break
+            audio = await synthesize_speech(sentence, voice_id, GRADIUM_API_KEY)
+            if audio:
+                await websocket.send(audio)
+            tts_queue.task_done()
+
+    worker_task = asyncio.create_task(tts_worker())
+
+    async for event in backend.ask_stream(question, "pipecat"):
+        event_type = event.get("event", "")
+
+        if event_type == "chunk":
+            token = event["data"].get("text", "")
+            sentence_buffer += token
+            full_answer += token
+
+            sentence, remainder = find_sentence_boundary(sentence_buffer)
+            if sentence:
+                sentence_buffer = remainder
+                await websocket.send(json.dumps({"type": "answer_chunk", "text": sentence}))
+                await tts_queue.put(sentence)
+
+        elif event_type == "done":
+            break
+
+    # Flush any remaining text in buffer
+    if sentence_buffer.strip():
+        remaining = sentence_buffer.strip()
+        await websocket.send(json.dumps({"type": "answer_chunk", "text": remaining}))
+        await tts_queue.put(remaining)
+
+    # Signal TTS worker to stop and wait for completion
+    await tts_queue.put(None)
+    await worker_task
+
+    await websocket.send(json.dumps({"type": "answer_done", "text": full_answer}))
+    print(f"[STREAM] Complete: {len(full_answer)} chars", flush=True)
+
+
+async def _fallback_non_streaming(websocket, backend, question, language):
+    """Fallback to non-streaming POST /ask if SSE fails."""
+    try:
+        result = await backend.ask(question)
+        answer = result.get("answer", "Désolé, je n'ai pas compris.")
+    except Exception as e:
+        print(f"[RAG] Fallback error: {e}", flush=True)
+        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue."
+
+    voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
+    await websocket.send(json.dumps({"type": "answer_chunk", "text": answer}))
+
+    audio = await synthesize_speech(answer, voice_id, GRADIUM_API_KEY)
+    if audio:
+        await websocket.send(audio)
+
+    await websocket.send(json.dumps({"type": "answer_done", "text": answer}))
 
 
 async def _handle_json_message(websocket, message, language):
@@ -115,21 +191,6 @@ def _extract_language(message: str, current: str) -> str:
     return current
 
 
-async def _process_question(backend, question, language):
-    """Send question to RAG backend and synthesize answer via TTS."""
-    try:
-        lang_hint = " (Please answer in English.)" if language == "en" else ""
-        result = await backend.ask(question + lang_hint)
-        answer = result.get("answer", "Désolé, je n'ai pas compris.")
-    except Exception as e:
-        print(f"[RAG] Error: {e}", flush=True)
-        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue."
-
-    voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
-    audio = await synthesize_speech(answer, voice_id, GRADIUM_API_KEY)
-    return answer, audio
-
-
 async def main():
     if not GRADIUM_API_KEY:
         print("ERROR: GRADIUM_API_KEY not set.", flush=True)
@@ -137,7 +198,7 @@ async def main():
 
     print(f"Voice agent bridge listening on ws://{WS_HOST}:{WS_PORT}", flush=True)
     print(f"  STT/TTS: Gradium (direct WebSocket API)", flush=True)
-    print(f"  Backend: {BACKEND_URL}", flush=True)
+    print(f"  Backend: {BACKEND_URL} (SSE streaming)", flush=True)
 
     async with websockets.serve(handle_client, WS_HOST, WS_PORT):
         await asyncio.Future()

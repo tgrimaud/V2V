@@ -1,6 +1,7 @@
 export { VoiceChat } from './VoiceChat'
 export { useVoiceWebSocket } from './useVoiceWebSocket'
 export { useAudioRecorder } from './useAudioRecorder'
+export { useAudioQueue } from './useAudioQueue'
 export { MessageList } from './MessageList'
 export { labels } from './i18n'
 export type { RecordingState } from './useAudioRecorder'

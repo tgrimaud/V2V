@@ -4,11 +4,19 @@ import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.LlmPort;
+import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.domain.port.out.VectorStorePort;
 import com.voicesupport.domain.service.ConversationService;
 import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
+import com.voicesupport.domain.service.StreamingConversationService;
+import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
+import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
+import com.voicesupport.domain.service.ConversationService;
+import com.voicesupport.domain.service.EscalationDetector;
+import com.voicesupport.domain.service.KnowledgeIngestionService;
+import com.voicesupport.domain.service.StreamingConversationService;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
@@ -74,13 +82,13 @@ public class DomainServiceConfig {
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public LlmPort mistralLlmPort(ChatClient chatClient) {
+    public MistralLlmAdapter mistralLlmAdapter(ChatClient chatClient) {
         return new MistralLlmAdapter(chatClient);
     }
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
-    public LlmPort ollamaLlmPort(ChatClient chatClient) {
+    public OllamaLlmAdapter ollamaLlmAdapter(ChatClient chatClient) {
         return new OllamaLlmAdapter(chatClient);
     }
 
@@ -114,6 +122,14 @@ public class DomainServiceConfig {
                                                   EscalationDetector escalationDetector,
                                                   ConversationEventStore eventStore) {
         return new ConversationService(vectorSearchPort, llmPort, escalationDetector, eventStore);
+    }
+
+    @Bean
+    public StreamingConversationService streamingConversationService(
+            VectorSearchPort vectorSearchPort, LlmStreamingPort llmStreamingPort,
+            EscalationDetector escalationDetector, ConversationEventStore eventStore) {
+        return new StreamingConversationService(vectorSearchPort, llmStreamingPort,
+                escalationDetector, eventStore);
     }
 
     @Bean
