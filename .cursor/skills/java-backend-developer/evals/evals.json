@@ -1,0 +1,23 @@
+{
+  "skill_name": "java-backend-developer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a new output port called BillingQueryPort in the domain layer with a method getBillingHistory(DateRange range) that returns List<BillingRecord>. Then create a mock adapter for it and register the beans properly. BillingRecord should be a value object with fields: date (LocalDate), amountCents (long), description (String).",
+      "expected_output": "Port interface in domain/port/out/, value object as a record with validation, mock adapter in infrastructure/adapter/out/mock/, bean registration in AdapterConfig with @Profile, and DomainServiceConfig not touched since there's no domain service here.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Create a new application service called NotificationService that uses a NotificationQueryPort to fetch notifications and an AnomalyDetectionService (domain service) to filter them. Add @Cacheable with a new cache name. Also add a REST endpoint GET /api/notifications that returns the filtered list wrapped in ApiResponse.",
+      "expected_output": "Application service with @Service and @Cacheable, cache name added to CacheConfig, controller using the app service, DTO with static fromDomain(), proper error handling, and no Spring annotations leaked into domain layer.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I need to add a new output adapter that calls an external REST API at https://api.example.com/metrics. It should implement a MetricsQueryPort, handle rate limiting (429 responses), have a 30-second timeout, and use the existing CursorApiClient pattern. Register it for the prod profile only, with a mock adapter for dev.",
+      "expected_output": "Adapter in infrastructure/adapter/out/ implementing the port, using WebClient with retry on 429, timeout, .block() for sync calls. Bean registered in CursorApiConfig with @Profile(prod). Mock adapter registered in AdapterConfig. Port interface in domain/port/out/.",
+      "files": []
+    }
+  ]
+}
