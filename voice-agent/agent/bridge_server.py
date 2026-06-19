@@ -30,6 +30,26 @@ WS_HOST = os.getenv("VOICE_AGENT_HOST", "0.0.0.0")
 WS_PORT = int(os.getenv("VOICE_AGENT_PORT", "8765"))
 
 SAMPLE_RATE = 16000
+TTS_SAMPLE_RATE = 16000
+
+
+def pcm_to_wav(pcm_data: bytes, sample_rate: int = TTS_SAMPLE_RATE) -> bytes:
+    """Wrap raw PCM 16-bit mono data in a WAV header so the browser can decode it."""
+    num_channels = 1
+    bits_per_sample = 16
+    byte_rate = sample_rate * num_channels * bits_per_sample // 8
+    block_align = num_channels * bits_per_sample // 8
+    data_size = len(pcm_data)
+    file_size = 36 + data_size
+
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF', file_size, b'WAVE',
+        b'fmt ', 16, 1, num_channels,
+        sample_rate, byte_rate, block_align, bits_per_sample,
+        b'data', data_size,
+    )
+    return header + pcm_data
 
 
 async def handle_client(websocket):
@@ -164,6 +184,11 @@ async def synthesize_speech(text: str) -> bytes | None:
             })
             await ws.send(setup_msg)
 
+            ready = await ws.recv()
+            ready_data = json.loads(ready)
+            if ready_data.get("type") != "ready":
+                print(f"[TTS] Unexpected setup response: {ready_data}", flush=True)
+
             await ws.send(json.dumps({
                 "type": "text",
                 "text": text,
@@ -181,7 +206,8 @@ async def synthesize_speech(text: str) -> bytes | None:
                     break
 
             if audio_chunks:
-                return b"".join(audio_chunks)
+                pcm_data = b"".join(audio_chunks)
+                return pcm_to_wav(pcm_data, TTS_SAMPLE_RATE)
             return None
 
     except Exception as e:
