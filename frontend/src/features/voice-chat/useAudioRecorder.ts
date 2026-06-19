@@ -9,9 +9,12 @@ interface UseAudioRecorderOptions {
 
 export function useAudioRecorder(options: UseAudioRecorderOptions) {
   const [state, setState] = useState<RecordingState>('idle')
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const chunksRef = useRef<Int16Array[]>([])
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   const startRecording = useCallback(async () => {
     try {
@@ -20,40 +23,60 @@ export function useAudioRecorder(options: UseAudioRecorderOptions) {
       })
       streamRef.current = stream
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-      mediaRecorderRef.current = mediaRecorder
+      const audioContext = new AudioContext({ sampleRate: 16000 })
+      audioContextRef.current = audioContext
+
+      const source = audioContext.createMediaStreamSource(stream)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+      processorRef.current = processor
       chunksRef.current = []
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
+      processor.onaudioprocess = (event) => {
+        const float32 = event.inputBuffer.getChannelData(0)
+        const int16 = new Int16Array(float32.length)
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]))
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
+        chunksRef.current.push(int16)
       }
 
-      mediaRecorder.onstop = async () => {
-        setState('processing')
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-        const buffer = await blob.arrayBuffer()
-        options.onAudioData(buffer)
-        options.onRecordingComplete()
-      }
-
-      mediaRecorder.start(100)
+      source.connect(processor)
+      processor.connect(audioContext.destination)
       setState('recording')
     } catch (error) {
       console.error('Failed to start recording:', error)
       setState('idle')
     }
-  }, [options])
+  }, [])
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop()
+    if (processorRef.current) {
+      processorRef.current.disconnect()
+      processorRef.current = null
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
     }
+
+    setState('processing')
+
+    const totalLength = chunksRef.current.reduce((acc, c) => acc + c.length, 0)
+    const pcm = new Int16Array(totalLength)
+    let offset = 0
+    for (const chunk of chunksRef.current) {
+      pcm.set(chunk, offset)
+      offset += chunk.length
+    }
+    chunksRef.current = []
+
+    optionsRef.current.onAudioData(pcm.buffer)
+    optionsRef.current.onRecordingComplete()
   }, [])
 
   const reset = useCallback(() => {

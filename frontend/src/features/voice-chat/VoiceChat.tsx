@@ -74,11 +74,6 @@ export function VoiceChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  useEffect(() => {
-    connect()
-    return () => disconnect()
-  }, [connect, disconnect])
-
   const handleMicClick = () => {
     if (voiceState === 'recording') {
       stopRecording()

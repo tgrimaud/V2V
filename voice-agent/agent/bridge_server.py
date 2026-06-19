@@ -104,7 +104,7 @@ async def transcribe_audio(audio_data: bytes) -> str | None:
             ready = await ws.recv()
             ready_data = json.loads(ready)
             if ready_data.get("type") != "ready":
-                print(f"[STT] Unexpected setup response: {ready_data}")
+                print(f"[STT] Unexpected setup response: {ready_data}", flush=True)
 
             chunk_size = 3200  # 100ms of PCM 16kHz 16-bit mono
             for i in range(0, len(audio_data), chunk_size):

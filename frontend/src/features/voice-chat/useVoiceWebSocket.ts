@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 type ConnectionState = 'disconnected' | 'connected' | 'error'
 
@@ -12,12 +12,17 @@ interface UseVoiceWebSocketOptions {
 export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
   const wsRef = useRef<WebSocket | null>(null)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
 
   const connect = useCallback(() => {
-    const voiceAgentUrl = import.meta.env.VITE_VOICE_AGENT_URL ?? 'ws://localhost:8765'
-    const wsUrl = voiceAgentUrl
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+      return
+    }
 
-    const ws = new WebSocket(wsUrl)
+    const voiceAgentUrl = import.meta.env.VITE_VOICE_AGENT_URL ?? 'ws://localhost:8765'
+
+    const ws = new WebSocket(voiceAgentUrl)
     ws.binaryType = 'arraybuffer'
 
     ws.onopen = () => {
@@ -26,26 +31,26 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
 
     ws.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
-        options.onAudio(event.data)
+        optionsRef.current.onAudio(event.data)
       } else {
         try {
           const message = JSON.parse(event.data)
           if (message.type === 'transcription') {
-            options.onTranscription(message.text)
+            optionsRef.current.onTranscription(message.text)
           } else if (message.type === 'answer') {
-            options.onAnswer(message.text)
+            optionsRef.current.onAnswer(message.text)
           } else if (message.error) {
-            options.onError(message.error)
+            optionsRef.current.onError(message.error)
           }
         } catch {
-          options.onError('Failed to parse server message')
+          optionsRef.current.onError('Failed to parse server message')
         }
       }
     }
 
     ws.onerror = () => {
       setConnectionState('error')
-      options.onError('WebSocket connection error')
+      optionsRef.current.onError('WebSocket connection error')
     }
 
     ws.onclose = () => {
@@ -53,7 +58,7 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     }
 
     wsRef.current = ws
-  }, [options])
+  }, [])
 
   const disconnect = useCallback(() => {
     wsRef.current?.close()
@@ -72,6 +77,11 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
       wsRef.current.send('END_OF_SPEECH')
     }
   }, [])
+
+  useEffect(() => {
+    connect()
+    return () => disconnect()
+  }, [connect, disconnect])
 
   return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech }
 }
