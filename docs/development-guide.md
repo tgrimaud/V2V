@@ -28,23 +28,32 @@
 
 ### Exemple : ajouter OpenAI comme LLM alternatif
 
-1. Créer l'adapter :
+1. Créer l'adapter (doit implémenter les deux ports) :
 
 ```java
 // infrastructure/adapter/out/llm/OpenAILlmAdapter.java
-public class OpenAILlmAdapter implements LlmPort {
+public class OpenAILlmAdapter implements LlmPort, LlmStreamingPort {
     private final ChatClient chatClient;
-    // ...
+
+    @Override
+    public String generateAnswer(...) {
+        return chatClient.prompt().system(sys).user(q).call().content();
+    }
+
+    @Override
+    public Flux<String> streamAnswer(...) {
+        return chatClient.prompt().system(sys).user(q).stream().content();
+    }
 }
 ```
 
-2. Ajouter la configuration conditionnelle :
+2. Ajouter le bean conditionnel (un seul bean satisfait les deux interfaces) :
 
 ```java
 // infrastructure/config/DomainServiceConfig.java
 @Bean
 @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "openai")
-public LlmPort openAiLlmPort(ChatClient chatClient) {
+public OpenAILlmAdapter openAiLlmAdapter(ChatClient chatClient) {
     return new OpenAILlmAdapter(chatClient);
 }
 ```
@@ -54,7 +63,7 @@ public LlmPort openAiLlmPort(ChatClient chatClient) {
 ```yaml
 voice-support:
   llm:
-    provider: openai  # ou ollama
+    provider: openai  # ou mistral-api (défaut) ou ollama
 ```
 
 ### Changer le provider STT/TTS (agent vocal)
@@ -130,7 +139,7 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 curl http://localhost:8081/api/health
 docker compose ps
 
-# Lancer l'agent vocal (navigateur — bridge mode)
+# Lancer l'agent vocal (navigateur — bridge mode streaming)
 cd voice-agent && python -u -m agent.bridge_server
 
 # Lancer l'agent vocal (navigateur — Pipecat natif, sans bridge)
@@ -138,6 +147,18 @@ cd voice-agent && python -m agent.ws_server
 
 # Lancer l'agent vocal (Twilio)
 cd voice-agent && python -m agent.twilio_server
+
+# Tester le streaming SSE (réponse token par token)
+curl -N "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=test"
+
+# Tester le RAG (mode synchrone)
+curl -s -X POST http://localhost:8081/api/conversation/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Ma box ne marche plus", "conversationId": "test"}' | python3 -m json.tool
+
+# Mesurer le time-to-first-byte (latence streaming)
+curl -w "\nTTFB: %{time_starttransfer}s\nTotal: %{time_total}s\n" -s -o /dev/null \
+  "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=perf"
 
 # Voir les chunks indexés
 docker exec voice-support-bot-postgres-1 psql -U voicesupport -d voicesupport \
