@@ -48,6 +48,7 @@ graph TB
             ConvService[ConversationService]
             StreamService[StreamingConversationService]
             EscDetector[EscalationDetector]
+            RAGPipeline["Pipeline RAG"]
         end
         subgraph adaptersOut [Adapters OUT]
             MistralAdapter[MistralLlmAdapter]
@@ -77,13 +78,14 @@ graph TB
     %% ─── Backend interne ───
     StreamController --> StreamService
     StreamService --> EscDetector
-    StreamService --> MistralAdapter
-    StreamService --> PgVecAdapter
-
+    StreamService --> RAGPipeline
     ConvController --> ConvService
-    ConvService --> MistralAdapter
-    ConvService --> OllamaAdapter
-    ConvService --> PgVecAdapter
+    ConvService --> RAGPipeline
+
+    %% ─── Pipeline RAG → Adapters ───
+    RAGPipeline -->|"retrieval"| PgVecAdapter
+    RAGPipeline -->|"generation"| MistralAdapter
+    RAGPipeline -->|"generation"| OllamaAdapter
 
     %% ─── Voice Agent → TTS (externe) ───
     BridgeServer --> SentenceSplitter
