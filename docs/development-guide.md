@@ -131,6 +131,10 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 | `Embeddings not found for default` | `GRADIUM_VOICE_ID` invalide | Utiliser un vrai ID du [catalogue](https://docs.gradium.ai/guides/voices/all-voices) (ex: `b35yykvVppLXyw_l` pour Elise FR) |
 | Audio TTS non joué dans le navigateur | PCM brut non décodable par `decodeAudioData` | Le bridge doit wrapper le PCM dans un header WAV (44 octets) avant envoi |
 | Agent Pipecat ne démarre pas | Dépendances manquantes | `cd voice-agent && uv pip install -e .` |
+| VAD charge `silero_vad_legacy.onnx` | Mauvais modèle par défaut | Ajouter `model: 'v5'` dans les options `MicVAD.new()` |
+| VAD `Can't create a session` | Fichier ONNX manquant dans `public/` | Copier `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` et `vad.worklet.bundle.min.js` dans `frontend/public/` |
+| VAD ne détecte pas la parole | `startOnLoad: true` + double-mount React | Ajouter `startOnLoad: false` et appeler `vad.start()` manuellement |
+| Barge-in ne coupe pas le bot | Bridge utilise l'ancien code | Redémarrer le bridge (`kill $(lsof -ti:8765)` puis relancer) |
 
 ## Commandes utiles
 
@@ -138,6 +142,10 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 # Vérifier l'état des services
 curl http://localhost:8081/api/health
 docker compose ps
+
+# Installer les assets VAD après npm install
+cp node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx frontend/public/
+cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js frontend/public/
 
 # Lancer l'agent vocal (navigateur — bridge mode streaming)
 cd voice-agent && python -u -m agent.bridge_server

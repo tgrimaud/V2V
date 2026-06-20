@@ -38,7 +38,17 @@ export function VoiceChat() {
   }, [])
 
   const { connectionState, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage } = useVoiceWebSocket({
-    onTranscription: (text) => addMessage('user', text),
+    onTranscription: (text) => {
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg && lastMsg.role === 'user' && lastMsg.streaming) {
+          return prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, text, streaming: false } : m
+          )
+        }
+        return [...prev, { id: crypto.randomUUID(), role: 'user' as const, text, timestamp: new Date() }]
+      })
+    },
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
       setVoiceState(vadActive ? 'listening' : 'idle')
@@ -79,6 +89,13 @@ export function VoiceChat() {
     onSpeechEndComplete: () => {
       sendEndOfSpeech()
       setVoiceState('processing')
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        role: 'user' as const,
+        text: language === 'fr' ? '...' : '...',
+        timestamp: new Date(),
+        streaming: true,
+      }])
     },
   })
 
@@ -95,6 +112,17 @@ export function VoiceChat() {
   }
 
   const handleLanguageChange = (lang: Language) => { setLanguage(lang); sendLanguage(lang) }
+
+  const handleEndConversation = () => {
+    if (vadActive) {
+      stopVAD()
+      setVadActive(false)
+    }
+    clearAudioQueue()
+    setMessages([])
+    setVoiceState('idle')
+    setTextInput('')
+  }
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -157,18 +185,32 @@ export function VoiceChat() {
       <MessageList messages={messages} greeting={t.greeting} hint={t.hint} />
       <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>
         <div className="flex flex-col items-center mb-4">
-          <button
-            onClick={handleMicToggle}
-            disabled={voiceState === 'processing'}
-            className="relative w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: stateColor[voiceState] }}
-            aria-label={vadActive ? (language === 'fr' ? 'Désactiver le micro' : 'Disable mic') : (language === 'fr' ? 'Activer le micro' : 'Enable mic')}
-          >
-            {(voiceState === 'listening' || voiceState === 'recording') && (
-              <span className="absolute inset-0 rounded-full opacity-50" style={{ animation: 'pulse-ring 1.5s infinite', backgroundColor: stateColor[voiceState] }} />
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleMicToggle}
+              disabled={voiceState === 'processing'}
+              className="relative w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: stateColor[voiceState] }}
+              aria-label={vadActive ? (language === 'fr' ? 'Désactiver le micro' : 'Disable mic') : (language === 'fr' ? 'Activer le micro' : 'Enable mic')}
+            >
+              {(voiceState === 'listening' || voiceState === 'recording') && (
+                <span className="absolute inset-0 rounded-full opacity-50" style={{ animation: 'pulse-ring 1.5s infinite', backgroundColor: stateColor[voiceState] }} />
+              )}
+              <span className="relative z-10" aria-hidden="true">{micIcon()}</span>
+            </button>
+            {messages.length > 0 && (
+              <button
+                onClick={handleEndConversation}
+                disabled={voiceState === 'processing'}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
+                aria-label={t.endConversation}
+                title={t.endConversation}
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
             )}
-            <span className="relative z-10" aria-hidden="true">{micIcon()}</span>
-          </button>
+          </div>
           <span className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>{stateLabel[voiceState]}</span>
         </div>
         <form onSubmit={handleTextSubmit} className="flex gap-2">

@@ -7,7 +7,7 @@ Voice Support Bot est un agent vocal intelligent qui répond aux questions de su
 L'architecture est **hybride** :
 - Un **backend Java** (hexagonal) gère la logique métier, le RAG, et l'administration
 - Un **agent vocal Python** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
-- Un **frontend React** fournit l'interface utilisateur avec WebSocket audio + streaming texte
+- Un **frontend React** fournit l'interface utilisateur avec VAD navigateur (détection automatique de parole), WebSocket audio + streaming texte, et barge-in (interruption du bot)
 
 ## Diagramme d'architecture
 
@@ -19,7 +19,7 @@ graph TB
 
     %% ─── Notre code : Frontend ───
     subgraph frontend ["🟢 Frontend — React/TypeScript"]
-        VoiceChat[VoiceChat + useAudioQueue]
+        VoiceChat[VoiceChat + useVAD + useAudioQueue]
     end
 
     %% ─── Notre code : Voice Agent ───
@@ -120,8 +120,8 @@ Le système appelle les services externes suivants :
 
 | Composant | Langage | Responsabilité |
 |-----------|---------|---------------|
-| **Frontend React** | TypeScript | Interface utilisateur, enregistrement audio, audio queue playback, streaming texte |
-| **Voice Agent** | Python | Orchestration audio, STT/TTS via Gradium, sentence splitting, SSE consumer |
+| **Frontend React** | TypeScript | Interface utilisateur, VAD navigateur (Silero via `@ricky0123/vad-web`), barge-in, audio queue playback, streaming texte |
+| **Voice Agent** | Python | Orchestration audio, STT/TTS via Gradium, sentence splitting, SSE consumer, gestion BARGE_IN (cancel async) |
 | **Gradium** | API cloud | STT (transcription) et TTS (synthèse vocale) |
 | **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), logique métier, escalade, admin |
 | **Mistral AI** | API cloud | LLM génération (provider par défaut, streaming) |
@@ -192,13 +192,19 @@ Client → POST /api/conversation/ask
 ```mermaid
 sequenceDiagram
     participant FE as Frontend React
+    participant VAD as Silero VAD
     participant BR as Bridge Python
     participant STT as Gradium STT
     participant BE as Backend Java
     participant LLM as Mistral API
     participant TTS as Gradium TTS
 
-    FE->>BR: PCM audio + END_OF_SPEECH
+    Note over FE,VAD: Utilisateur active le micro (toggle)
+    FE->>VAD: start()
+
+    Note over VAD: Detection automatique debut/fin de parole
+    VAD-->>FE: onSpeechEnd(audio Float32 16kHz)
+    FE->>BR: PCM Int16 + END_OF_SPEECH
     BR->>STT: POST /api/post/speech/asr
     STT-->>BR: NDJSON transcription (~200ms)
     BR->>FE: {"type":"transcription","text":"..."}
@@ -220,6 +226,14 @@ sequenceDiagram
 
     BE-->>BR: SSE event:done
     BR->>FE: {"type":"answer_done","text":"reponse complete"}
+
+    Note over FE,BR: --- Barge-in (interruption) ---
+    VAD-->>FE: onSpeechStart() pendant speaking
+    FE->>FE: flush audio queue
+    FE->>BR: BARGE_IN
+    Note over BR: Cancel asyncio task (SSE + TTS)
+    BR->>FE: {"type":"answer_done","text":"[interrompu]"}
+    Note over FE: Nouveau cycle : audio -> STT -> RAG
 ```
 
 **Gain de latence perçue :** L'utilisateur entend la première phrase en **~700ms** au lieu de ~2.2s dans le mode séquentiel.
@@ -228,8 +242,9 @@ sequenceDiagram
 
 | Direction | Message | Format | Quand |
 |-----------|---------|--------|-------|
-| Client → | Audio | Binary (PCM 16kHz mono) | Pendant enregistrement |
-| Client → | Fin | Text `"END_OF_SPEECH"` | Fin d'enregistrement |
+| Client → | Audio | Binary (PCM 16kHz mono) | Après détection fin de parole (VAD) |
+| Client → | Fin | Text `"END_OF_SPEECH"` | Après envoi du buffer audio |
+| Client → | Interruption | Text `"BARGE_IN"` | L'utilisateur parle pendant que le bot répond |
 | Client → | Langue | JSON `{"type":"set_language","language":"fr\|en"}` | Toggle langue |
 | → Client | Transcription | JSON `{"type":"transcription","text":"..."}` | Après STT |
 | → Client | Chunk texte | JSON `{"type":"answer_chunk","text":"..."}` | Chaque phrase (streaming) |
@@ -411,3 +426,17 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 - Le TTS worker concurrent (`asyncio.Queue`) permet de synthétiser la phrase N+1 pendant que la phrase N est jouée
 - Le frontend `useAudioQueue` chaîne les chunks audio WAV sans gap audible
 - Backward-compatible : fallback automatique vers POST /ask si SSE échoue
+
+### ADR-006 : VAD navigateur (Silero) avec barge-in
+
+**Contexte** : Le mode push-to-talk obligeait l'utilisateur à cliquer "stop" après chaque phrase. L'interaction était non-naturelle comparée à un appel téléphonique.
+
+**Décision** : Remplacer le push-to-talk par un VAD (Voice Activity Detection) côté navigateur utilisant Silero v5 via `@ricky0123/vad-web`, avec support du barge-in.
+
+**Raisons** :
+- **Conversation naturelle** : le VAD détecte automatiquement début/fin de parole (~500ms de silence = fin)
+- **Barge-in** : l'utilisateur peut interrompre le bot en parlant → flush audio + cancel SSE/TTS
+- **Client-side** : le VAD tourne dans le navigateur (WebAssembly + AudioWorklet), zéro latence réseau pour la détection
+- **Modèle Silero v5** : léger (~1.5MB ONNX), précis, et éprouvé dans la communauté
+- **Pas de modification backend** : seul le bridge Python gère le nouveau message `BARGE_IN` via `asyncio.Task.cancel()`
+- **Rétrocompatible** : le protocole WebSocket reste identique (PCM + END_OF_SPEECH), seul le déclencheur change (VAD au lieu de clic manuel)

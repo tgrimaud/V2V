@@ -22,6 +22,8 @@ export function useVAD(options: UseVADOptions) {
       const vad = await MicVAD.new({
         baseAssetPath: '/',
         onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/',
+        model: 'v5',
+        startOnLoad: false,
         onSpeechStart: () => {
           setState('speaking')
           optionsRef.current.onSpeechStart?.()
