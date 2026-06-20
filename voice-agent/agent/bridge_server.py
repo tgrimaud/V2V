@@ -21,7 +21,7 @@ import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
-from agent.gradium_stt import transcribe_audio
+from agent.gradium_stt import transcribe_audio, close_stt_client
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
 

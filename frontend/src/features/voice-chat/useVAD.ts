@@ -24,6 +24,7 @@ export function useVAD(options: UseVADOptions) {
         onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/',
         model: 'v5',
         startOnLoad: false,
+        redemptionMs: 300,
         onSpeechStart: () => {
           setState('speaking')
           optionsRef.current.onSpeechStart?.()
