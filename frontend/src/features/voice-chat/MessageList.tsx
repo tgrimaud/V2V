@@ -18,6 +18,8 @@ const GUARDRAIL_MARKERS = [
   "sort de mon domaine de compétence",
   "outside my area of expertise",
   "don't have enough reliable information",
+  "ne suis pas en mesure de répondre à ce type de demande",
+  "cannot help with this type of request",
 ]
 
 function isGuardrailMessage(text: string): boolean {

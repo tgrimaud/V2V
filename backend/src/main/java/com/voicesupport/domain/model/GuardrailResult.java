@@ -6,7 +6,8 @@ public record GuardrailResult(Verdict verdict, String fallbackMessage) {
         PASS,
         OFF_TOPIC,
         LOW_CONFIDENCE,
-        GREETING
+        GREETING,
+        INAPPROPRIATE
     }
 
     public boolean blocked() {
@@ -27,5 +28,9 @@ public record GuardrailResult(Verdict verdict, String fallbackMessage) {
 
     public static GuardrailResult greeting(String message) {
         return new GuardrailResult(Verdict.GREETING, message);
+    }
+
+    public static GuardrailResult inappropriate(String message) {
+        return new GuardrailResult(Verdict.INAPPROPRIATE, message);
     }
 }

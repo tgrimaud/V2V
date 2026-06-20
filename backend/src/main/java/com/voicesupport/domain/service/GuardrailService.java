@@ -31,6 +31,17 @@ public class GuardrailService {
             Pattern.compile("(?i)(play|sing|draw|dance)\\s+(me\\s+)?", Pattern.UNICODE_CASE)
     );
 
+    private static final Set<Pattern> INAPPROPRIATE_PATTERNS = Set.of(
+            Pattern.compile("(?i)(arme|weapon|gun|bomb|explos|firearm|fusil|pistolet|grenade)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(drogue|drug|cocaïne|héroïne|meth|crack|stupéfiant)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(tuer|kill|murder|assassin|suicide|mourir)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(hack(er|ing)?|pirater|phishing|ransomware|malware)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(fabriquer|construire|build|make|create).{0,20}(bombe|arme|weapon|explosive|poison)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(contenu\\s+(illégal|interdit)|illegal\\s+content)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(pédophil|child\\s+(porn|abuse)|exploitation)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(terroris|radicalisation|attentat)", Pattern.UNICODE_CASE)
+    );
+
     private final double confidenceThreshold;
     private final String offTopicMessageFr;
     private final String offTopicMessageEn;
@@ -73,6 +84,19 @@ public class GuardrailService {
 
         if (trimmed.length() < MIN_QUESTION_LENGTH) {
             return GuardrailResult.pass();
+        }
+
+        for (Pattern pattern : INAPPROPRIATE_PATTERNS) {
+            if (pattern.matcher(trimmed).find()) {
+                String message = isEnglish(trimmed)
+                        ? "I cannot help with this type of request. " +
+                          "I am a customer support assistant. " +
+                          "Can I help you with something else regarding your account or our services?"
+                        : "Je ne suis pas en mesure de répondre à ce type de demande. " +
+                          "Je suis un assistant de support client. " +
+                          "Puis-je vous aider avec autre chose concernant votre compte ou nos services ?";
+                return GuardrailResult.inappropriate(message);
+            }
         }
 
         for (Pattern pattern : OFF_TOPIC_PATTERNS) {
