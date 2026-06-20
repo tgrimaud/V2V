@@ -72,7 +72,12 @@ class GuardrailServiceTest {
             "Hey",
             "Bonsoir",
             "Comment ça va ?",
-            "How are you?"
+            "How are you?",
+            "bjr",
+            "slt",
+            "cc",
+            "bsr",
+            "ça va ?"
     })
     void shouldRespondToGreetingsWithoutRAG(String greeting) {
         GuardrailResult result = service.checkBeforeSearch(greeting);
