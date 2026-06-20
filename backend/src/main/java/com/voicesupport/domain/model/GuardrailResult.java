@@ -5,7 +5,8 @@ public record GuardrailResult(Verdict verdict, String fallbackMessage) {
     public enum Verdict {
         PASS,
         OFF_TOPIC,
-        LOW_CONFIDENCE
+        LOW_CONFIDENCE,
+        GREETING
     }
 
     public boolean blocked() {
@@ -22,5 +23,9 @@ public record GuardrailResult(Verdict verdict, String fallbackMessage) {
 
     public static GuardrailResult lowConfidence(String message) {
         return new GuardrailResult(Verdict.LOW_CONFIDENCE, message);
+    }
+
+    public static GuardrailResult greeting(String message) {
+        return new GuardrailResult(Verdict.GREETING, message);
     }
 }

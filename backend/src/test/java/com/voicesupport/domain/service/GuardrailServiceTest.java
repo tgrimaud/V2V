@@ -61,6 +61,35 @@ class GuardrailServiceTest {
         assertFalse(result.blocked());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Bonjour",
+            "bonjour",
+            "Salut",
+            "Hello",
+            "Hi",
+            "Coucou",
+            "Hey",
+            "Bonsoir",
+            "Comment ça va ?",
+            "How are you?"
+    })
+    void shouldRespondToGreetingsWithoutRAG(String greeting) {
+        GuardrailResult result = service.checkBeforeSearch(greeting);
+
+        assertTrue(result.blocked());
+        assertEquals(GuardrailResult.Verdict.GREETING, result.verdict());
+        assertNotNull(result.fallbackMessage());
+    }
+
+    @Test
+    void shouldNotTreatGreetingWithQuestionAsGreeting() {
+        GuardrailResult result = service.checkBeforeSearch("Bonjour, ma box ne marche plus");
+
+        assertFalse(result.blocked());
+        assertEquals(GuardrailResult.Verdict.PASS, result.verdict());
+    }
+
     @Test
     void shouldPassNullQuestion() {
         GuardrailResult result = service.checkBeforeSearch(null);

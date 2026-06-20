@@ -12,6 +12,12 @@ public class GuardrailService {
     private static final double DEFAULT_CONFIDENCE_THRESHOLD = 0.65;
     private static final int MIN_QUESTION_LENGTH = 3;
 
+    private static final Set<Pattern> GREETING_PATTERNS = Set.of(
+            Pattern.compile("(?i)^(bonjour|bonsoir|salut|coucou|hey|hello|hi|yo)\\s*[!.?]*$", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)^(bonjour|salut|hello|hi|hey)\\s+([a-zéèà]+\\s*[!.?]*)$", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)^(comment\\s+(ça\\s+va|allez[- ]vous)|how\\s+are\\s+you)\\s*[?!.]*$", Pattern.UNICODE_CASE)
+    );
+
     private static final Set<Pattern> OFF_TOPIC_PATTERNS = Set.of(
             Pattern.compile("(?i)(quel(le)?\\s+(heure|temps|météo|température))", Pattern.UNICODE_CASE),
             Pattern.compile("(?i)(raconte|dis)[- ]moi\\s+(une\\s+)?(blague|histoire|poème)", Pattern.UNICODE_CASE),
@@ -50,11 +56,25 @@ public class GuardrailService {
     }
 
     public GuardrailResult checkBeforeSearch(String question) {
-        if (question == null || question.trim().length() < MIN_QUESTION_LENGTH) {
+        if (question == null || question.trim().isEmpty()) {
             return GuardrailResult.pass();
         }
 
         String trimmed = question.trim();
+
+        for (Pattern pattern : GREETING_PATTERNS) {
+            if (pattern.matcher(trimmed).find()) {
+                String message = isEnglish(trimmed)
+                        ? "Hello! How can I help you today?"
+                        : "Bonjour ! Comment puis-je vous aider ?";
+                return GuardrailResult.greeting(message);
+            }
+        }
+
+        if (trimmed.length() < MIN_QUESTION_LENGTH) {
+            return GuardrailResult.pass();
+        }
+
         for (Pattern pattern : OFF_TOPIC_PATTERNS) {
             if (pattern.matcher(trimmed).find()) {
                 String message = isEnglish(trimmed) ? offTopicMessageEn : offTopicMessageFr;
