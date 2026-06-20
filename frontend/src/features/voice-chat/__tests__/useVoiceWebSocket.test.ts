@@ -137,6 +137,18 @@ describe('useVoiceWebSocket', () => {
     expect(mockWsInstance.sentMessages).toContain('END_OF_SPEECH')
   })
 
+  it('should_send_BARGE_IN_string', () => {
+    // GIVEN
+    const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))
+    act(() => mockWsInstance.simulateOpen())
+
+    // WHEN
+    act(() => result.current.sendBargeIn())
+
+    // THEN
+    expect(mockWsInstance.sentMessages).toContain('BARGE_IN')
+  })
+
   it('should_set_disconnected_state_on_close', () => {
     // GIVEN
     const { result } = renderHook(() => useVoiceWebSocket(defaultOptions))

@@ -7,6 +7,7 @@ export function useAudioQueue() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const queueRef = useRef<ArrayBuffer[]>([])
   const playingRef = useRef(false)
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
 
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -18,6 +19,7 @@ export function useAudioQueue() {
   const playNext = useCallback(async () => {
     if (queueRef.current.length === 0) {
       playingRef.current = false
+      currentSourceRef.current = null
       setState('idle')
       return
     }
@@ -35,11 +37,18 @@ export function useAudioQueue() {
     try {
       const decoded = await ctx.decodeAudioData(buffer)
       const source = ctx.createBufferSource()
+      currentSourceRef.current = source
       source.buffer = decoded
       source.connect(ctx.destination)
-      source.onended = () => playNext()
+      source.onended = () => {
+        if (currentSourceRef.current === source) {
+          currentSourceRef.current = null
+        }
+        playNext()
+      }
       source.start()
     } catch {
+      currentSourceRef.current = null
       playNext()
     }
   }, [getAudioContext])
@@ -54,8 +63,19 @@ export function useAudioQueue() {
   const clear = useCallback(() => {
     queueRef.current = []
     playingRef.current = false
+    currentSourceRef.current = null
     setState('idle')
   }, [])
 
-  return { enqueue, clear, state }
+  const flush = useCallback(() => {
+    queueRef.current = []
+    if (currentSourceRef.current) {
+      try { currentSourceRef.current.stop() } catch { /* already stopped */ }
+      currentSourceRef.current = null
+    }
+    playingRef.current = false
+    setState('idle')
+  }, [])
+
+  return { enqueue, clear, flush, state }
 }

@@ -3,6 +3,7 @@
 Frontend protocol:
   - Client sends: binary audio chunks (PCM 16kHz 16-bit mono)
   - Client sends: text "END_OF_SPEECH" when done speaking
+  - Client sends: text "BARGE_IN" to interrupt current response
   - Client sends: JSON {"type":"set_language","language":"fr|en"}
   - Server sends: JSON {"type":"transcription","text":"..."} after STT
   - Server sends: JSON {"type":"answer_chunk","text":"..."} per sentence (streaming)
@@ -45,6 +46,7 @@ async def handle_client(websocket):
 
     audio_buffer = bytearray()
     language = DEFAULT_LANGUAGE
+    response_task: asyncio.Task | None = None
 
     try:
         async for message in websocket:
@@ -52,14 +54,40 @@ async def handle_client(websocket):
                 audio_buffer.extend(message)
             elif isinstance(message, str):
                 if message == "END_OF_SPEECH":
-                    await _handle_end_of_speech(websocket, backend, audio_buffer, language)
-                    audio_buffer.clear()
+                    if response_task and not response_task.done():
+                        response_task.cancel()
+                        try:
+                            await response_task
+                        except asyncio.CancelledError:
+                            pass
+                    response_task = asyncio.create_task(
+                        _handle_end_of_speech(websocket, backend, audio_buffer, language)
+                    )
+                    audio_buffer = bytearray()
+                elif message == "BARGE_IN":
+                    if response_task and not response_task.done():
+                        print("[BARGE-IN] Cancelling current response", flush=True)
+                        response_task.cancel()
+                        try:
+                            await response_task
+                        except asyncio.CancelledError:
+                            pass
+                        response_task = None
+                        await websocket.send(json.dumps({
+                            "type": "answer_done", "text": "[interrompu]"
+                        }))
                 else:
                     await _handle_json_message(websocket, message, language)
                     language = _extract_language(message, language)
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
+        if response_task and not response_task.done():
+            response_task.cancel()
+            try:
+                await response_task
+            except asyncio.CancelledError:
+                pass
         await backend.close()
         print("[CLIENT] Disconnected", flush=True)
 
@@ -88,6 +116,9 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
 
     try:
         await _stream_answer(websocket, backend, question, language)
+    except asyncio.CancelledError:
+        print("[STREAM] Cancelled (barge-in)", flush=True)
+        raise
     except Exception as e:
         print(f"[STREAM] SSE failed ({e}), falling back to POST", flush=True)
         await _fallback_non_streaming(websocket, backend, question, language)
@@ -113,35 +144,43 @@ async def _stream_answer(websocket, backend, question, language):
 
     worker_task = asyncio.create_task(tts_worker())
 
-    async for event in backend.ask_stream(question, "pipecat"):
-        event_type = event.get("event", "")
+    try:
+        async for event in backend.ask_stream(question, "pipecat"):
+            event_type = event.get("event", "")
 
-        if event_type == "chunk":
-            token = event["data"].get("text", "")
-            sentence_buffer += token
-            full_answer += token
+            if event_type == "chunk":
+                token = event["data"].get("text", "")
+                sentence_buffer += token
+                full_answer += token
 
-            sentence, remainder = find_sentence_boundary(sentence_buffer)
-            if sentence:
-                sentence_buffer = remainder
-                await websocket.send(json.dumps({"type": "answer_chunk", "text": sentence}))
-                await tts_queue.put(sentence)
+                sentence, remainder = find_sentence_boundary(sentence_buffer)
+                if sentence:
+                    sentence_buffer = remainder
+                    await websocket.send(json.dumps({"type": "answer_chunk", "text": sentence}))
+                    await tts_queue.put(sentence)
 
-        elif event_type == "done":
-            break
+            elif event_type == "done":
+                break
 
-    # Flush any remaining text in buffer
-    if sentence_buffer.strip():
-        remaining = sentence_buffer.strip()
-        await websocket.send(json.dumps({"type": "answer_chunk", "text": remaining}))
-        await tts_queue.put(remaining)
+        if sentence_buffer.strip():
+            remaining = sentence_buffer.strip()
+            await websocket.send(json.dumps({"type": "answer_chunk", "text": remaining}))
+            await tts_queue.put(remaining)
 
-    # Signal TTS worker to stop and wait for completion
-    await tts_queue.put(None)
-    await worker_task
+        await tts_queue.put(None)
+        await worker_task
 
-    await websocket.send(json.dumps({"type": "answer_done", "text": full_answer}))
-    print(f"[STREAM] Complete: {len(full_answer)} chars", flush=True)
+        await websocket.send(json.dumps({"type": "answer_done", "text": full_answer}))
+        print(f"[STREAM] Complete: {len(full_answer)} chars", flush=True)
+
+    except asyncio.CancelledError:
+        await tts_queue.put(None)
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+        raise
 
 
 async def _fallback_non_streaming(websocket, backend, question, language):

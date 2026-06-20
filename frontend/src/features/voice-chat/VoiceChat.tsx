@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react'
 import { useVoiceWebSocket } from './useVoiceWebSocket'
-import { useAudioRecorder } from './useAudioRecorder'
+import { useVAD } from './useVAD'
 import { useAudioQueue } from './useAudioQueue'
 import { MessageList } from './MessageList'
 import { labels } from './i18n'
-import type { Language } from './i18n'
+import type { Language, Labels } from './i18n'
 
 interface Message {
   id: string
@@ -14,33 +14,34 @@ interface Message {
   streaming?: boolean
 }
 
-type VoiceState = 'idle' | 'recording' | 'processing' | 'speaking'
+type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'speaking'
 
 export function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [textInput, setTextInput] = useState('')
   const [language, setLanguage] = useState<Language>('fr')
+  const [vadActive, setVadActive] = useState(false)
 
   const t = labels[language]
 
-  const { enqueue: enqueueAudio, clear: clearAudioQueue, state: audioState } = useAudioQueue()
+  const { enqueue: enqueueAudio, clear: clearAudioQueue, flush: flushAudio, state: audioState } = useAudioQueue()
 
   if (audioState === 'playing' && voiceState !== 'speaking') {
     setVoiceState('speaking')
   } else if (audioState === 'idle' && voiceState === 'speaking') {
-    setVoiceState('idle')
+    setVoiceState(vadActive ? 'listening' : 'idle')
   }
 
   const addMessage = useCallback((role: 'user' | 'assistant', text: string) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, text, timestamp: new Date() }])
   }, [])
 
-  const { connectionState, sendAudio, sendEndOfSpeech, sendLanguage } = useVoiceWebSocket({
+  const { connectionState, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage } = useVoiceWebSocket({
     onTranscription: (text) => addMessage('user', text),
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
-      setVoiceState('idle')
+      setVoiceState(vadActive ? 'listening' : 'idle')
     },
     onAnswerChunk: (text) => {
       setMessages(prev => {
@@ -56,29 +57,44 @@ export function VoiceChat() {
     onAnswerDone: () => {
       setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m))
       if (audioState !== 'playing') {
-        setVoiceState('idle')
+        setVoiceState(vadActive ? 'listening' : 'idle')
       }
     },
     onAudio: (audio) => {
       enqueueAudio(audio)
     },
     onLanguageChanged: (lang) => setLanguage(lang as Language),
-    onError: (error) => { console.error('Voice error:', error); setVoiceState('idle'); clearAudioQueue() },
+    onError: (error) => { console.error('Voice error:', error); setVoiceState(vadActive ? 'listening' : 'idle'); clearAudioQueue() },
   })
 
-  const { state: recorderState, startRecording, stopRecording, reset: resetRecorder } = useAudioRecorder({
-    onAudioData: sendAudio,
-    onRecordingComplete: () => { sendEndOfSpeech(); setVoiceState('processing') },
+  const { start: startVAD, stop: stopVAD, resetToListening } = useVAD({
+    onSpeechStart: () => {
+      if (voiceState === 'speaking') {
+        flushAudio()
+        sendBargeIn()
+      }
+      setVoiceState('recording')
+    },
+    onSpeechEnd: sendAudio,
+    onSpeechEndComplete: () => {
+      sendEndOfSpeech()
+      setVoiceState('processing')
+    },
   })
 
-  if (recorderState === 'recording' && voiceState !== 'recording') setVoiceState('recording')
+  const handleMicToggle = async () => {
+    if (vadActive) {
+      stopVAD()
+      setVadActive(false)
+      setVoiceState('idle')
+    } else {
+      await startVAD()
+      setVadActive(true)
+      setVoiceState('listening')
+    }
+  }
 
   const handleLanguageChange = (lang: Language) => { setLanguage(lang); sendLanguage(lang) }
-
-  const handleMicClick = () => {
-    if (voiceState === 'recording') stopRecording()
-    else if (voiceState === 'idle') startRecording()
-  }
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,14 +115,35 @@ export function VoiceChat() {
     } catch {
       addMessage('assistant', t.error)
     } finally {
-      setVoiceState('idle')
-      resetRecorder()
+      setVoiceState(vadActive ? 'listening' : 'idle')
+      resetToListening()
     }
   }
 
+  const stateLabel: Record<VoiceState, string> = {
+    idle: t.idle,
+    listening: language === 'fr' ? 'En écoute...' : 'Listening...',
+    recording: language === 'fr' ? 'Parole détectée' : 'Speech detected',
+    processing: t.processing,
+    speaking: t.speaking,
+  }
+
   const stateColor: Record<VoiceState, string> = {
-    idle: 'var(--color-primary)', recording: 'var(--color-recording)',
-    processing: 'var(--color-processing)', speaking: 'var(--color-speaking)',
+    idle: 'var(--color-primary)',
+    listening: 'var(--color-success)',
+    recording: 'var(--color-recording)',
+    processing: 'var(--color-processing)',
+    speaking: 'var(--color-speaking)',
+  }
+
+  const micIcon = () => {
+    if (vadActive) {
+      if (voiceState === 'recording') return '🔴'
+      if (voiceState === 'processing') return '⏳'
+      if (voiceState === 'speaking') return '🔊'
+      return '👂'
+    }
+    return '🎙️'
   }
 
   return (
@@ -121,20 +158,18 @@ export function VoiceChat() {
       <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>
         <div className="flex flex-col items-center mb-4">
           <button
-            onClick={handleMicClick}
-            disabled={voiceState === 'processing' || voiceState === 'speaking'}
+            onClick={handleMicToggle}
+            disabled={voiceState === 'processing'}
             className="relative w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: stateColor[voiceState] }}
-            aria-label={t[voiceState]}
+            aria-label={vadActive ? (language === 'fr' ? 'Désactiver le micro' : 'Disable mic') : (language === 'fr' ? 'Activer le micro' : 'Enable mic')}
           >
-            {voiceState === 'recording' && (
-              <span className="absolute inset-0 rounded-full" style={{ animation: 'pulse-ring 1.5s infinite', backgroundColor: stateColor[voiceState] }} />
+            {(voiceState === 'listening' || voiceState === 'recording') && (
+              <span className="absolute inset-0 rounded-full opacity-50" style={{ animation: 'pulse-ring 1.5s infinite', backgroundColor: stateColor[voiceState] }} />
             )}
-            <span className="relative z-10" aria-hidden="true">
-              {voiceState === 'recording' ? '⏹' : voiceState === 'processing' ? '⏳' : voiceState === 'speaking' ? '🔊' : '🎙️'}
-            </span>
+            <span className="relative z-10" aria-hidden="true">{micIcon()}</span>
           </button>
-          <span className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>{t[voiceState]}</span>
+          <span className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>{stateLabel[voiceState]}</span>
         </div>
         <form onSubmit={handleTextSubmit} className="flex gap-2">
           <label htmlFor="voice-chat-input" className="sr-only">{t.placeholder}</label>
@@ -161,7 +196,7 @@ export function VoiceChat() {
 }
 
 function Header({ connectionState, language, t, onLanguageChange }: {
-  connectionState: string; language: Language; t: typeof labels['fr']; onLanguageChange: (l: Language) => void
+  connectionState: string; language: Language; t: Labels; onLanguageChange: (l: Language) => void
 }) {
   return (
     <div className="px-4 py-2 flex items-center justify-between text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}>

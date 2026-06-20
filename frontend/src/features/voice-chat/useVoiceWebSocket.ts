@@ -91,6 +91,12 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     }
   }, [])
 
+  const sendBargeIn = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send('BARGE_IN')
+    }
+  }, [])
+
   const sendLanguage = useCallback((language: string) => {
     pendingLanguageRef.current = language
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -103,5 +109,5 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     return () => disconnect()
   }, [connect, disconnect])
 
-  return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech, sendLanguage }
+  return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage }
 }
