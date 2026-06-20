@@ -13,6 +13,17 @@ interface MessageListProps {
   hint: string
 }
 
+const GUARDRAIL_MARKERS = [
+  "pas assez d'informations fiables",
+  "sort de mon domaine de compétence",
+  "outside my area of expertise",
+  "don't have enough reliable information",
+]
+
+function isGuardrailMessage(text: string): boolean {
+  return GUARDRAIL_MARKERS.some(marker => text.includes(marker))
+}
+
 export function MessageList({ messages, greeting, hint }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -35,19 +46,33 @@ export function MessageList({ messages, greeting, hint }: MessageListProps) {
           </div>
         </div>
       )}
-      {messages.map(msg => (
-        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-          <div
-            className="max-w-[80%] rounded-2xl px-4 py-3 text-sm"
-            style={{
-              backgroundColor: msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
-              color: msg.role === 'user' ? 'white' : 'var(--color-text)',
-            }}
-          >
-            {msg.text}
+      {messages.map(msg => {
+        const guardrail = msg.role === 'assistant' && isGuardrailMessage(msg.text)
+        return (
+          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              className="max-w-[80%] rounded-2xl px-4 py-3 text-sm"
+              style={{
+                backgroundColor: guardrail
+                  ? '#fef3c7'
+                  : msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
+                color: guardrail
+                  ? '#92400e'
+                  : msg.role === 'user' ? 'white' : 'var(--color-text)',
+                border: guardrail ? '1px solid #f59e0b' : 'none',
+              }}
+            >
+              {guardrail && (
+                <span className="inline-block mr-1.5 text-xs font-medium px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: '#f59e0b', color: 'white' }}>
+                  ⚠️ Confiance faible
+                </span>
+              )}
+              {msg.text}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       <div ref={messagesEndRef} />
     </div>
   )

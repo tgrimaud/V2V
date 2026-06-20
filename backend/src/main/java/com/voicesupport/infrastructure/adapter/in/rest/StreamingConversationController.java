@@ -47,6 +47,14 @@ public class StreamingConversationController {
                     return;
                 }
 
+                if (result.guardrailBlocked()) {
+                    String blockedText = result.tokens().blockFirst();
+                    sendChunk(emitter, blockedText);
+                    sendDone(emitter, blockedText, citations, conversationId);
+                    emitter.complete();
+                    return;
+                }
+
                 StringBuilder fullAnswer = new StringBuilder();
 
                 result.tokens()

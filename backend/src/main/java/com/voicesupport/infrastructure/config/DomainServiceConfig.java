@@ -9,12 +9,7 @@ import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.domain.port.out.VectorStorePort;
 import com.voicesupport.domain.service.ConversationService;
 import com.voicesupport.domain.service.EscalationDetector;
-import com.voicesupport.domain.service.KnowledgeIngestionService;
-import com.voicesupport.domain.service.StreamingConversationService;
-import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
-import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
-import com.voicesupport.domain.service.ConversationService;
-import com.voicesupport.domain.service.EscalationDetector;
+import com.voicesupport.domain.service.GuardrailService;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
 import com.voicesupport.domain.service.StreamingConversationService;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
@@ -113,6 +108,12 @@ public class DomainServiceConfig {
     }
 
     @Bean
+    public GuardrailService guardrailService(
+            @Value("${voice-support.guardrails.confidence-threshold:0.65}") double confidenceThreshold) {
+        return new GuardrailService(confidenceThreshold);
+    }
+
+    @Bean
     public ConversationEventStore conversationEventStore() {
         return new InMemoryConversationEventStore();
     }
@@ -120,16 +121,19 @@ public class DomainServiceConfig {
     @Bean
     public AskQuestionUseCase askQuestionUseCase(VectorSearchPort vectorSearchPort, LlmPort llmPort,
                                                   EscalationDetector escalationDetector,
+                                                  GuardrailService guardrailService,
                                                   ConversationEventStore eventStore) {
-        return new ConversationService(vectorSearchPort, llmPort, escalationDetector, eventStore);
+        return new ConversationService(vectorSearchPort, llmPort, escalationDetector,
+                guardrailService, eventStore);
     }
 
     @Bean
     public StreamingConversationService streamingConversationService(
             VectorSearchPort vectorSearchPort, LlmStreamingPort llmStreamingPort,
-            EscalationDetector escalationDetector, ConversationEventStore eventStore) {
+            EscalationDetector escalationDetector, GuardrailService guardrailService,
+            ConversationEventStore eventStore) {
         return new StreamingConversationService(vectorSearchPort, llmStreamingPort,
-                escalationDetector, eventStore);
+                escalationDetector, guardrailService, eventStore);
     }
 
     @Bean

@@ -13,6 +13,7 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 - **Téléphonie Twilio** — réponse vocale sur un numéro de téléphone classique
 - **RAG sur base de connaissance** — réponses factuelles avec citations sourcées
 - **Détection d'escalade** — transfert automatique vers un conseiller humain (résiliation, réclamation, RGPD)
+- **Guardrails** — détection hors-sujet (patterns) + score de confiance RAG (seuil configurable), badge visuel quand confiance faible
 - **Dashboard admin** — KPIs (latence, taux de résolution, escalades) + historique des conversations
 - **Architecture hybride** — Java pour le RAG/domain, Python pour l'orchestration vocale
 
@@ -466,6 +467,7 @@ voice-support-bot/
 | `OLLAMA_BASE_URL` | URL d'Ollama (si provider=ollama) | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Modèle LLM Ollama | `llama3.1:8b` |
 | `OLLAMA_EMBEDDING_MODEL` | Modèle d'embeddings | `nomic-embed-text` |
+| `GUARDRAIL_CONFIDENCE_THRESHOLD` | Seuil de confiance RAG (0.0 à 1.0) | `0.65` |
 
 ## Tests
 
@@ -493,7 +495,7 @@ cd voice-agent && python -m pytest tests/
 - [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
 - [x] Fallback Mistral API quand Ollama est trop lent (configurable via `LLM_PROVIDER`)
 - [ ] Ingestion PDF (extraction structurée)
-- [ ] Guardrails : détection "hors sujet" avec score de confiance
+- [x] Guardrails : détection "hors sujet" avec score de confiance
 - [ ] Observabilité : traces OpenTelemetry sur le pipeline
 - [ ] Voice cloning Gradium pour voix de marque personnalisée
 - [ ] Multi-agent Pipecat (routage vers spécialistes : facturation, technique, commercial)

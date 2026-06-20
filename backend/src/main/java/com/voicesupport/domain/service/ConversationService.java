@@ -4,6 +4,7 @@ import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.model.Conversation;
 import com.voicesupport.domain.model.ConversationEvent;
 import com.voicesupport.domain.model.ConversationResponse;
+import com.voicesupport.domain.model.GuardrailResult;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.LlmPort;
@@ -21,14 +22,18 @@ public class ConversationService implements AskQuestionUseCase {
     private final VectorSearchPort vectorSearchPort;
     private final LlmPort llmPort;
     private final EscalationDetector escalationDetector;
+    private final GuardrailService guardrailService;
     private final ConversationEventStore eventStore;
     private final Map<String, Conversation> sessions = new ConcurrentHashMap<>();
 
     public ConversationService(VectorSearchPort vectorSearchPort, LlmPort llmPort,
-                                EscalationDetector escalationDetector, ConversationEventStore eventStore) {
+                                EscalationDetector escalationDetector,
+                                GuardrailService guardrailService,
+                                ConversationEventStore eventStore) {
         this.vectorSearchPort = vectorSearchPort;
         this.llmPort = llmPort;
         this.escalationDetector = escalationDetector;
+        this.guardrailService = guardrailService;
         this.eventStore = eventStore;
     }
 
@@ -50,7 +55,25 @@ public class ConversationService implements AskQuestionUseCase {
             return new ConversationResponse(escalationMsg, List.of());
         }
 
+        GuardrailResult preCheck = guardrailService.checkBeforeSearch(question);
+        if (preCheck.blocked()) {
+            conversation.addAssistantTurn(preCheck.fallbackMessage(), List.of());
+            long latency = System.currentTimeMillis() - startTime;
+            eventStore.save(ConversationEvent.of(conversationId, "web", question,
+                    preCheck.fallbackMessage(), 0, latency, false));
+            return new ConversationResponse(preCheck.fallbackMessage(), List.of());
+        }
+
         List<Citation> citations = vectorSearchPort.searchRelevant(question, TOP_K);
+
+        GuardrailResult postCheck = guardrailService.checkAfterSearch(question, citations);
+        if (postCheck.blocked()) {
+            conversation.addAssistantTurn(postCheck.fallbackMessage(), List.of());
+            long latency = System.currentTimeMillis() - startTime;
+            eventStore.save(ConversationEvent.of(conversationId, "web", question,
+                    postCheck.fallbackMessage(), 0, latency, false));
+            return new ConversationResponse(postCheck.fallbackMessage(), citations);
+        }
 
         List<String> contextChunks = citations.stream()
                 .map(Citation::relevantText)

@@ -27,7 +27,8 @@ class StreamingConversationServiceTest {
         llmStreamingPort = new FakeLlmStreamingPort();
         eventStore = new FakeEventStore();
         service = new StreamingConversationService(
-                vectorSearchPort, llmStreamingPort, new EscalationDetector(), eventStore);
+                vectorSearchPort, llmStreamingPort, new EscalationDetector(),
+                new GuardrailService(), eventStore);
     }
 
     @Test
@@ -97,7 +98,9 @@ class StreamingConversationServiceTest {
     @Test
     void shouldIsolateStreamingSessions() {
         // GIVEN
-        vectorSearchPort.setCitations(List.of());
+        vectorSearchPort.setCitations(List.of(
+                new Citation("faq.md", "Section", "Context", 0.8)
+        ));
         llmStreamingPort.setTokens(List.of("Answer A"));
         service.askStream("conv-a", "Question A");
         service.recordCompletion("conv-a", "Question A", "Answer A", List.of(), System.currentTimeMillis());

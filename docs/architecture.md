@@ -143,6 +143,7 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `ConversationResponse` | Réponse du bot (texte + citations) |
 | `ConversationEvent` | Événement de tracking (question, réponse, latence, escalade) |
 | `KnowledgeChunk` | Unité de connaissance indexée dans le vector store |
+| `GuardrailResult` | Résultat d'évaluation guardrail (PASS, OFF_TOPIC, LOW_CONFIDENCE) |
 
 ### Services
 
@@ -152,6 +153,7 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `StreamingConversationService` | Pipeline RAG streaming : retrieval → `Flux<String>` token stream → tracking post-complétion |
 | `KnowledgeIngestionService` | Découpe les documents en chunks et les indexe |
 | `EscalationDetector` | Détecte les demandes nécessitant un transfert humain |
+| `GuardrailService` | Filtre pré/post-recherche : off-topic (patterns) + low-confidence (score seuil) |
 
 ### Ports IN (cas d'usage)
 
@@ -181,7 +183,9 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 Client → POST /api/conversation/ask
          → ConversationService.ask()
            → EscalationDetector.shouldEscalate()  [court-circuit si oui]
+           → GuardrailService.checkBeforeSearch()  [off-topic → court-circuit]
            → VectorSearchPort.searchRelevant()     [retrieval]
+           → GuardrailService.checkAfterSearch()   [low-confidence → court-circuit]
            → LlmPort.generateAnswer()             [generation blocking]
            → ConversationEventStore.save()         [tracking]
          ← JSON { answer, citations, conversationId }
@@ -440,3 +444,19 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 - **Modèle Silero v5** : léger (~1.5MB ONNX), précis, et éprouvé dans la communauté
 - **Pas de modification backend** : seul le bridge Python gère le nouveau message `BARGE_IN` via `asyncio.Task.cancel()`
 - **Rétrocompatible** : le protocole WebSocket reste identique (PCM + END_OF_SPEECH), seul le déclencheur change (VAD au lieu de clic manuel)
+
+### ADR-007 : Guardrails (off-topic + score de confiance)
+
+**Contexte** : Sans protection, le bot répond à toute question même hors domaine, avec un risque d'hallucination quand la base de connaissances ne couvre pas le sujet.
+
+**Décision** : Implémenter un `GuardrailService` avec deux niveaux de filtrage :
+1. **Pré-recherche** : détection off-topic par patterns regex (météo, blagues, culture générale)
+2. **Post-recherche** : évaluation du score de similarité vectorielle — si le meilleur score est sous le seuil configurable (défaut 0.65), réponse dégradée
+
+**Raisons** :
+- **Fail-safe** : plutôt que halluciner, le bot admet son ignorance et propose une escalade humaine
+- **Configurable** : seuil externalisé via `voice-support.guardrails.confidence-threshold`
+- **Deux étapes** : le filtre pré-recherche économise le coût d'embedding/vectorsearch pour les questions manifestement hors scope
+- **Bilingue** : messages de fallback en FR et EN selon la langue détectée
+- **Indicateur visuel** : badge ambre "⚠️ Confiance faible" côté frontend quand le guardrail déclenche
+- **Pure domain** : pas de dépendance Spring, testable avec de simples fakes

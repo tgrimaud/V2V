@@ -26,7 +26,8 @@ class ConversationServiceTest {
         vectorSearchPort = new FakeVectorSearchPort();
         llmPort = new FakeLlmPort();
         eventStore = new FakeEventStore();
-        service = new ConversationService(vectorSearchPort, llmPort, new EscalationDetector(), eventStore);
+        service = new ConversationService(vectorSearchPort, llmPort, new EscalationDetector(),
+                new GuardrailService(), eventStore);
     }
 
     @Test
@@ -45,7 +46,9 @@ class ConversationServiceTest {
 
     @Test
     void shouldMaintainConversationHistory() {
-        vectorSearchPort.setCitations(List.of());
+        vectorSearchPort.setCitations(List.of(
+                new Citation("faq.md", "Section", "Context", 0.8)
+        ));
         llmPort.setAnswer("Première réponse");
         service.ask("conv-2", "Question 1");
 
@@ -58,7 +61,9 @@ class ConversationServiceTest {
 
     @Test
     void shouldIsolateConversations() {
-        vectorSearchPort.setCitations(List.of());
+        vectorSearchPort.setCitations(List.of(
+                new Citation("faq.md", "Section", "Context", 0.8)
+        ));
         llmPort.setAnswer("Réponse A");
         service.ask("conv-a", "Question A");
 
@@ -83,7 +88,9 @@ class ConversationServiceTest {
 
     @Test
     void shouldRecordEventsInStore() {
-        vectorSearchPort.setCitations(List.of());
+        vectorSearchPort.setCitations(List.of(
+                new Citation("faq.md", "Section", "Context", 0.8)
+        ));
         llmPort.setAnswer("Réponse test");
 
         service.ask("conv-event", "Question test");
