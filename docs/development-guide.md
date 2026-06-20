@@ -135,6 +135,8 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 | VAD `Can't create a session` | Fichier ONNX manquant dans `public/` | Copier `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` et `vad.worklet.bundle.min.js` dans `frontend/public/` |
 | VAD ne détecte pas la parole | `startOnLoad: true` + double-mount React | Ajouter `startOnLoad: false` et appeler `vad.start()` manuellement |
 | Barge-in ne coupe pas le bot | Bridge utilise l'ancien code | Redémarrer le bridge (`kill $(lsof -ti:8765)` puis relancer) |
+| `401 Unauthorized` de Mistral | Clé API non chargée | Lancer le backend avec `export $(cat backend/.env \| xargs) && mvn spring-boot:run` ou sourcer le `.env` avant |
+| Bot répond hors-sujet sur "Bonjour" | Guardrails non actifs | Vérifier que `GuardrailService` est dans `DomainServiceConfig` et redémarrer le backend |
 
 ## Commandes utiles
 
@@ -146,6 +148,9 @@ docker compose ps
 # Installer les assets VAD après npm install
 cp node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx frontend/public/
 cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js frontend/public/
+
+# Lancer le backend Java (charger le .env pour la clé Mistral)
+cd backend && export $(cat .env | xargs) && mvn spring-boot:run
 
 # Lancer l'agent vocal (navigateur — bridge mode streaming)
 cd voice-agent && python -u -m agent.bridge_server
@@ -183,6 +188,16 @@ curl -s http://localhost:8081/api/admin/stats | python3 -m json.tool
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Je veux résilier"}' | python3 -m json.tool
+
+# Tester les guardrails — salutation (pas de RAG)
+curl -s -X POST http://localhost:8081/api/conversation/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Bonjour", "conversationId": "test"}' | python3 -m json.tool
+
+# Tester les guardrails — off-topic
+curl -s -X POST http://localhost:8081/api/conversation/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Quel temps fait-il dehors ?", "conversationId": "test"}' | python3 -m json.tool
 
 # Arrêter tout
 docker compose down

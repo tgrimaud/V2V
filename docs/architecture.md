@@ -183,7 +183,8 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 Client → POST /api/conversation/ask
          → ConversationService.ask()
            → EscalationDetector.shouldEscalate()  [court-circuit si oui]
-           → GuardrailService.checkBeforeSearch()  [off-topic → court-circuit]
+           → GuardrailService.checkBeforeSearch()  [greeting → réponse directe]
+                                                   [off-topic → court-circuit]
            → VectorSearchPort.searchRelevant()     [retrieval]
            → GuardrailService.checkAfterSearch()   [low-confidence → court-circuit]
            → LlmPort.generateAnswer()             [generation blocking]
@@ -445,18 +446,20 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 - **Pas de modification backend** : seul le bridge Python gère le nouveau message `BARGE_IN` via `asyncio.Task.cancel()`
 - **Rétrocompatible** : le protocole WebSocket reste identique (PCM + END_OF_SPEECH), seul le déclencheur change (VAD au lieu de clic manuel)
 
-### ADR-007 : Guardrails (off-topic + score de confiance)
+### ADR-007 : Guardrails (salutations + off-topic + score de confiance)
 
-**Contexte** : Sans protection, le bot répond à toute question même hors domaine, avec un risque d'hallucination quand la base de connaissances ne couvre pas le sujet.
+**Contexte** : Sans protection, le bot répond à toute question même hors domaine, avec un risque d'hallucination quand la base de connaissances ne couvre pas le sujet. De plus, un simple "Bonjour" déclenchait le RAG et retournait une réponse non pertinente.
 
-**Décision** : Implémenter un `GuardrailService` avec deux niveaux de filtrage :
-1. **Pré-recherche** : détection off-topic par patterns regex (météo, blagues, culture générale)
-2. **Post-recherche** : évaluation du score de similarité vectorielle — si le meilleur score est sous le seuil configurable (défaut 0.65), réponse dégradée
+**Décision** : Implémenter un `GuardrailService` avec trois niveaux de filtrage :
+1. **Salutations** : détection de "Bonjour", "Salut", "Hello", etc. → réponse de courtoisie directe sans RAG ni LLM
+2. **Pré-recherche** : détection off-topic par patterns regex (météo, blagues, culture générale)
+3. **Post-recherche** : évaluation du score de similarité vectorielle — si le meilleur score est sous le seuil configurable (défaut 0.65), réponse dégradée
 
 **Raisons** :
+- **Salutations naturelles** : le bot accueille l'utilisateur avant qu'il ne pose sa question, sans consommer de ressources LLM
 - **Fail-safe** : plutôt que halluciner, le bot admet son ignorance et propose une escalade humaine
 - **Configurable** : seuil externalisé via `voice-support.guardrails.confidence-threshold`
-- **Deux étapes** : le filtre pré-recherche économise le coût d'embedding/vectorsearch pour les questions manifestement hors scope
+- **Trois étapes** : salutations et off-topic économisent embedding + vectorsearch + LLM pour les messages simples
 - **Bilingue** : messages de fallback en FR et EN selon la langue détectée
-- **Indicateur visuel** : badge ambre "⚠️ Confiance faible" côté frontend quand le guardrail déclenche
+- **Indicateur visuel** : badge ambre "⚠️ Confiance faible" côté frontend quand le guardrail de confiance déclenche
 - **Pure domain** : pas de dépendance Spring, testable avec de simples fakes
