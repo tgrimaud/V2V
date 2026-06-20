@@ -6,6 +6,21 @@ import { MessageList } from './MessageList'
 import { labels } from './i18n'
 import type { Language, Labels } from './i18n'
 
+const GOODBYE_PATTERNS = [
+  /merci\s*(au revoir|bonne journ[ée]e?|bien)/i,
+  /au revoir/i,
+  /bonne journ[ée]e?\s*$/i,
+  /c'est tout\s*(merci|pour moi)?/i,
+  /thank(s| you).*bye/i,
+  /goodbye/i,
+  /bye\s*bye/i,
+  /that'?s all/i,
+]
+
+function isGoodbye(text: string): boolean {
+  return GOODBYE_PATTERNS.some(p => p.test(text.trim()))
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -48,6 +63,9 @@ export function VoiceChat() {
         }
         return [...prev, { id: crypto.randomUUID(), role: 'user' as const, text, timestamp: new Date() }]
       })
+      if (isGoodbye(text)) {
+        setTimeout(() => handleEndConversation(), 1500)
+      }
     },
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
