@@ -2,17 +2,19 @@
 
 Agent support client **voice-to-voice** pour le domaine Telecom/FAI, alimenté par RAG (Retrieval-Augmented Generation) sur une base de connaissance, accessible via **navigateur web** et **téléphonie classique** (Twilio).
 
-Le bot écoute la question du client (voix), la transcrit, cherche la réponse dans sa base de connaissance, génère une réponse synthétique et la prononce au client — le tout en ~2 secondes.
+Le bot écoute la question du client (voix), la transcrit, cherche la réponse dans sa base de connaissance, génère une réponse synthétique et la prononce au client — le tout en streaming avec la première phrase audible en ~700ms.
 
 ## Fonctionnalités
 
-- **Chat vocal web** — bouton micro dans le navigateur, réponse audio (voix Gradium, format WAV 16kHz)
+- **Conversation vocale naturelle** — VAD navigateur (Silero) détecte automatiquement début/fin de parole, sans clic
+- **Barge-in** — interrompre le bot en parlant coupe instantanément sa réponse
+- **Streaming temps réel** — réponse phrase par phrase (texte + audio) en ~700ms
 - **Chat texte** — fallback texte pour tester ou pour les contextes non-vocaux
 - **Téléphonie Twilio** — réponse vocale sur un numéro de téléphone classique
 - **RAG sur base de connaissance** — réponses factuelles avec citations sourcées
 - **Détection d'escalade** — transfert automatique vers un conseiller humain (résiliation, réclamation, RGPD)
 - **Dashboard admin** — KPIs (latence, taux de résolution, escalades) + historique des conversations
-- **Architecture hybride** — Java pour le RAG/domain, Python (Pipecat) pour l'orchestration vocale
+- **Architecture hybride** — Java pour le RAG/domain, Python pour l'orchestration vocale
 
 ## Stack technique
 
@@ -27,6 +29,7 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 | Vector Store | PostgreSQL 16 + pgvector (HNSW) | Recherche de similarité |
 | Téléphonie | Twilio Media Streams → Pipecat | Appels téléphoniques |
 | Frontend | React 19, TypeScript, Vite 6, TailwindCSS 4 | Interface web |
+| VAD navigateur | Silero v5 (`@ricky0123/vad-web`) | Détection vocale client-side |
 
 ## Architecture
 
@@ -303,6 +306,8 @@ L'agent vocal écoute sur `ws://localhost:8765`.
 ```bash
 cd frontend
 npm install
+cp node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx public/
+cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js public/
 npm run dev
 ```
 
@@ -431,7 +436,8 @@ voice-support-bot/
 │   ├── pyproject.toml                      #   Dépendances (pipecat-ai[gradium])
 │   └── Dockerfile
 ├── frontend/                               # React 19 + TailwindCSS
-│   └── src/features/voice-chat/           #   VoiceChat, useAudioRecorder, useVoiceWebSocket
+│   ├── public/                            #   Assets VAD (silero_vad_v5.onnx, worklet)
+│   └── src/features/voice-chat/           #   VoiceChat, useVAD, useAudioQueue, useVoiceWebSocket
 ├── knowledge-base/                         # Documents FAQ Telecom à ingérer
 ├── docs/                                   # Architecture + guide développement
 ├── docker-compose.yml                      # PostgreSQL + pgvector + voice-agent
@@ -467,13 +473,21 @@ voice-support-bot/
 # Backend — tests unitaires du domaine (fakes manuels, pas de Mockito)
 cd backend && mvn test
 
+# Frontend — tests unitaires (Vitest)
+cd frontend && npx vitest run
+
 # Frontend — vérification TypeScript
 cd frontend && npx tsc --noEmit
+
+# Voice agent — tests Python
+cd voice-agent && python -m pytest tests/
 ```
 
 ## Roadmap
 
-- [ ] Streaming inter-étapes (commencer le TTS avant la fin de la génération LLM)
+- [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
+- [x] VAD navigateur (Silero) — conversation naturelle sans clic stop
+- [x] Barge-in — interrompre le bot en parlant
 - [ ] Mémoire conversationnelle persistante (JPA)
 - [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
 - [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
