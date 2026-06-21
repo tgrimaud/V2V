@@ -46,14 +46,29 @@ class KnowledgeIngestionServiceTest {
         assertEquals("ma-source.md", vectorStorePort.storedChunks.get(0).source);
     }
 
+    @Test
+    void shouldIngestWithDomain() {
+        String content = "## Factures\n\nConsultez votre espace client pour voir vos factures.";
+
+        int chunks = service.ingest(content, "billing-faq.md", "billing");
+
+        assertTrue(chunks > 0);
+        assertEquals("billing", vectorStorePort.storedChunks.get(0).domain);
+    }
+
     static class FakeVectorStorePort implements VectorStorePort {
         final List<StoredChunk> storedChunks = new ArrayList<>();
 
         @Override
         public void store(String content, String source, String section, int chunkIndex) {
-            storedChunks.add(new StoredChunk(content, source, section, chunkIndex));
+            store(content, source, section, chunkIndex, null);
         }
 
-        record StoredChunk(String content, String source, String section, int chunkIndex) {}
+        @Override
+        public void store(String content, String source, String section, int chunkIndex, String domain) {
+            storedChunks.add(new StoredChunk(content, source, section, chunkIndex, domain));
+        }
+
+        record StoredChunk(String content, String source, String section, int chunkIndex, String domain) {}
     }
 }

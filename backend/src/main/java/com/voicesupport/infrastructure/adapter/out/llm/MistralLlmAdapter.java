@@ -9,7 +9,7 @@ import java.util.List;
 
 public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
 
-    private static final String SYSTEM_PROMPT = """
+    private static final String DEFAULT_SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI.
             Tu réponds aux questions des clients de manière claire, concise et professionnelle.
             
@@ -37,11 +37,18 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
 
     @Override
     public String generateAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+        return generateAnswer(question, contextChunks, conversationHistory, null);
+    }
+
+    @Override
+    public String generateAnswer(String question, List<String> contextChunks,
+                                  List<String> conversationHistory, String systemPrompt) {
         String context = String.join("\n---\n", contextChunks);
         String history = conversationHistory.isEmpty() ? "" :
                 "\n\nHistorique de la conversation :\n" + String.join("\n", conversationHistory);
 
-        String systemMessage = SYSTEM_PROMPT.replace("{context}", context);
+        String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
+        String systemMessage = prompt.replace("{context}", context);
 
         return chatClient.prompt()
                 .system(systemMessage)
@@ -52,11 +59,18 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
 
     @Override
     public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+        return streamAnswer(question, contextChunks, conversationHistory, null);
+    }
+
+    @Override
+    public Flux<String> streamAnswer(String question, List<String> contextChunks,
+                                      List<String> conversationHistory, String systemPrompt) {
         String context = String.join("\n---\n", contextChunks);
         String history = conversationHistory.isEmpty() ? "" :
                 "\n\nHistorique de la conversation :\n" + String.join("\n", conversationHistory);
 
-        String systemMessage = SYSTEM_PROMPT.replace("{context}", context);
+        String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
+        String systemMessage = prompt.replace("{context}", context);
 
         return chatClient.prompt()
                 .system(systemMessage)

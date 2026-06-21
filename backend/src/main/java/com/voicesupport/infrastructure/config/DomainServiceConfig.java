@@ -1,5 +1,7 @@
 package com.voicesupport.infrastructure.config;
 
+import com.voicesupport.domain.model.AgentProfile;
+import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
@@ -7,12 +9,12 @@ import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.domain.port.out.VectorStorePort;
-import com.voicesupport.domain.service.ConversationService;
+import com.voicesupport.domain.service.ConversationOrchestrator;
 import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.GuardrailService;
+import com.voicesupport.domain.service.IntentClassifier;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
 import com.voicesupport.domain.service.QueryReformulator;
-import com.voicesupport.domain.service.StreamingConversationService;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
@@ -30,6 +32,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class DomainServiceConfig {
@@ -125,23 +129,31 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    public AskQuestionUseCase askQuestionUseCase(VectorSearchPort vectorSearchPort, LlmPort llmPort,
-                                                  EscalationDetector escalationDetector,
-                                                  GuardrailService guardrailService,
-                                                  QueryReformulator queryReformulator,
-                                                  ConversationEventStore eventStore) {
-        return new ConversationService(vectorSearchPort, llmPort, escalationDetector,
-                guardrailService, queryReformulator, eventStore);
+    public AgentRegistry agentRegistry() {
+        return new AgentRegistry(
+                List.of(AgentProfile.support(), AgentProfile.billing(), AgentProfile.commercial()),
+                "support"
+        );
     }
 
     @Bean
-    public StreamingConversationService streamingConversationService(
-            VectorSearchPort vectorSearchPort, LlmStreamingPort llmStreamingPort,
+    public IntentClassifier intentClassifier(AgentRegistry agentRegistry) {
+        return new IntentClassifier(agentRegistry);
+    }
+
+    @Bean
+    public ConversationOrchestrator conversationOrchestrator(
+            VectorSearchPort vectorSearchPort, LlmPort llmPort, LlmStreamingPort llmStreamingPort,
             EscalationDetector escalationDetector, GuardrailService guardrailService,
-            QueryReformulator queryReformulator,
+            QueryReformulator queryReformulator, IntentClassifier intentClassifier,
             ConversationEventStore eventStore) {
-        return new StreamingConversationService(vectorSearchPort, llmStreamingPort,
-                escalationDetector, guardrailService, queryReformulator, eventStore);
+        return new ConversationOrchestrator(vectorSearchPort, llmPort, llmStreamingPort,
+                escalationDetector, guardrailService, queryReformulator, intentClassifier, eventStore);
+    }
+
+    @Bean
+    public AskQuestionUseCase askQuestionUseCase(ConversationOrchestrator orchestrator) {
+        return orchestrator;
     }
 
     @Bean

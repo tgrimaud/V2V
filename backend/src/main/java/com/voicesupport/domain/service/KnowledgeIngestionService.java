@@ -20,6 +20,10 @@ public class KnowledgeIngestionService implements IngestKnowledgeUseCase {
 
     @Override
     public int ingest(String content, String sourceName) {
+        return ingest(content, sourceName, null);
+    }
+
+    public int ingest(String content, String sourceName, String domain) {
         List<String> chunks = splitIntoChunks(content);
         String currentSection = "default";
 
@@ -27,7 +31,7 @@ public class KnowledgeIngestionService implements IngestKnowledgeUseCase {
             String chunk = chunks.get(i);
             String section = extractSection(chunk, currentSection);
             currentSection = section;
-            vectorStorePort.store(chunk, sourceName, section, i);
+            vectorStorePort.store(chunk, sourceName, section, i, domain);
         }
 
         return chunks.size();

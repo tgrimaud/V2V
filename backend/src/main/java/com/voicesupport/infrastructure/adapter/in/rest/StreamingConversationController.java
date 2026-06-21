@@ -1,8 +1,8 @@
 package com.voicesupport.infrastructure.adapter.in.rest;
 
 import com.voicesupport.domain.model.Citation;
-import com.voicesupport.domain.service.StreamingConversationService;
-import com.voicesupport.domain.service.StreamingConversationService.StreamingResult;
+import com.voicesupport.domain.service.ConversationOrchestrator;
+import com.voicesupport.domain.service.ConversationOrchestrator.StreamingResult;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,11 +19,11 @@ import java.util.concurrent.Executors;
 @RequestMapping("/api/conversation")
 public class StreamingConversationController {
 
-    private final StreamingConversationService streamingService;
+    private final ConversationOrchestrator orchestrator;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public StreamingConversationController(StreamingConversationService streamingService) {
-        this.streamingService = streamingService;
+    public StreamingConversationController(ConversationOrchestrator orchestrator) {
+        this.orchestrator = orchestrator;
     }
 
     @GetMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -36,13 +36,13 @@ public class StreamingConversationController {
 
         executor.execute(() -> {
             try {
-                StreamingResult result = streamingService.askStream(conversationId, question);
+                StreamingResult result = orchestrator.askStream(conversationId, question);
                 List<Citation> citations = result.citations();
 
                 if (result.escalated()) {
                     String escalationText = result.tokens().blockFirst();
                     sendChunk(emitter, escalationText);
-                    sendDone(emitter, escalationText, citations, conversationId);
+                    sendDone(emitter, escalationText, citations, conversationId, result.agentId());
                     emitter.complete();
                     return;
                 }
@@ -50,7 +50,7 @@ public class StreamingConversationController {
                 if (result.guardrailBlocked()) {
                     String blockedText = result.tokens().blockFirst();
                     sendChunk(emitter, blockedText);
-                    sendDone(emitter, blockedText, citations, conversationId);
+                    sendDone(emitter, blockedText, citations, conversationId, result.agentId());
                     emitter.complete();
                     return;
                 }
@@ -64,9 +64,9 @@ public class StreamingConversationController {
                         })
                         .doOnComplete(() -> {
                             String answer = fullAnswer.toString();
-                            streamingService.recordCompletion(
+                            orchestrator.recordCompletion(
                                     conversationId, question, answer, citations, startTime);
-                            sendDone(emitter, answer, citations, conversationId);
+                            sendDone(emitter, answer, citations, conversationId, result.agentId());
                             emitter.complete();
                         })
                         .doOnError(error -> {
@@ -95,7 +95,7 @@ public class StreamingConversationController {
     }
 
     private void sendDone(SseEmitter emitter, String fullAnswer,
-                          List<Citation> citations, String conversationId) {
+                          List<Citation> citations, String conversationId, String agentId) {
         try {
             StringBuilder citationsJson = new StringBuilder("[");
             for (int i = 0; i < citations.size(); i++) {
@@ -108,9 +108,11 @@ public class StreamingConversationController {
             }
             citationsJson.append("]");
 
+            String agentField = agentId != null ? ",\"agentId\":\"" + escapeJson(agentId) + "\"" : "";
             String data = "{\"answer\":\"" + escapeJson(fullAnswer)
                     + "\",\"citations\":" + citationsJson
-                    + ",\"conversationId\":\"" + escapeJson(conversationId) + "\"}";
+                    + ",\"conversationId\":\"" + escapeJson(conversationId) + "\""
+                    + agentField + "}";
 
             emitter.send(SseEmitter.event()
                     .name("done")

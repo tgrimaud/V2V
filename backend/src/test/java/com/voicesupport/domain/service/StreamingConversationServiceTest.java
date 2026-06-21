@@ -122,6 +122,9 @@ class StreamingConversationServiceTest {
 
         @Override
         public List<Citation> searchRelevant(String query, int topK) { return citations; }
+
+        @Override
+        public List<Citation> searchRelevant(String query, int topK, String domain) { return citations; }
     }
 
     static class FakeLlmStreamingPort implements LlmStreamingPort {
@@ -133,6 +136,12 @@ class StreamingConversationServiceTest {
 
         @Override
         public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+            return streamAnswer(question, contextChunks, conversationHistory, null);
+        }
+
+        @Override
+        public Flux<String> streamAnswer(String question, List<String> contextChunks,
+                                          List<String> conversationHistory, String systemPrompt) {
             this.lastHistory = conversationHistory;
             return Flux.fromIterable(tokens);
         }

@@ -7,4 +7,6 @@ import java.util.List;
 public interface VectorSearchPort {
 
     List<Citation> searchRelevant(String query, int topK);
+
+    List<Citation> searchRelevant(String query, int topK, String domain);
 }

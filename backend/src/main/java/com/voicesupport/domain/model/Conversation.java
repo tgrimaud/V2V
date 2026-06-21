@@ -11,12 +11,14 @@ public class Conversation {
     private final List<Turn> turns;
     private final Instant startedAt;
     private String sessionLanguage;
+    private String currentAgentId;
 
     public Conversation() {
         this.id = UUID.randomUUID().toString();
         this.turns = new ArrayList<>();
         this.startedAt = Instant.now();
         this.sessionLanguage = "fr";
+        this.currentAgentId = null;
     }
 
     public void addUserTurn(String text) {
@@ -37,6 +39,8 @@ public class Conversation {
     public Instant getStartedAt() { return startedAt; }
     public String getSessionLanguage() { return sessionLanguage; }
     public void setSessionLanguage(String language) { this.sessionLanguage = language; }
+    public String getCurrentAgentId() { return currentAgentId; }
+    public void setCurrentAgentId(String agentId) { this.currentAgentId = agentId; }
 
     public enum Role { USER, ASSISTANT }
 

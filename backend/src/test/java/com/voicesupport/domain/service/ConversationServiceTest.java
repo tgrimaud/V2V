@@ -106,6 +106,9 @@ class ConversationServiceTest {
 
         @Override
         public List<Citation> searchRelevant(String query, int topK) { return citations; }
+
+        @Override
+        public List<Citation> searchRelevant(String query, int topK, String domain) { return citations; }
     }
 
     static class FakeLlmPort implements LlmPort {
@@ -117,6 +120,13 @@ class ConversationServiceTest {
 
         @Override
         public String generateAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+            this.lastHistory = conversationHistory;
+            return answer;
+        }
+
+        @Override
+        public String generateAnswer(String question, List<String> contextChunks,
+                                      List<String> conversationHistory, String systemPrompt) {
             this.lastHistory = conversationHistory;
             return answer;
         }

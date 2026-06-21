@@ -25,16 +25,18 @@ public class KnowledgeController {
     @PostMapping("/ingest")
     public ResponseEntity<Map<String, Object>> ingest(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "source", required = false) String source) throws IOException {
+            @RequestParam(value = "source", required = false) String source,
+            @RequestParam(value = "domain", required = false) String domain) throws IOException {
 
         String content = new String(file.getBytes(), StandardCharsets.UTF_8);
         String sourceName = source != null ? source : file.getOriginalFilename();
 
-        int chunksCreated = ingestKnowledgeUseCase.ingest(content, sourceName);
+        int chunksCreated = ingestKnowledgeUseCase.ingest(content, sourceName, domain);
 
         return ResponseEntity.ok(Map.of(
                 "status", "ingested",
                 "source", sourceName,
+                "domain", domain != null ? domain : "general",
                 "chunks_created", chunksCreated
         ));
     }

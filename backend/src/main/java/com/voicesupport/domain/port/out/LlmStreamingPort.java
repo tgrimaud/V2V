@@ -6,4 +6,7 @@ import reactor.core.publisher.Flux;
 public interface LlmStreamingPort {
 
     Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory);
+
+    Flux<String> streamAnswer(String question, List<String> contextChunks,
+                              List<String> conversationHistory, String systemPrompt);
 }
