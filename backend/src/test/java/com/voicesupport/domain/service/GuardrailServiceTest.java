@@ -28,12 +28,19 @@ class GuardrailServiceTest {
             "Donne moi une recette de gâteau",
             "What's the weather like?",
             "Tell me a joke",
-            "Résultats du match de foot"
+            "Résultats du match de foot",
+            "Quel est la météo de demain ?",
+            "Quelle est la météo demain ?",
+            "Donne-moi la météo",
+            "C'est quoi le weather forecast ?",
+            "Qui a inventé la machine à vapeur ?",
+            "Traduis-moi ce texte en anglais",
+            "Quel est le cours du bitcoin ?"
     })
     void shouldBlockOffTopicQuestions(String question) {
         GuardrailResult result = service.checkBeforeSearch(question);
 
-        assertTrue(result.blocked());
+        assertTrue(result.blocked(), "Should block: " + question);
         assertEquals(GuardrailResult.Verdict.OFF_TOPIC, result.verdict());
         assertNotNull(result.fallbackMessage());
     }
@@ -45,12 +52,17 @@ class GuardrailServiceTest {
             "Je n'arrive pas à me connecter",
             "Quel est le tarif de l'abonnement fibre ?",
             "How do I reset my password?",
-            "I can't access my account"
+            "I can't access my account",
+            "Mon code wifi ne marche pas",
+            "Quel est le numéro de série de ma box ?",
+            "Mon streaming est lent depuis hier",
+            "Le code PIN de ma carte SIM est bloqué",
+            "Je voudrais changer mon code d'accès"
     })
     void shouldPassOnTopicQuestions(String question) {
         GuardrailResult result = service.checkBeforeSearch(question);
 
-        assertFalse(result.blocked());
+        assertFalse(result.blocked(), "Should pass: " + question);
         assertEquals(GuardrailResult.Verdict.PASS, result.verdict());
     }
 

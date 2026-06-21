@@ -22,6 +22,7 @@ public class StreamingConversationService {
     private final LlmStreamingPort llmStreamingPort;
     private final EscalationDetector escalationDetector;
     private final GuardrailService guardrailService;
+    private final QueryReformulator queryReformulator;
     private final ConversationEventStore eventStore;
     private final Map<String, Conversation> sessions = new ConcurrentHashMap<>();
 
@@ -29,11 +30,13 @@ public class StreamingConversationService {
                                          LlmStreamingPort llmStreamingPort,
                                          EscalationDetector escalationDetector,
                                          GuardrailService guardrailService,
+                                         QueryReformulator queryReformulator,
                                          ConversationEventStore eventStore) {
         this.vectorSearchPort = vectorSearchPort;
         this.llmStreamingPort = llmStreamingPort;
         this.escalationDetector = escalationDetector;
         this.guardrailService = guardrailService;
+        this.queryReformulator = queryReformulator;
         this.eventStore = eventStore;
     }
 
@@ -62,7 +65,8 @@ public class StreamingConversationService {
             return new StreamingResult(Flux.just(preCheck.fallbackMessage()), List.of(), false, true);
         }
 
-        List<Citation> citations = vectorSearchPort.searchRelevant(question, TOP_K);
+        String searchQuery = queryReformulator.reformulate(question, conversation);
+        List<Citation> citations = vectorSearchPort.searchRelevant(searchQuery, TOP_K);
 
         GuardrailResult postCheck = guardrailService.checkAfterSearch(question, citations);
         if (postCheck.blocked()) {

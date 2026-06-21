@@ -19,16 +19,27 @@ public class GuardrailService {
     );
 
     private static final Set<Pattern> OFF_TOPIC_PATTERNS = Set.of(
-            Pattern.compile("(?i)(quel(le)?\\s+(heure|temps|météo|température))", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(météo|meteo|weather|forecast|prévisions?\\s+météo)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(quel(le)?\\s+temps\\s+(fait|fera|qu'?il))", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(quelle?\\s+heure|what\\s+time)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(blague|joke|histoire\\s+drôle|devinette|riddle)", Pattern.UNICODE_CASE),
             Pattern.compile("(?i)(raconte|dis)[- ]moi\\s+(une\\s+)?(blague|histoire|poème)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(joue|chante|danse|dessine)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(qui\\s+est\\s+le\\s+président|capitale\\s+de)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(recette|cuisine|ingrédient)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(résult(at)?s?\\s+.{0,20}(foot|match|ligue|champion))", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(what('?s|\\s+is)\\s+the\\s+weather)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(tell\\s+me\\s+a\\s+(joke|story))", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(who\\s+(is|was)\\s+the\\s+president)", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)(play|sing|draw|dance)\\s+(me\\s+)?", Pattern.UNICODE_CASE)
+            Pattern.compile("(?i)\\b(joue|chante|danse|dessine|play|sing|draw|dance)\\b", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(président|president|capitale|capital\\s+of|roi|queen|king)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(recette|cuisine|ingrédient|recipe|cook(ing)?)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(foot(ball)?|rugby|tennis|basket|match\\s+de|ligue|champion(nat)?|tour\\s+de\\s+france)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)\\b(film|cinéma|movie|musique|chanson|album|concert)\\b", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(horoscope|astro(logie|logy)|signe\\s+(du\\s+)?zodiaque)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(politique|élection|election|vote(r|z)\\b|parti\\s+(politique|socialiste|républicain))", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(bourse|bitcoin|crypto|trading|investir|actions?\\s+en\\s+bourse)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(vacances|voyage|hôtel|hotel|avion|flight|destination\\s+de)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(jeu(x)?\\s+vidéo|gaming|playstation|xbox|nintendo|fortnite)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(programme\\s+tv|émission|netflix|disney\\+)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(santé|médecin|doctor|symptôme|maladie|médicament|ordonnance)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(programm(er|ation|ing)|python|javascript|react|angular)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(tradui(s|re|ction)|translate)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(équation|equation|combien\\s+font|résoudre\\s+(un|ce)\\s+calcul)", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)(qui\\s+(est|a\\s+inventé|était)|who\\s+(is|was|invented))", Pattern.UNICODE_CASE)
     );
 
     private static final Set<Pattern> INAPPROPRIATE_PATTERNS = Set.of(
@@ -55,11 +66,11 @@ public class GuardrailService {
     public GuardrailService(double confidenceThreshold) {
         this.confidenceThreshold = confidenceThreshold;
         this.offTopicMessageFr = "Cette question sort de mon domaine de compétence. " +
-                "Je suis spécialisé dans le support client. " +
-                "Puis-je vous aider avec autre chose concernant votre compte ou nos services ?";
+                "Je suis un assistant spécialisé dans le support client pour les problèmes de box internet et services associés. " +
+                "Puis-je vous aider avec autre chose concernant votre connexion ou nos services ?";
         this.offTopicMessageEn = "This question is outside my area of expertise. " +
-                "I specialize in customer support. " +
-                "Can I help you with something else regarding your account or our services?";
+                "I am a support assistant specialized in internet box issues and related services. " +
+                "Can I help you with something else regarding your connection or our services?";
         this.lowConfidenceMessageFr = "Je n'ai pas assez d'informations fiables pour répondre à cette question. " +
                 "Souhaitez-vous que je vous mette en relation avec un conseiller ?";
         this.lowConfidenceMessageEn = "I don't have enough reliable information to answer this question. " +

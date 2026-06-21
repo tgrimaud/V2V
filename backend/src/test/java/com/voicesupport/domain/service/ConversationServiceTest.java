@@ -27,7 +27,7 @@ class ConversationServiceTest {
         llmPort = new FakeLlmPort();
         eventStore = new FakeEventStore();
         service = new ConversationService(vectorSearchPort, llmPort, new EscalationDetector(),
-                new GuardrailService(), eventStore);
+                new GuardrailService(), new QueryReformulator(), eventStore);
     }
 
     @Test

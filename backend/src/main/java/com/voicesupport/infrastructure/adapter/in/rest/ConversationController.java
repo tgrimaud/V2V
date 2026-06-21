@@ -1,5 +1,6 @@
 package com.voicesupport.infrastructure.adapter.in.rest;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.model.ConversationResponse;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
@@ -36,7 +37,8 @@ public class ConversationController {
         return ResponseEntity.ok(new AskResponse(response.answer(), citations, conversationId));
     }
 
-    public record AskRequest(String question, String conversationId) {}
+    public record AskRequest(String question,
+                             @JsonProperty("conversation_id") String conversationId) {}
 
     public record AskResponse(String answer, List<CitationDto> citations, String conversationId) {}
 

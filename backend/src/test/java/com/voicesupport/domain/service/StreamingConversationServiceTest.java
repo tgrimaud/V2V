@@ -28,7 +28,7 @@ class StreamingConversationServiceTest {
         eventStore = new FakeEventStore();
         service = new StreamingConversationService(
                 vectorSearchPort, llmStreamingPort, new EscalationDetector(),
-                new GuardrailService(), eventStore);
+                new GuardrailService(), new QueryReformulator(), eventStore);
     }
 
     @Test

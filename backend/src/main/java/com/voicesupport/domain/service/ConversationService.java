@@ -23,17 +23,20 @@ public class ConversationService implements AskQuestionUseCase {
     private final LlmPort llmPort;
     private final EscalationDetector escalationDetector;
     private final GuardrailService guardrailService;
+    private final QueryReformulator queryReformulator;
     private final ConversationEventStore eventStore;
     private final Map<String, Conversation> sessions = new ConcurrentHashMap<>();
 
     public ConversationService(VectorSearchPort vectorSearchPort, LlmPort llmPort,
                                 EscalationDetector escalationDetector,
                                 GuardrailService guardrailService,
+                                QueryReformulator queryReformulator,
                                 ConversationEventStore eventStore) {
         this.vectorSearchPort = vectorSearchPort;
         this.llmPort = llmPort;
         this.escalationDetector = escalationDetector;
         this.guardrailService = guardrailService;
+        this.queryReformulator = queryReformulator;
         this.eventStore = eventStore;
     }
 
@@ -64,7 +67,8 @@ public class ConversationService implements AskQuestionUseCase {
             return new ConversationResponse(preCheck.fallbackMessage(), List.of());
         }
 
-        List<Citation> citations = vectorSearchPort.searchRelevant(question, TOP_K);
+        String searchQuery = queryReformulator.reformulate(question, conversation);
+        List<Citation> citations = vectorSearchPort.searchRelevant(searchQuery, TOP_K);
 
         GuardrailResult postCheck = guardrailService.checkAfterSearch(question, citations);
         if (postCheck.blocked()) {

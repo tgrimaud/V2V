@@ -20,10 +20,29 @@ const GUARDRAIL_MARKERS = [
   "don't have enough reliable information",
   "ne suis pas en mesure de répondre à ce type de demande",
   "cannot help with this type of request",
+  "je vous transfère à un conseiller",
+  "je n'ai pas cette information",
+  "je ne dispose pas de cette information",
+  "cette question ne fait pas partie",
+  "I'll transfer you to an agent",
+  "I don't have this information",
+  "spécialisé dans le support client",
+  "specialized in internet box",
 ]
 
-function isGuardrailMessage(text: string): boolean {
-  return GUARDRAIL_MARKERS.some(marker => text.includes(marker))
+const OFF_TOPIC_MARKERS = [
+  "sort de mon domaine de compétence",
+  "outside my area of expertise",
+  "ne suis pas en mesure de répondre à ce type de demande",
+  "cannot help with this type of request",
+  "spécialisé dans le support client",
+  "specialized in internet box",
+]
+
+function getGuardrailLabel(text: string): string | null {
+  if (OFF_TOPIC_MARKERS.some(m => text.includes(m))) return '🚫 Hors domaine'
+  if (GUARDRAIL_MARKERS.some(m => text.includes(m))) return '⚠️ Confiance faible'
+  return null
 }
 
 export function MessageList({ messages, greeting, hint }: MessageListProps) {
@@ -49,25 +68,25 @@ export function MessageList({ messages, greeting, hint }: MessageListProps) {
         </div>
       )}
       {messages.map(msg => {
-        const guardrail = msg.role === 'assistant' && isGuardrailMessage(msg.text)
+        const guardrailLabel = msg.role === 'assistant' ? getGuardrailLabel(msg.text) : null
         return (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className="max-w-[80%] rounded-2xl px-4 py-3 text-sm"
               style={{
-                backgroundColor: guardrail
+                backgroundColor: guardrailLabel
                   ? '#fef3c7'
                   : msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
-                color: guardrail
+                color: guardrailLabel
                   ? '#92400e'
                   : msg.role === 'user' ? 'white' : 'var(--color-text)',
-                border: guardrail ? '1px solid #f59e0b' : 'none',
+                border: guardrailLabel ? '1px solid #f59e0b' : 'none',
               }}
             >
-              {guardrail && (
+              {guardrailLabel && (
                 <span className="inline-block mr-1.5 text-xs font-medium px-1.5 py-0.5 rounded"
                   style={{ backgroundColor: '#f59e0b', color: 'white' }}>
-                  ⚠️ Confiance faible
+                  {guardrailLabel}
                 </span>
               )}
               {msg.text}

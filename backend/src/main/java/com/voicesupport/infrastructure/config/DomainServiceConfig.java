@@ -11,6 +11,7 @@ import com.voicesupport.domain.service.ConversationService;
 import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.GuardrailService;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
+import com.voicesupport.domain.service.QueryReformulator;
 import com.voicesupport.domain.service.StreamingConversationService;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
@@ -114,6 +115,11 @@ public class DomainServiceConfig {
     }
 
     @Bean
+    public QueryReformulator queryReformulator() {
+        return new QueryReformulator();
+    }
+
+    @Bean
     public ConversationEventStore conversationEventStore() {
         return new InMemoryConversationEventStore();
     }
@@ -122,18 +128,20 @@ public class DomainServiceConfig {
     public AskQuestionUseCase askQuestionUseCase(VectorSearchPort vectorSearchPort, LlmPort llmPort,
                                                   EscalationDetector escalationDetector,
                                                   GuardrailService guardrailService,
+                                                  QueryReformulator queryReformulator,
                                                   ConversationEventStore eventStore) {
         return new ConversationService(vectorSearchPort, llmPort, escalationDetector,
-                guardrailService, eventStore);
+                guardrailService, queryReformulator, eventStore);
     }
 
     @Bean
     public StreamingConversationService streamingConversationService(
             VectorSearchPort vectorSearchPort, LlmStreamingPort llmStreamingPort,
             EscalationDetector escalationDetector, GuardrailService guardrailService,
+            QueryReformulator queryReformulator,
             ConversationEventStore eventStore) {
         return new StreamingConversationService(vectorSearchPort, llmStreamingPort,
-                escalationDetector, guardrailService, eventStore);
+                escalationDetector, guardrailService, queryReformulator, eventStore);
     }
 
     @Bean
