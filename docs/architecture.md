@@ -45,8 +45,9 @@ graph TB
             StreamController[StreamingConversationController]
         end
         subgraph domain [Domain]
-            ConvService[ConversationService]
-            StreamService[StreamingConversationService]
+            Orchestrator[ConversationOrchestrator]
+            IntentClass[IntentClassifier]
+            AgentReg[AgentRegistry]
             EscDetector[EscalationDetector]
             RAGPipeline["Pipeline RAG"]
         end
@@ -76,11 +77,12 @@ graph TB
     BackendClient -->|"GET SSE /ask-stream"| StreamController
 
     %% ─── Backend interne ───
-    StreamController --> StreamService
-    StreamService --> EscDetector
-    StreamService --> RAGPipeline
-    ConvController --> ConvService
-    ConvService --> RAGPipeline
+    StreamController --> Orchestrator
+    Orchestrator --> IntentClass
+    IntentClass --> AgentReg
+    Orchestrator --> EscDetector
+    Orchestrator --> RAGPipeline
+    ConvController --> Orchestrator
 
     %% ─── Pipeline RAG → Adapters ───
     RAGPipeline -->|"retrieval"| PgVecAdapter
@@ -138,38 +140,43 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 
 | Classe | Rôle |
 |--------|------|
-| `Conversation` | Session de dialogue multi-tour (historique user/assistant) |
+| `Conversation` | Session de dialogue multi-tour (historique user/assistant + agent courant) |
 | `Citation` | Référence à un passage de la base de connaissance (source, section, score) |
 | `ConversationResponse` | Réponse du bot (texte + citations) |
 | `ConversationEvent` | Événement de tracking (question, réponse, latence, escalade) |
 | `KnowledgeChunk` | Unité de connaissance indexée dans le vector store |
 | `GuardrailResult` | Résultat d'évaluation guardrail (PASS, OFF_TOPIC, LOW_CONFIDENCE) |
+| `AgentProfile` | Profil d'un agent spécialisé (id, nom, system prompt, domaine KB, mots-clés d'intent) |
+| `AgentRegistry` | Registre des agents disponibles avec lookup par id et fallback par défaut |
 
 ### Services
 
 | Service | Responsabilité |
 |---------|---------------|
-| `ConversationService` | Pipeline RAG synchrone : retrieval → génération blocking → tracking |
-| `StreamingConversationService` | Pipeline RAG streaming : retrieval → `Flux<String>` token stream → tracking post-complétion |
-| `KnowledgeIngestionService` | Découpe les documents en chunks et les indexe |
+| `ConversationOrchestrator` | Pipeline RAG unifié (sync + streaming) avec routing multi-agent : classification d'intent → recherche vectorielle filtrée par domaine → génération avec system prompt dynamique |
+| `ConversationService` | Pipeline RAG synchrone legacy (toujours fonctionnel mais remplacé par l'orchestrateur) |
+| `StreamingConversationService` | Pipeline RAG streaming legacy (remplacé par l'orchestrateur) |
+| `IntentClassifier` | Classifie la question de l'utilisateur pour router vers l'agent approprié (scoring par mots-clés avec session stickiness) |
+| `KnowledgeIngestionService` | Découpe les documents en chunks et les indexe avec tag de domaine |
 | `EscalationDetector` | Détecte les demandes nécessitant un transfert humain |
 | `GuardrailService` | Filtre pré/post-recherche : off-topic (patterns) + low-confidence (score seuil) |
+| `QueryReformulator` | Reformule les questions de suivi en incluant le contexte conversationnel |
 
 ### Ports IN (cas d'usage)
 
 | Port | Implémenté par |
 |------|----------------|
-| `AskQuestionUseCase` | `ConversationService` |
+| `AskQuestionUseCase` | `ConversationOrchestrator` |
 | `IngestKnowledgeUseCase` | `KnowledgeIngestionService` |
 
 ### Ports OUT (dépendances inversées)
 
 | Port | Contrat | Adapters |
 |------|---------|----------|
-| `LlmPort` | Générer une réponse complète (blocking `.call()`) | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `LlmStreamingPort` | Streamer les tokens de réponse (`Flux<String>` via `.stream()`) | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `VectorSearchPort` | Chercher les chunks pertinents | `PgVectorStoreAdapter` |
-| `VectorStorePort` | Stocker un chunk avec ses embeddings | `PgVectorStoreAdapter` |
+| `LlmPort` | Générer une réponse complète (blocking `.call()`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmStreamingPort` | Streamer les tokens de réponse (`Flux<String>`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `VectorSearchPort` | Chercher les chunks pertinents (global ou filtré par domaine) | `PgVectorStoreAdapter` |
+| `VectorStorePort` | Stocker un chunk avec ses embeddings et tag de domaine | `PgVectorStoreAdapter` |
 | `ConversationEventStore` | Persister les événements de conversation | `InMemoryConversationEventStore` |
 
 > **Note** : Chaque adapter LLM implémente **les deux ports** (`LlmPort` + `LlmStreamingPort`). Un seul bean Spring satisfait les deux interfaces.
@@ -177,17 +184,42 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 
 ## Pipeline de traitement
 
+### Routing multi-agent
+
+```
+Question utilisateur
+    │
+    ▼
+IntentClassifier.classify(question, currentAgentId)
+    │
+    ├─ Score mots-clés ≥ 1 → route vers l'agent avec le meilleur score
+    │
+    ├─ Score = 0 + agent courant en session → reste sur l'agent courant (stickiness)
+    │
+    └─ Score = 0 + pas d'agent courant → fallback vers agent par défaut (support)
+```
+
+**Agents disponibles :**
+
+| Agent | Domaine KB | Mots-clés déclencheurs (extrait) |
+|-------|-----------|------|
+| **Support technique** | `support` | connexion, wifi, box, débit, panne, voyant, reset... |
+| **Facturation** | `billing` | facture, paiement, prélèvement, prix, abonnement, résilier... |
+| **Commercial** | `commercial` | souscrire, fibre, déménagement, portabilité, option, TV, parrainage... |
+
 ### Mode texte (REST — synchrone)
 
 ```
 Client → POST /api/conversation/ask
-         → ConversationService.ask()
+         → ConversationOrchestrator.ask()
            → EscalationDetector.shouldEscalate()  [court-circuit si oui]
            → GuardrailService.checkBeforeSearch()  [greeting → réponse directe]
                                                    [off-topic → court-circuit]
-           → VectorSearchPort.searchRelevant()     [retrieval]
+           → IntentClassifier.classify()           [routing vers agent]
+           → QueryReformulator.reformulate()       [contexte conversationnel]
+           → VectorSearchPort.searchRelevant(domain) [retrieval filtré par domaine]
            → GuardrailService.checkAfterSearch()   [low-confidence → court-circuit]
-           → LlmPort.generateAnswer()             [generation blocking]
+           → LlmPort.generateAnswer(systemPrompt)  [generation avec prompt agent]
            → ConversationEventStore.save()         [tracking]
          ← JSON { answer, citations, conversationId }
 ```
@@ -280,11 +312,13 @@ Le `KnowledgeIngestionService` découpe les documents de manière sémantique :
 2. **Taille cible : 500 caractères** — assez pour un contexte cohérent
 3. **Chevauchement : 50 caractères** — assure la continuité entre chunks
 4. **Extraction de section** — le heading Markdown `## ...` est propagé comme métadonnée
+5. **Tag de domaine** — chaque chunk est tagué avec le domaine de l'agent (`support`, `billing`, `commercial`)
 
 Chaque chunk est ensuite :
 - Transformé en vecteur via `nomic-embed-text` (768 dimensions)
 - Stocké dans pgvector avec index HNSW pour recherche rapide
-- Annoté avec ses métadonnées (source, section, index)
+- Annoté avec ses métadonnées (source, section, index, **domain**)
+- Filtrable par domaine lors de la recherche vectorielle (via `FilterExpression`)
 
 ## Détection d'escalade
 
@@ -463,3 +497,27 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 - **Bilingue** : messages de fallback en FR et EN selon la langue détectée
 - **Indicateur visuel** : badge ambre "⚠️ Confiance faible" côté frontend quand le guardrail de confiance déclenche
 - **Pure domain** : pas de dépendance Spring, testable avec de simples fakes
+
+### ADR-008 : Multi-agent routing avec classification par mots-clés
+
+**Contexte** : Un seul agent avec un system prompt générique ne peut pas être expert sur tous les sujets (support technique, facturation, commercial). Les réponses manquent de précision sur les questions spécialisées et le RAG ramène des chunks de domaines non pertinents.
+
+**Décision** : Implémenter un système multi-agent avec :
+1. **AgentProfile** : chaque agent a son propre system prompt, son domaine KB, et ses mots-clés d'intent
+2. **IntentClassifier** : classification par scoring de mots-clés (rapide, déterministe, extensible)
+3. **ConversationOrchestrator** : pipeline unifié qui route vers l'agent approprié et filtre la recherche vectorielle par domaine
+4. **Session stickiness** : le `currentAgentId` est maintenu dans la `Conversation` pour assurer la continuité des follow-ups
+
+**Agents définis (POC) :**
+- **Support** (défaut) : problèmes techniques, box, connexion, Wi-Fi, débit
+- **Billing** : facturation, paiements, prélèvements, offres, résiliation
+- **Commercial** : souscription, déménagement, portabilité, options TV, parrainage
+
+**Raisons** :
+- **Précision accrue** : chaque agent utilise un system prompt spécialisé et ne cherche que dans sa KB
+- **Zéro latence de routing** : classification par regex/mots-clés (~0ms) vs LLM (~200ms)
+- **Transparent pour l'utilisateur** : aucune question supplémentaire posée, le routing est implicite
+- **Extensible** : ajouter un agent = ajouter un `AgentProfile` dans le registre + un fichier KB + `domain` tag
+- **Stickiness** : les questions de suivi restent sur le même agent sans re-classification inutile
+- **Pure domain** : `IntentClassifier` et `AgentRegistry` sont du domaine pur (pas de Spring)
+- **Backward-compatible** : les anciens endpoints continuent de fonctionner via `AskQuestionUseCase`

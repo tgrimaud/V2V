@@ -90,6 +90,55 @@ tts = CartesiaTTSService(api_key=os.getenv("CARTESIA_API_KEY"), voice_id="...")
 
 Aucune modification du backend Java n'est nécessaire — le `RAGProcessor` communique via HTTP.
 
+## Ajouter un nouvel agent spécialisé
+
+Le système multi-agent est extensible. Pour ajouter un nouvel agent (ex: agent SAV retours) :
+
+1. **Créer la KB** dans `knowledge-base/sav-faq.md`
+
+2. **Ajouter le profil** dans `AgentProfile.java` :
+
+```java
+public static AgentProfile sav() {
+    return new AgentProfile(
+            "sav",
+            "Agent SAV",
+            """
+            Tu es un agent SAV spécialisé dans les retours et échanges...
+            Contexte de la base de connaissance :
+            {context}
+            """,
+            "sav",
+            List.of("retour", "échange", "panne matériel", "renvoi", "colis",
+                    "garantie", "remplacement", "défectueux")
+    );
+}
+```
+
+3. **Enregistrer** dans `DomainServiceConfig.agentRegistry()` :
+
+```java
+@Bean
+public AgentRegistry agentRegistry() {
+    return new AgentRegistry(
+            List.of(AgentProfile.support(), AgentProfile.billing(),
+                    AgentProfile.commercial(), AgentProfile.sav()),
+            "support"
+    );
+}
+```
+
+4. **Ingérer la KB** avec le tag domaine :
+
+```bash
+curl -X POST http://localhost:8081/api/knowledge/ingest \
+  -F "file=@knowledge-base/sav-faq.md" \
+  -F "source=sav-faq.md" \
+  -F "domain=sav"
+```
+
+Aucune modification de l'orchestrateur, du classifier ou des adapters n'est nécessaire.
+
 ## Ajouter un document à la base de connaissance
 
 1. Créer un fichier Markdown dans `knowledge-base/` :
@@ -106,13 +155,30 @@ Contenu structuré avec des paragraphes séparés par des lignes vides.
 Chaque paragraphe devient un chunk potentiel.
 ```
 
-2. Ingérer via l'API :
+2. Ingérer via l'API avec le tag de domaine (obligatoire pour le routing multi-agent) :
 
 ```bash
+# Support technique
 curl -X POST http://localhost:8081/api/knowledge/ingest \
-  -F "file=@knowledge-base/nouveau-sujet.md" \
-  -F "source=nouveau-sujet"
+  -F "file=@knowledge-base/telecom-faq.md" \
+  -F "source=telecom-faq.md" \
+  -F "domain=support"
+
+# Facturation
+curl -X POST http://localhost:8081/api/knowledge/ingest \
+  -F "file=@knowledge-base/billing-faq.md" \
+  -F "source=billing-faq.md" \
+  -F "domain=billing"
+
+# Commercial
+curl -X POST http://localhost:8081/api/knowledge/ingest \
+  -F "file=@knowledge-base/commercial-faq.md" \
+  -F "source=commercial-faq.md" \
+  -F "domain=commercial"
 ```
+
+Le paramètre `domain` tag chaque chunk pour que la recherche vectorielle soit filtrée par agent.
+Sans `domain`, les chunks sont stockés sans filtre (rétrocompatible mais non recommandé).
 
 Le chunking respecte les frontières de paragraphes et propage les headings comme métadonnées de section.
 
@@ -137,6 +203,8 @@ Le chunking respecte les frontières de paragraphes et propage les headings comm
 | Barge-in ne coupe pas le bot | Bridge utilise l'ancien code | Redémarrer le bridge (`kill $(lsof -ti:8765)` puis relancer) |
 | `401 Unauthorized` de Mistral | Clé API non chargée | Lancer le backend avec `export $(cat backend/.env \| xargs) && mvn spring-boot:run` ou sourcer le `.env` avant |
 | Bot répond hors-sujet sur "Bonjour" | Guardrails non actifs | Vérifier que `GuardrailService` est dans `DomainServiceConfig` et redémarrer le backend |
+| Routing multi-agent ne fonctionne pas | KB non taguée | Ré-ingérer avec le paramètre `domain=support\|billing\|commercial` |
+| Réponses génériques malgré routing | Chunks sans domaine en BDD | Vider la table et ré-ingérer : `DELETE FROM vector_store;` puis re-curl ingest |
 
 ## Commandes utiles
 
@@ -198,6 +266,21 @@ curl -s -X POST http://localhost:8081/api/conversation/ask \
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Quel temps fait-il dehors ?", "conversationId": "test"}' | python3 -m json.tool
+
+# Tester le routing multi-agent — facturation
+curl -s -X POST http://localhost:8081/api/conversation/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Comment consulter ma facture ?", "conversation_id": "test-billing"}' | python3 -m json.tool
+
+# Tester le routing multi-agent — commercial
+curl -s -X POST http://localhost:8081/api/conversation/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Je déménage, comment transférer mon abonnement ?", "conversation_id": "test-commercial"}' | python3 -m json.tool
+
+# Ingérer les 3 KB avec domaines (après un reset)
+curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/telecom-faq.md" -F "source=telecom-faq.md" -F "domain=support"
+curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/billing-faq.md" -F "source=billing-faq.md" -F "domain=billing"
+curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/commercial-faq.md" -F "source=commercial-faq.md" -F "domain=commercial"
 
 # Arrêter tout
 docker compose down
