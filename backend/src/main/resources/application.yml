@@ -43,15 +43,6 @@ server:
 voice-support:
   llm:
     provider: ${LLM_PROVIDER:mistral-api}
-  tts:
-    provider: piper
-    piper:
-      host: localhost
-      port: 10200
-  stt:
-    provider: deepgram
-    deepgram:
-      api-key: ${DEEPGRAM_API_KEY:}
   knowledge:
     chunk-size: 500
     chunk-overlap: 50
