@@ -157,7 +157,11 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
     }
 
     private List<String> buildHistory(Conversation conversation) {
-        return conversation.lastTurns(HISTORY_WINDOW).stream()
+        List<Conversation.Turn> turns = conversation.lastTurns(HISTORY_WINDOW + 1);
+        if (turns.size() <= 1) {
+            return List.of();
+        }
+        return turns.subList(0, turns.size() - 1).stream()
                 .map(turn -> turn.role().name() + ": " + turn.text())
                 .toList();
     }
