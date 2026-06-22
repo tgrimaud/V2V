@@ -24,13 +24,13 @@ public class IntentClassifier {
             if (score > bestScore) {
                 bestScore = score;
                 bestMatch = profile;
+            } else if (score == bestScore && score > 0 && currentAgentId != null
+                    && profile.id().equals(currentAgentId)) {
+                bestMatch = profile;
             }
         }
 
         if (bestScore >= 1 && bestMatch != null) {
-            if (currentAgentId == null || !currentAgentId.equals(bestMatch.id())) {
-                return bestMatch;
-            }
             return bestMatch;
         }
 
@@ -45,10 +45,25 @@ public class IntentClassifier {
     private int computeKeywordScore(String normalizedQuestion, AgentProfile profile) {
         int score = 0;
         for (String keyword : profile.intentKeywords()) {
-            if (normalizedQuestion.contains(keyword.toLowerCase(Locale.FRENCH))) {
+            String normalizedKeyword = keyword.toLowerCase(Locale.FRENCH);
+            if (isWholeWordMatch(normalizedQuestion, normalizedKeyword)) {
                 score++;
             }
         }
         return score;
+    }
+
+    private boolean isWholeWordMatch(String text, String keyword) {
+        int index = text.indexOf(keyword);
+        while (index >= 0) {
+            boolean startBoundary = (index == 0) || !Character.isLetterOrDigit(text.charAt(index - 1));
+            int end = index + keyword.length();
+            boolean endBoundary = (end >= text.length()) || !Character.isLetterOrDigit(text.charAt(end));
+            if (startBoundary && endBoundary) {
+                return true;
+            }
+            index = text.indexOf(keyword, index + 1);
+        }
+        return false;
     }
 }

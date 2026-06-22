@@ -29,11 +29,9 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         Map<String, Object> metadata = new java.util.HashMap<>(Map.of(
                 "source", source,
                 "section", section,
-                "chunk_index", String.valueOf(chunkIndex)
+                "chunk_index", String.valueOf(chunkIndex),
+                "domain", domain != null ? domain : "general"
         ));
-        if (domain != null) {
-            metadata.put("domain", domain);
-        }
         Document document = new Document(content, metadata);
         vectorStore.add(List.of(document));
     }
@@ -52,7 +50,9 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
 
         if (domain != null) {
             FilterExpressionBuilder fb = new FilterExpressionBuilder();
-            builder.filterExpression(fb.eq("domain", domain).build());
+            builder.filterExpression(
+                    fb.or(fb.eq("domain", domain), fb.eq("domain", "general")).build()
+            );
         }
 
         List<Document> results = vectorStore.similaritySearch(builder.build());
