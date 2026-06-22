@@ -521,3 +521,21 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 - **Stickiness** : les questions de suivi restent sur le même agent sans re-classification inutile
 - **Pure domain** : `IntentClassifier` et `AgentRegistry` sont du domaine pur (pas de Spring)
 - **Backward-compatible** : les anciens endpoints continuent de fonctionner via `AskQuestionUseCase`
+
+### ADR-009 : Optimisation latence (déploiement opérateur) — Phase 1 code
+
+**Contexte** : Pour un déploiement omnicanal (téléphonie SIP + web + mobile) chez un opérateur télécom, la latence de tour de parole doit descendre sous ~800ms (idéalement ~500ms) pour une conversation naturelle. Le pipeline initial atteint ~700ms jusqu'à la première phrase audible **hors** détection de fin de parole (latence réelle perçue ≈ 1.2-1.5s).
+
+**Décision** : livrer d'abord les changements applicatifs (Phase 1) déployables sur l'infra actuelle, l'infra (Phase 2) suivant après validation.
+
+**Instrumentation (Phase 0)** : logs structurés `[LATENCY] step=<nom> ms=<valeur>` sur tout le chemin critique (`stt`, `vector_search`, `llm_first_token`, `llm_total`, `tts`, `time_to_first_audio`, `turn_total`) + `voice-agent/tools/latency_report.py` qui agrège en p50/p95 avec SLO `time_to_first_audio` p95 < 800ms.
+
+**Détection de fin de tour côté serveur** : `voice-agent/agent/turn_detector.py` — endpointing déterministe (RMS + silence) requis pour la téléphonie (pas de VAD navigateur). Pur, sans dépendance, testable avec PCM synthétique.
+
+**Abstraction STT streaming** : `voice-agent/agent/stt_streaming.py` — `StreamingSttSession` (Protocol) avec `feed()`/`finalize()`. L'implémentation concrète actuelle (`BatchSttSession`) conserve le comportement Gradium REST derrière une couture streaming ; un futur client WebSocket ASR ou un STT self-hosté (faster-whisper) s'y branche sans toucher au bridge.
+
+**Raisons** :
+- **Mesure d'abord** : on ne peut pas optimiser ce qu'on ne mesure pas ; la baseline conditionne les choix.
+- **Téléphonie-ready** : le turn-detector serveur débloque le canal SIP qui n'a pas de VAD client.
+- **Découplage moteur STT** : la couture permet d'adopter un STT streaming (gain ~300-500ms) sans réécriture.
+- **Réversible et sans nouvelle dépendance** : logs structurés plutôt qu'un stack d'observabilité lourd (déféré à la Phase 2).

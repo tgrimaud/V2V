@@ -23,9 +23,9 @@ import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
-from agent.gradium_stt import transcribe_audio, close_stt_client, SttResult
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
+from agent.stt_streaming import create_stt_session
 
 load_dotenv()
 
@@ -104,7 +104,9 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
     audio_data = bytes(audio_buffer)
     print(f"[STT] Transcribing {len(audio_data)} bytes (lang={language})...", flush=True)
 
-    stt_result = await transcribe_audio(audio_data, language, GRADIUM_API_KEY)
+    stt_session = create_stt_session(language, GRADIUM_API_KEY)
+    stt_session.feed(audio_data)
+    stt_result = await stt_session.finalize()
 
     if stt_result.error_code:
         print(f"[STT] Error: {stt_result.error} ({stt_result.error_code})", flush=True)
