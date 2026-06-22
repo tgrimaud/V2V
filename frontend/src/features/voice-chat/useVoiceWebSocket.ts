@@ -10,6 +10,7 @@ interface UseVoiceWebSocketOptions {
   onAnswerDone?: (fullText: string, agentName?: string) => void
   onAudio: (audio: ArrayBuffer) => void
   onError: (error: string) => void
+  onServiceError?: (code: string, message: string) => void
   onLanguageChanged?: (language: string) => void
 }
 
@@ -47,6 +48,8 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
             optionsRef.current.onTranscription(message.text)
           } else if (message.type === 'answer_start') {
             optionsRef.current.onAnswerStart?.(message.agentName, message.guardrailBlocked)
+          } else if (message.type === 'service_error') {
+            optionsRef.current.onServiceError?.(message.code, message.message)
           } else if (message.type === 'answer_chunk') {
             optionsRef.current.onAnswerChunk?.(message.text)
           } else if (message.type === 'answer_done') {

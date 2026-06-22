@@ -33,12 +33,30 @@ interface Message {
 
 type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'speaking'
 
+interface ServiceError {
+  code: string
+  message: string
+  timestamp: number
+}
+
+const ERROR_LABELS: Record<string, string> = {
+  STT_CREDITS_EXHAUSTED: '🎙️ Crédits Gradium épuisés — la reconnaissance vocale est indisponible. Utilisez le champ texte.',
+  STT_AUTH_ERROR: '🎙️ Clé API Gradium invalide — vérifiez la configuration.',
+  STT_UNREACHABLE: '🎙️ Service Gradium STT injoignable.',
+  STT_ERROR: '🎙️ Erreur du service de reconnaissance vocale.',
+  BACKEND_UNAVAILABLE: '⚙️ Backend indisponible — vérifiez que le serveur est démarré sur le port 8081.',
+  LLM_AUTH_ERROR: '🤖 Clé API Mistral manquante ou invalide — vérifiez MISTRAL_API_KEY.',
+  BACKEND_ERROR: '⚙️ Erreur du backend.',
+  BRIDGE_DISCONNECTED: '🔌 Bridge vocal déconnecté — le mode voix est indisponible.',
+}
+
 export function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [textInput, setTextInput] = useState('')
   const [language, setLanguage] = useState<Language>('fr')
   const [vadActive, setVadActive] = useState(false)
+  const [serviceError, setServiceError] = useState<ServiceError | null>(null)
 
   const t = labels[language]
 
@@ -108,7 +126,18 @@ export function VoiceChat() {
     },
     onLanguageChanged: (lang) => setLanguage(lang as Language),
     onError: (error) => { console.error('Voice error:', error); setVoiceState(vadActive ? 'listening' : 'idle'); clearAudioQueue() },
+    onServiceError: (code, message) => {
+      setServiceError({ code, message, timestamp: Date.now() })
+    },
   })
+
+  useEffect(() => {
+    if (connectionState === 'disconnected' || connectionState === 'error') {
+      setServiceError({ code: 'BRIDGE_DISCONNECTED', message: 'Bridge disconnected', timestamp: Date.now() })
+    } else if (connectionState === 'connected' && serviceError?.code === 'BRIDGE_DISCONNECTED') {
+      setServiceError(null)
+    }
+  }, [connectionState])
 
   const { start: startVAD, stop: stopVAD, resetToListening } = useVAD({
     onSpeechStart: () => {
@@ -172,8 +201,17 @@ export function VoiceChat() {
         body: JSON.stringify({ question: question + langHint, conversation_id: 'web-text' }),
       })
       if (!response.ok) {
+        if (response.status === 500) {
+          const text = await response.text()
+          if (text.includes('401') || text.includes('Unauthorized') || text.includes('mistral')) {
+            setServiceError({ code: 'LLM_AUTH_ERROR', message: 'Mistral API key invalid', timestamp: Date.now() })
+          } else {
+            setServiceError({ code: 'BACKEND_ERROR', message: `Backend error (${response.status})`, timestamp: Date.now() })
+          }
+        }
         throw new Error(`HTTP ${response.status}`)
       }
+      setServiceError(prev => prev?.code === 'LLM_AUTH_ERROR' || prev?.code === 'BACKEND_ERROR' ? null : prev)
       const data = await response.json()
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(), role: 'assistant', text: data.answer,
@@ -222,6 +260,19 @@ export function VoiceChat() {
         t={t}
         onLanguageChange={handleLanguageChange}
       />
+      {serviceError && (
+        <div
+          className="px-4 py-2 flex items-center justify-between text-sm"
+          style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fca5a5', color: '#991b1b' }}
+        >
+          <span>{ERROR_LABELS[serviceError.code] || serviceError.message}</span>
+          <button
+            onClick={() => setServiceError(null)}
+            className="ml-2 text-xs font-bold hover:opacity-70"
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
       <MessageList messages={messages} greeting={t.greeting} hint={t.hint} />
       <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>
         <div className="flex flex-col items-center mb-4">

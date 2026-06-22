@@ -17,11 +17,12 @@ import json
 import os
 import sys
 
+import httpx
 import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
-from agent.gradium_stt import transcribe_audio, close_stt_client
+from agent.gradium_stt import transcribe_audio, close_stt_client, SttResult
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
 
@@ -101,8 +102,19 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
     audio_data = bytes(audio_buffer)
     print(f"[STT] Transcribing {len(audio_data)} bytes (lang={language})...", flush=True)
 
-    transcription = await transcribe_audio(audio_data, language, GRADIUM_API_KEY)
+    stt_result = await transcribe_audio(audio_data, language, GRADIUM_API_KEY)
 
+    if stt_result.error_code:
+        print(f"[STT] Error: {stt_result.error} ({stt_result.error_code})", flush=True)
+        await websocket.send(json.dumps({
+            "type": "service_error",
+            "code": stt_result.error_code,
+            "message": stt_result.error,
+        }))
+        await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
+        return
+
+    transcription = stt_result.text
     if not transcription:
         print("[STT] No transcription returned (silence?)", flush=True)
         await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
@@ -218,8 +230,28 @@ async def _fallback_non_streaming(websocket, backend, question, language):
     try:
         result = await backend.ask(question)
         answer = result.get("answer", "Désolé, je n'ai pas compris.")
+    except httpx.ConnectError:
+        await websocket.send(json.dumps({
+            "type": "service_error",
+            "code": "BACKEND_UNAVAILABLE",
+            "message": "Backend service unavailable",
+        }))
+        answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue."
     except Exception as e:
+        error_str = str(e)
         print(f"[RAG] Fallback error: {e}", flush=True)
+        if "401" in error_str or "Unauthorized" in error_str:
+            await websocket.send(json.dumps({
+                "type": "service_error",
+                "code": "LLM_AUTH_ERROR",
+                "message": "Mistral API key invalid or missing",
+            }))
+        else:
+            await websocket.send(json.dumps({
+                "type": "service_error",
+                "code": "BACKEND_ERROR",
+                "message": f"Backend error: {error_str[:100]}",
+            }))
         answer = "Sorry, an error occurred." if language == "en" else "Désolé, une erreur est survenue."
 
     voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
