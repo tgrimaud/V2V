@@ -34,13 +34,17 @@ public class ConversationController {
                 .map(c -> new CitationDto(c.source(), c.section(), c.relevantText(), c.score()))
                 .toList();
 
-        return ResponseEntity.ok(new AskResponse(response.answer(), citations, conversationId));
+        return ResponseEntity.ok(new AskResponse(response.answer(), citations, conversationId,
+                response.agentId(), response.agentName(), response.guardrailBlocked()));
     }
 
     public record AskRequest(String question,
                              @JsonProperty("conversation_id") String conversationId) {}
 
-    public record AskResponse(String answer, List<CitationDto> citations, String conversationId) {}
+    public record AskResponse(String answer, List<CitationDto> citations, String conversationId,
+                              @JsonProperty("agent_id") String agentId,
+                              @JsonProperty("agent_name") String agentName,
+                              @JsonProperty("guardrail_blocked") boolean guardrailBlocked) {}
 
     public record CitationDto(String source, String section, String relevantText, double score) {}
 }

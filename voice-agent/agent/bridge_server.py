@@ -145,10 +145,25 @@ async def _stream_answer(websocket, backend, question, language):
     worker_task = asyncio.create_task(tts_worker())
 
     try:
+        agent_id = None
+        agent_name = None
+        guardrail_blocked = False
+
         async for event in backend.ask_stream(question, "pipecat"):
             event_type = event.get("event", "")
 
-            if event_type == "chunk":
+            if event_type == "start":
+                agent_id = event["data"].get("agentId")
+                agent_name = event["data"].get("agentName")
+                guardrail_blocked = event["data"].get("guardrailBlocked", False)
+                await websocket.send(json.dumps({
+                    "type": "answer_start",
+                    "agentId": agent_id,
+                    "agentName": agent_name,
+                    "guardrailBlocked": guardrail_blocked,
+                }))
+
+            elif event_type == "chunk":
                 token = event["data"].get("text", "")
                 sentence_buffer += token
                 full_answer += token
@@ -168,6 +183,8 @@ async def _stream_answer(websocket, backend, question, language):
                 break
 
             elif event_type == "done":
+                agent_id = event["data"].get("agentId")
+                agent_name = event["data"].get("agentName")
                 break
 
         if sentence_buffer.strip():
@@ -178,8 +195,13 @@ async def _stream_answer(websocket, backend, question, language):
         await tts_queue.put(None)
         await worker_task
 
-        await websocket.send(json.dumps({"type": "answer_done", "text": full_answer}))
-        print(f"[STREAM] Complete: {len(full_answer)} chars", flush=True)
+        done_msg = {"type": "answer_done", "text": full_answer}
+        if agent_id:
+            done_msg["agentId"] = agent_id
+        if agent_name:
+            done_msg["agentName"] = agent_name
+        await websocket.send(json.dumps(done_msg))
+        print(f"[STREAM] Complete: {len(full_answer)} chars (agent={agent_name})", flush=True)
 
     except asyncio.CancelledError:
         await tts_queue.put(None)

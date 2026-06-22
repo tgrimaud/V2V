@@ -84,7 +84,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         eventStore.save(ConversationEvent.of(conversationId, "web", question,
                 answer, citations.size(), latency, false));
 
-        return new ConversationResponse(answer, citations);
+        return new ConversationResponse(answer, citations, agent.id(), agent.name(), false);
     }
 
     public StreamingResult askStream(String conversationId, String question) {
@@ -97,7 +97,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
             conversation.addAssistantTurn(msg, List.of());
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "voice", question, msg, 0, latency, true));
-            return new StreamingResult(Flux.just(msg), List.of(), true, false, null);
+            return new StreamingResult(Flux.just(msg), List.of(), true, false, null, null);
         }
 
         GuardrailResult preCheck = guardrailService.checkBeforeSearch(question);
@@ -106,7 +106,8 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "voice", question,
                     preCheck.fallbackMessage(), 0, latency, false));
-            return new StreamingResult(Flux.just(preCheck.fallbackMessage()), List.of(), false, true, null);
+            boolean isActualBlock = preCheck.verdict() != GuardrailResult.Verdict.GREETING;
+            return new StreamingResult(Flux.just(preCheck.fallbackMessage()), List.of(), false, isActualBlock, null, null);
         }
 
         AgentProfile agent = routeToAgent(question, conversation);
@@ -119,7 +120,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "voice", question,
                     postCheck.fallbackMessage(), 0, latency, false));
-            return new StreamingResult(Flux.just(postCheck.fallbackMessage()), citations, false, true, null);
+            return new StreamingResult(Flux.just(postCheck.fallbackMessage()), citations, false, true, null, null);
         }
 
         List<String> contextChunks = citations.stream().map(Citation::relevantText).toList();
@@ -127,7 +128,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
 
         Flux<String> tokenStream = llmStreamingPort.streamAnswer(question, contextChunks, history, agent.systemPrompt());
 
-        return new StreamingResult(tokenStream, citations, false, false, agent.id());
+        return new StreamingResult(tokenStream, citations, false, false, agent.id(), agent.name());
     }
 
     public void recordCompletion(String conversationId, String question,
@@ -172,7 +173,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         conversation.addAssistantTurn(msg, List.of());
         long latency = System.currentTimeMillis() - startTime;
         eventStore.save(ConversationEvent.of(conversationId, channel, question, msg, 0, latency, true));
-        return new ConversationResponse(msg, List.of());
+        return new ConversationResponse(msg, List.of(), null, null, false);
     }
 
     private ConversationResponse handleGuardrailBlock(Conversation conversation, String conversationId,
@@ -182,7 +183,8 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         long latency = System.currentTimeMillis() - startTime;
         eventStore.save(ConversationEvent.of(conversationId, channel, question,
                 result.fallbackMessage(), 0, latency, false));
-        return new ConversationResponse(result.fallbackMessage(), List.of());
+        boolean isActualBlock = result.verdict() != GuardrailResult.Verdict.GREETING;
+        return new ConversationResponse(result.fallbackMessage(), List.of(), null, null, isActualBlock);
     }
 
     private ConversationResponse handlePostSearchBlock(Conversation conversation, String conversationId,
@@ -192,9 +194,10 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         long latency = System.currentTimeMillis() - startTime;
         eventStore.save(ConversationEvent.of(conversationId, channel, question,
                 result.fallbackMessage(), 0, latency, false));
-        return new ConversationResponse(result.fallbackMessage(), citations);
+        return new ConversationResponse(result.fallbackMessage(), citations, null, null, true);
     }
 
     public record StreamingResult(Flux<String> tokens, List<Citation> citations,
-                                   boolean escalated, boolean guardrailBlocked, String agentId) {}
+                                   boolean escalated, boolean guardrailBlocked,
+                                   String agentId, String agentName) {}
 }

@@ -55,7 +55,7 @@ public class ConversationService implements AskQuestionUseCase {
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "web", question,
                     escalationMsg, 0, latency, true));
-            return new ConversationResponse(escalationMsg, List.of());
+            return new ConversationResponse(escalationMsg, List.of(), null, null, false);
         }
 
         GuardrailResult preCheck = guardrailService.checkBeforeSearch(question);
@@ -64,7 +64,8 @@ public class ConversationService implements AskQuestionUseCase {
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "web", question,
                     preCheck.fallbackMessage(), 0, latency, false));
-            return new ConversationResponse(preCheck.fallbackMessage(), List.of());
+            boolean isActualBlock = preCheck.verdict() != GuardrailResult.Verdict.GREETING;
+            return new ConversationResponse(preCheck.fallbackMessage(), List.of(), null, null, isActualBlock);
         }
 
         String searchQuery = queryReformulator.reformulate(question, conversation);
@@ -76,7 +77,7 @@ public class ConversationService implements AskQuestionUseCase {
             long latency = System.currentTimeMillis() - startTime;
             eventStore.save(ConversationEvent.of(conversationId, "web", question,
                     postCheck.fallbackMessage(), 0, latency, false));
-            return new ConversationResponse(postCheck.fallbackMessage(), citations);
+            return new ConversationResponse(postCheck.fallbackMessage(), citations, null, null, true);
         }
 
         List<String> contextChunks = citations.stream()
@@ -95,6 +96,6 @@ public class ConversationService implements AskQuestionUseCase {
         eventStore.save(ConversationEvent.of(conversationId, "web", question,
                 answer, citations.size(), latency, false));
 
-        return new ConversationResponse(answer, citations);
+        return new ConversationResponse(answer, citations, null, null, false);
     }
 }

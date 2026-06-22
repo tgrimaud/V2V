@@ -47,7 +47,7 @@ public class IntentClassifier {
         for (String keyword : profile.intentKeywords()) {
             String normalizedKeyword = keyword.toLowerCase(Locale.FRENCH);
             if (isWholeWordMatch(normalizedQuestion, normalizedKeyword)) {
-                score++;
+                score += normalizedKeyword.contains(" ") ? 3 : 1;
             }
         }
         return score;
@@ -59,6 +59,12 @@ public class IntentClassifier {
             boolean startBoundary = (index == 0) || !Character.isLetterOrDigit(text.charAt(index - 1));
             int end = index + keyword.length();
             boolean endBoundary = (end >= text.length()) || !Character.isLetterOrDigit(text.charAt(end));
+            if (!endBoundary && end < text.length()) {
+                char next = text.charAt(end);
+                boolean pluralSuffix = (next == 's' || next == 'x')
+                        && (end + 1 >= text.length() || !Character.isLetterOrDigit(text.charAt(end + 1)));
+                endBoundary = pluralSuffix;
+            }
             if (startBoundary && endBoundary) {
                 return true;
             }

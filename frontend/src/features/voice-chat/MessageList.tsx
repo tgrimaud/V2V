@@ -5,6 +5,8 @@ interface Message {
   role: 'user' | 'assistant'
   text: string
   timestamp: Date
+  agentName?: string
+  guardrailBlocked?: boolean
 }
 
 interface MessageListProps {
@@ -13,36 +15,14 @@ interface MessageListProps {
   hint: string
 }
 
-const GUARDRAIL_MARKERS = [
-  "pas assez d'informations fiables",
-  "sort de mon domaine de compétence",
-  "outside my area of expertise",
-  "don't have enough reliable information",
-  "ne suis pas en mesure de répondre à ce type de demande",
-  "cannot help with this type of request",
-  "je vous transfère à un conseiller",
-  "je n'ai pas cette information",
-  "je ne dispose pas de cette information",
-  "cette question ne fait pas partie",
-  "I'll transfer you to an agent",
-  "I don't have this information",
-  "spécialisé dans le support client",
-  "specialized in internet box",
-]
+const AGENT_COLORS: Record<string, string> = {
+  'Agent Support Technique': '#3b82f6',
+  'Agent Facturation': '#10b981',
+  'Agent Commercial': '#f59e0b',
+}
 
-const OFF_TOPIC_MARKERS = [
-  "sort de mon domaine de compétence",
-  "outside my area of expertise",
-  "ne suis pas en mesure de répondre à ce type de demande",
-  "cannot help with this type of request",
-  "spécialisé dans le support client",
-  "specialized in internet box",
-]
-
-function getGuardrailLabel(text: string): string | null {
-  if (OFF_TOPIC_MARKERS.some(m => text.includes(m))) return '🚫 Hors domaine'
-  if (GUARDRAIL_MARKERS.some(m => text.includes(m))) return '⚠️ Confiance faible'
-  return null
+function getAgentColor(agentName: string): string {
+  return AGENT_COLORS[agentName] || '#6b7280'
 }
 
 export function MessageList({ messages, greeting, hint }: MessageListProps) {
@@ -68,28 +48,41 @@ export function MessageList({ messages, greeting, hint }: MessageListProps) {
         </div>
       )}
       {messages.map(msg => {
-        const guardrailLabel = msg.role === 'assistant' ? getGuardrailLabel(msg.text) : null
+        const isGuardrail = msg.role === 'assistant' && msg.guardrailBlocked
         return (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className="max-w-[80%] rounded-2xl px-4 py-3 text-sm"
-              style={{
-                backgroundColor: guardrailLabel
-                  ? '#fef3c7'
-                  : msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
-                color: guardrailLabel
-                  ? '#92400e'
-                  : msg.role === 'user' ? 'white' : 'var(--color-text)',
-                border: guardrailLabel ? '1px solid #f59e0b' : 'none',
-              }}
-            >
-              {guardrailLabel && (
-                <span className="inline-block mr-1.5 text-xs font-medium px-1.5 py-0.5 rounded"
-                  style={{ backgroundColor: '#f59e0b', color: 'white' }}>
-                  {guardrailLabel}
-                </span>
+            <div className="max-w-[80%]">
+              {msg.role === 'assistant' && msg.agentName && (
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ backgroundColor: getAgentColor(msg.agentName) }}
+                  />
+                  <span className="text-xs font-medium" style={{ color: getAgentColor(msg.agentName) }}>
+                    {msg.agentName}
+                  </span>
+                </div>
               )}
-              {msg.text}
+              <div
+                className="rounded-2xl px-4 py-3 text-sm"
+                style={{
+                  backgroundColor: isGuardrail
+                    ? '#fef3c7'
+                    : msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
+                  color: isGuardrail
+                    ? '#92400e'
+                    : msg.role === 'user' ? 'white' : 'var(--color-text)',
+                  border: isGuardrail ? '1px solid #f59e0b' : 'none',
+                }}
+              >
+                {isGuardrail && (
+                  <span className="inline-block mr-1.5 text-xs font-medium px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: '#f59e0b', color: 'white' }}>
+                    ⚠️ Confiance faible
+                  </span>
+                )}
+                {msg.text}
+              </div>
             </div>
           </div>
         )

@@ -27,6 +27,8 @@ interface Message {
   text: string
   timestamp: Date
   streaming?: boolean
+  agentName?: string
+  guardrailBlocked?: boolean
 }
 
 type VoiceState = 'idle' | 'listening' | 'recording' | 'processing' | 'speaking'
@@ -69,6 +71,17 @@ export function VoiceChat() {
         setTimeout(() => handleEndConversation(), 1500)
       }
     },
+    onAnswerStart: (agentName, guardrailBlocked) => {
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        role: 'assistant' as const,
+        text: '',
+        timestamp: new Date(),
+        streaming: true,
+        agentName: agentName || undefined,
+        guardrailBlocked: guardrailBlocked || false,
+      }])
+    },
     onAnswer: (text) => {
       if (text) addMessage('assistant', text)
       setVoiceState(vadActive ? 'listening' : 'idle')
@@ -84,8 +97,8 @@ export function VoiceChat() {
         return [...prev, { id: crypto.randomUUID(), role: 'assistant' as const, text, timestamp: new Date(), streaming: true }]
       })
     },
-    onAnswerDone: () => {
-      setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false } : m))
+    onAnswerDone: (_text, agentName) => {
+      setMessages(prev => prev.map(m => m.streaming ? { ...m, streaming: false, agentName: agentName || m.agentName } : m))
       if (audioState !== 'playing') {
         setVoiceState(vadActive ? 'listening' : 'idle')
       }
@@ -162,7 +175,11 @@ export function VoiceChat() {
         throw new Error(`HTTP ${response.status}`)
       }
       const data = await response.json()
-      addMessage('assistant', data.answer)
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), role: 'assistant', text: data.answer,
+        timestamp: new Date(), agentName: data.agent_name,
+        guardrailBlocked: data.guardrail_blocked || false,
+      }])
     } catch {
       addMessage('assistant', t.error)
     } finally {

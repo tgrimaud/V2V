@@ -62,9 +62,11 @@ public record AgentProfile(
                 {context}
                 """,
                 "billing",
-                List.of("facture", "paiement", "prélèvement", "rib", "carte bancaire",
-                        "montant", "prix", "euro", "€", "abonnement", "offre", "résilier",
-                        "résiliation", "engagement", "promotion", "promo", "code promo",
+                List.of("facture", "facture internet", "comprendre ma facture",
+                        "paiement", "prélèvement", "rib", "carte bancaire",
+                        "montant", "prix", "euro", "€", "abonnement",
+                        "résilier", "résiliation", "engagement",
+                        "promotion", "promo", "code promo",
                         "hors-forfait", "impayé", "rejet", "payer")
         );
     }
@@ -95,7 +97,9 @@ public record AgentProfile(
                 List.of("souscrire", "souscription", "nouvelle offre", "déménage", "déménagement",
                         "fibre disponible", "fibre", "éligibilité", "éligible", "portabilité",
                         "garder mon numéro", "rio", "option", "tv", "bouquet", "sport",
-                        "cinéma", "répéteur", "parrainage", "parrainer", "filleul")
+                        "cinéma", "répéteur", "parrainage", "parrainer", "filleul",
+                        "changer d'abonnement", "changer mon abonnement",
+                        "changer d'offre", "changer mon offre", "offre")
         );
     }
 }

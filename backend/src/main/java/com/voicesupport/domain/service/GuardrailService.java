@@ -13,9 +13,9 @@ public class GuardrailService {
     private static final int MIN_QUESTION_LENGTH = 3;
 
     private static final Set<Pattern> GREETING_PATTERNS = Set.of(
-            Pattern.compile("(?i)^(bonjour|bonsoir|salut|coucou|hey|hello|hi|yo|bjr|slt|cc|bsr)\\s*[!.?]*$", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)^(bonjour|salut|hello|hi|hey|bjr|slt)\\s+([a-zéèà]+\\s*[!.?]*)$", Pattern.UNICODE_CASE),
-            Pattern.compile("(?i)^(comment\\s+(ça\\s+va|allez[- ]vous)|how\\s+are\\s+you|[çc]a\\s+va)\\s*[?!.]*$", Pattern.UNICODE_CASE)
+            Pattern.compile("(?i)^(bonjour|bonsoir|salut|coucou|hey|hello|hi|yo|bjr|slt|cc|bsr)\\s*[!.?,;…]*$", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)^(bonjour|salut|hello|hi|hey|bjr|slt)\\s+([a-zéèà]+\\s*[!.?,;…]*)$", Pattern.UNICODE_CASE),
+            Pattern.compile("(?i)^(comment\\s+(ça\\s+va|allez[- ]vous)|how\\s+are\\s+you|[çc]a\\s+va)\\s*[?!.,;…]*$", Pattern.UNICODE_CASE)
     );
 
     private static final Set<Pattern> OFF_TOPIC_PATTERNS = Set.of(
