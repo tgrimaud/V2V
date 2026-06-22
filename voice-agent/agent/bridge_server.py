@@ -159,6 +159,14 @@ async def _stream_answer(websocket, backend, question, language):
                     await websocket.send(json.dumps({"type": "answer_chunk", "text": sentence}))
                     await tts_queue.put(sentence)
 
+            elif event_type == "error":
+                error_msg = event["data"].get("message", "Unknown error")
+                print(f"[STREAM] Backend error: {error_msg}", flush=True)
+                if not full_answer:
+                    full_answer = "Désolé, une erreur est survenue."
+                    await websocket.send(json.dumps({"type": "answer_chunk", "text": full_answer}))
+                break
+
             elif event_type == "done":
                 break
 

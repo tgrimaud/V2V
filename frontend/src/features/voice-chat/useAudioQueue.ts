@@ -62,8 +62,11 @@ export function useAudioQueue() {
 
   const clear = useCallback(() => {
     queueRef.current = []
+    if (currentSourceRef.current) {
+      try { currentSourceRef.current.stop() } catch { /* already stopped */ }
+      currentSourceRef.current = null
+    }
     playingRef.current = false
-    currentSourceRef.current = null
     setState('idle')
   }, [])
 

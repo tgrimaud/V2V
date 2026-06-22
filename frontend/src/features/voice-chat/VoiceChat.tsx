@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useVoiceWebSocket } from './useVoiceWebSocket'
 import { useVAD } from './useVAD'
 import { useAudioQueue } from './useAudioQueue'
@@ -42,11 +42,13 @@ export function VoiceChat() {
 
   const { enqueue: enqueueAudio, clear: clearAudioQueue, flush: flushAudio, state: audioState } = useAudioQueue()
 
-  if (audioState === 'playing' && voiceState !== 'speaking') {
-    setVoiceState('speaking')
-  } else if (audioState === 'idle' && voiceState === 'speaking') {
-    setVoiceState(vadActive ? 'listening' : 'idle')
-  }
+  useEffect(() => {
+    if (audioState === 'playing' && voiceState !== 'speaking') {
+      setVoiceState('speaking')
+    } else if (audioState === 'idle' && voiceState === 'speaking') {
+      setVoiceState(vadActive ? 'listening' : 'idle')
+    }
+  }, [audioState, voiceState, vadActive])
 
   const addMessage = useCallback((role: 'user' | 'assistant', text: string) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, text, timestamp: new Date() }])
@@ -156,6 +158,9 @@ export function VoiceChat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: question + langHint, conversation_id: 'web-text' }),
       })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
       const data = await response.json()
       addMessage('assistant', data.answer)
     } catch {

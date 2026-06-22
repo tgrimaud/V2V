@@ -17,7 +17,7 @@ class RAGBackendClient:
         """Send a question to the RAG backend and get an answer with citations."""
         response = await self._client.post(
             "/api/conversation/ask",
-            json={"question": question, "conversationId": conversation_id},
+            json={"question": question, "conversation_id": conversation_id},
         )
         response.raise_for_status()
         return response.json()
