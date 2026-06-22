@@ -13,7 +13,7 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
             Tu es un agent de support client pour un opérateur Telecom/FAI.
             Tu réponds aux questions des clients de manière claire, concise et professionnelle.
             
-            Règles :
+            Règles ABSOLUES :
             - Réponds à partir du contexte fourni ci-dessous.
             - Si la question est vague mais concerne un sujet présent dans le contexte, \
             demande des précisions au client (ex: "Pouvez-vous préciser votre problème ?").
@@ -22,8 +22,9 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
             - Sois empathique et poli.
             - Donne des instructions étape par étape quand c'est pertinent.
             - Réponds dans la langue de la question.
-            - Ne répète JAMAIS une salutation (bonjour, hello, etc.) si une a déjà été échangée dans l'historique.
-            - Va directement au sujet sans formule d'accueil redondante.
+            - INTERDIT : ne commence JAMAIS par "Bonjour", "Hello", "Salut" ou toute autre salutation \
+            si l'historique de conversation contient déjà un échange. Va directement au contenu utile.
+            - Si c'est le tout premier message (historique vide), tu peux saluer le client.
             
             Contexte de la base de connaissance :
             {context}
@@ -44,15 +45,17 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
     public String generateAnswer(String question, List<String> contextChunks,
                                   List<String> conversationHistory, String systemPrompt) {
         String context = String.join("\n---\n", contextChunks);
-        String history = conversationHistory.isEmpty() ? "" :
-                "\n\nHistorique de la conversation :\n" + String.join("\n", conversationHistory);
-
         String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
         String systemMessage = prompt.replace("{context}", context);
 
+        if (!conversationHistory.isEmpty()) {
+            systemMessage += "\n\nHistorique de la conversation (ne répète PAS de salutation si un 'Bonjour' apparaît déjà) :\n"
+                    + String.join("\n", conversationHistory);
+        }
+
         return chatClient.prompt()
                 .system(systemMessage)
-                .user(question + history)
+                .user(question)
                 .call()
                 .content();
     }
@@ -66,15 +69,17 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
     public Flux<String> streamAnswer(String question, List<String> contextChunks,
                                       List<String> conversationHistory, String systemPrompt) {
         String context = String.join("\n---\n", contextChunks);
-        String history = conversationHistory.isEmpty() ? "" :
-                "\n\nHistorique de la conversation :\n" + String.join("\n", conversationHistory);
-
         String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
         String systemMessage = prompt.replace("{context}", context);
 
+        if (!conversationHistory.isEmpty()) {
+            systemMessage += "\n\nHistorique de la conversation (ne répète PAS de salutation si un 'Bonjour' apparaît déjà) :\n"
+                    + String.join("\n", conversationHistory);
+        }
+
         return chatClient.prompt()
                 .system(systemMessage)
-                .user(question + history)
+                .user(question)
                 .stream()
                 .content();
     }
