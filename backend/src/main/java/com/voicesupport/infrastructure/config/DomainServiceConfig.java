@@ -5,6 +5,7 @@ import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
+import com.voicesupport.domain.port.out.ConversationStore;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
@@ -18,6 +19,7 @@ import com.voicesupport.domain.service.QueryReformulator;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
+import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
 import com.voicesupport.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -129,6 +131,11 @@ public class DomainServiceConfig {
     }
 
     @Bean
+    public ConversationStore conversationStore() {
+        return new InMemoryConversationStore();
+    }
+
+    @Bean
     public AgentRegistry agentRegistry() {
         return new AgentRegistry(
                 List.of(AgentProfile.support(), AgentProfile.billing(), AgentProfile.commercial()),
@@ -146,9 +153,10 @@ public class DomainServiceConfig {
             VectorSearchPort vectorSearchPort, LlmPort llmPort, LlmStreamingPort llmStreamingPort,
             EscalationDetector escalationDetector, GuardrailService guardrailService,
             QueryReformulator queryReformulator, IntentClassifier intentClassifier,
-            ConversationEventStore eventStore) {
+            ConversationEventStore eventStore, ConversationStore conversationStore) {
         return new ConversationOrchestrator(vectorSearchPort, llmPort, llmStreamingPort,
-                escalationDetector, guardrailService, queryReformulator, intentClassifier, eventStore);
+                escalationDetector, guardrailService, queryReformulator, intentClassifier,
+                eventStore, conversationStore);
     }
 
     @Bean

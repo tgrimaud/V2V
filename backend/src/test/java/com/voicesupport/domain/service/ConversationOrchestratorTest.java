@@ -9,6 +9,7 @@ import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
+import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -39,7 +40,8 @@ class ConversationOrchestratorTest {
         orchestrator = new ConversationOrchestrator(
                 vectorSearchPort, llmPort, llmPort,
                 new EscalationDetector(), new GuardrailService(),
-                new QueryReformulator(), intentClassifier, eventStore
+                new QueryReformulator(), intentClassifier, eventStore,
+                new InMemoryConversationStore()
         );
     }
 

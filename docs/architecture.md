@@ -178,6 +178,7 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `VectorSearchPort` | Chercher les chunks pertinents (global ou filtré par domaine) | `PgVectorStoreAdapter` |
 | `VectorStorePort` | Stocker un chunk avec ses embeddings et tag de domaine | `PgVectorStoreAdapter` |
 | `ConversationEventStore` | Persister les événements de conversation | `InMemoryConversationEventStore` |
+| `ConversationStore` | Charger/sauver l'état d'une session (`load`/`save`) | `InMemoryConversationStore` (Redis en Phase 2) |
 
 > **Note** : Chaque adapter LLM implémente **les deux ports** (`LlmPort` + `LlmStreamingPort`). Un seul bean Spring satisfait les deux interfaces.
 > Les ports `SpeechToTextPort` et `TextToSpeechPort` ne sont plus utilisés côté Java — STT/TTS sont gérés par l'agent Python via Gradium.
@@ -341,9 +342,9 @@ L'escalade est **instantanée** (<1ms) car elle ne passe ni par le vector store 
 
 ## Gestion de la mémoire conversationnelle
 
-Chaque `conversationId` a sa propre instance de `Conversation` en mémoire (map ConcurrentHashMap). L'historique des 6 derniers tours est injecté dans le prompt LLM pour assurer la cohérence multi-tour.
+L'état de session est accédé via le port `ConversationStore` (`load(id)` / `save(id, conversation)`), ce qui rend l'`ConversationOrchestrator` **sans état JVM** : il ne conserve plus de map interne. L'historique des 6 derniers tours est injecté dans le prompt LLM pour assurer la cohérence multi-tour.
 
-Limitation actuelle : la mémoire est volatile (in-memory). La persistence JPA est prévue en roadmap.
+L'implémentation actuelle (`InMemoryConversationStore`) reste volatile et mono-instance, mais le port permet de basculer vers un **adapter Redis partagé** (Phase 2) sans toucher au domaine — débloquant l'autoscaling horizontal du backend. Le pattern explicite `load` → mutation → `save` est déjà compatible avec un store distribué (pas de dépendance à l'identité de référence en mémoire).
 
 ## Budget latence
 
@@ -533,6 +534,8 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 **Détection de fin de tour côté serveur** : `voice-agent/agent/turn_detector.py` — endpointing déterministe (RMS + silence) requis pour la téléphonie (pas de VAD navigateur). Pur, sans dépendance, testable avec PCM synthétique.
 
 **Abstraction STT streaming** : `voice-agent/agent/stt_streaming.py` — `StreamingSttSession` (Protocol) avec `feed()`/`finalize()`. L'implémentation concrète actuelle (`BatchSttSession`) conserve le comportement Gradium REST derrière une couture streaming ; un futur client WebSocket ASR ou un STT self-hosté (faster-whisper) s'y branche sans toucher au bridge.
+
+**Backend stateless** : l'état de session sort de la JVM derrière le port `ConversationStore` (`load`/`save`). `InMemoryConversationStore` aujourd'hui, adapter Redis en Phase 2 — débloque l'autoscaling horizontal. Le pattern explicite `load → mutation → save` est compatible store distribué.
 
 **Raisons** :
 - **Mesure d'abord** : on ne peut pas optimiser ce qu'on ne mesure pas ; la baseline conditionne les choix.
