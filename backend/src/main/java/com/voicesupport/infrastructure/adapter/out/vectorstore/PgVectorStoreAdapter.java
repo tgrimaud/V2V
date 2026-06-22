@@ -3,6 +3,8 @@ package com.voicesupport.infrastructure.adapter.out.vectorstore;
 import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.domain.port.out.VectorStorePort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -12,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 
 public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
+
+    private static final Logger log = LoggerFactory.getLogger(PgVectorStoreAdapter.class);
 
     private final VectorStore vectorStore;
 
@@ -55,7 +59,11 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
             );
         }
 
+        long startNanos = System.nanoTime();
         List<Document> results = vectorStore.similaritySearch(builder.build());
+        long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+        log.info("[LATENCY] step=vector_search ms={} top_k={} domain={} results={}",
+                elapsedMs, topK, domain != null ? domain : "all", results != null ? results.size() : 0);
 
         return results.stream()
                 .map(doc -> new Citation(

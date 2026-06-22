@@ -2,12 +2,17 @@ package com.voicesupport.infrastructure.adapter.out.llm;
 
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class OllamaLlmAdapter implements LlmPort, LlmStreamingPort {
+
+    private static final Logger log = LoggerFactory.getLogger(OllamaLlmAdapter.class);
 
     private static final String DEFAULT_SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI.
@@ -75,10 +80,25 @@ public class OllamaLlmAdapter implements LlmPort, LlmStreamingPort {
                     + String.join("\n", conversationHistory);
         }
 
-        return chatClient.prompt()
-                .system(systemMessage)
-                .user(question)
-                .stream()
-                .content();
+        final String finalSystemMessage = systemMessage;
+        return Flux.defer(() -> {
+            long startNanos = System.nanoTime();
+            AtomicBoolean firstToken = new AtomicBoolean(true);
+            return chatClient.prompt()
+                    .system(finalSystemMessage)
+                    .user(question)
+                    .stream()
+                    .content()
+                    .doOnNext(token -> {
+                        if (firstToken.compareAndSet(true, false)) {
+                            long ms = (System.nanoTime() - startNanos) / 1_000_000;
+                            log.info("[LATENCY] step=llm_first_token ms={}", ms);
+                        }
+                    })
+                    .doOnComplete(() -> {
+                        long ms = (System.nanoTime() - startNanos) / 1_000_000;
+                        log.info("[LATENCY] step=llm_total ms={}", ms);
+                    });
+        });
     }
 }

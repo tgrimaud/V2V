@@ -287,3 +287,33 @@ docker compose down
 kill $(lsof -ti:8081) 2>/dev/null
 kill $(lsof -ti:8765) 2>/dev/null
 ```
+
+## Mesure de latence (baseline)
+
+Le chemin critique est instrumenté avec des logs structurés préfixés `[LATENCY]`, sans dépendance supplémentaire. Chaque étape émet une ligne `[LATENCY] step=<nom> ms=<valeur> [extra...]` :
+
+| Étape (`step`) | Émis par | Fichier |
+|----------------|----------|---------|
+| `stt` | Voice agent | `voice-agent/agent/gradium_stt.py` |
+| `vector_search` | Backend | `PgVectorStoreAdapter` |
+| `llm_first_token` / `llm_total` | Backend | `MistralLlmAdapter` / `OllamaLlmAdapter` |
+| `tts` | Voice agent | `voice-agent/agent/gradium_tts.py` |
+| `time_to_first_audio` | Voice agent | `bridge_server.py` (de la fin de parole au 1er audio envoyé) |
+| `turn_total` | Voice agent | `bridge_server.py` (durée totale du tour) |
+
+**SLO de référence** : `time_to_first_audio` p95 < 800 ms.
+
+### Capturer et agréger une baseline
+
+```bash
+# 1. Capturer les logs des deux services pendant une session de test
+cd backend && export $(cat .env | xargs) && mvn spring-boot:run 2>&1 | tee /tmp/backend.log
+cd voice-agent && python -u -m agent.bridge_server 2>&1 | tee /tmp/bridge.log
+
+# 2. Mener quelques échanges vocaux représentatifs (10-20 tours)
+
+# 3. Agréger en p50/p95 par étape
+python voice-agent/tools/latency_report.py /tmp/backend.log /tmp/bridge.log
+```
+
+Le rapport affiche `n / p50 / p95 / min / max / mean` par étape et marque `OK`/`FAIL` sur le SLO `time_to_first_audio`. C'est la baseline de référence avant les optimisations de Phase 1.

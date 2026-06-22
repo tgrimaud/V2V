@@ -1,6 +1,7 @@
 """Gradium STT — transcription via REST endpoint."""
 
 import json
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -37,6 +38,7 @@ async def transcribe_audio(
     api_key: str,
 ) -> SttResult:
     """Send audio to Gradium STT REST endpoint and return transcription."""
+    start = time.perf_counter()
     try:
         client = get_stt_client()
         r = await client.post(
@@ -70,6 +72,8 @@ async def transcribe_audio(
                     words.append(word)
 
         result = " ".join(words)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        print(f"[LATENCY] step=stt ms={elapsed_ms:.0f} bytes={len(audio_data)}", flush=True)
         return SttResult(text=result.strip() if result.strip() else None)
 
     except httpx.ConnectError:

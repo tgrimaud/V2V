@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 
 import httpx
 import websockets
@@ -99,6 +100,7 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
         await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
         return
 
+    turn_start = time.perf_counter()
     audio_data = bytes(audio_buffer)
     print(f"[STT] Transcribing {len(audio_data)} bytes (lang={language})...", flush=True)
 
@@ -127,7 +129,7 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
     question = transcription + lang_hint
 
     try:
-        await _stream_answer(websocket, backend, question, language)
+        await _stream_answer(websocket, backend, question, language, turn_start)
     except asyncio.CancelledError:
         print("[STREAM] Cancelled (barge-in)", flush=True)
         raise
@@ -136,15 +138,17 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
         await _fallback_non_streaming(websocket, backend, question, language)
 
 
-async def _stream_answer(websocket, backend, question, language):
+async def _stream_answer(websocket, backend, question, language, turn_start=None):
     """Consume SSE from backend, split into sentences, TTS each concurrently."""
     voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
     sentence_buffer = ""
     full_answer = ""
     tts_queue = asyncio.Queue()
+    first_audio_sent = False
 
     async def tts_worker():
         """Process TTS requests from queue and send audio to client."""
+        nonlocal first_audio_sent
         while True:
             sentence = await tts_queue.get()
             if sentence is None:
@@ -152,6 +156,10 @@ async def _stream_answer(websocket, backend, question, language):
             audio = await synthesize_speech(sentence, voice_id, GRADIUM_API_KEY)
             if audio:
                 await websocket.send(audio)
+                if not first_audio_sent and turn_start is not None:
+                    first_audio_sent = True
+                    ttfa_ms = (time.perf_counter() - turn_start) * 1000
+                    print(f"[LATENCY] step=time_to_first_audio ms={ttfa_ms:.0f}", flush=True)
             tts_queue.task_done()
 
     worker_task = asyncio.create_task(tts_worker())
@@ -213,6 +221,9 @@ async def _stream_answer(websocket, backend, question, language):
         if agent_name:
             done_msg["agentName"] = agent_name
         await websocket.send(json.dumps(done_msg))
+        if turn_start is not None:
+            total_ms = (time.perf_counter() - turn_start) * 1000
+            print(f"[LATENCY] step=turn_total ms={total_ms:.0f} chars={len(full_answer)}", flush=True)
         print(f"[STREAM] Complete: {len(full_answer)} chars (agent={agent_name})", flush=True)
 
     except asyncio.CancelledError:

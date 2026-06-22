@@ -3,6 +3,7 @@
 import base64
 import json
 import struct
+import time
 
 import websockets
 
@@ -34,6 +35,7 @@ async def synthesize_speech(
     api_key: str,
 ) -> bytes | None:
     """Send text to Gradium TTS via WebSocket and return WAV audio."""
+    start = time.perf_counter()
     try:
         async with websockets.connect(
             "wss://api.gradium.ai/api/speech/tts",
@@ -68,6 +70,8 @@ async def synthesize_speech(
 
             if audio_chunks:
                 pcm_data = b"".join(audio_chunks)
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                print(f"[LATENCY] step=tts ms={elapsed_ms:.0f} chars={len(text)}", flush=True)
                 return pcm_to_wav(pcm_data, TTS_SAMPLE_RATE)
             return None
 

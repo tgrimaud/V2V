@@ -11,7 +11,7 @@ from agent.gradium_stt import transcribe_audio
 async def test_transcribe_audio_returns_joined_words():
     """GIVEN audio data and a successful Gradium response
     WHEN transcribe_audio is called
-    THEN it returns words joined with spaces."""
+    THEN it returns an SttResult whose text is the words joined with spaces."""
     # GIVEN
     ndjson_response = "\n".join([
         json.dumps({"type": "text", "text": "Bonjour", "start_s": 0.5}),
@@ -36,14 +36,15 @@ async def test_transcribe_audio_returns_joined_words():
         result = await transcribe_audio(b"\x00" * 3200, "fr", "fake-key")
 
     # THEN
-    assert result == "Bonjour le monde."
+    assert result.text == "Bonjour le monde."
+    assert result.error_code is None
 
 
 @pytest.mark.asyncio
-async def test_transcribe_audio_returns_none_on_http_error():
+async def test_transcribe_audio_returns_error_on_http_error():
     """GIVEN a failed HTTP response from Gradium
     WHEN transcribe_audio is called
-    THEN it returns None."""
+    THEN it returns an SttResult with an error code and no text."""
     # GIVEN
     mock_response = MagicMock()
     mock_response.status_code = 500
@@ -59,14 +60,15 @@ async def test_transcribe_audio_returns_none_on_http_error():
         result = await transcribe_audio(b"\x00" * 3200, "fr", "fake-key")
 
     # THEN
-    assert result is None
+    assert result.text is None
+    assert result.error_code == "STT_ERROR"
 
 
 @pytest.mark.asyncio
-async def test_transcribe_audio_returns_none_on_empty_response():
+async def test_transcribe_audio_returns_empty_on_silence():
     """GIVEN an empty response from Gradium (silence)
     WHEN transcribe_audio is called
-    THEN it returns None."""
+    THEN it returns an SttResult with no text and no error."""
     # GIVEN
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -82,4 +84,5 @@ async def test_transcribe_audio_returns_none_on_empty_response():
         result = await transcribe_audio(b"\x00" * 3200, "fr", "fake-key")
 
     # THEN
-    assert result is None
+    assert result.text is None
+    assert result.error_code is None
