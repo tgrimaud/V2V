@@ -13,4 +13,4 @@ dependencies = [
 ]
 
 [project.scripts]
-voice-agent = "agent.main:main"
+voice-agent = "agent.bridge_server:run"

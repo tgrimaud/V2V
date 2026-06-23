@@ -3,8 +3,10 @@ import { useVoiceWebSocket } from './useVoiceWebSocket'
 import { useVAD } from './useVAD'
 import { useAudioQueue } from './useAudioQueue'
 import { MessageList } from './MessageList'
-import { labels } from './i18n'
-import type { Language, Labels } from './i18n'
+import { ChatHeader } from './ChatHeader'
+import { ServiceErrorBanner } from './ServiceErrorBanner'
+import { labels, isLanguage } from './i18n'
+import type { Language } from './i18n'
 
 const GOODBYE_PATTERNS = [
   /merci\s*(au revoir|bonne journ[ée]e?|bien)/i,
@@ -124,7 +126,7 @@ export function VoiceChat() {
     onAudio: (audio) => {
       enqueueAudio(audio)
     },
-    onLanguageChanged: (lang) => setLanguage(lang as Language),
+    onLanguageChanged: (lang) => { if (isLanguage(lang)) setLanguage(lang) },
     onError: (error) => { console.error('Voice error:', error); setVoiceState(vadActive ? 'listening' : 'idle'); clearAudioQueue() },
     onServiceError: (code, message) => {
       setServiceError({ code, message, timestamp: Date.now() })
@@ -254,24 +256,18 @@ export function VoiceChat() {
 
   return (
     <div className="rounded-2xl shadow-lg overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
-      <Header
-        connectionState={connectionState}
+      <ChatHeader
+        connected={connectionState === 'connected'}
+        statusLabel={t.disconnected}
         language={language}
         t={t}
         onLanguageChange={handleLanguageChange}
       />
       {serviceError && (
-        <div
-          className="px-4 py-2 flex items-center justify-between text-sm"
-          style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fca5a5', color: '#991b1b' }}
-        >
-          <span>{ERROR_LABELS[serviceError.code] || serviceError.message}</span>
-          <button
-            onClick={() => setServiceError(null)}
-            className="ml-2 text-xs font-bold hover:opacity-70"
-            aria-label="Dismiss"
-          >✕</button>
-        </div>
+        <ServiceErrorBanner
+          message={ERROR_LABELS[serviceError.code] || serviceError.message}
+          onDismiss={() => setServiceError(null)}
+        />
       )}
       <MessageList messages={messages} greeting={t.greeting} hint={t.hint} />
       <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>
@@ -328,31 +324,3 @@ export function VoiceChat() {
   )
 }
 
-function Header({ connectionState, language, t, onLanguageChange }: {
-  connectionState: string; language: Language; t: Labels; onLanguageChange: (l: Language) => void
-}) {
-  return (
-    <div className="px-4 py-2 flex items-center justify-between text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
-      <div className="flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full" aria-hidden="true" style={{
-          backgroundColor: connectionState === 'connected' ? 'var(--color-success)' : 'var(--color-danger)'
-        }} />
-        <span style={{ color: 'var(--color-text-muted)' }}>{connectionState === 'connected' ? t.connected : t.disconnected}</span>
-      </div>
-      <div className="flex items-center gap-1 rounded-full p-0.5" role="group" aria-label="Language selection" style={{ backgroundColor: 'var(--color-border)' }}>
-        {(['fr', 'en'] as const).map(lang => (
-          <button
-            key={lang}
-            onClick={() => onLanguageChange(lang)}
-            className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-            aria-pressed={language === lang}
-            style={{
-              backgroundColor: language === lang ? 'var(--color-primary)' : 'transparent',
-              color: language === lang ? 'white' : 'var(--color-text-muted)',
-            }}
-          >{lang.toUpperCase()}</button>
-        ))}
-      </div>
-    </div>
-  )
-}

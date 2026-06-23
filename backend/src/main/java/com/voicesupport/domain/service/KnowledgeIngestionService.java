@@ -26,12 +26,12 @@ public class KnowledgeIngestionService implements IngestKnowledgeUseCase {
     public int ingest(String content, String sourceName, String domain) {
         List<String> chunks = splitIntoChunks(content);
         String currentSection = "default";
+        int chunkIndex = 0;
 
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunk = chunks.get(i);
-            String section = extractSection(chunk, currentSection);
-            currentSection = section;
-            vectorStorePort.store(chunk, sourceName, section, i, domain);
+        for (String chunk : chunks) {
+            currentSection = extractSection(chunk, currentSection);
+            vectorStorePort.store(chunk, sourceName, currentSection, chunkIndex, domain);
+            chunkIndex++;
         }
 
         return chunks.size();

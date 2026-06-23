@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+import uuid
 
 import httpx
 import websockets
@@ -46,7 +47,10 @@ DEFAULT_LANGUAGE = "fr"
 async def handle_client(websocket):
     """Handle one browser client session."""
     backend = RAGBackendClient(base_url=BACKEND_URL)
-    print(f"[CLIENT] Connected from {websocket.remote_address}", flush=True)
+    # Per-session id so concurrent browser clients never share conversation
+    # history on the backend.
+    conversation_id = f"web-{uuid.uuid4().hex[:8]}"
+    print(f"[CLIENT] Connected from {websocket.remote_address} ({conversation_id})", flush=True)
 
     audio_buffer = bytearray()
     language = DEFAULT_LANGUAGE
@@ -65,7 +69,9 @@ async def handle_client(websocket):
                         except asyncio.CancelledError:
                             pass
                     response_task = asyncio.create_task(
-                        _handle_end_of_speech(websocket, backend, audio_buffer, language)
+                        _handle_end_of_speech(
+                            websocket, backend, audio_buffer, language, conversation_id
+                        )
                     )
                     audio_buffer = bytearray()
                 elif message == "BARGE_IN":
@@ -96,7 +102,7 @@ async def handle_client(websocket):
         print("[CLIENT] Disconnected", flush=True)
 
 
-async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
+async def _handle_end_of_speech(websocket, backend, audio_buffer, language, conversation_id):
     """Process buffered audio: STT → streaming RAG → streaming TTS."""
     if not audio_buffer:
         await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
@@ -126,23 +132,23 @@ async def _handle_end_of_speech(websocket, backend, audio_buffer, language):
         await websocket.send(json.dumps({"type": "answer_done", "text": ""}))
         return
 
-    print(f"[STT] Result: '{transcription}'", flush=True)
+    print(f"[STT] Result: {len(transcription)} chars", flush=True)
     await websocket.send(json.dumps({"type": "transcription", "text": transcription}))
 
     lang_hint = " (Please answer in English.)" if language == "en" else ""
     question = transcription + lang_hint
 
     try:
-        await _stream_answer(websocket, backend, question, language, turn_start)
+        await _stream_answer(websocket, backend, question, language, conversation_id, turn_start)
     except asyncio.CancelledError:
         print("[STREAM] Cancelled (barge-in)", flush=True)
         raise
     except Exception as e:
         print(f"[STREAM] SSE failed ({e}), falling back to POST", flush=True)
-        await _fallback_non_streaming(websocket, backend, question, language)
+        await _fallback_non_streaming(websocket, backend, question, language, conversation_id)
 
 
-async def _stream_answer(websocket, backend, question, language, turn_start=None):
+async def _stream_answer(websocket, backend, question, language, conversation_id, turn_start=None):
     """Consume SSE from backend, split into sentences, TTS each concurrently."""
     voice_id = VOICE_MAP.get(language, VOICE_MAP[DEFAULT_LANGUAGE])
     sentence_buffer = ""
@@ -173,7 +179,7 @@ async def _stream_answer(websocket, backend, question, language, turn_start=None
         agent_name = None
         guardrail_blocked = False
 
-        async for event in backend.ask_stream(question, "pipecat"):
+        async for event in backend.ask_stream(question, conversation_id):
             event_type = event.get("event", "")
 
             if event_type == "start":
@@ -240,10 +246,10 @@ async def _stream_answer(websocket, backend, question, language, turn_start=None
         raise
 
 
-async def _fallback_non_streaming(websocket, backend, question, language):
+async def _fallback_non_streaming(websocket, backend, question, language, conversation_id):
     """Fallback to non-streaming POST /ask if SSE fails."""
     try:
-        result = await backend.ask(question)
+        result = await backend.ask(question, conversation_id)
         answer = result.get("answer", "Désolé, je n'ai pas compris.")
     except httpx.ConnectError:
         await websocket.send(json.dumps({
@@ -334,5 +340,10 @@ async def main():
         await asyncio.Future()
 
 
-if __name__ == "__main__":
+def run():
+    """Sync entry point for the `voice-agent` console script."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()

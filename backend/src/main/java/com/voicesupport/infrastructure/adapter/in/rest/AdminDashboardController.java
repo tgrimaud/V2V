@@ -42,7 +42,7 @@ public class AdminDashboardController {
             @RequestParam(value = "limit", defaultValue = "50") int limit) {
         List<ConversationEvent> all = eventStore.findAll();
         int start = Math.max(0, all.size() - limit);
-        return ResponseEntity.ok(all.subList(start, all.size()));
+        return ResponseEntity.ok(List.copyOf(all.subList(start, all.size())));
     }
 
     @GetMapping("/top-questions")

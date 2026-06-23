@@ -3,9 +3,9 @@ spring:
     name: voice-support-bot
 
   datasource:
-    url: jdbc:postgresql://localhost:5433/voicesupport
-    username: voicesupport
-    password: voicesupport
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/voicesupport}
+    username: ${DB_USERNAME:voicesupport}
+    password: ${DB_PASSWORD:voicesupport}
 
   jpa:
     hibernate:

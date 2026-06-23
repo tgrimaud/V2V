@@ -23,6 +23,7 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [events, setEvents] = useState<ConversationEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -31,10 +32,15 @@ export function AdminDashboard() {
           fetch('/api/admin/stats'),
           fetch('/api/admin/events?limit=20')
         ])
+        if (!statsRes.ok || !eventsRes.ok) {
+          throw new Error(`HTTP ${statsRes.status} / ${eventsRes.status}`)
+        }
         setStats(await statsRes.json())
         setEvents(await eventsRes.json())
-      } catch (error) {
-        console.error('Failed to load admin data:', error)
+        setError(null)
+      } catch (err) {
+        console.error('Failed to load admin data:', err)
+        setError('Impossible de charger les données du tableau de bord.')
       } finally {
         setLoading(false)
       }
@@ -46,6 +52,22 @@ export function AdminDashboard() {
 
   if (loading) {
     return <div className="text-center p-8" style={{ color: 'var(--color-text-muted)' }}>Chargement...</div>
+  }
+
+  if (error && !stats) {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl p-4 text-sm text-center"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '1px solid var(--color-danger)',
+          color: 'var(--color-danger)',
+        }}
+      >
+        {error}
+      </div>
+    )
   }
 
   return (
@@ -72,7 +94,7 @@ export function AdminDashboard() {
             </div>
           )}
           {events.map((event, i) => (
-            <div key={i} className="px-4 py-3 text-sm">
+            <div key={`${event.conversationId}-${event.timestamp}-${i}`} className="px-4 py-3 text-sm">
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2 h-2 rounded-full" style={{
                   backgroundColor: event.escalated ? 'var(--color-warning)' : 'var(--color-success)'

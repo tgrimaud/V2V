@@ -181,7 +181,7 @@ describe('useVoiceWebSocket', () => {
     // WHEN
     act(() => mockWsInstance.simulateMessage(JSON.stringify({ type: 'answer_done', text: 'Full answer.' })))
 
-    // THEN
-    expect(defaultOptions.onAnswerDone).toHaveBeenCalledWith('Full answer.')
+    // THEN (agentName is the optional second arg, absent here)
+    expect(defaultOptions.onAnswerDone).toHaveBeenCalledWith('Full answer.', undefined)
   })
 })

@@ -1,6 +1,8 @@
 package com.voicesupport.domain.service;
 
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class EscalationDetector {
 
@@ -14,9 +16,17 @@ public class EscalationDetector {
             "pas satisfait", "inacceptable", "scandaleux"
     );
 
+    // Whole-word matching avoids substring false positives (e.g. "déconseiller"
+    // would match a raw `contains("conseiller")`).
+    private static final Set<Pattern> ESCALATION_PATTERNS = ESCALATION_KEYWORDS.stream()
+            .map(keyword -> Pattern.compile(
+                    "\\b" + Pattern.quote(keyword) + "\\b",
+                    Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS))
+            .collect(Collectors.toUnmodifiableSet());
+
     public boolean shouldEscalate(String userMessage) {
-        String lower = userMessage.toLowerCase();
-        return ESCALATION_KEYWORDS.stream().anyMatch(lower::contains);
+        return ESCALATION_PATTERNS.stream()
+                .anyMatch(pattern -> pattern.matcher(userMessage).find());
     }
 
     public String getEscalationMessage() {

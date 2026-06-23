@@ -31,3 +31,7 @@ export const labels = {
 
 export type Language = keyof typeof labels
 export type Labels = typeof labels[Language]
+
+export function isLanguage(value: string): value is Language {
+  return value in labels
+}

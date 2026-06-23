@@ -15,6 +15,16 @@
   --color-recording: #ef4444;
   --color-processing: #f59e0b;
   --color-speaking: #10b981;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fca5a5;
+  --color-danger-text: #991b1b;
+  --color-guardrail-bg: #fef3c7;
+  --color-guardrail-text: #92400e;
+  --color-bubble-assistant: #f1f5f9;
+  --color-agent-technical: #3b82f6;
+  --color-agent-billing: #10b981;
+  --color-agent-sales: #f59e0b;
+  --color-agent-default: #6b7280;
 }
 
 body {

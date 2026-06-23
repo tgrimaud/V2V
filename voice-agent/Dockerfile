@@ -9,4 +9,4 @@ RUN uv pip install --system -e ".[dev]" 2>/dev/null || uv pip install --system -
 
 COPY agent/ agent/
 
-CMD ["python", "-m", "agent.ws_server"]
+CMD ["python", "-m", "agent.bridge_server"]

@@ -3,6 +3,8 @@ package com.voicesupport.domain.service;
 import com.voicesupport.domain.model.Conversation;
 import com.voicesupport.domain.model.Conversation.Turn;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -61,17 +63,18 @@ public class QueryReformulator {
     );
 
     private String findPreviousUserQuestion(List<Turn> turns, String currentQuestion) {
+        List<Turn> mostRecentFirst = new ArrayList<>(turns);
+        Collections.reverse(mostRecentFirst);
         boolean skippedCurrent = false;
-        for (int i = turns.size() - 1; i >= 0; i--) {
-            Turn turn = turns.get(i);
-            if (turn.role() == Conversation.Role.USER) {
-                if (!skippedCurrent && turn.text().equals(currentQuestion)) {
-                    skippedCurrent = true;
-                    continue;
-                }
-                if (isGreetingOnly(turn.text())) {
-                    continue;
-                }
+        for (Turn turn : mostRecentFirst) {
+            if (turn.role() != Conversation.Role.USER) {
+                continue;
+            }
+            if (!skippedCurrent && turn.text().equals(currentQuestion)) {
+                skippedCurrent = true;
+                continue;
+            }
+            if (!isGreetingOnly(turn.text())) {
                 return turn.text();
             }
         }

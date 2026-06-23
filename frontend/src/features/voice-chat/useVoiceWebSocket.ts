@@ -73,7 +73,9 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     }
 
     ws.onclose = () => {
-      setConnectionState('disconnected')
+      // Don't downgrade a real error to a plain "disconnected": onerror fires
+      // immediately before onclose, and overwriting it would hide the failure.
+      setConnectionState((prev) => (prev === 'error' ? 'error' : 'disconnected'))
     }
 
     wsRef.current = ws

@@ -12,8 +12,10 @@ import {
   usePipecatClientTransportState,
 } from '@pipecat-ai/client-react'
 import { MessageList } from './MessageList'
+import { ChatHeader } from './ChatHeader'
+import { ServiceErrorBanner } from './ServiceErrorBanner'
 import { labels } from './i18n'
-import type { Language, Labels } from './i18n'
+import type { Language } from './i18n'
 
 const BOT_URL =
   (import.meta.env.VITE_BOT_URL as string | undefined) ?? 'http://localhost:7860'
@@ -23,6 +25,21 @@ interface UiMessage {
   role: 'user' | 'assistant'
   text: string
   timestamp: Date
+  agentName?: string
+}
+
+interface AgentNameMessage {
+  type: 'agent_name'
+  agent_name: string
+}
+
+function isAgentNameMessage(data: unknown): data is AgentNameMessage {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { type?: unknown }).type === 'agent_name' &&
+    typeof (data as { agent_name?: unknown }).agent_name === 'string'
+  )
 }
 
 function newId(): string {
@@ -87,6 +104,9 @@ function VoiceChatWebRTCInner() {
   // id of the assistant bubble currently being streamed (between
   // botLlmStarted and botLlmStopped). null when no answer is in flight.
   const activeAssistantId = useRef<string | null>(null)
+  // agent name received (via server message) before its bubble exists; applied
+  // to the next assistant bubble that opens.
+  const pendingAgentName = useRef<string | null>(null)
   const t = labels[language]
 
   const isConnected = transportState === 'connected' || transportState === 'ready'
@@ -105,19 +125,43 @@ function VoiceChatWebRTCInner() {
     if (!text) return
     // A new user turn closes any assistant bubble still marked active.
     activeAssistantId.current = null
-    setMessages(prev => [
-      ...prev,
-      { id: newId(), role: 'user', text, timestamp: new Date() },
-    ])
+    setMessages(prev => {
+      // Drop a trailing empty assistant bubble left by a barge-in that cut the
+      // bot off before its first word (no LLMFullResponseEnd was emitted).
+      const last = prev[prev.length - 1]
+      const pruned =
+        last && last.role === 'assistant' && last.text.length === 0
+          ? prev.slice(0, -1)
+          : prev
+      return [...pruned, { id: newId(), role: 'user', text, timestamp: new Date() }]
+    })
   }, [])
 
   const handleBotStarted = useCallback(() => {
     const id = newId()
     activeAssistantId.current = id
+    const agentName = pendingAgentName.current ?? undefined
+    pendingAgentName.current = null
     setMessages(prev => [
       ...prev,
-      { id, role: 'assistant', text: '', timestamp: new Date() },
+      { id, role: 'assistant', text: '', timestamp: new Date(), agentName },
     ])
+  }, [])
+
+  // The bot forwards the routed agent (Facturation / Support / Commercial) as a
+  // server message; attach it to the active assistant bubble so MessageList can
+  // render the same colored agent badge as strategy A.
+  const handleServerMessage = useCallback((data: unknown) => {
+    if (!isAgentNameMessage(data)) return
+    const agentName = data.agent_name
+    const id = activeAssistantId.current
+    setMessages(prev => {
+      if (id && prev.some(m => m.id === id)) {
+        return prev.map(m => (m.id === id ? { ...m, agentName } : m))
+      }
+      pendingAgentName.current = agentName
+      return prev
+    })
   }, [])
 
   const handleBotText = useCallback((data: BotLLMTextData) => {
@@ -148,11 +192,13 @@ function VoiceChatWebRTCInner() {
   useRTVIClientEvent(RTVIEvent.BotLlmStarted, handleBotStarted)
   useRTVIClientEvent(RTVIEvent.BotLlmText, handleBotText)
   useRTVIClientEvent(RTVIEvent.BotLlmStopped, handleBotStopped)
+  useRTVIClientEvent(RTVIEvent.ServerMessage, handleServerMessage)
 
   const handleConnect = useCallback(async () => {
     setError(null)
     setMessages([])
     activeAssistantId.current = null
+    pendingAgentName.current = null
     try {
       await client?.connect({ webrtcUrl: `${BOT_URL}/api/offer` })
     } catch (err) {
@@ -185,7 +231,7 @@ function VoiceChatWebRTCInner() {
       className="rounded-2xl shadow-lg overflow-hidden"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
-      <Header
+      <ChatHeader
         connected={isConnected}
         statusLabel={statusLabel}
         language={language}
@@ -194,19 +240,7 @@ function VoiceChatWebRTCInner() {
       />
 
       {error && (
-        <div
-          className="px-4 py-2 flex items-center justify-between text-sm"
-          style={{ backgroundColor: '#fef2f2', borderBottom: '1px solid #fca5a5', color: '#991b1b' }}
-        >
-          <span>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="ml-2 text-xs font-bold hover:opacity-70"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
+        <ServiceErrorBanner message={error} onDismiss={() => setError(null)} />
       )}
 
       <MessageList messages={messages} greeting={t.greeting} hint={t.hint} />
@@ -273,55 +307,3 @@ function VoiceChatWebRTCInner() {
   )
 }
 
-function Header({
-  connected,
-  statusLabel,
-  language,
-  t,
-  onLanguageChange,
-}: {
-  connected: boolean
-  statusLabel: string
-  language: Language
-  t: Labels
-  onLanguageChange: (l: Language) => void
-}) {
-  return (
-    <div
-      className="px-4 py-2 flex items-center justify-between text-sm"
-      style={{ borderBottom: '1px solid var(--color-border)' }}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className="w-2 h-2 rounded-full"
-          aria-hidden="true"
-          style={{ backgroundColor: connected ? 'var(--color-success)' : 'var(--color-danger)' }}
-        />
-        <span style={{ color: 'var(--color-text-muted)' }}>
-          {connected ? t.connected : statusLabel}
-        </span>
-      </div>
-      <div
-        className="flex items-center gap-1 rounded-full p-0.5"
-        role="group"
-        aria-label="Language selection"
-        style={{ backgroundColor: 'var(--color-border)' }}
-      >
-        {(['fr', 'en'] as const).map(lang => (
-          <button
-            key={lang}
-            onClick={() => onLanguageChange(lang)}
-            className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-            aria-pressed={language === lang}
-            style={{
-              backgroundColor: language === lang ? 'var(--color-primary)' : 'transparent',
-              color: language === lang ? 'white' : 'var(--color-text-muted)',
-            }}
-          >
-            {lang.toUpperCase()}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}

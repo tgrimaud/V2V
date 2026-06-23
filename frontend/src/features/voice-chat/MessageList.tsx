@@ -16,13 +16,13 @@ interface MessageListProps {
 }
 
 const AGENT_COLORS: Record<string, string> = {
-  'Agent Support Technique': '#3b82f6',
-  'Agent Facturation': '#10b981',
-  'Agent Commercial': '#f59e0b',
+  'Agent Support Technique': 'var(--color-agent-technical)',
+  'Agent Facturation': 'var(--color-agent-billing)',
+  'Agent Commercial': 'var(--color-agent-sales)',
 }
 
 function getAgentColor(agentName: string): string {
-  return AGENT_COLORS[agentName] || '#6b7280'
+  return AGENT_COLORS[agentName] || 'var(--color-agent-default)'
 }
 
 export function MessageList({ messages, greeting, hint }: MessageListProps) {
@@ -67,17 +67,17 @@ export function MessageList({ messages, greeting, hint }: MessageListProps) {
                 className="rounded-2xl px-4 py-3 text-sm"
                 style={{
                   backgroundColor: isGuardrail
-                    ? '#fef3c7'
-                    : msg.role === 'user' ? 'var(--color-primary)' : '#f1f5f9',
+                    ? 'var(--color-guardrail-bg)'
+                    : msg.role === 'user' ? 'var(--color-primary)' : 'var(--color-bubble-assistant)',
                   color: isGuardrail
-                    ? '#92400e'
+                    ? 'var(--color-guardrail-text)'
                     : msg.role === 'user' ? 'white' : 'var(--color-text)',
-                  border: isGuardrail ? '1px solid #f59e0b' : 'none',
+                  border: isGuardrail ? '1px solid var(--color-warning)' : 'none',
                 }}
               >
                 {isGuardrail && (
                   <span className="inline-block mr-1.5 text-xs font-medium px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: '#f59e0b', color: 'white' }}>
+                    style={{ backgroundColor: 'var(--color-warning)', color: 'white' }}>
                     ⚠️ Confiance faible
                   </span>
                 )}

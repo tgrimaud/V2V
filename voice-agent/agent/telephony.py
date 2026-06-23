@@ -132,7 +132,7 @@ async def _answer_call(websocket, backend, api_key, voice_id, language, stream_s
     if stt_result.error_code or not stt_result.text:
         return
 
-    print(f"[TWILIO] Caller said: '{stt_result.text}'", flush=True)
+    print(f"[TWILIO] Caller transcription received ({len(stt_result.text)} chars)", flush=True)
     sentence_buffer = ""
 
     async for sse in backend.ask_stream(stt_result.text, f"twilio-{stream_sid}"):
