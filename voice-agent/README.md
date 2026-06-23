@@ -58,6 +58,24 @@ python -m agent.twilio_server
 # → écoute sur ws://localhost:8766
 ```
 
+### Deux stratégies d'unification des canaux
+
+Le projet contient deux implémentations **parallèles** (voir ADR-009 / ADR-010) qui peuvent tourner en même temps (backend Java partagé) :
+
+| | Strategy A (bridge custom) | Strategy B (Pipecat) |
+|---|---|---|
+| Entrée | `python -u -m agent.bridge_server` | `python -m agent.bot` |
+| Web | `ws://localhost:8765` + frontend React (`:5173`) | WebRTC + UI prebuilt sur `http://localhost:7860` |
+| Téléphonie | `ws://localhost:8766` (Twilio Media Streams) | `python -m agent.bot -t twilio -x <host-public>` |
+| STT | Gradium REST (batch) | Gradium streaming |
+| VAD | navigateur + heuristique RMS | Silero (serveur) |
+
+**Strategy B — démarrage :**
+```bash
+python -m agent.bot -t webrtc   # web seul → http://localhost:7860
+python -m agent.bot             # web + téléphonie
+```
+
 ## Configuration
 
 | Variable | Défaut | Description |

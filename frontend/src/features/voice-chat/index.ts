@@ -1,4 +1,6 @@
 export { VoiceChat } from './VoiceChat'
+export { VoiceChatWebRTC } from './VoiceChatWebRTC'
+export { VoiceChatContainer } from './VoiceChatContainer'
 export { useVoiceWebSocket } from './useVoiceWebSocket'
 export { useAudioRecorder } from './useAudioRecorder'
 export { useAudioQueue } from './useAudioQueue'

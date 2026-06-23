@@ -560,3 +560,32 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 - **Découplage moteur STT** : la couture permet d'adopter un STT streaming (gain ~300-500ms) sans réécriture.
 - **Unification des canaux** : web et téléphonie sur un seul pipeline élimine la dérive entre deux implémentations et évite la dépendance Pipecat sur le chemin critique.
 - **Réversible et sans nouvelle dépendance** : logs structurés plutôt qu'un stack d'observabilité lourd (déféré à la Phase 2).
+
+### ADR-010 : Stratégie B — unification sur Pipecat (alternative parallèle à ADR-009)
+
+**Contexte** : ADR-009 (stratégie A) unifie web + téléphonie sur le **bridge custom** (`bridge_server.py`, sans Pipecat). Pour évaluer si une pile **Pipecat** ferait mieux en latence/robustesse, on construit une implémentation **parallèle** (stratégie B) sans toucher A, afin de comparer les deux têtes à tête.
+
+**Décision** : un bot Pipecat unique multi-transports (`voice-agent/agent/bot.py`) servant les deux canaux via le **development runner** Pipecat :
+- **Web** : WebRTC (`SmallWebRTCTransport`) avec l'**UI prebuilt** (`pipecat-ai-prebuilt`) servie sur `http://localhost:7860/client` — aucun frontend custom à écrire.
+- **Téléphonie** : Twilio Media Streams via `TwilioFrameSerializer` (sélection automatique par `create_transport`).
+- Les deux transports partagent **le même pipeline** : `transport.input() → Gradium STT (streaming) → StreamingRAGProcessor → Gradium TTS → transport.output()`.
+
+**Composants** :
+- `agent/bot.py` : `bot(runner_args)` + `create_transport(runner_args, transport_params)` ; Silero VAD sur les deux canaux (endpointing **et** barge-in gérés par le framework).
+- `agent/streaming_rag_processor.py` : `iter_answer_sentences()` (générateur pur, testé) consomme le SSE `/ask-stream` et pousse un `TextFrame` **par phrase** → la TTS démarre dès la 1ère phrase. Logs `[LATENCY] step=llm_first_token|rag_total` au même format que A pour comparaison directe.
+
+**Coexistence** : A (bridge 8765/8766, frontend 5173) et B (runner 7860) tournent en parallèle, backend Java partagé (8081). Aucun fichier de A modifié.
+
+**Différences clés A vs B** :
+
+| Aspect | A (bridge custom) | B (Pipecat) |
+|---|---|---|
+| Transport web | WebSocket + protocole maison | WebRTC (Opus, jitter buffer) |
+| Frontend web | React existant (riche : multi-agents, erreurs typées) | UI prebuilt Pipecat (générique) |
+| STT | Gradium REST **batch** (par tour) | Gradium **streaming** (partiels) |
+| VAD / endpointing | navigateur (web) + heuristique RMS (tél.) | Silero (ML) côté serveur, les 2 canaux |
+| Barge-in | annulation de tâche basique | géré par le framework |
+| Métadonnées multi-agents | exposées au client | non propagées (UI générique) |
+| Dépendances | légères, sans Pipecat sur le hot path | aiortc + runner + prebuilt |
+
+**Statut** : B est une **piste d'évaluation**, pas un remplacement décidé. L'arbitrage A vs B (latence mesurée, robustesse VAD télécom réelle, richesse UI) est à trancher au jalon de validation Phase 1.

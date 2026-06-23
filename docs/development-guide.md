@@ -231,6 +231,16 @@ cd voice-agent && python -m agent.ws_server
 # Lancer l'agent vocal téléphonie via Pipecat (legacy, alternative au bridge unifié)
 cd voice-agent && python -m agent.twilio_server
 
+# --- Strategy B : pile Pipecat unifiee (ADR-010), parallele au bridge (strategy A) ---
+# Web (WebRTC) + UI prebuilt sur http://localhost:7860 ; coexiste avec A (5173/8765/8766)
+cd voice-agent && python -m agent.bot -t webrtc
+# Tous transports (web + telephonie) :
+cd voice-agent && python -m agent.bot
+# Telephonie Pipecat (necessite un proxy public, ex: ngrok) :
+cd voice-agent && python -m agent.bot -t twilio -x <votre-host-public>
+# Comparer A vs B : ouvrir http://localhost:5173 (A) et http://localhost:7860 (B),
+# puis agreger les logs [LATENCY] des deux avec tools/latency_report.py
+
 # Tester le streaming SSE (réponse token par token)
 curl -N "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=test"
 

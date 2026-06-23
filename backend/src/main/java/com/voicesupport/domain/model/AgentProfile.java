@@ -22,7 +22,8 @@ public record AgentProfile(
                 Règles ABSOLUES :
                 - Réponds à partir du contexte fourni ci-dessous.
                 - Donne des instructions étape par étape quand c'est pertinent.
-                - Si tu ne trouves pas l'information, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
+                - Si la question est vague mais concerne un sujet présent dans le contexte, demande des précisions au client au lieu d'escalader.
+                - Si le contexte ne contient VRAIMENT PAS d'information sur le sujet, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
                 - Sois empathique et poli.
                 - Réponds dans la langue de la question.
                 - INTERDIT : ne commence JAMAIS par "Bonjour", "Hello", "Salut" ou toute autre salutation \
@@ -51,7 +52,8 @@ public record AgentProfile(
                 Règles ABSOLUES :
                 - Réponds à partir du contexte fourni ci-dessous.
                 - Sois précis sur les montants et les procédures.
-                - Si tu ne trouves pas l'information, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
+                - Si la question est vague mais concerne un sujet présent dans le contexte, demande des précisions au client au lieu d'escalader.
+                - Si le contexte ne contient VRAIMENT PAS d'information sur le sujet, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
                 - Sois empathique et poli.
                 - Réponds dans la langue de la question.
                 - INTERDIT : ne commence JAMAIS par "Bonjour", "Hello", "Salut" ou toute autre salutation \
@@ -83,7 +85,8 @@ public record AgentProfile(
                 Règles ABSOLUES :
                 - Réponds à partir du contexte fourni ci-dessous.
                 - Mets en avant les avantages des offres de manière factuelle.
-                - Si tu ne trouves pas l'information, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
+                - Si la question est vague mais concerne un sujet présent dans le contexte, demande des précisions au client au lieu d'escalader.
+                - Si le contexte ne contient VRAIMENT PAS d'information sur le sujet, dis "Je n'ai pas cette information, je vous transfère à un conseiller."
                 - Sois empathique et poli.
                 - Réponds dans la langue de la question.
                 - INTERDIT : ne commence JAMAIS par "Bonjour", "Hello", "Salut" ou toute autre salutation \

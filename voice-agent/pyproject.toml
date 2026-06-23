@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Pipecat voice agent for Telecom support using Gradium STT/TTS"
 requires-python = ">=3.11"
 dependencies = [
-    "pipecat-ai[gradium,websocket,silero]",
+    # webrtc + runner extras and the prebuilt UI power strategy B (agent/bot.py:
+    # unified Pipecat web WebRTC + telephony). websocket/silero/gradium are shared.
+    "pipecat-ai[gradium,websocket,silero,webrtc,runner]",
+    "pipecat-ai-prebuilt",
     "httpx",
     "python-dotenv",
 ]

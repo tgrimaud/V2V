@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { VoiceChat } from './features/voice-chat'
+import { VoiceChatContainer } from './features/voice-chat'
 import { AdminDashboard } from './features/admin'
 
 type View = 'chat' | 'admin'
@@ -42,7 +42,7 @@ function App() {
         </nav>
       </header>
       <main className="w-full max-w-2xl mx-auto flex-1">
-        {view === 'chat' ? <VoiceChat /> : <AdminDashboard />}
+        {view === 'chat' ? <VoiceChatContainer /> : <AdminDashboard />}
       </main>
     </div>
   )
