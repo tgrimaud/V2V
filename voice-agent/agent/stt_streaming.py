@@ -27,12 +27,13 @@ class StreamingSttSession(Protocol):
 
 
 class BatchSttSession:
-    """Accumulates all PCM, transcribes once via Gradium REST on finalize."""
+    """Accumulates all audio, transcribes once via Gradium REST on finalize."""
 
-    def __init__(self, language: str, api_key: str):
+    def __init__(self, language: str, api_key: str, input_format: str = "pcm_16000"):
         self._buffer = bytearray()
         self._language = language
         self._api_key = api_key
+        self._input_format = input_format
 
     def feed(self, pcm: bytes) -> None:
         self._buffer.extend(pcm)
@@ -40,9 +41,17 @@ class BatchSttSession:
     async def finalize(self) -> SttResult:
         if not self._buffer:
             return SttResult(text=None)
-        return await transcribe_audio(bytes(self._buffer), self._language, self._api_key)
+        return await transcribe_audio(
+            bytes(self._buffer), self._language, self._api_key, self._input_format
+        )
 
 
-def create_stt_session(language: str, api_key: str) -> StreamingSttSession:
-    """Factory for the active STT engine. Returns the batch engine for now."""
-    return BatchSttSession(language, api_key)
+def create_stt_session(
+    language: str, api_key: str, input_format: str = "pcm_16000"
+) -> StreamingSttSession:
+    """Factory for the active STT engine. Returns the batch engine for now.
+
+    `input_format` selects the audio encoding: `pcm_16000` for web/PCM clients,
+    `ulaw_8000` for telephony.
+    """
+    return BatchSttSession(language, api_key, input_format)

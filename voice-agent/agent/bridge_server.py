@@ -26,6 +26,7 @@ from agent.backend_client import RAGBackendClient
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
 from agent.stt_streaming import create_stt_session
+from agent.telephony import handle_twilio_client
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ GRADIUM_API_KEY = os.getenv("GRADIUM_API_KEY")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8081")
 WS_HOST = os.getenv("VOICE_AGENT_HOST", "0.0.0.0")
 WS_PORT = int(os.getenv("VOICE_AGENT_PORT", "8765"))
+TELEPHONY_WS_PORT = int(os.getenv("TWILIO_WS_PORT", "8766"))
 
 VOICE_MAP = {
     "fr": os.getenv("GRADIUM_VOICE_FR", "b35yykvVppLXyw_l"),
@@ -305,16 +307,30 @@ def _extract_language(message: str, current: str) -> str:
     return current
 
 
+async def handle_telephony_client(websocket):
+    """Handle one telephony (Twilio Media Streams) call session."""
+    backend = RAGBackendClient(base_url=BACKEND_URL)
+    voice_id = VOICE_MAP[DEFAULT_LANGUAGE]
+    print(f"[TELEPHONY] Call connected from {websocket.remote_address}", flush=True)
+    try:
+        await handle_twilio_client(websocket, backend, GRADIUM_API_KEY, voice_id, DEFAULT_LANGUAGE)
+    finally:
+        await backend.close()
+        print("[TELEPHONY] Call disconnected", flush=True)
+
+
 async def main():
     if not GRADIUM_API_KEY:
         print("ERROR: GRADIUM_API_KEY not set.", flush=True)
         sys.exit(1)
 
-    print(f"Voice agent bridge listening on ws://{WS_HOST}:{WS_PORT}", flush=True)
+    print(f"Voice agent bridge listening on ws://{WS_HOST}:{WS_PORT} (browser)", flush=True)
+    print(f"Telephony listening on ws://{WS_HOST}:{TELEPHONY_WS_PORT} (Twilio Media Streams, ulaw_8000)", flush=True)
     print(f"  STT/TTS: Gradium (direct WebSocket API)", flush=True)
     print(f"  Backend: {BACKEND_URL} (SSE streaming)", flush=True)
 
-    async with websockets.serve(handle_client, WS_HOST, WS_PORT):
+    async with websockets.serve(handle_client, WS_HOST, WS_PORT), \
+            websockets.serve(handle_telephony_client, WS_HOST, TELEPHONY_WS_PORT):
         await asyncio.Future()
 
 

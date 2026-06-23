@@ -23,9 +23,10 @@ class TurnDetectorConfig:
     silence_ms: int = 500         # trailing silence that ends a turn
     min_speech_ms: int = 200      # minimum speech before a turn may end
     frame_ms: int = 20            # analysis frame size
+    sample_rate: int = SAMPLE_RATE  # 16000 for web PCM, 8000 for telephony
 
     def frame_bytes(self) -> int:
-        return int(SAMPLE_RATE * self.frame_ms / 1000) * SAMPLE_WIDTH
+        return int(self.sample_rate * self.frame_ms / 1000) * SAMPLE_WIDTH
 
 
 def frame_rms(frame: bytes) -> float:

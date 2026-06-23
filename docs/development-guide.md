@@ -220,13 +220,15 @@ cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js frontend/publi
 # Lancer le backend Java (charger le .env pour la clé Mistral)
 cd backend && export $(cat .env | xargs) && mvn spring-boot:run
 
-# Lancer l'agent vocal (navigateur — bridge mode streaming)
+# Lancer l'agent vocal (bridge unifié : navigateur ws:8765 + téléphonie ws:8766)
+# Depuis ADR-009, bridge_server sert AUSSI la téléphonie Twilio Media Streams
+# (μ-law 8kHz) sur TWILIO_WS_PORT (défaut 8766), même pipeline que le web.
 cd voice-agent && python -u -m agent.bridge_server
 
 # Lancer l'agent vocal (navigateur — Pipecat natif, sans bridge)
 cd voice-agent && python -m agent.ws_server
 
-# Lancer l'agent vocal (Twilio)
+# Lancer l'agent vocal téléphonie via Pipecat (legacy, alternative au bridge unifié)
 cd voice-agent && python -m agent.twilio_server
 
 # Tester le streaming SSE (réponse token par token)

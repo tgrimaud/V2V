@@ -27,7 +27,7 @@ async def test_batch_session_accumulates_and_transcribes_once():
         result = await session.finalize()
 
     # THEN the accumulated buffer is transcribed once and text is returned
-    mock_stt.assert_awaited_once_with(b"\x01\x02\x03\x04", "fr", "fake-key")
+    mock_stt.assert_awaited_once_with(b"\x01\x02\x03\x04", "fr", "fake-key", "pcm_16000")
     assert result.text == "bonjour"
 
 

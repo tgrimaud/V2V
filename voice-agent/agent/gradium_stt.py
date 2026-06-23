@@ -36,8 +36,13 @@ async def transcribe_audio(
     audio_data: bytes,
     language: str,
     api_key: str,
+    input_format: str = "pcm_16000",
 ) -> SttResult:
-    """Send audio to Gradium STT REST endpoint and return transcription."""
+    """Send audio to Gradium STT REST endpoint and return transcription.
+
+    `input_format` is the Gradium audio format: `pcm_16000` for browser/PCM
+    clients, `ulaw_8000` for telephony (Twilio Media Streams / SIP).
+    """
     start = time.perf_counter()
     try:
         client = get_stt_client()
@@ -46,7 +51,7 @@ async def transcribe_audio(
             headers={"x-api-key": api_key},
             params={
                 "model_name": "default",
-                "input_format": "pcm_16000",
+                "input_format": input_format,
                 "json_config": json.dumps({"language": language}),
             },
             content=audio_data,
@@ -73,7 +78,7 @@ async def transcribe_audio(
 
         result = " ".join(words)
         elapsed_ms = (time.perf_counter() - start) * 1000
-        print(f"[LATENCY] step=stt ms={elapsed_ms:.0f} bytes={len(audio_data)}", flush=True)
+        print(f"[LATENCY] step=stt ms={elapsed_ms:.0f} bytes={len(audio_data)} fmt={input_format}", flush=True)
         return SttResult(text=result.strip() if result.strip() else None)
 
     except httpx.ConnectError:

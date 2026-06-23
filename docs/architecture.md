@@ -290,20 +290,35 @@ sequenceDiagram
 | → Client | Fin réponse | JSON `{"type":"answer_done","text":"..."}` | Fin génération complète |
 | → Client | Langue ack | JSON `{"type":"language_changed","language":"..."}` | Après set_language |
 
-### Mode téléphonie (Twilio → Pipecat + Gradium)
+### Mode téléphonie (Twilio Media Streams → bridge unifié + Gradium)
+
+Depuis ADR-009 (Phase 1), la téléphonie est servie par le **bridge unifié**
+(`bridge_server.py`, sans Pipecat), au même titre que le canal navigateur. Le
+bridge expose un second serveur WebSocket dédié à la téléphonie et réutilise le
+même pipeline (turn-detector serveur + abstraction STT streaming + RAG SSE + TTS).
 
 ```
 Appel téléphonique entrant
   → Twilio → POST /api/twilio/voice (webhook sur backend Java)
-  ← TwiML <Response><Connect><Stream url="ws://voice-agent:8766"/></Connect></Response>
+  ← TwiML <Response><Connect><Stream url="wss://.../ws/twilio"/></Connect></Response>
 
-  → Twilio WebSocket → ws://localhost:8766 (agent Pipecat)
-  → Pipecat reçoit μ-law 8kHz audio frames
+  → Twilio Media Streams (WebSocket JSON) → ws://localhost:8766 (TWILIO_WS_PORT)
+  → bridge: parse les frames Twilio (telephony.parse_twilio_message)
+  → décode μ-law 8kHz → PCM16 (audio_codec.mulaw_to_pcm16)
+  → détection de fin de tour côté serveur (turn_detector, 8kHz, pas de VAD client)
   → Gradium STT (input_format: ulaw_8000) → transcription
-  → HTTP POST /api/conversation/ask → réponse
-  → Gradium TTS (output_format: ulaw_8000) → audio
-  → Audio frames retournés à Twilio → diffusé à l'appelant
+  → GET /api/conversation/ask-stream (SSE) → réponse en streaming par phrase
+  → Gradium TTS (output_format: ulaw_8000) → μ-law brut
+  → frames média Twilio (telephony.build_media_message) → diffusé à l'appelant
 ```
+
+Modules : `telephony.py` (protocole Twilio Media Streams : parser/builders purs +
+handler de session), `audio_codec.py` (codec G.711 μ-law ↔ PCM16, sans dépendance),
+`turn_detector.py` (endpointing 8kHz), `stt_streaming.py` (abstraction STT).
+
+> L'ancien agent Pipecat (`twilio_server.py`, transport `WebSocketServerTransport` +
+> Silero VAD) reste disponible comme alternative legacy sur le même port, mais le
+> bridge unifié est le chemin recommandé (cohérent avec le canal web, sans Pipecat).
 
 ## Stratégie de chunking
 
@@ -399,7 +414,7 @@ Modifier `voice-agent/agent/gradium_stt.py` et `gradium_tts.py` pour appeler un 
 
 ### Ajouter un transport
 
-Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pour ajouter un nouveau transport (ex: SIP, LiveKit), créer un nouveau handler WebSocket dans le bridge.
+Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la téléphonie Twilio Media Streams (ws:8766, μ-law 8kHz) via deux serveurs WebSocket lancés ensemble dans `main()`. Les deux canaux partagent le même pipeline (turn-detector + STT streaming + RAG SSE + TTS) ; seuls le format audio (`pcm_16000` vs `ulaw_8000`) et le protocole d'enveloppe (binaire WAV vs frames média Twilio JSON) diffèrent. Pour ajouter un nouveau transport (ex: SIP natif, LiveKit), créer un handler WebSocket dédié réutilisant `create_stt_session(...)`, `TurnDetector`, et `synthesize_speech(...)` avec le bon `output_format`.
 
 ## Décisions d'architecture (ADR)
 
@@ -537,8 +552,11 @@ Le bridge server gère les clients navigateur (ws:8765) et Twilio (ws:8766). Pou
 
 **Backend stateless** : l'état de session sort de la JVM derrière le port `ConversationStore` (`load`/`save`). `InMemoryConversationStore` aujourd'hui, adapter Redis en Phase 2 — débloque l'autoscaling horizontal. Le pattern explicite `load → mutation → save` est compatible store distribué.
 
+**Transport téléphonie unifié** : `voice-agent/agent/telephony.py` intègre le protocole Twilio Media Streams (μ-law 8kHz) **dans le bridge** plutôt qu'un agent Pipecat séparé. Parser/builders purs (`parse_twilio_message`, `build_media_message`) testés unitairement ; codec G.711 sans dépendance (`audio_codec.py`, `audioop` retiré en Python 3.13) ; le turn-detector serveur tourne en 8kHz. Web (`pcm_16000`) et téléphonie (`ulaw_8000`) partagent désormais le même pipeline STT→RAG→TTS — un seul code-path à maintenir et à optimiser. `bridge_server.main()` lance les deux serveurs WebSocket (8765 web, 8766 téléphonie via `TWILIO_WS_PORT`).
+
 **Raisons** :
 - **Mesure d'abord** : on ne peut pas optimiser ce qu'on ne mesure pas ; la baseline conditionne les choix.
 - **Téléphonie-ready** : le turn-detector serveur débloque le canal SIP qui n'a pas de VAD client.
 - **Découplage moteur STT** : la couture permet d'adopter un STT streaming (gain ~300-500ms) sans réécriture.
+- **Unification des canaux** : web et téléphonie sur un seul pipeline élimine la dérive entre deux implémentations et évite la dépendance Pipecat sur le chemin critique.
 - **Réversible et sans nouvelle dépendance** : logs structurés plutôt qu'un stack d'observabilité lourd (déféré à la Phase 2).

@@ -33,8 +33,14 @@ async def synthesize_speech(
     text: str,
     voice_id: str,
     api_key: str,
+    output_format: str = "pcm_16000",
 ) -> bytes | None:
-    """Send text to Gradium TTS via WebSocket and return WAV audio."""
+    """Send text to Gradium TTS via WebSocket and return audio.
+
+    For `pcm_16000` (web/browser) the PCM is wrapped in a WAV header so the
+    browser can decode it. For `ulaw_8000` (telephony) the raw mu-law bytes are
+    returned as-is (Twilio Media Streams expects raw mu-law payloads).
+    """
     start = time.perf_counter()
     try:
         async with websockets.connect(
@@ -45,7 +51,7 @@ async def synthesize_speech(
                 "type": "setup",
                 "model_name": "default",
                 "voice_id": voice_id,
-                "output_format": "pcm_16000",
+                "output_format": output_format,
             })
             await ws.send(setup_msg)
 
@@ -69,10 +75,12 @@ async def synthesize_speech(
                     break
 
             if audio_chunks:
-                pcm_data = b"".join(audio_chunks)
+                audio_data = b"".join(audio_chunks)
                 elapsed_ms = (time.perf_counter() - start) * 1000
-                print(f"[LATENCY] step=tts ms={elapsed_ms:.0f} chars={len(text)}", flush=True)
-                return pcm_to_wav(pcm_data, TTS_SAMPLE_RATE)
+                print(f"[LATENCY] step=tts ms={elapsed_ms:.0f} chars={len(text)} fmt={output_format}", flush=True)
+                if output_format == "pcm_16000":
+                    return pcm_to_wav(audio_data, TTS_SAMPLE_RATE)
+                return audio_data
             return None
 
     except Exception as e:
