@@ -1,7 +1,10 @@
 package com.voicesupport.infrastructure.adapter.in.rest;
 
+import com.voicesupport.domain.model.SyncReport;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
+import com.voicesupport.domain.port.in.SyncKnowledgeSourceUseCase;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,9 +20,13 @@ import java.util.Map;
 public class KnowledgeController {
 
     private final IngestKnowledgeUseCase ingestKnowledgeUseCase;
+    private final SyncKnowledgeSourceUseCase syncKnowledgeSourceUseCase;
 
-    public KnowledgeController(IngestKnowledgeUseCase ingestKnowledgeUseCase) {
+    public KnowledgeController(
+            IngestKnowledgeUseCase ingestKnowledgeUseCase,
+            SyncKnowledgeSourceUseCase syncKnowledgeSourceUseCase) {
         this.ingestKnowledgeUseCase = ingestKnowledgeUseCase;
+        this.syncKnowledgeSourceUseCase = syncKnowledgeSourceUseCase;
     }
 
     @PostMapping("/ingest")
@@ -39,5 +46,15 @@ public class KnowledgeController {
                 "domain", domain != null ? domain : "general",
                 "chunks_created", chunksCreated
         ));
+    }
+
+    @PostMapping("/sync")
+    public ResponseEntity<SyncReport> syncAll() {
+        return ResponseEntity.ok(syncKnowledgeSourceUseCase.syncAll());
+    }
+
+    @PostMapping("/sync/{sourceType}")
+    public ResponseEntity<SyncReport> sync(@PathVariable("sourceType") String sourceType) {
+        return ResponseEntity.ok(syncKnowledgeSourceUseCase.sync(sourceType));
     }
 }

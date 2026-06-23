@@ -1,3 +1,8 @@
+---
+domain: commercial
+language: fr
+---
+
 # Base de connaissance — Offres Commerciales et Déménagement
 
 ## Nouvelles souscriptions

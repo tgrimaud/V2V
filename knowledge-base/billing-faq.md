@@ -1,3 +1,8 @@
+---
+domain: billing
+language: fr
+---
+
 # Base de connaissance — Facturation et Abonnements
 
 ## Factures

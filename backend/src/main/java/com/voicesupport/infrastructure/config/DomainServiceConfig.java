@@ -4,8 +4,11 @@ import com.voicesupport.domain.model.AgentProfile;
 import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
+import com.voicesupport.domain.port.in.SyncKnowledgeSourceUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.ConversationStore;
+import com.voicesupport.domain.port.out.KnowledgeSourceConnector;
+import com.voicesupport.domain.port.out.KnowledgeSourceStatePort;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
@@ -15,11 +18,16 @@ import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.GuardrailService;
 import com.voicesupport.domain.service.IntentClassifier;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
+import com.voicesupport.domain.service.KnowledgeSyncService;
 import com.voicesupport.domain.service.QueryReformulator;
+import com.voicesupport.domain.service.TextChunker;
 import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
+import com.voicesupport.infrastructure.adapter.out.persistence.JpaKnowledgeSourceStateAdapter;
+import com.voicesupport.infrastructure.adapter.out.persistence.KbSourceStateRepository;
+import com.voicesupport.infrastructure.adapter.out.source.MarkdownFolderConnector;
 import com.voicesupport.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -165,10 +173,35 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    public IngestKnowledgeUseCase ingestKnowledgeUseCase(
-            VectorStorePort vectorStorePort,
+    public TextChunker textChunker(
             @Value("${voice-support.knowledge.chunk-size:500}") int chunkSize,
             @Value("${voice-support.knowledge.chunk-overlap:50}") int chunkOverlap) {
-        return new KnowledgeIngestionService(vectorStorePort, chunkSize, chunkOverlap);
+        return new TextChunker(chunkSize, chunkOverlap);
+    }
+
+    @Bean
+    public IngestKnowledgeUseCase ingestKnowledgeUseCase(VectorStorePort vectorStorePort, TextChunker textChunker) {
+        return new KnowledgeIngestionService(vectorStorePort, textChunker);
+    }
+
+    @Bean
+    public KnowledgeSourceStatePort knowledgeSourceStatePort(KbSourceStateRepository repository) {
+        return new JpaKnowledgeSourceStateAdapter(repository);
+    }
+
+    @Bean
+    public MarkdownFolderConnector markdownFolderConnector(
+            @Value("${voice-support.knowledge.markdown-path:../knowledge-base}") String markdownPath,
+            @Value("${voice-support.knowledge.default-language:fr}") String defaultLanguage) {
+        return new MarkdownFolderConnector(markdownPath, defaultLanguage);
+    }
+
+    @Bean
+    public SyncKnowledgeSourceUseCase syncKnowledgeSourceUseCase(
+            List<KnowledgeSourceConnector> connectors,
+            KnowledgeSourceStatePort knowledgeSourceStatePort,
+            VectorStorePort vectorStorePort,
+            TextChunker textChunker) {
+        return new KnowledgeSyncService(connectors, knowledgeSourceStatePort, vectorStorePort, textChunker);
     }
 }

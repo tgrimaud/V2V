@@ -1,3 +1,8 @@
+---
+domain: support
+language: fr
+---
+
 # Base de connaissance — Support Telecom FAI
 
 ## Problèmes de connexion Internet

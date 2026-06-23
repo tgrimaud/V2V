@@ -1,5 +1,6 @@
 package com.voicesupport.domain.service;
 
+import com.voicesupport.domain.model.SourceDocument;
 import com.voicesupport.domain.port.out.VectorStorePort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +18,7 @@ class KnowledgeIngestionServiceTest {
     @BeforeEach
     void setUp() {
         vectorStorePort = new FakeVectorStorePort();
-        service = new KnowledgeIngestionService(vectorStorePort, 200, 30);
+        service = new KnowledgeIngestionService(vectorStorePort, new TextChunker(200, 30));
     }
 
     @Test
@@ -67,6 +68,16 @@ class KnowledgeIngestionServiceTest {
         @Override
         public void store(String content, String source, String section, int chunkIndex, String domain) {
             storedChunks.add(new StoredChunk(content, source, section, chunkIndex, domain));
+        }
+
+        @Override
+        public void storeChunk(SourceDocument document, String chunkContent, String section, int chunkIndex) {
+            storedChunks.add(new StoredChunk(chunkContent, document.sourceId(), section, chunkIndex, document.domain()));
+        }
+
+        @Override
+        public void deleteBySource(String sourceType, String sourceId) {
+            // no-op for ingestion tests
         }
 
         record StoredChunk(String content, String source, String section, int chunkIndex, String domain) {}

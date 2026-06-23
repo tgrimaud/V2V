@@ -182,6 +182,46 @@ Sans `domain`, les chunks sont stockés sans filtre (rétrocompatible mais non r
 
 Le chunking respecte les frontières de paragraphes et propage les headings comme métadonnées de section.
 
+### Synchronisation multi-sources (recommandé)
+
+Le `curl ... /ingest` reste disponible pour un upload ponctuel, mais la KB est
+désormais alimentée par des **connecteurs de source** synchronisés. Le connecteur
+de référence `MarkdownFolderConnector` lit `knowledge-base/*.md` et résout le
+`domain` depuis un **front-matter YAML** en tête de chaque fichier :
+
+```markdown
+---
+domain: billing
+language: fr
+---
+
+# Base de connaissance — Facturation et Abonnements
+...
+```
+
+Déclencher une synchro manuellement :
+
+```bash
+# Toutes les sources
+curl -X POST http://localhost:8081/api/knowledge/sync
+
+# Une seule source (par type de connecteur)
+curl -X POST http://localhost:8081/api/knowledge/sync/markdown
+```
+
+La réponse est un rapport : `{ "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }`.
+La synchro est **idempotente** : un document inchangé (même `content_hash`) est
+ignoré (`skipped`), un document modifié est ré-ingéré (`deleted` puis re-chunké),
+et un document disparu de la source est supprimé du vector store. L'état de
+synchro est conservé dans la table `kb_source_state`.
+
+Une synchro **planifiée** tourne via cron (`voice-support.knowledge.sync-cron`,
+défaut horaire `0 0 * * * *`). Mettre `KB_SYNC_CRON=-` pour la désactiver en dev.
+
+Migration depuis l'ancien seeding `curl /ingest` : les lignes pré-existantes n'ont
+pas de `source_id`, donc pour éviter les doublons, vider une fois la table avant la
+première synchro : `DELETE FROM vector_store;` puis `POST /api/knowledge/sync`.
+
 ## Résolution de problèmes courants
 
 | Problème | Cause | Solution |

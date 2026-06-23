@@ -46,3 +46,7 @@ voice-support:
   knowledge:
     chunk-size: 500
     chunk-overlap: 50
+    markdown-path: ${KB_MARKDOWN_PATH:../knowledge-base}
+    default-language: ${KB_DEFAULT_LANGUAGE:fr}
+    # Cron de synchro KB (pull planifie). Mettre "-" pour desactiver.
+    sync-cron: ${KB_SYNC_CRON:0 0 * * * *}
