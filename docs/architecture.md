@@ -148,6 +148,9 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `GuardrailResult` | Résultat d'évaluation guardrail (PASS, OFF_TOPIC, LOW_CONFIDENCE) |
 | `AgentProfile` | Profil d'un agent spécialisé (id, nom, system prompt, domaine KB, mots-clés d'intent) |
 | `AgentRegistry` | Registre des agents disponibles avec lookup par id et fallback par défaut |
+| `SourceDocument` | Format **pivot** d'un document de source KB (sourceType, sourceId, title, url, content, domain, language, updatedAt, contentHash) — normalise toute source hétérogène avant ingestion |
+| `ContentHash` | Utilitaire SHA-256 du contenu normalisé (clé d'idempotence de la synchro) |
+| `SyncReport` | Résultat d'une synchro KB (processed, ingested, skipped, deleted) |
 
 ### Services
 
@@ -157,7 +160,9 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `ConversationService` | Pipeline RAG synchrone legacy (toujours fonctionnel mais remplacé par l'orchestrateur) |
 | `StreamingConversationService` | Pipeline RAG streaming legacy (remplacé par l'orchestrateur) |
 | `IntentClassifier` | Classifie la question de l'utilisateur pour router vers l'agent approprié (scoring par mots-clés avec session stickiness) |
-| `KnowledgeIngestionService` | Découpe les documents en chunks et les indexe avec tag de domaine |
+| `KnowledgeIngestionService` | Ingestion ponctuelle (upload `POST /ingest`) : délègue le découpage à `TextChunker` et indexe avec tag de domaine |
+| `KnowledgeSyncService` | Synchro **multi-sources** idempotente : parcourt les connecteurs, compare le `contentHash` au ledger (skip si inchangé), ré-ingère les documents modifiés (delete + re-chunk), supprime les documents disparus (deletion-diff) |
+| `TextChunker` | Découpage sémantique partagé (paragraphes, taille/chevauchement, extraction de section) — réutilisé par l'ingestion ponctuelle et la synchro |
 | `EscalationDetector` | Détecte les demandes nécessitant un transfert humain |
 | `GuardrailService` | Filtre pré/post-recherche : off-topic (patterns) + low-confidence (score seuil) |
 | `QueryReformulator` | Reformule les questions de suivi en incluant le contexte conversationnel |
@@ -168,6 +173,7 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 |------|----------------|
 | `AskQuestionUseCase` | `ConversationOrchestrator` |
 | `IngestKnowledgeUseCase` | `KnowledgeIngestionService` |
+| `SyncKnowledgeSourceUseCase` | `KnowledgeSyncService` |
 
 ### Ports OUT (dépendances inversées)
 
@@ -176,7 +182,9 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | `LlmPort` | Générer une réponse complète (blocking `.call()`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
 | `LlmStreamingPort` | Streamer les tokens de réponse (`Flux<String>`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
 | `VectorSearchPort` | Chercher les chunks pertinents (global ou filtré par domaine) | `PgVectorStoreAdapter` |
-| `VectorStorePort` | Stocker un chunk avec ses embeddings et tag de domaine | `PgVectorStoreAdapter` |
+| `VectorStorePort` | Stocker un chunk (`store` legacy + `storeChunk` avec métadonnées enrichies depuis un `SourceDocument`) et supprimer par source (`deleteBySource`) | `PgVectorStoreAdapter` |
+| `KnowledgeSourceConnector` | Lister les `SourceDocument` d'une source (`sourceType()` + `fetchAll()`) — un connecteur par type de source | `MarkdownFolderConnector` (référence) ; Confluence/PDF/DB à venir |
+| `KnowledgeSourceStatePort` | Ledger de synchro : hash connu, upsert, liste des ids, suppression | `JpaKnowledgeSourceStateAdapter` (table `kb_source_state`) |
 | `ConversationEventStore` | Persister les événements de conversation | `InMemoryConversationEventStore` |
 | `ConversationStore` | Charger/sauver l'état d'une session (`load`/`save`) | `InMemoryConversationStore` (Redis en Phase 2) |
 
@@ -335,6 +343,65 @@ Chaque chunk est ensuite :
 - Stocké dans pgvector avec index HNSW pour recherche rapide
 - Annoté avec ses métadonnées (source, section, index, **domain**)
 - Filtrable par domaine lors de la recherche vectorielle (via `FilterExpression`)
+
+## Deux modèles d'IA distincts : LLM (génération) vs Embedding (vectorisation)
+
+Le système utilise **deux modèles d'IA séparés**, à ne pas confondre :
+
+| Rôle | Modèle (défaut) | Fournisseur | Quand |
+|------|-----------------|-------------|-------|
+| **LLM / chat** (rédige la réponse) | `mistral-small-latest` | **Mistral AI** (API cloud) | À chaque génération de réponse |
+| **Embedding** (texte → vecteur) | `nomic-embed-text` (768 dim) | **Ollama** (local) | À l'ingestion (chaque chunk) ET à chaque requête (la question) |
+
+> Le provider LLM est configurable (`voice-support.llm.provider` : `mistral-api` par défaut, `ollama` en alternative). L'embedding est aujourd'hui **toujours** servi par Ollama : `MistralAiEmbeddingAutoConfiguration` est exclu dans `VoiceSupportApplication`. Confier les embeddings à Mistral (`mistral-embed`, 1024 dim) impliquerait de changer `pgvector.dimensions` et de recréer la table `vector_store` + re-synchroniser.
+
+## Base de connaissance multi-sources (synchronisation)
+
+Au-delà de l'upload ponctuel (`POST /api/knowledge/ingest`), la KB est alimentée par des **connecteurs de source** synchronisés vers un format **pivot** unique (`SourceDocument`). Cela permet d'ajouter des sources hétérogènes (Markdown, Confluence, PDF, base de données) sans toucher au cœur.
+
+```mermaid
+graph TB
+    subgraph sources ["Sources (un connecteur par type)"]
+        MD["MarkdownFolderConnector<br/>knowledge-base/*.md"]
+        FUT["Confluence / PDF / DB<br/>(à venir)"]
+    end
+
+    subgraph domain ["Domaine"]
+        SYNC["KnowledgeSyncService"]
+        CHUNK["TextChunker"]
+    end
+
+    subgraph store ["PostgreSQL (une seule base)"]
+        LEDGER[("kb_source_state<br/>ledger de synchro")]
+        VEC[("vector_store<br/>chunks + embeddings + metadata JSONB")]
+    end
+
+    OLLAMA["Ollama<br/>nomic-embed-text"]
+    SCHED["KnowledgeSyncScheduler<br/>cron (pull planifié)"]
+    REST["POST /api/knowledge/sync"]
+
+    SCHED --> SYNC
+    REST --> SYNC
+    MD -->|"SourceDocument (pivot)"| SYNC
+    FUT -.->|"SourceDocument (pivot)"| SYNC
+    SYNC -->|"hash connu ? upsert"| LEDGER
+    SYNC --> CHUNK
+    CHUNK -->|"chunks"| VEC
+    SYNC -->|"embedding"| OLLAMA
+    OLLAMA -->|"vecteurs 768d"| VEC
+```
+
+**Boucle de synchro (idempotente) par source :**
+
+1. Le connecteur retourne tous ses `SourceDocument` (`fetchAll()`), chacun portant un `contentHash` (SHA-256).
+2. Pour chaque document : si le hash est identique à celui du ledger → **skip** (aucun re-embed). Sinon → `deleteBySource` puis re-chunk + re-store, et mise à jour du ledger.
+3. **Deletion-diff** : tout `sourceId` présent dans le ledger mais absent de la source est supprimé du vector store et du ledger.
+
+**Connecteur de référence — `MarkdownFolderConnector` :** lit `knowledge-base/*.md`, résout le `domain` depuis un **front-matter YAML** (`domain: billing`), `sourceId` = nom de fichier, `updatedAt` = date de modification du fichier. Il remplace le seeding `curl` manuel.
+
+**Stockage :** tout vit dans **un seul Postgres** (image `pgvector/pgvector`). La table `vector_store` (gérée par Spring AI) stocke contenu + embeddings + métadonnées en **JSONB** (donc enrichir les métadonnées ne demande aucun `ALTER`). La table `kb_source_state` (JPA, Hibernate `ddl-auto: update`) ne stocke que la comptabilité de synchro (hash, compteurs), pas le contenu.
+
+**Planification :** `KnowledgeSyncScheduler` exécute `syncAll()` via cron (`voice-support.knowledge.sync-cron`, défaut horaire). Mettre `KB_SYNC_CRON=-` désactive la synchro planifiée.
 
 ## Détection d'escalade
 
@@ -589,3 +656,23 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 | Dépendances | légères, sans Pipecat sur le hot path | aiortc + runner + prebuilt |
 
 **Statut** : B est une **piste d'évaluation**, pas un remplacement décidé. L'arbitrage A vs B (latence mesurée, robustesse VAD télécom réelle, richesse UI) est à trancher au jalon de validation Phase 1.
+
+### ADR-011 : Ingestion KB multi-sources via format pivot + synchro idempotente
+
+**Contexte** : la KB n'était alimentée que par un upload manuel (`POST /api/knowledge/ingest`) de fichiers Markdown. Pour un déploiement réel, le contenu vient de sources hétérogènes et vivantes (Confluence/wiki, PDF, base de données) qui changent dans le temps — il faut les ingérer, détecter les mises à jour et les suppressions, sans dupliquer la logique par source.
+
+**Décision** : introduire un **socle source-agnostique** (hexagonal) :
+1. **Format pivot `SourceDocument`** : toute source est normalisée vers ce modèle avant ingestion (identité `sourceType`/`sourceId`, contenu, `domain`, `contentHash`, `updatedAt`, `url`).
+2. **Port `KnowledgeSourceConnector`** : un connecteur par type de source (`fetchAll()`), le premier étant `MarkdownFolderConnector` (référence, front-matter YAML).
+3. **`KnowledgeSyncService`** : synchro idempotente pilotée par `contentHash` (skip/upsert/deletion-diff), réutilisant `TextChunker`.
+4. **Ledger `kb_source_state`** (port `KnowledgeSourceStatePort`, adapter JPA) : bookkeeping hash/compteurs pour l'idempotence et la détection de suppression.
+5. **Pull planifié** (`KnowledgeSyncScheduler`, cron) + déclenchement manuel (`POST /api/knowledge/sync[/{sourceType}]`).
+
+**Raisons** :
+- **Ajout de source = un seul connecteur** : aucun impact sur le cœur (le scheduler injecte automatiquement tous les `KnowledgeSourceConnector`).
+- **Idempotent et économe** : un document inchangé n'est pas ré-embeddé (coût/latence évités).
+- **Pas de migration de schéma vectoriel** : les métadonnées enrichies tiennent dans la colonne JSONB de `vector_store` ; seule la table de ledger est ajoutée (auto-créée par Hibernate).
+- **Cohérent avec l'existant** : l'upload ponctuel `/ingest` reste disponible (rétrocompatible).
+- **Pure domain** : `SourceDocument`, `KnowledgeSyncService`, `TextChunker` sont du domaine pur, testés avec des fakes.
+
+**Statut** : Lot 0 (socle + connecteur Markdown de référence) livré. Connecteurs réels (Confluence/PDF/DB) et citations enrichies (`url`/`title`) à suivre.

@@ -316,10 +316,20 @@ L'application est accessible sur http://localhost:5173.
 
 ### 7. Ingérer la base de connaissance
 
+Méthode recommandée — **synchronisation multi-sources** (lit `knowledge-base/*.md`, le `domain` venant du front-matter YAML de chaque fichier) :
+
+```bash
+curl -X POST http://localhost:8081/api/knowledge/sync
+# -> { "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }
+```
+
+La synchro est idempotente (relancer = `skipped` si rien n'a changé) et tourne aussi via un scheduler cron (`voice-support.knowledge.sync-cron`). Upload ponctuel d'un fichier (toujours disponible) :
+
 ```bash
 curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "file=@knowledge-base/telecom-faq.md" \
-  -F "source=telecom-faq"
+  -F "source=telecom-faq.md" \
+  -F "domain=support"
 ```
 
 ### 8. Tester en mode texte
@@ -356,9 +366,21 @@ Content-Type: multipart/form-data
 Params:
   file (MultipartFile) — fichier Markdown ou texte à ingérer
   source (string, optional) — nom de la source
+  domain (string, optional) — tag de domaine (support|billing|commercial)
 
-Response: { "status": "ingested", "source": "...", "chunks_created": 17 }
+Response: { "status": "ingested", "source": "...", "domain": "...", "chunks_created": 17 }
 ```
+
+### Synchronisation multi-sources
+
+```
+POST /api/knowledge/sync               — synchronise toutes les sources
+POST /api/knowledge/sync/{sourceType}  — synchronise une source (ex: markdown)
+
+Response: { "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }
+```
+
+Connecteurs branchés via le port `KnowledgeSourceConnector` (référence : `MarkdownFolderConnector` lisant `knowledge-base/*.md` avec front-matter YAML `domain:`). Idempotent via `content_hash` (table `kb_source_state`) ; pull planifié via cron.
 
 ### Admin Dashboard
 
@@ -419,14 +441,16 @@ voice-support-bot/
 ├── backend/                                # Java backend (RAG + LLM + domain)
 │   └── src/main/java/com/voicesupport/
 │       ├── domain/                         # Logique métier pure (aucune dépendance Spring)
-│       │   ├── model/                      #   Conversation, Citation, ConversationEvent
-│       │   ├── port/in/                    #   AskQuestionUseCase, IngestKnowledgeUseCase
-│       │   ├── port/out/                   #   LlmPort, VectorSearchPort, VectorStorePort
-│       │   └── service/                    #   ConversationService, EscalationDetector
+│       │   ├── model/                      #   Conversation, Citation, SourceDocument, SyncReport, ContentHash
+│       │   ├── port/in/                    #   AskQuestionUseCase, IngestKnowledgeUseCase, SyncKnowledgeSourceUseCase
+│       │   ├── port/out/                   #   LlmPort, VectorSearchPort/StorePort, KnowledgeSourceConnector/StatePort
+│       │   └── service/                    #   ConversationService, KnowledgeSyncService, TextChunker, EscalationDetector
 │       └── infrastructure/                 # Implémentations techniques
-│           ├── adapter/in/rest/            #   Controllers REST
-│           ├── adapter/out/               #   Ollama, pgvector, persistence adapters
-│           └── config/                     #   DomainServiceConfig
+│           ├── adapter/in/rest/            #   Controllers REST (dont KnowledgeController: /ingest + /sync)
+│           ├── adapter/out/source/         #   MarkdownFolderConnector (connecteurs KB)
+│           ├── adapter/out/                #   Ollama, pgvector, persistence (ledger kb_source_state)
+│           ├── scheduler/                  #   KnowledgeSyncScheduler (pull planifié cron)
+│           └── config/                     #   DomainServiceConfig, SchedulingConfig
 ├── voice-agent/                            # Python Pipecat agent (orchestration vocale)
 │   ├── agent/
 │   │   ├── bridge_server.py               #   Bridge WebSocket (protocole frontend ↔ Gradium)
@@ -494,6 +518,8 @@ cd voice-agent && python -m pytest tests/
 - [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
 - [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
 - [x] Fallback Mistral API quand Ollama est trop lent (configurable via `LLM_PROVIDER`)
+- [x] Socle KB multi-sources (format pivot `SourceDocument`, synchro idempotente, connecteur Markdown, pull planifié)
+- [ ] Connecteurs KB Confluence / PDF (Tika) / base de données
 - [ ] Ingestion PDF (extraction structurée)
 - [x] Guardrails : détection "hors sujet" avec score de confiance
 - [ ] Observabilité : traces OpenTelemetry sur le pipeline
