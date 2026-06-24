@@ -141,6 +141,10 @@ Aucune modification de l'orchestrateur, du classifier ou des adapters n'est néc
 
 ## Ajouter un document à la base de connaissance
 
+> Voir aussi : [`knowledge-base-technical.md`](./knowledge-base-technical.md) (architecture
+> KB + ajout d'un connecteur) et [`knowledge-base-guide.md`](./knowledge-base-guide.md)
+> (guide de rédaction pour contributeurs).
+
 1. Créer un fichier Markdown dans `knowledge-base/` :
 
 ```markdown
@@ -243,6 +247,7 @@ première synchro : `DELETE FROM vector_store;` puis `POST /api/knowledge/sync`.
 | Barge-in ne coupe pas le bot | Bridge utilise l'ancien code | Redémarrer le bridge (`kill $(lsof -ti:8765)` puis relancer) |
 | `401 Unauthorized` de Mistral | Clé API non chargée | Lancer le backend avec `export $(cat backend/.env \| xargs) && mvn spring-boot:run` ou sourcer le `.env` avant |
 | Bot répond hors-sujet sur "Bonjour" | Guardrails non actifs | Vérifier que `GuardrailService` est dans `DomainServiceConfig` et redémarrer le backend |
+| Le bot re-salue au 1er message (strategy B) | Le message d'accueil joué par le TTS n'est pas dans l'historique backend | `bot.py` doit appeler `POST /api/conversation/seed` au `on_client_connected` ; redémarrer l'agent vocal après mise à jour |
 | Routing multi-agent ne fonctionne pas | KB non taguée | Ré-ingérer avec le paramètre `domain=support\|billing\|commercial` |
 | Réponses génériques malgré routing | Chunks sans domaine en BDD | Vider la table et ré-ingérer : `DELETE FROM vector_store;` puis re-curl ingest |
 
@@ -283,6 +288,12 @@ cd voice-agent && python -m agent.bot -t twilio -x <votre-host-public>
 
 # Tester le streaming SSE (réponse token par token)
 curl -N "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=test"
+
+# Amorcer l'historique avec le message d'accueil (utilisé par le bot Pipecat B)
+# pour éviter que le LLM ne re-salue au 1er message utilisateur
+curl -X POST http://localhost:8081/api/conversation/seed \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Bonjour ! Je suis votre assistant virtuel.", "conversation_id": "test"}'
 
 # Tester le RAG (mode synchrone)
 curl -s -X POST http://localhost:8081/api/conversation/ask \

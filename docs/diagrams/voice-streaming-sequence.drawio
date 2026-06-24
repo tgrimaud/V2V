@@ -1,0 +1,59 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Voice mode — SSE streaming sequence">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="950" math="0" adaptiveColors="auto" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Actor headers -->
+        <mxCell id="hFE" value="Frontend React" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="30" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hVAD" value="Silero VAD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="230" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hBR" value="Bridge Python" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="430" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hSTT" value="Gradium STT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="630" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hBE" value="Backend Java" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="830" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hLLM" value="Mistral API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1030" y="40" width="140" height="40" as="geometry"/></mxCell>
+        <mxCell id="hTTS" value="Gradium TTS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1230" y="40" width="140" height="40" as="geometry"/></mxCell>
+
+        <!-- Lifelines -->
+        <mxCell id="lFE" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="100" y="85" as="sourcePoint"/><mxPoint x="100" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lVAD" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="300" y="85" as="sourcePoint"/><mxPoint x="300" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lBR" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="85" as="sourcePoint"/><mxPoint x="500" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lSTT" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="85" as="sourcePoint"/><mxPoint x="700" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lBE" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="900" y="85" as="sourcePoint"/><mxPoint x="900" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lLLM" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1100" y="85" as="sourcePoint"/><mxPoint x="1100" y="840" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="lTTS" style="endArrow=none;dashed=1;html=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="85" as="sourcePoint"/><mxPoint x="1300" y="840" as="targetPoint"/></mxGeometry></mxCell>
+
+        <!-- Loop frame -->
+        <mxCell id="loop" value="loop  [pour chaque phrase detectee]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c8ebf;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=2;" vertex="1" parent="1"><mxGeometry x="470" y="480" width="850" height="180" as="geometry"/></mxCell>
+
+        <!-- Messages -->
+        <mxCell id="m1" value="start()" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="100" y="120" as="sourcePoint"/><mxPoint x="300" y="120" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m2" value="onSpeechEnd(audio Float32 16kHz)" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="300" y="160" as="sourcePoint"/><mxPoint x="100" y="160" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m3" value="PCM Int16 + END_OF_SPEECH" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="100" y="200" as="sourcePoint"/><mxPoint x="500" y="200" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m4" value="POST /api/post/speech/asr" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="240" as="sourcePoint"/><mxPoint x="700" y="240" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m5" value="NDJSON transcription (~200ms)" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="280" as="sourcePoint"/><mxPoint x="500" y="280" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m6" value="{type:transcription}" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="320" as="sourcePoint"/><mxPoint x="100" y="320" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m7" value="GET /api/conversation/ask-stream" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="360" as="sourcePoint"/><mxPoint x="900" y="360" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="nVS" value="Vector search (~200ms)" style="text;html=1;align=center;fontStyle=2;fontColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="810" y="378" width="180" height="20" as="geometry"/></mxCell>
+        <mxCell id="m8" value="ChatClient.stream()" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="900" y="410" as="sourcePoint"/><mxPoint x="1100" y="410" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m9" value="token stream" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1100" y="450" as="sourcePoint"/><mxPoint x="900" y="450" as="targetPoint"/></mxGeometry></mxCell>
+
+        <!-- inside loop -->
+        <mxCell id="m10" value="SSE event:chunk {text:token}" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="900" y="510" as="sourcePoint"/><mxPoint x="500" y="510" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m11" value="{answer_chunk: phrase complete}" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="550" as="sourcePoint"/><mxPoint x="100" y="550" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m12" value="WSS text -&gt; audio PCM" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="590" as="sourcePoint"/><mxPoint x="1300" y="590" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m13" value="PCM chunks" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="625" as="sourcePoint"/><mxPoint x="500" y="625" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m14" value="Binary WAV (1 phrase)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="650" as="sourcePoint"/><mxPoint x="100" y="650" as="targetPoint"/></mxGeometry></mxCell>
+
+        <!-- after loop -->
+        <mxCell id="m15" value="SSE event:done" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="900" y="690" as="sourcePoint"/><mxPoint x="500" y="690" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m16" value="{answer_done}" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="500" y="725" as="sourcePoint"/><mxPoint x="100" y="725" as="targetPoint"/></mxGeometry></mxCell>
+
+        <!-- barge-in -->
+        <mxCell id="bargeLbl" value="--- Barge-in (interruption) ---" style="text;html=1;align=center;fontStyle=2;fontColor=#b85450;" vertex="1" parent="1"><mxGeometry x="180" y="745" width="240" height="20" as="geometry"/></mxCell>
+        <mxCell id="m17" value="onSpeechStart() pendant lecture" style="html=1;endArrow=open;dashed=1;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="300" y="780" as="sourcePoint"/><mxPoint x="100" y="780" as="targetPoint"/></mxGeometry></mxCell>
+        <mxCell id="m18" value="BARGE_IN  (cancel SSE + TTS)" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="100" y="815" as="sourcePoint"/><mxPoint x="500" y="815" as="targetPoint"/></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

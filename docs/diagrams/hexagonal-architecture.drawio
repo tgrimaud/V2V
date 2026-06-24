@@ -1,0 +1,109 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Hexagonal architecture (ports and adapters)">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="950" math="0" adaptiveColors="auto" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="legend" value="&lt;b&gt;Legende&lt;/b&gt;  — trait plein = depend de   - - - trait pointille = implemente" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="520" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Inbound REST -->
+        <mxCell id="cIn" value="Inbound adapters (REST / Twilio)" style="swimlane;startSize=28;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="250" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="convCtrl" value="ConversationController&#xa;POST /api/conversation/ask" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="40" width="220" height="50" as="geometry"/></mxCell>
+        <mxCell id="streamCtrl" value="StreamingConversationController&#xa;/ask-stream · /seed (SSE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="105" width="220" height="50" as="geometry"/></mxCell>
+        <mxCell id="knowCtrl" value="KnowledgeController&#xa;/ingest · /sync" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="170" width="220" height="50" as="geometry"/></mxCell>
+        <mxCell id="adminCtrl" value="AdminDashboardController&#xa;GET /api/admin/*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="235" width="220" height="50" as="geometry"/></mxCell>
+        <mxCell id="healthCtrl" value="HealthController&#xa;GET /api/health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="300" width="220" height="50" as="geometry"/></mxCell>
+        <mxCell id="twilioCtrl" value="TwilioWebhookController" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cIn"><mxGeometry x="15" y="365" width="220" height="40" as="geometry"/></mxCell>
+
+        <!-- Ports IN -->
+        <mxCell id="cPin" value="Ports IN (use cases)" style="swimlane;startSize=28;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="330" y="80" width="220" height="250" as="geometry"/>
+        </mxCell>
+        <mxCell id="askUC" value="&lt;&lt;port in&gt;&gt;&#xa;AskQuestionUseCase" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPin"><mxGeometry x="15" y="40" width="190" height="50" as="geometry"/></mxCell>
+        <mxCell id="ingUC" value="&lt;&lt;port in&gt;&gt;&#xa;IngestKnowledgeUseCase" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPin"><mxGeometry x="15" y="105" width="190" height="50" as="geometry"/></mxCell>
+        <mxCell id="syncUC" value="&lt;&lt;port in&gt;&gt;&#xa;SyncKnowledgeSourceUseCase" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPin"><mxGeometry x="15" y="170" width="190" height="50" as="geometry"/></mxCell>
+
+        <!-- Domain services + models -->
+        <mxCell id="cDom" value="Domain (pure Java)" style="swimlane;startSize=28;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="590" y="80" width="270" height="620" as="geometry"/>
+        </mxCell>
+        <mxCell id="orch" value="ConversationOrchestrator&#xa;ask / askStream / seedAssistantMessage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="15" y="40" width="240" height="55" as="geometry"/></mxCell>
+        <mxCell id="ingSvc" value="KnowledgeIngestionService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="15" y="110" width="240" height="40" as="geometry"/></mxCell>
+        <mxCell id="syncSvc" value="KnowledgeSyncService&#xa;skip / upsert / deletion-diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="15" y="165" width="240" height="50" as="geometry"/></mxCell>
+        <mxCell id="chunker" value="TextChunker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="15" y="230" width="115" height="40" as="geometry"/></mxCell>
+        <mxCell id="guard" value="GuardrailService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="140" y="230" width="115" height="40" as="geometry"/></mxCell>
+        <mxCell id="intent" value="IntentClassifier" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="15" y="285" width="115" height="40" as="geometry"/></mxCell>
+        <mxCell id="escdet" value="EscalationDetector" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="cDom"><mxGeometry x="140" y="285" width="115" height="40" as="geometry"/></mxCell>
+        <mxCell id="models" value="Models" style="swimlane;startSize=22;html=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="cDom"><mxGeometry x="15" y="345" width="240" height="160" as="geometry"/></mxCell>
+        <mxCell id="mSrcDoc" value="SourceDocument (pivot)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="models"><mxGeometry x="15" y="32" width="210" height="30" as="geometry"/></mxCell>
+        <mxCell id="mSync" value="SyncReport" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="models"><mxGeometry x="15" y="70" width="210" height="30" as="geometry"/></mxCell>
+        <mxCell id="mCit" value="Citation / ConversationResponse" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="models"><mxGeometry x="15" y="108" width="210" height="30" as="geometry"/></mxCell>
+
+        <!-- Ports OUT -->
+        <mxCell id="cPout" value="Ports OUT (dependencies)" style="swimlane;startSize=28;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="900" y="80" width="240" height="620" as="geometry"/>
+        </mxCell>
+        <mxCell id="pLlm" value="&lt;&lt;port out&gt;&gt; LlmPort" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="40" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pLlmS" value="&lt;&lt;port out&gt;&gt; LlmStreamingPort" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="90" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pVs" value="&lt;&lt;port out&gt;&gt; VectorSearchPort" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="140" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pVst" value="&lt;&lt;port out&gt;&gt; VectorStorePort" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="190" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pConn" value="&lt;&lt;port out&gt;&gt; KnowledgeSourceConnector" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="240" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pState" value="&lt;&lt;port out&gt;&gt; KnowledgeSourceStatePort" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="290" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pConvStore" value="&lt;&lt;port out&gt;&gt; ConversationStore" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="340" width="210" height="38" as="geometry"/></mxCell>
+        <mxCell id="pEvt" value="&lt;&lt;port out&gt;&gt; ConversationEventStore" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="cPout"><mxGeometry x="15" y="390" width="210" height="38" as="geometry"/></mxCell>
+
+        <!-- Adapters OUT -->
+        <mxCell id="cAout" value="Outbound adapters" style="swimlane;startSize=28;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="80" width="260" height="620" as="geometry"/>
+        </mxCell>
+        <mxCell id="aMistral" value="MistralLlmAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="40" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aOllama" value="OllamaLlmAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="95" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aPg" value="PgVectorStoreAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="150" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aMd" value="MarkdownFolderConnector" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="205" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aJpa" value="JpaKnowledgeSourceStateAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="260" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aConvStore" value="InMemoryConversationStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="315" width="230" height="40" as="geometry"/></mxCell>
+        <mxCell id="aEvt" value="InMemoryConversationEventStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="cAout"><mxGeometry x="15" y="370" width="230" height="40" as="geometry"/></mxCell>
+
+        <!-- Edges: controllers -> ports in / orchestrator -->
+        <mxCell id="x1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="convCtrl" target="askUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="streamCtrl" target="orch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="knowCtrl" target="ingUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="knowCtrl" target="syncUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="adminCtrl" target="pEvt"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- implements ports in (dashed) -->
+        <mxCell id="x6" value="implements" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="orch" target="askUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x7" value="implements" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="ingSvc" target="ingUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x8" value="implements" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="syncSvc" target="syncUC"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- services -> ports out -->
+        <mxCell id="x9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="pLlm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="pLlmS"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="pVs"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="pConvStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="pEvt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ingSvc" target="pVst"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="syncSvc" target="pConn"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="syncSvc" target="pState"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="syncSvc" target="pVst"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- adapters implement ports out (dashed) -->
+        <mxCell id="x18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aMistral" target="pLlm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aMistral" target="pLlmS"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aOllama" target="pLlm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aOllama" target="pLlmS"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aPg" target="pVs"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aPg" target="pVst"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aMd" target="pConn"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aJpa" target="pState"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x26" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aConvStore" target="pConvStore"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="x27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1" source="aEvt" target="pEvt"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

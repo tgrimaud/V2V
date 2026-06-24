@@ -117,6 +117,7 @@ Le système appelle les services externes suivants :
 | **TTS Synthesis** | WSS | `gradium_tts.py` → `wss://api.gradium.ai/api/speech/tts` | Texte → PCM audio chunks |
 | **RAG Query (streaming)** | HTTP SSE | `bridge_server.py` → Backend :8081 `/api/conversation/ask-stream` | Question → SSE token stream |
 | **RAG Query (fallback)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
+| **Greeting seed** | HTTP POST | `bot.py` → Backend :8081 `/api/conversation/seed` | Message d'accueil (strategy B) enregistré dans l'historique pour éviter une re-salutation |
 
 ## Séparation des responsabilités
 
@@ -356,6 +357,11 @@ Le système utilise **deux modèles d'IA séparés**, à ne pas confondre :
 > Le provider LLM est configurable (`voice-support.llm.provider` : `mistral-api` par défaut, `ollama` en alternative). L'embedding est aujourd'hui **toujours** servi par Ollama : `MistralAiEmbeddingAutoConfiguration` est exclu dans `VoiceSupportApplication`. Confier les embeddings à Mistral (`mistral-embed`, 1024 dim) impliquerait de changer `pgvector.dimensions` et de recréer la table `vector_store` + re-synchroniser.
 
 ## Base de connaissance multi-sources (synchronisation)
+
+> Documentation dédiée : [`knowledge-base-technical.md`](./knowledge-base-technical.md)
+> (architecture détaillée + extension par connecteurs) et
+> [`knowledge-base-guide.md`](./knowledge-base-guide.md) (rédaction/publication de
+> contenu pour les contributeurs non-dev).
 
 Au-delà de l'upload ponctuel (`POST /api/knowledge/ingest`), la KB est alimentée par des **connecteurs de source** synchronisés vers un format **pivot** unique (`SourceDocument`). Cela permet d'ajouter des sources hétérogènes (Markdown, Confluence, PDF, base de données) sans toucher au cœur.
 
@@ -640,6 +646,8 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 **Composants** :
 - `agent/bot.py` : `bot(runner_args)` + `create_transport(runner_args, transport_params)` ; Silero VAD sur les deux canaux (endpointing **et** barge-in gérés par le framework).
 - `agent/streaming_rag_processor.py` : `iter_answer_sentences()` (générateur pur, testé) consomme le SSE `/ask-stream` et pousse un `TextFrame` **par phrase** → la TTS démarre dès la 1ère phrase. Logs `[LATENCY] step=llm_first_token|rag_total` au même format que A pour comparaison directe.
+
+**Amorçage de l'historique (anti re-salutation)** : le message d'accueil de B (`WELCOME_MESSAGE`) est joué côté client par le TTS au `on_client_connected` et n'atteint donc **pas** le backend. Sans correctif, l'historique backend de la conversation est vide quand le premier message utilisateur arrive, et le LLM re-salue (« Bonjour, … »). À la connexion, `bot.py` appelle `POST /api/conversation/seed` (→ `ConversationOrchestrator.seedAssistantMessage`) pour enregistrer le message d'accueil comme un tour assistant. Le premier tour utilisateur voit alors un contexte assistant antérieur et le LLM ne re-salue plus. En stratégie A, la salutation provient du guardrail backend, donc elle est déjà dans l'historique — d'où l'asymétrie.
 
 **Coexistence** : A (bridge 8765/8766, frontend 5173) et B (runner 7860) tournent en parallèle, backend Java partagé (8081). Aucun fichier de A modifié.
 

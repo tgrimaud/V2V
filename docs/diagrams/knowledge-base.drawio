@@ -32,7 +32,7 @@
         <mxCell id="kc" value="KnowledgeController&#xa;POST /ingest · /sync" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="be">
           <mxGeometry x="205" y="50" width="180" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="scc" value="StreamingConversation&#xa;Controller (SSE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="be">
+        <mxCell id="scc" value="StreamingConversation&#xa;Controller (SSE · /ask-stream · /seed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="be">
           <mxGeometry x="400" y="50" width="150" height="55" as="geometry"/>
         </mxCell>
         <mxCell id="sync" value="&lt;b&gt;KnowledgeSyncService&lt;/b&gt;&#xa;skip/upsert/deletion-diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="be">

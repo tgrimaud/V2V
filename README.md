@@ -36,6 +36,9 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 
 ### Diagramme de dépendances (Hexagonal)
 
+> STT/TTS ne sont **pas** dans le backend Java : ils sont assurés par l'agent
+> vocal Python (Gradium). Le backend expose uniquement le RAG/domain via HTTP.
+
 ```mermaid
 classDiagram
     direction TB
@@ -44,52 +47,77 @@ classDiagram
     namespace Domain {
         class AskQuestionUseCase {
             <<port in>>
-            +ask(question, conversationId) ConversationResponse
+            +ask(conversationId, question) ConversationResponse
         }
         class IngestKnowledgeUseCase {
             <<port in>>
-            +ingest(content, source) int
+            +ingest(content, source, domain) int
+        }
+        class SyncKnowledgeSourceUseCase {
+            <<port in>>
+            +syncAll() SyncReport
+            +sync(sourceType) SyncReport
         }
         class LlmPort {
             <<port out>>
-            +generateAnswer(question, context, history) String
+            +generateAnswer(question, context, history, systemPrompt) String
+        }
+        class LlmStreamingPort {
+            <<port out>>
+            +streamAnswer(question, context, history, systemPrompt) Flux~String~
         }
         class VectorSearchPort {
             <<port out>>
-            +search(query, topK) List~KnowledgeChunk~
+            +searchRelevant(query, topK, domain) List~Citation~
         }
         class VectorStorePort {
             <<port out>>
-            +store(chunks) void
+            +storeChunk(doc, content, section, idx) void
+            +deleteBySource(sourceType, sourceId) void
+        }
+        class KnowledgeSourceConnector {
+            <<port out>>
+            +sourceType() String
+            +fetchAll() List~SourceDocument~
+        }
+        class KnowledgeSourceStatePort {
+            <<port out>>
+            sync ledger access
+        }
+        class ConversationStore {
+            <<port out>>
         }
         class ConversationEventStore {
             <<port out>>
-            +save(event) void
         }
-        class SpeechToTextPort {
-            <<port out>>
-            +transcribe(audio) String
-        }
-        class TextToSpeechPort {
-            <<port out>>
-            +synthesize(text) byte[]
-        }
-        class ConversationService {
+        class ConversationOrchestrator {
             <<service>>
+            RAG + multi-agent routing
+            ask / askStream / seedAssistantMessage
         }
         class KnowledgeIngestionService {
             <<service>>
         }
-        class EscalationDetector {
+        class KnowledgeSyncService {
+            <<service>>
+            idempotent multi-source sync
+        }
+        class TextChunker {
             <<service>>
         }
-        class ConversationResponse {
+        class GuardrailService {
+            <<service>>
+        }
+        class IntentClassifier {
+            <<service>>
+        }
+        class SourceDocument {
+            <<model>>
+        }
+        class SyncReport {
             <<model>>
         }
         class Citation {
-            <<model>>
-        }
-        class KnowledgeChunk {
             <<model>>
         }
     }
@@ -100,9 +128,15 @@ classDiagram
             <<REST>>
             POST /api/conversation/ask
         }
+        class StreamingConversationController {
+            <<REST/SSE>>
+            GET /api/conversation/ask-stream
+            POST /api/conversation/seed
+        }
         class KnowledgeController {
             <<REST>>
             POST /api/knowledge/ingest
+            POST /api/knowledge/sync
         }
         class AdminDashboardController {
             <<REST>>
@@ -111,9 +145,6 @@ classDiagram
         class HealthController {
             <<REST>>
             GET /api/health
-        }
-        class VoiceWebSocketHandler {
-            <<WebSocket>>
         }
         class TwilioWebhookController {
             <<Twilio>>
@@ -134,24 +165,32 @@ classDiagram
             <<adapter>>
             PostgreSQL + pgvector
         }
+        class MarkdownFolderConnector {
+            <<adapter>>
+            knowledge-base/*.md
+        }
+        class JpaKnowledgeSourceStateAdapter {
+            <<adapter>>
+            kb_source_state
+        }
+        class InMemoryConversationStore {
+            <<adapter>>
+        }
         class InMemoryConversationEventStore {
-            <<adapter>>
-        }
-        class DeepgramSttAdapter {
-            <<adapter>>
-        }
-        class PiperTtsAdapter {
             <<adapter>>
         }
     }
 
-    %% ─── CONFIGURATION ───
+    %% ─── SCHEDULER + CONFIGURATION ───
     namespace Config {
+        class KnowledgeSyncScheduler {
+            <<@Scheduled cron>>
+        }
         class DomainServiceConfig {
             <<Spring @Configuration>>
             wires ports to adapters
         }
-        class VoiceConfig {
+        class SchedulingConfig {
             <<Spring @Configuration>>
         }
     }
@@ -159,42 +198,55 @@ classDiagram
     %% ─── RELATIONSHIPS ───
 
     %% Services implement ports in
-    ConversationService ..|> AskQuestionUseCase
+    ConversationOrchestrator ..|> AskQuestionUseCase
     KnowledgeIngestionService ..|> IngestKnowledgeUseCase
+    KnowledgeSyncService ..|> SyncKnowledgeSourceUseCase
 
     %% Services depend on ports out
-    ConversationService --> LlmPort
-    ConversationService --> VectorSearchPort
-    ConversationService --> ConversationEventStore
-    ConversationService --> EscalationDetector
+    ConversationOrchestrator --> LlmPort
+    ConversationOrchestrator --> LlmStreamingPort
+    ConversationOrchestrator --> VectorSearchPort
+    ConversationOrchestrator --> ConversationStore
+    ConversationOrchestrator --> ConversationEventStore
+    ConversationOrchestrator --> GuardrailService
+    ConversationOrchestrator --> IntentClassifier
     KnowledgeIngestionService --> VectorStorePort
+    KnowledgeIngestionService --> TextChunker
+    KnowledgeSyncService --> KnowledgeSourceConnector
+    KnowledgeSyncService --> KnowledgeSourceStatePort
+    KnowledgeSyncService --> VectorStorePort
+    KnowledgeSyncService --> TextChunker
 
-    %% Services produce domain models
-    ConversationService --> ConversationResponse
-    ConversationResponse --> Citation
-    VectorSearchPort --> KnowledgeChunk
+    %% Models
+    ConversationOrchestrator --> Citation
+    KnowledgeSyncService --> SyncReport
+    KnowledgeSourceConnector --> SourceDocument
 
     %% Adapters implement ports out
     MistralLlmAdapter ..|> LlmPort
+    MistralLlmAdapter ..|> LlmStreamingPort
     OllamaLlmAdapter ..|> LlmPort
+    OllamaLlmAdapter ..|> LlmStreamingPort
     PgVectorStoreAdapter ..|> VectorStorePort
     PgVectorStoreAdapter ..|> VectorSearchPort
+    MarkdownFolderConnector ..|> KnowledgeSourceConnector
+    JpaKnowledgeSourceStateAdapter ..|> KnowledgeSourceStatePort
+    InMemoryConversationStore ..|> ConversationStore
     InMemoryConversationEventStore ..|> ConversationEventStore
-    DeepgramSttAdapter ..|> SpeechToTextPort
-    PiperTtsAdapter ..|> TextToSpeechPort
 
     %% Inbound adapters use ports in
     ConversationController --> AskQuestionUseCase
+    StreamingConversationController --> ConversationOrchestrator
     KnowledgeController --> IngestKnowledgeUseCase
+    KnowledgeController --> SyncKnowledgeSourceUseCase
     AdminDashboardController --> ConversationEventStore
 
-    %% Config wires everything
-    DomainServiceConfig ..> ConversationService
-    DomainServiceConfig ..> MistralLlmAdapter
-    DomainServiceConfig ..> OllamaLlmAdapter
-    DomainServiceConfig ..> PgVectorStoreAdapter
-    VoiceConfig ..> DeepgramSttAdapter
-    VoiceConfig ..> PiperTtsAdapter
+    %% Scheduler + config
+    KnowledgeSyncScheduler --> SyncKnowledgeSourceUseCase
+    DomainServiceConfig ..> ConversationOrchestrator
+    DomainServiceConfig ..> KnowledgeSyncService
+    DomainServiceConfig ..> MarkdownFolderConnector
+    SchedulingConfig ..> KnowledgeSyncScheduler
 ```
 
 ### Flux principal (séquence)
@@ -245,6 +297,16 @@ Browser/Téléphone
            │  pgvector)   │
            └─────────────┘
 ```
+
+## Documentation
+
+| Document | Public | Contenu |
+|----------|--------|---------|
+| [`docs/architecture.md`](docs/architecture.md) | Dev / archi | Architecture complète, pipeline RAG, guardrails, multi-agent, ADRs |
+| [`docs/development-guide.md`](docs/development-guide.md) | Dev | Conventions, ajout de providers/agents, commandes utiles, troubleshooting |
+| [`docs/knowledge-base-technical.md`](docs/knowledge-base-technical.md) | Dev / archi | Fonctionnement et architecture de la base de connaissance (ingestion, synchro, vector store, extension par connecteurs) |
+| [`docs/knowledge-base-guide.md`](docs/knowledge-base-guide.md) | Contributeurs (non-dev) | Comment rédiger, ajouter et publier du contenu dans la base de connaissance |
+| [`docs/diagrams/`](docs/diagrams/) | Tous | Versions **draw.io** éditables de tous les diagrammes d'archi et de classe (overview, hexagonal, séquence vocale, KB) |
 
 ## Démarrage rapide
 
@@ -356,6 +418,31 @@ Response: {
   "conversationId": "..."
 }
 ```
+
+### Conversation (streaming SSE — utilisé par le mode vocal)
+
+```
+GET /api/conversation/ask-stream?question=...&conversation_id=...
+Accept: text/event-stream
+
+Events: start (agent), chunk (token), done (answer + citations), error
+```
+
+### Conversation (seed — amorçage de l'historique)
+
+```
+POST /api/conversation/seed
+Content-Type: application/json
+
+Body: { "message": "...", "conversation_id": "..." }
+Response: 204 No Content
+```
+
+Enregistre un message **assistant** dans l'historique d'une conversation. Utilisé
+par le bot Pipecat (strategy B) au moment de la connexion : le message d'accueil
+est joué côté client par le TTS et n'atteint donc pas le backend ; sans cet
+amorçage, le LLM considère le premier message utilisateur comme le début de
+conversation et **re-salue**. Le seed corrige ce comportement.
 
 ### Ingestion de connaissance
 

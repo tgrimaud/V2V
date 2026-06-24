@@ -1,0 +1,158 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Architecture overview">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="950" math="0" adaptiveColors="auto" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="legend" value="&lt;b&gt;Legende&lt;/b&gt;  🟢 notre code   🔴 service externe" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="360" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Clients -->
+        <mxCell id="browser" value="👤 Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="twilio" value="👤 Twilio" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="170" width="120" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Frontend -->
+        <mxCell id="frontend" value="🟢 Frontend — React/TypeScript" style="swimlane;startSize=28;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="220" y="80" width="240" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="voicechat" value="VoiceChat + useVAD + useAudioQueue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="frontend">
+          <mxGeometry x="15" y="38" width="210" height="42" as="geometry"/>
+        </mxCell>
+
+        <!-- Voice Agent -->
+        <mxCell id="voiceAgent" value="🟢 Voice Agent — Python" style="swimlane;startSize=28;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="220" y="210" width="300" height="330" as="geometry"/>
+        </mxCell>
+        <mxCell id="bridge" value="bridge_server.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="40" width="180" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="stt" value="gradium_stt.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="95" width="180" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="splitter" value="sentence_splitter.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="140" width="180" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="ttsworker" value="TTS Worker Queue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="185" width="180" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="ttsclient" value="gradium_tts.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="230" width="180" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="bclient" value="backend_client.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="voiceAgent">
+          <mxGeometry x="20" y="275" width="180" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- Gradium -->
+        <mxCell id="gradium" value="🔴 Gradium Cloud API" style="swimlane;startSize=28;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="220" y="580" width="300" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="gstt" value="STT — api.gradium.ai" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="gradium">
+          <mxGeometry x="20" y="40" width="180" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="gtts" value="TTS — wss://api.gradium.ai" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="gradium">
+          <mxGeometry x="20" y="85" width="180" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- Java Backend -->
+        <mxCell id="backend" value="🟢 Java Backend — Spring Boot (hexagonal)" style="swimlane;startSize=28;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="120" width="540" height="560" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="adaptersIn" value="Adapters IN" style="swimlane;startSize=24;html=1;fillColor=#ebf0fb;strokeColor=#6c8ebf;" vertex="1" parent="backend">
+          <mxGeometry x="20" y="40" width="500" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="convCtrl" value="ConversationController" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="adaptersIn">
+          <mxGeometry x="15" y="34" width="220" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="streamCtrl" value="StreamingConversationController&#xa;/ask-stream · /seed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="adaptersIn">
+          <mxGeometry x="260" y="34" width="225" height="42" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="domain" value="Domain (pure Java)" style="swimlane;startSize=24;html=1;fillColor=#ebf0fb;strokeColor=#6c8ebf;" vertex="1" parent="backend">
+          <mxGeometry x="20" y="145" width="500" height="215" as="geometry"/>
+        </mxCell>
+        <mxCell id="orch" value="ConversationOrchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="domain">
+          <mxGeometry x="15" y="34" width="210" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="intent" value="IntentClassifier" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="domain">
+          <mxGeometry x="260" y="34" width="210" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="escdet" value="EscalationDetector" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="domain">
+          <mxGeometry x="15" y="90" width="210" height="38" as="geometry"/>
+        </mxCell>
+        <mxCell id="agentreg" value="AgentRegistry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="domain">
+          <mxGeometry x="260" y="90" width="210" height="38" as="geometry"/>
+        </mxCell>
+        <mxCell id="ragpipe" value="Pipeline RAG (retrieval + generation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="domain">
+          <mxGeometry x="120" y="145" width="260" height="45" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="adaptersOut" value="Adapters OUT" style="swimlane;startSize=24;html=1;fillColor=#ebf0fb;strokeColor=#6c8ebf;" vertex="1" parent="backend">
+          <mxGeometry x="20" y="375" width="500" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="mistralAd" value="MistralLlmAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="adaptersOut">
+          <mxGeometry x="15" y="40" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="ollamaAd" value="OllamaLlmAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="adaptersOut">
+          <mxGeometry x="180" y="40" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="pgAd" value="PgVectorStoreAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="adaptersOut">
+          <mxGeometry x="345" y="40" width="150" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- External services -->
+        <mxCell id="mistralApi" value="🔴 Mistral AI Cloud" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="180" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ollamaSrv" value="🔴 Ollama Local :11434" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="280" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="pgvector" value="🔴 PostgreSQL + pgvector :5433" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="500" width="180" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges: inbound -->
+        <mxCell id="o1" value="ws:8765" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="browser" target="voicechat"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o2" value="ws:8765 PCM + JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="voicechat" target="bridge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o3" value="ws:8766 μ-law" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="twilio" target="bridge"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- voice agent → gradium -->
+        <mxCell id="o4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="bridge" target="stt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o5" value="HTTPS POST" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;" edge="1" parent="1" source="stt" target="gstt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="bridge" target="splitter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="splitter" target="ttsworker"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ttsworker" target="ttsclient"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o9" value="WSS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;" edge="1" parent="1" source="ttsclient" target="gtts"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- voice agent → backend -->
+        <mxCell id="o10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="bridge" target="bclient"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o11" value="GET SSE /ask-stream" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="bclient" target="streamCtrl"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- backend internal -->
+        <mxCell id="o12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="streamCtrl" target="orch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="convCtrl" target="orch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="intent"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="intent" target="agentreg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="escdet"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="orch" target="ragpipe"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- RAG → adapters -->
+        <mxCell id="o18" value="retrieval" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ragpipe" target="pgAd"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o19" value="generation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ragpipe" target="mistralAd"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o20" value="generation (alt)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ragpipe" target="ollamaAd"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- backend → external -->
+        <mxCell id="o21" value="HTTPS streaming" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;" edge="1" parent="1" source="mistralAd" target="mistralApi"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o22" value="HTTP streaming" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;" edge="1" parent="1" source="ollamaAd" target="ollamaSrv"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o23" value="SQL + HNSW" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;" edge="1" parent="1" source="pgAd" target="pgvector"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="o24" value="embedding (nomic-embed-text)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="pgAd" target="ollamaSrv"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
