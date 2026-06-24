@@ -36,3 +36,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# draw.io desktop backup/lock files
+.$*.drawio.bkp
