@@ -21,14 +21,10 @@ from pipecat.transports.websocket.server import (
 )
 
 from agent.backend_client import RAGBackendClient
+from agent.constants import WELCOME_MESSAGE
 from agent.rag_processor import RAGProcessor
 
 load_dotenv()
-
-WELCOME_MESSAGE = (
-    "Bonjour ! Je suis votre assistant virtuel du support télécom. "
-    "Comment puis-je vous aider aujourd'hui ?"
-)
 
 
 async def run_websocket_agent():

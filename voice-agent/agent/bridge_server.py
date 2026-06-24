@@ -24,6 +24,7 @@ import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
+from agent.constants import WELCOME_MESSAGE
 from agent.gradium_stt import close_stt_client
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
@@ -58,6 +59,7 @@ async def handle_client(websocket):
     response_task: asyncio.Task | None = None
 
     try:
+        await _send_welcome(websocket, backend, conversation_id)
         async for message in websocket:
             if isinstance(message, bytes):
                 audio_buffer.extend(message)
@@ -101,6 +103,30 @@ async def handle_client(websocket):
                 pass
         await backend.close()
         print("[CLIENT] Disconnected", flush=True)
+
+
+async def _send_welcome(websocket, backend, conversation_id):
+    """Speak a scripted welcome at connection and seed it into the backend
+    history (mirrors strategy B / bot.py).
+
+    Seeding records the welcome as an assistant turn so the LLM has prior
+    context and does not greet again on the user's first message. The welcome
+    is sent through the normal answer protocol (answer_chunk -> audio ->
+    answer_done) so the frontend renders it as a regular assistant bubble.
+
+    Note: browsers may defer playback of this audio until the first user
+    gesture (autoplay policy); the text bubble always appears immediately.
+    """
+    try:
+        await backend.seed_greeting(WELCOME_MESSAGE, conversation_id)
+    except Exception as e:
+        print(f"[WELCOME] Failed to seed welcome in backend: {e}", flush=True)
+
+    await websocket.send(json.dumps({"type": "answer_chunk", "text": WELCOME_MESSAGE}))
+    audio = await synthesize_speech(WELCOME_MESSAGE, VOICE_MAP[DEFAULT_LANGUAGE], GRADIUM_API_KEY)
+    if audio:
+        await websocket.send(audio)
+    await websocket.send(json.dumps({"type": "answer_done", "text": WELCOME_MESSAGE}))
 
 
 async def _handle_end_of_speech(websocket, backend, audio_buffer, language, conversation_id):

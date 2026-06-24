@@ -41,6 +41,7 @@ from pipecat.services.gradium.tts import GradiumTTSService
 from pipecat.transports.base_transport import TransportParams
 
 from agent.backend_client import RAGBackendClient
+from agent.constants import WELCOME_MESSAGE
 from agent.streaming_rag_processor import StreamingRAGProcessor
 
 load_dotenv()
@@ -48,11 +49,6 @@ load_dotenv()
 GRADIUM_API_KEY = os.getenv("GRADIUM_API_KEY")
 GRADIUM_VOICE_ID = os.getenv("GRADIUM_VOICE_ID", "default")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8081")
-
-WELCOME_MESSAGE = (
-    "Bonjour ! Je suis votre assistant virtuel du support télécom. "
-    "Comment puis-je vous aider aujourd'hui ?"
-)
 
 
 def _transport_params() -> dict:
