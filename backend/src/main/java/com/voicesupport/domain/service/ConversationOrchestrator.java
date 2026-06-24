@@ -55,13 +55,14 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
     public ConversationResponse ask(String conversationId, String question) {
         long startTime = System.currentTimeMillis();
         Conversation conversation = getOrCreateConversation(conversationId);
+        boolean alreadyGreeted = conversation.hasAssistantTurn();
         conversation.addUserTurn(question);
 
         if (escalationDetector.shouldEscalate(question)) {
             return handleEscalation(conversation, conversationId, question, startTime, "web");
         }
 
-        GuardrailResult preCheck = guardrailService.checkBeforeSearch(question);
+        GuardrailResult preCheck = guardrailService.checkBeforeSearch(question, alreadyGreeted);
         if (preCheck.blocked()) {
             return handleGuardrailBlock(conversation, conversationId, question, preCheck, startTime, "web");
         }
@@ -92,6 +93,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
     public StreamingResult askStream(String conversationId, String question) {
         long startTime = System.currentTimeMillis();
         Conversation conversation = getOrCreateConversation(conversationId);
+        boolean alreadyGreeted = conversation.hasAssistantTurn();
         conversation.addUserTurn(question);
 
         if (escalationDetector.shouldEscalate(question)) {
@@ -103,7 +105,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
             return new StreamingResult(Flux.just(msg), List.of(), true, false, null, null);
         }
 
-        GuardrailResult preCheck = guardrailService.checkBeforeSearch(question);
+        GuardrailResult preCheck = guardrailService.checkBeforeSearch(question, alreadyGreeted);
         if (preCheck.blocked()) {
             conversation.addAssistantTurn(preCheck.fallbackMessage(), List.of());
             conversationStore.save(conversationId, conversation);

@@ -78,6 +78,10 @@ public class GuardrailService {
     }
 
     public GuardrailResult checkBeforeSearch(String question) {
+        return checkBeforeSearch(question, false);
+    }
+
+    public GuardrailResult checkBeforeSearch(String question, boolean alreadyGreeted) {
         if (question == null || question.trim().isEmpty()) {
             return GuardrailResult.pass();
         }
@@ -86,10 +90,7 @@ public class GuardrailService {
 
         for (Pattern pattern : GREETING_PATTERNS) {
             if (pattern.matcher(trimmed).find()) {
-                String message = isEnglish(trimmed)
-                        ? "Hello! How can I help you today?"
-                        : "Bonjour ! Comment puis-je vous aider ?";
-                return GuardrailResult.greeting(message);
+                return GuardrailResult.greeting(greetingMessage(trimmed, alreadyGreeted));
             }
         }
 
@@ -137,6 +138,18 @@ public class GuardrailService {
         }
 
         return GuardrailResult.pass();
+    }
+
+    private String greetingMessage(String trimmed, boolean alreadyGreeted) {
+        boolean english = isEnglish(trimmed);
+        if (alreadyGreeted) {
+            return english
+                    ? "I'm listening, how can I help you?"
+                    : "Je vous écoute, que puis-je faire pour vous ?";
+        }
+        return english
+                ? "Hello! How can I help you today?"
+                : "Bonjour ! Comment puis-je vous aider ?";
     }
 
     private boolean isEnglish(String text) {

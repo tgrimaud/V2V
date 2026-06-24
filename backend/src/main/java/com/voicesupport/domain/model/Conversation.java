@@ -34,6 +34,10 @@ public class Conversation {
         return List.copyOf(turns.subList(start, turns.size()));
     }
 
+    public boolean hasAssistantTurn() {
+        return turns.stream().anyMatch(turn -> turn.role() == Role.ASSISTANT);
+    }
+
     public String getId() { return id; }
     public List<Turn> getTurns() { return List.copyOf(turns); }
     public Instant getStartedAt() { return startedAt; }

@@ -145,6 +145,23 @@ class ConversationOrchestratorTest {
     }
 
     @Test
+    void shouldRelaunchWithoutReGreetingWhenUserGreetsAfterSeededWelcome() {
+        orchestrator.seedAssistantMessage("conv-regreet",
+                "Bonjour ! Je suis votre assistant virtuel du support télécom.");
+
+        ConversationResponse response = orchestrator.ask("conv-regreet", "Bonjour");
+
+        assertEquals("Je vous écoute, que puis-je faire pour vous ?", response.answer());
+    }
+
+    @Test
+    void shouldGreetWithBonjourOnFirstUserGreetingWithoutSeededWelcome() {
+        ConversationResponse response = orchestrator.ask("conv-firstgreet", "Bonjour");
+
+        assertEquals("Bonjour ! Comment puis-je vous aider ?", response.answer());
+    }
+
+    @Test
     void shouldIgnoreBlankSeedMessage() {
         orchestrator.seedAssistantMessage("conv-blank", "   ");
 

@@ -108,6 +108,30 @@ class GuardrailServiceTest {
     }
 
     @Test
+    void shouldGreetWithBonjourWhenConversationNotYetStarted() {
+        GuardrailResult result = service.checkBeforeSearch("Bonjour", false);
+
+        assertEquals(GuardrailResult.Verdict.GREETING, result.verdict());
+        assertEquals("Bonjour ! Comment puis-je vous aider ?", result.fallbackMessage());
+    }
+
+    @Test
+    void shouldRelaunchWithoutReGreetingWhenAlreadyGreeted() {
+        GuardrailResult result = service.checkBeforeSearch("Bonjour", true);
+
+        assertEquals(GuardrailResult.Verdict.GREETING, result.verdict());
+        assertEquals("Je vous écoute, que puis-je faire pour vous ?", result.fallbackMessage());
+    }
+
+    @Test
+    void shouldRelaunchInEnglishWhenAlreadyGreeted() {
+        GuardrailResult result = service.checkBeforeSearch("How are you?", true);
+
+        assertEquals(GuardrailResult.Verdict.GREETING, result.verdict());
+        assertEquals("I'm listening, how can I help you?", result.fallbackMessage());
+    }
+
+    @Test
     void shouldPassNullQuestion() {
         GuardrailResult result = service.checkBeforeSearch(null);
 
