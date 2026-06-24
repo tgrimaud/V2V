@@ -24,6 +24,7 @@ import websockets
 from dotenv import load_dotenv
 
 from agent.backend_client import RAGBackendClient
+from agent.gradium_stt import close_stt_client
 from agent.gradium_tts import synthesize_speech
 from agent.sentence_splitter import find_sentence_boundary
 from agent.stt_streaming import create_stt_session
@@ -335,9 +336,14 @@ async def main():
     print(f"  STT/TTS: Gradium (direct WebSocket API)", flush=True)
     print(f"  Backend: {BACKEND_URL} (SSE streaming)", flush=True)
 
-    async with websockets.serve(handle_client, WS_HOST, WS_PORT), \
-            websockets.serve(handle_telephony_client, WS_HOST, TELEPHONY_WS_PORT):
-        await asyncio.Future()
+    try:
+        async with websockets.serve(handle_client, WS_HOST, WS_PORT), \
+                websockets.serve(handle_telephony_client, WS_HOST, TELEPHONY_WS_PORT):
+            await asyncio.Future()
+    finally:
+        # The Gradium STT client is a process-wide shared connection pool
+        # (reused across all sessions) — close it once on shutdown.
+        await close_stt_client()
 
 
 def run():

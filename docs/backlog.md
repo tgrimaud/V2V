@@ -63,10 +63,14 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 - **Objectif** : court-circuiter le vector search (et idéalement le LLM) pour les
   questions ultra-courantes (« ma box ne marche pas ») → gain ~150-200 ms.
 
-### L4. Réutilisation du client HTTP STT
-- **Priorité** : 🟢 Basse (quick win) · **Statut** : En cours
-- **Objectif** : injecter un `httpx.AsyncClient` partagé dans `gradium_stt.py`
-  (comme `RAGBackendClient`) au lieu d'en créer un par appel → ~30-80 ms.
+### L4. Réutilisation du client HTTP STT — ✅ Fait
+- **Priorité** : 🟢 Basse (quick win) · **Statut** : Fait
+- **Réalisé** : `gradium_stt.py` réutilise un `httpx.AsyncClient` partagé
+  (`get_stt_client()`, pool de connexions TCP/TLS process-wide) → handshake
+  éliminé entre appels (~30-80 ms). Fermeture propre du client câblée au
+  shutdown du bridge (`close_stt_client()` dans `bridge_server.main()`).
+- **Tests** : cycle de vie du client partagé (réutilisation, fermeture,
+  recréation) dans `tests/test_gradium_stt.py`.
 
 ---
 

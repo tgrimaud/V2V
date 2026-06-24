@@ -4,7 +4,8 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from agent.gradium_stt import transcribe_audio
+import agent.gradium_stt as gradium_stt_module
+from agent.gradium_stt import close_stt_client, get_stt_client, transcribe_audio
 
 
 @pytest.mark.asyncio
@@ -86,3 +87,68 @@ async def test_transcribe_audio_returns_empty_on_silence():
     # THEN
     assert result.text is None
     assert result.error_code is None
+
+
+@pytest.mark.asyncio
+async def test_get_stt_client_reuses_same_instance():
+    """GIVEN no shared STT client yet
+    WHEN get_stt_client is called twice
+    THEN the same pooled client is returned and only one client is constructed."""
+    # GIVEN
+    gradium_stt_module._shared_client = None
+    fake = MagicMock()
+    fake.is_closed = False
+
+    # WHEN
+    with patch("agent.gradium_stt.httpx.AsyncClient", return_value=fake) as ctor:
+        first = get_stt_client()
+        second = get_stt_client()
+
+    # THEN
+    assert first is second
+    assert ctor.call_count == 1
+
+    # cleanup (avoid leaking the shared client into other tests)
+    gradium_stt_module._shared_client = None
+
+
+@pytest.mark.asyncio
+async def test_close_stt_client_closes_and_allows_recreation():
+    """GIVEN an open shared STT client
+    WHEN close_stt_client is called then get_stt_client again
+    THEN the old client is closed and a fresh one is created."""
+    # GIVEN
+    gradium_stt_module._shared_client = None
+    fake_open = MagicMock()
+    fake_open.is_closed = False
+    fake_open.aclose = AsyncMock()
+    fake_new = MagicMock()
+    fake_new.is_closed = False
+    fake_new.aclose = AsyncMock()
+
+    with patch("agent.gradium_stt.httpx.AsyncClient", side_effect=[fake_open, fake_new]):
+        original = get_stt_client()
+        # WHEN
+        await close_stt_client()
+        recreated = get_stt_client()
+
+    # THEN
+    fake_open.aclose.assert_awaited_once()
+    assert original is fake_open
+    assert recreated is fake_new
+    assert original is not recreated
+
+    # cleanup
+    gradium_stt_module._shared_client = None
+
+
+@pytest.mark.asyncio
+async def test_close_stt_client_is_noop_without_client():
+    """GIVEN no shared client
+    WHEN close_stt_client is called
+    THEN it completes without error and leaves no client."""
+    # GIVEN
+    gradium_stt_module._shared_client = None
+    # WHEN / THEN (must not raise)
+    await close_stt_client()
+    assert gradium_stt_module._shared_client is None
