@@ -127,6 +127,38 @@ class ConversationOrchestratorTest {
     }
 
     @Test
+    void shouldIncludeSeededGreetingInHistoryOfFirstUserTurn() {
+        orchestrator.seedAssistantMessage("conv-seed",
+                "Bonjour ! Je suis votre assistant virtuel du support télécom.");
+
+        vectorSearchPort.setCitations(List.of(
+                new Citation("billing-faq.md", "Factures", "Info facture", 0.9)
+        ));
+        llmPort.setAnswer("Je vois que vous avez un problème de facture.");
+
+        orchestrator.ask("conv-seed", "Bonjour, j'ai un problème de facture.");
+
+        List<String> history = llmPort.getLastHistory();
+        assertEquals(1, history.size());
+        assertTrue(history.get(0).contains("assistant virtuel"),
+                "The first user turn should see the seeded greeting in history so the LLM does not greet again");
+    }
+
+    @Test
+    void shouldIgnoreBlankSeedMessage() {
+        orchestrator.seedAssistantMessage("conv-blank", "   ");
+
+        vectorSearchPort.setCitations(List.of(
+                new Citation("billing-faq.md", "Factures", "Info facture", 0.9)
+        ));
+        llmPort.setAnswer("Réponse");
+
+        orchestrator.ask("conv-blank", "Comment voir ma facture ?");
+
+        assertTrue(llmPort.getLastHistory().isEmpty());
+    }
+
+    @Test
     void shouldStreamWithAgentRouting() {
         vectorSearchPort.setCitations(List.of(
                 new Citation("billing-faq.md", "Paiement", "RIB info", 0.9)

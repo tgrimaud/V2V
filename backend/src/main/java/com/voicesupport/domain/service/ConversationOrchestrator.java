@@ -137,6 +137,15 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         return new StreamingResult(tokenStream, citations, false, false, agent.id(), agent.name());
     }
 
+    public void seedAssistantMessage(String conversationId, String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        Conversation conversation = getOrCreateConversation(conversationId);
+        conversation.addAssistantTurn(message, List.of());
+        conversationStore.save(conversationId, conversation);
+    }
+
     public void recordCompletion(String conversationId, String question,
                                   String fullAnswer, List<Citation> citations, long startTime) {
         Conversation conversation = conversationStore.load(conversationId);

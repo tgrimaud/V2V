@@ -116,6 +116,14 @@ async def bot(runner_args: RunnerArguments):
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _client):
         logger.info(f"Client connected (conversation {conversation_id})")
+        # Record the welcome as an assistant turn in the backend so its
+        # conversation history is not empty when the first user message
+        # arrives. Without this the LLM treats that message as the start of
+        # the conversation and greets again ("Bonjour, ...").
+        try:
+            await backend.seed_greeting(WELCOME_MESSAGE, conversation_id)
+        except Exception as exc:
+            logger.warning(f"Failed to seed welcome message in backend: {exc}")
         # Send the welcome through the same LLM-response boundaries as RAG
         # answers so the RTVI observer emits botLlmStarted/botLlmText/
         # botLlmStopped uniformly. The WebRTC client (strategy B) then renders

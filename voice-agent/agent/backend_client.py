@@ -13,6 +13,18 @@ class RAGBackendClient:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=30.0)
 
+    async def seed_greeting(
+        self, message: str, conversation_id: str = "pipecat"
+    ) -> None:
+        """Record an assistant message (e.g. the spoken welcome) in the backend's
+        conversation history so the LLM has prior context and does not greet again
+        on the user's first message."""
+        response = await self._client.post(
+            "/api/conversation/seed",
+            json={"message": message, "conversation_id": conversation_id},
+        )
+        response.raise_for_status()
+
     async def ask(self, question: str, conversation_id: str = "pipecat") -> dict:
         """Send a question to the RAG backend and get an answer with citations."""
         response = await self._client.post(
