@@ -598,6 +598,8 @@ cd voice-agent && python -m pytest tests/
 
 ## Roadmap
 
+> Suivi détaillé des items ouverts (priorité, domaine, pistes) : [`docs/backlog.md`](docs/backlog.md).
+
 - [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
 - [x] VAD navigateur (Silero) — conversation naturelle sans clic stop
 - [x] Barge-in — interrompre le bot en parlant
