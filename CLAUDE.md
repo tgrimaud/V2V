@@ -12,6 +12,14 @@
 | Voice agent | `voice-agent/` | Python, bridge WebSocket + Gradium STT/TTS (+ piste Pipecat) |
 | Frontend | `frontend/` | React 19, TypeScript, Vite, TailwindCSS 4 |
 
+## Product scope V1
+
+- V1 cible les **utilisateurs finaux** et se concentre sur l'explication des ecarts de facture operateur.
+- Le bot doit rester un **assistant vocal de support operateur extensible** : billing en V1, puis technique, commercial, reclamation, retention ou selfcare plus tard.
+- Le parcours **Voice2Voice est obligatoire** : activation par telephone ou chat vocal web, avec ecrit seulement comme canal complementaire.
+- La source de verite billing est le **BSS en lecture seule**. Le LLM formule une explication traçable apres calcul deterministe des ecarts ; il ne doit pas deviner les montants.
+- Le coeur produit doit rester agnostique des fournisseurs **LLM / STT / TTS** via ports/adapters configurables pour tester facilement plusieurs solutions.
+
 ## Deux modèles d'IA distincts (NE PAS confondre)
 
 - **LLM / chat** = **Mistral AI** (API cloud, `mistral-small-latest`) — rédige la réponse. Provider configurable via `voice-support.llm.provider` (`mistral-api` défaut, `ollama` alt). Construit manuellement dans `DomainServiceConfig` (les auto-configs chat sont exclues dans `VoiceSupportApplication`).
@@ -22,6 +30,7 @@
 - Hexagonal : domaine pur (aucune annotation Spring), services exposés en `@Bean` dans `infrastructure/config/DomainServiceConfig`. Ports `domain/port/in` (use cases) et `domain/port/out` (dépendances).
 - Tests : JUnit 5, **fakes manuels (pas de Mockito)**. Pas de `@SpringBootTest` aujourd'hui → `mvn test` ne nécessite ni DB ni Ollama.
 - Stockage : **une seule base Postgres** (image `pgvector/pgvector`, port 5433). `vector_store` (Spring AI, métadonnées **JSONB**) + `kb_source_state` (ledger JPA, `ddl-auto: update`).
+- Acces BSS : privilegier un port metier typé (`BssBillingPort`) avec adapters REST/SOAP/SQL/snapshot selon le SI. Ne pas mettre un MCP generique dans le chemin critique client ; le MCP peut servir a l'exploration ou aux outils internes.
 
 ### KB multi-sources (socle Lot 0)
 

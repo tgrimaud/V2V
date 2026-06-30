@@ -23,6 +23,10 @@
 - Mettre des annotations Spring dans le domaine, ou injecter un connecteur en oubliant le `@Bean` (il ne sera pas dans `List<KnowledgeSourceConnector>`).
 - Croire que `mvn test` a besoin d'une DB/Ollama : il n'y a pas de `@SpringBootTest`, les tests sont des unités de domaine avec fakes.
 - Mettre les learnings du bot dans le `CLAUDE.md` racine de `BMad` : il concerne un autre projet (cursor-usage-dashboard). Les fichiers de connaissance du bot vivent dans `voice-support-bot/`.
+- Repartir de zero pour la V1 billing : conserver le socle voix/RAG/orchestrateur du POC, mais reconstruire le coeur metier autour du BSS et de la comparaison de factures.
+- Utiliser un MCP generique comme acces BSS principal en runtime client : preferer un port metier typé lecture seule (`BssBillingPort`) avec adapters BSS ; reserver MCP a l'exploration et aux outils internes.
+- Coupler le coeur produit a un SDK LLM/STT/TTS precis : exposer ces capacites via ports/adapters configurables pour benchmarker et changer facilement de fournisseur.
+- Fermer le produit a la facturation uniquement : V1 = explication de facture, mais l'architecture doit rester extensible a d'autres domaines support operateur.
 
 ## Checklist après changement substantiel
 

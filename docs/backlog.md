@@ -13,6 +13,21 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 
 ---
 
+## Cloud privé / cible 700 ms
+
+### P1. Pré-requis techniques pour tenir `first audio < 700 ms`
+- **Priorité** : 🔴 Haute · **Statut** : À faire
+- **Objectif** : documenter et implémenter les prérequis nécessaires pour tenir
+  une cible de latence `first audio < 700 ms` en cloud privé.
+- **À couvrir** : STT streaming réel (**L1**), TTS streaming chunké/persistant
+  (**L2**), cache sémantique (**L3**), état conversationnel partagé Redis
+  (**S1**) et observabilité par span (**O1**).
+- **Critère de validation** : mesurer le budget de latence par étape
+  (STT → retrieval → LLM first-token → TTS first-audio → réseau) et vérifier le
+  SLO sur un environnement co-localisé et pré-warmé.
+
+---
+
 ## Scalabilité & omnicanal
 
 ### S1. Backend stateless + état partagé (Redis)

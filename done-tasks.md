@@ -23,3 +23,19 @@
 - `backend/src/main/resources/application.yml` — clés `markdown-path`, `default-language`, `sync-cron`.
 - `knowledge-base/{telecom,billing,commercial}-faq.md` — front-matter `domain`.
 - `docs/{architecture.md,development-guide.md}`, `README.md`, `docs/architecture-kb.drawio` — documentation.
+
+## 2026-06-30 — Scope V1 billing Voice2Voice + decisions architecture
+
+**Summary:**
+
+- Definition du scope V1 : assistant vocal de support operateur cible utilisateurs finaux, centre sur l'explication des ecarts de factures a partir du BSS.
+- Clarification du parcours obligatoire Voice2Voice : activation par telephone ou chat vocal web, avec ecrit seulement comme canal complementaire.
+- Decision architecture : conserver le socle POC voix/RAG/orchestrateur, mais reconstruire le coeur metier autour d'un modele billing, d'un connecteur BSS lecture seule et d'un moteur deterministe de comparaison.
+- Decision integration BSS : utiliser un port metier typé et des adapters BSS, pas un MCP generique dans le chemin critique client.
+- Decision extensibilite : garder le produit ouvert a d'autres domaines support operateur et rendre le coeur agnostique des solutions LLM, STT et TTS.
+
+### Files changed
+- `docs/v1-scope.md` — scope V1 complet et exigences produit/non fonctionnelles.
+- `docs/backlog.md` — rappel des prerequis techniques pour la cible `first audio < 700 ms`.
+- `CLAUDE.md` — decisions produit et architecture a retenir.
+- `AGENTS.md` — pieges a eviter pour les futurs agents.
