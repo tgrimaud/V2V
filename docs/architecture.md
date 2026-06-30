@@ -10,7 +10,9 @@ L'architecture est **hybride** :
 - Un **frontend React** fournit l'interface utilisateur avec VAD navigateur (détection automatique de parole), WebSocket audio + streaming texte, et barge-in (interruption du bot)
 
 La cible machines/VM pour un pilote operateur V1 est detaillee dans
-[`infra-v1.md`](infra-v1.md).
+[`infra-v1.md`](infra-v1.md). Le plan d'integration BSS et du mock
+contract-compatible est detaille dans
+[`bss-integration-plan.md`](bss-integration-plan.md).
 
 ## Diagramme d'architecture
 
