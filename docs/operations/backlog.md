@@ -96,7 +96,7 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 - **Objectif** : nouveaux connecteurs au socle multi-sources pour ingérer des
   documents hétérogènes sans conversion Markdown manuelle.
 - **Pistes** : implémenter `KnowledgeSourceConnector` (`sourceType()` +
-  `fetchAll()`) — couture déjà en place (cf. `docs/knowledge-base-technical.md`).
+  `fetchAll()`) — couture déjà en place (cf. `../knowledge-base/knowledge-base-technical.md`).
 
 ### K2. Ingestion PDF (extraction structurée)
 - **Priorité** : 🟠 Moyenne · **Statut** : À faire

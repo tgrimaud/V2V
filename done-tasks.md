@@ -35,8 +35,8 @@
 - Decision extensibilite : garder le produit ouvert a d'autres domaines support operateur et rendre le coeur agnostique des solutions LLM, STT et TTS.
 
 ### Files changed
-- `docs/v1-scope.md` — scope V1 complet et exigences produit/non fonctionnelles.
-- `docs/backlog.md` — rappel des prerequis techniques pour la cible `first audio < 700 ms`.
+- `docs/product/v1-scope.md` — scope V1 complet et exigences produit/non fonctionnelles.
+- `docs/operations/backlog.md` — rappel des prerequis techniques pour la cible `first audio < 700 ms`.
 - `CLAUDE.md` — decisions produit et architecture a retenir.
 - `AGENTS.md` — pieges a eviter pour les futurs agents.
 
@@ -52,6 +52,6 @@
 ### Files changed
 - `product-backlog/` — backlog produit V1 local et migrable Jira.
 - `.cursor/skills/product-business/` — skill Product / Business local.
-- `docs/diagrams/target-v1-solution.drawio` — diagramme cible editable.
-- `docs/v1-scope.md` — ajouts sur Gradium/Pipecat, escalade humaine et exigences techniques structurantes.
+- `docs/architecture/diagrams/target-v1-solution.drawio` — diagramme cible editable.
+- `docs/product/v1-scope.md` — ajouts sur Gradium/Pipecat, escalade humaine et exigences techniques structurantes.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees.

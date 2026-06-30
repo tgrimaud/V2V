@@ -101,8 +101,8 @@ Pour eviter de disperser l'analyse, les premiers Swagger a ouvrir sont :
 
 | Ordre | Microservice | Pourquoi |
 |-------|--------------|----------|
-| 1 | `billing-api` | Verifier s'il existe une facade plus stable que `billing-service` pour factures et lignes |
-| 2 | `billing-service` | Recuperer les details facture si la facade ne suffit pas |
+| 1 | `billing-api` | Verifier s'il existe une facade plus stable que `billing-service` pour factures et lignes. Analyse comparative initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
+| 2 | `billing-service` | Recuperer historique et details facture. Analyse comparative initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
 | 3 | `accounts-service` | Relier client, compte, abonnement et contexte commercial |
 | 4 | `contracts-service` | Recuperer contrat, offre et abonnement actifs sur les periodes comparees |
 | 5 | `discounts-service` | Identifier remises, validite et expiration |

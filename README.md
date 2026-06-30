@@ -302,11 +302,12 @@ Browser/Téléphone
 
 | Document | Public | Contenu |
 |----------|--------|---------|
-| [`docs/architecture.md`](docs/architecture.md) | Dev / archi | Architecture complète, pipeline RAG, guardrails, multi-agent, ADRs |
-| [`docs/development-guide.md`](docs/development-guide.md) | Dev | Conventions, ajout de providers/agents, commandes utiles, troubleshooting |
-| [`docs/knowledge-base-technical.md`](docs/knowledge-base-technical.md) | Dev / archi | Fonctionnement et architecture de la base de connaissance (ingestion, synchro, vector store, extension par connecteurs) |
-| [`docs/knowledge-base-guide.md`](docs/knowledge-base-guide.md) | Contributeurs (non-dev) | Comment rédiger, ajouter et publier du contenu dans la base de connaissance |
-| [`docs/diagrams/`](docs/diagrams/) | Tous | Versions **draw.io** éditables de tous les diagrammes d'archi et de classe (overview, hexagonal, séquence vocale, KB) |
+| [`docs/architecture/architecture.md`](docs/architecture/architecture.md) | Dev / archi | Architecture complète, pipeline RAG, guardrails, multi-agent, ADRs |
+| [`docs/engineering/development-guide.md`](docs/engineering/development-guide.md) | Dev | Conventions, ajout de providers/agents, commandes utiles, troubleshooting |
+| [`docs/knowledge-base/knowledge-base-technical.md`](docs/knowledge-base/knowledge-base-technical.md) | Dev / archi | Fonctionnement et architecture de la base de connaissance (ingestion, synchro, vector store, extension par connecteurs) |
+| [`docs/knowledge-base/knowledge-base-guide.md`](docs/knowledge-base/knowledge-base-guide.md) | Contributeurs (non-dev) | Comment rédiger, ajouter et publier du contenu dans la base de connaissance |
+| [`docs/architecture/diagrams/`](docs/architecture/diagrams/) | Tous | Versions **draw.io** éditables des diagrammes d'architecture (overview, hexagonal, séquence vocale) |
+| [`docs/knowledge-base/diagrams/`](docs/knowledge-base/diagrams/) | Tous | Version **draw.io** éditable du diagramme de base de connaissance |
 
 ## Démarrage rapide
 
@@ -598,7 +599,7 @@ cd voice-agent && python -m pytest tests/
 
 ## Roadmap
 
-> Suivi détaillé des items ouverts (priorité, domaine, pistes) : [`docs/backlog.md`](docs/backlog.md).
+> Suivi détaillé des items ouverts (priorité, domaine, pistes) : [`docs/operations/backlog.md`](docs/operations/backlog.md).
 
 - [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
 - [x] VAD navigateur (Silero) — conversation naturelle sans clic stop

@@ -7,11 +7,12 @@ extension in VS Code / Cursor.
 
 | File | Type | Source diagram |
 |------|------|----------------|
-| [`architecture-overview.drawio`](./architecture-overview.drawio) | Component / deployment | `docs/architecture.md` § Diagramme d'architecture |
+| [`architecture-overview.drawio`](./architecture-overview.drawio) | Component / deployment | `docs/architecture/architecture.md` § Diagramme d'architecture |
 | [`hexagonal-architecture.drawio`](./hexagonal-architecture.drawio) | Class / ports & adapters | `README.md` § Diagramme de dépendances (Hexagonal) |
-| [`voice-streaming-sequence.drawio`](./voice-streaming-sequence.drawio) | Sequence | `docs/architecture.md` § Mode vocal (SSE streaming) |
-| [`knowledge-base.drawio`](./knowledge-base.drawio) | Component (KB) | `docs/architecture.md` § Base de connaissance multi-sources |
+| [`voice-streaming-sequence.drawio`](./voice-streaming-sequence.drawio) | Sequence | `docs/architecture/architecture.md` § Mode vocal (SSE streaming) |
 
-The Mermaid versions embedded in `README.md` and `docs/architecture.md` remain
+Knowledge base diagrams live in `docs/knowledge-base/diagrams/`.
+
+The Mermaid versions embedded in `README.md` and `docs/architecture/architecture.md` remain
 the source of truth for inline reading; these `.drawio` files mirror them for
 editing and export (PNG/SVG/PDF).

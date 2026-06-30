@@ -1,0 +1,22 @@
+# Voice Support Bot Documentation
+
+## Structure
+
+| Folder | Audience | Contents |
+|--------|----------|----------|
+| [`product/`](product/) | Product / delivery | V1 scope and product framing |
+| [`architecture/`](architecture/) | Architecture / engineering | System architecture, infra target and architecture diagrams |
+| [`integrations/`](integrations/) | Architecture / backend / BSS | External system integration plans and contracts |
+| [`knowledge-base/`](knowledge-base/) | Content contributors / engineering | RAG knowledge base authoring and technical docs |
+| [`engineering/`](engineering/) | Developers | Development guide and implementation conventions |
+| [`operations/`](operations/) | Delivery / ops | Operational backlog and run-oriented follow-ups |
+
+## Main Entry Points
+
+- Product scope: [`product/v1-scope.md`](product/v1-scope.md)
+- Architecture: [`architecture/architecture.md`](architecture/architecture.md)
+- Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
+- Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
+- Knowledge base guide: [`knowledge-base/knowledge-base-guide.md`](knowledge-base/knowledge-base-guide.md)
+- Development guide: [`engineering/development-guide.md`](engineering/development-guide.md)
+- Operational backlog: [`operations/backlog.md`](operations/backlog.md)

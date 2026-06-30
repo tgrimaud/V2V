@@ -141,8 +141,8 @@ Aucune modification de l'orchestrateur, du classifier ou des adapters n'est néc
 
 ## Ajouter un document à la base de connaissance
 
-> Voir aussi : [`knowledge-base-technical.md`](./knowledge-base-technical.md) (architecture
-> KB + ajout d'un connecteur) et [`knowledge-base-guide.md`](./knowledge-base-guide.md)
+> Voir aussi : [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md) (architecture
+> KB + ajout d'un connecteur) et [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md)
 > (guide de rédaction pour contributeurs).
 
 1. Créer un fichier Markdown dans `knowledge-base/` :

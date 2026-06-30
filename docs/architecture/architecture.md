@@ -12,7 +12,7 @@ L'architecture est **hybride** :
 La cible machines/VM pour un pilote operateur V1 est detaillee dans
 [`infra-v1.md`](infra-v1.md). Le plan d'integration BSS et du mock
 contract-compatible est detaille dans
-[`bss-integration-plan.md`](bss-integration-plan.md).
+[`bss-integration-plan.md`](../integrations/galaxion/bss-integration-plan.md).
 
 ## Diagramme d'architecture
 
@@ -363,9 +363,9 @@ Le système utilise **deux modèles d'IA séparés**, à ne pas confondre :
 
 ## Base de connaissance multi-sources (synchronisation)
 
-> Documentation dédiée : [`knowledge-base-technical.md`](./knowledge-base-technical.md)
+> Documentation dédiée : [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md)
 > (architecture détaillée + extension par connecteurs) et
-> [`knowledge-base-guide.md`](./knowledge-base-guide.md) (rédaction/publication de
+> [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md) (rédaction/publication de
 > contenu pour les contributeurs non-dev).
 
 Au-delà de l'upload ponctuel (`POST /api/knowledge/ingest`), la KB est alimentée par des **connecteurs de source** synchronisés vers un format **pivot** unique (`SourceDocument`). Cela permet d'ajouter des sources hétérogènes (Markdown, Confluence, PDF, base de données) sans toucher au cœur.

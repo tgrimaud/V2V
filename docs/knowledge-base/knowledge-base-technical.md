@@ -269,7 +269,7 @@ Schema is created by Hibernate (`spring.jpa.hibernate.ddl-auto: update`).
 - Each result becomes a `Citation(source, section, relevantText, score)`.
 
 The retrieved chunks feed `ConversationOrchestrator`'s RAG prompt. See
-[`architecture.md`](./architecture.md) for the full conversation pipeline,
+[`architecture.md`](../architecture/architecture.md) for the full conversation pipeline,
 guardrails, and multi-agent routing.
 
 ---
@@ -366,7 +366,7 @@ Run: `cd backend && mvn test`.
 
 ---
 
-## 14. Design decisions (see `architecture.md` for the full ADRs)
+## 14. Design decisions (see `../architecture/architecture.md` for the full ADRs)
 
 - **ADR-011 — multi-source ingestion.** A pivot `SourceDocument` + per-source
   connectors + an idempotent sync ledger decouple the core from any specific
