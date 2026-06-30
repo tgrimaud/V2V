@@ -4,15 +4,29 @@
 
 | Key | Title | Status | Priority |
 |-----|-------|--------|----------|
-| EPIC-001 | Identifier le client et recuperer son contexte de facturation | Draft | High |
-| EPIC-002 | Comparer deux factures ou periodes de facturation | Draft | High |
-| EPIC-003 | Expliquer les ecarts de facture avec preuves | Draft | High |
+| EPIC-001 | Identifier le client et recuperer son contexte de facturation | Ready for review | High |
+| EPIC-002 | Comparer deux factures ou periodes de facturation | Ready for delivery split | High |
+| EPIC-003 | Expliquer les ecarts de facture avec preuves | Ready for review | High |
 | EPIC-004 | Offrir le parcours Voice2Voice par telephone | Draft | High |
 | EPIC-005 | Offrir le parcours Voice2Voice sur page web | Draft | High |
 | EPIC-006 | Escalader vers un agent humain | Draft | High |
 | EPIC-007 | Fournir une synthese web et les preuves associees | Draft | Medium |
 | EPIC-008 | Garantir confiance, securite et audit | Draft | High |
 | EPIC-009 | Piloter qualite conversationnelle et performance V1 | Draft | Medium |
+
+## MVP Delivery Candidate
+
+| Key | Title | Status | Priority |
+|-----|-------|--------|----------|
+| US-001 | Identifier le client au debut de l'echange | Ready for review | High |
+| US-002 | Recuperer les factures disponibles | Ready for review | High |
+| US-003 | Detecter les donnees BSS insuffisantes | Ready for review | High |
+| US-004 | Selectionner deux factures ou periodes a comparer | Ready for delivery split | High |
+| US-005 | Identifier les lignes et montants qui changent | Ready for delivery split | High |
+| US-006 | Identifier les causes metier principales | Ready for delivery split | High |
+| US-007 | Recevoir une synthese des causes de hausse ou baisse | Ready for review | High |
+| US-008 | Obtenir les preuves associees a chaque cause | Ready for review | High |
+| US-009 | Expliquer une regle tarifaire associee a l'ecart | Ready for review | Medium |
 
 ## Open Questions
 

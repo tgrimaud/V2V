@@ -2,7 +2,7 @@
 
 ## EPIC-001 - Identifier le client et recuperer son contexte de facturation
 
-**Status:** Draft  
+**Status:** Ready for review  
 **Priority:** High  
 **Outcome:** Le bot sait pour quel client il travaille et dispose du contexte de facturation necessaire avant d'expliquer une difference de prix.
 
@@ -11,6 +11,19 @@
 - Identifier le client depuis le canal d'activation lorsque c'est possible.
 - Recuperer les factures, periodes et donnees billing utiles depuis la source de verite BSS.
 - Detecter les cas ou l'identification ou les donnees sont insuffisantes.
+
+### MVP Delivery Slice
+
+- Accepter un contexte client deja fourni par le canal ou par un jeu de donnees pilote.
+- Recuperer au moins deux periodes de facturation comparables pour un client identifie.
+- Bloquer l'explication quand l'identite, les periodes ou les donnees minimales ne sont pas fiables.
+- Produire un resultat fonctionnel exploitable par EPIC-002, sans imposer encore le mecanisme cible d'identification telephone ou web.
+
+### Out of Scope MVP
+
+- Enrolement client complet.
+- Authentification forte definie de bout en bout.
+- Modification ou correction de donnees BSS.
 
 ### Business Rules
 
@@ -35,7 +48,7 @@
 
 ## EPIC-002 - Comparer deux factures ou periodes de facturation
 
-**Status:** Draft  
+**Status:** Ready for delivery split  
 **Priority:** High  
 **Outcome:** Le systeme identifie les ecarts de prix entre deux factures ou periodes et produit une analyse causale metier.
 
@@ -44,6 +57,19 @@
 - Comparer les lignes apparues, disparues ou modifiees.
 - Identifier les variations de consommation, remises, proratas, options, taxes, frais ponctuels et regularisations.
 - Calculer un delta global et des deltas par cause.
+
+### MVP Delivery Slice
+
+- Comparer deux periodes explicitement selectionnees ou la derniere periode avec la precedente.
+- Identifier les lignes apparues, disparues et modifiees avec leur contribution au delta global.
+- Regrouper les differences dans un nombre limite de categories metier V1 : remise expiree, option/service, consommation hors forfait, prorata, frais ponctuel, regularisation, taxe, autre.
+- Declarer l'analyse incomplete quand la somme des causes tracees ne couvre pas le delta de maniere suffisante.
+
+### Out of Scope MVP
+
+- Prediction de prochaine facture.
+- Negociation commerciale ou proposition automatique de geste.
+- Analyse multi-clients ou multi-contrats complexe au-dela du contexte client fourni.
 
 ### Business Rules
 
@@ -63,7 +89,7 @@
 
 ## EPIC-003 - Expliquer les ecarts de facture avec preuves
 
-**Status:** Draft  
+**Status:** Ready for review  
 **Priority:** High  
 **Outcome:** Le client recoit une explication claire, fiable et appuyee sur des preuves BSS et des regles tarifaires.
 
@@ -73,6 +99,20 @@
 - Citer les preuves BSS utilisees.
 - Enrichir l'explication par la base de connaissance tarifaire.
 - Distinguer cause certaine, cause probable et donnee manquante.
+
+### MVP Delivery Slice
+
+- Commencer chaque explication par le delta global et le sens de variation.
+- Presenter les causes par impact decroissant, avec un montant quand il est confirme.
+- Associer chaque cause confirmee a au moins une preuve BSS visible ou citable.
+- Utiliser la base de connaissance uniquement pour expliquer une regle, jamais pour inventer un montant ou une cause.
+- Basculer vers une formulation prudente ou une escalade quand les preuves sont insuffisantes.
+
+### Out of Scope MVP
+
+- Reponse juridique engageante.
+- Garantie de resolution commerciale.
+- Explication d'une regle tarifaire non presente dans la base de connaissance ou les donnees BSS.
 
 ### Business Rules
 
