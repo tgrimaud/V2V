@@ -1,0 +1,241 @@
+<mxfile host="Cursor">
+  <diagram name="Solution cible V1" id="target-v1-solution">
+    <mxGraphModel dx="2200" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1050" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="&lt;b&gt;Solution cible V1 - Assistant vocal d'explication de facture operateur&lt;/b&gt;&lt;br&gt;Voice2Voice telephone + web vocal, BSS source de verite, coeur billing deterministe, IA agnostique via ports/adapters" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1500" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="channels" value="Canaux utilisateurs" style="swimlane;startSize=30;fillColor=#e8f4f8;strokeColor=#6c8ebf;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="250" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="user" value="Utilisateur final&lt;br&gt;client operateur" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="channels">
+          <mxGeometry x="55" y="50" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phone" value="Telephone&lt;br&gt;PSTN / SIP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="channels">
+          <mxGeometry x="55" y="140" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="web_voice" value="Page web&lt;br&gt;chat vocal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="channels">
+          <mxGeometry x="55" y="230" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="web_text" value="Ecrit web&lt;br&gt;canal complementaire" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="channels">
+          <mxGeometry x="55" y="320" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="realtime" value="Edge temps reel voix" style="swimlane;startSize=30;fillColor=#fff0e6;strokeColor=#d79b00;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="90" width="300" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="ingress" value="Ingress / LB&lt;br&gt;TLS + WebSocket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
+          <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="telephony" value="Connecteur telephonie&lt;br&gt;Twilio / SIP trunk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
+          <mxGeometry x="30" y="140" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="pipecat" value="Pipecat&lt;br&gt;orchestration voix temps reel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
+          <mxGeometry x="30" y="230" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="gradium" value="Adapters Gradium&lt;br&gt;STT + TTS de reference" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
+          <mxGeometry x="30" y="320" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="backend" value="Backend applicatif - coeur produit agnostique" style="swimlane;startSize=30;fillColor=#e8f5e9;strokeColor=#82b366;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="670" y="90" width="430" height="580" as="geometry" />
+        </mxCell>
+        <mxCell id="conversation_api" value="API conversation&lt;br&gt;SSE / REST / WS bridge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
+          <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="orchestrator" value="Orchestrateur / graph&lt;br&gt;conversationnel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
+          <mxGeometry x="30" y="140" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="intent_guardrails" value="Intentions + guardrails&lt;br&gt;billing / autres supports" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
+          <mxGeometry x="250" y="140" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="billing_capability" value="BillingExplanation&lt;br&gt;Capability V1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="backend">
+          <mxGeometry x="30" y="230" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="comparison" value="Moteur deterministe&lt;br&gt;comparaison factures" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="backend">
+          <mxGeometry x="30" y="320" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="explanation" value="Moteur d'explication&lt;br&gt;preuves BSS + KB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
+          <mxGeometry x="250" y="320" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="confidence" value="Politique certitude&lt;br&gt;preuve ou escalade" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="backend">
+          <mxGeometry x="140" y="450" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="data" value="Donnees et connaissance" style="swimlane;startSize=30;fillColor=#fff9e6;strokeColor=#d6b656;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="90" width="400" height="580" as="geometry" />
+        </mxCell>
+        <mxCell id="bss_port" value="BssBillingPort&lt;br&gt;contrat metier lecture seule" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="data">
+          <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="bss" value="BSS operateur&lt;br&gt;source de verite" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="data">
+          <mxGeometry x="230" y="45" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="billing_snapshot" value="Snapshot / cache&lt;br&gt;factures, contrats, offres" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="30" y="155" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="kb_connectors" value="Connecteurs KB&lt;br&gt;Markdown / PDF / Confluence / DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="30" y="270" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vector_store" value="Postgres + pgvector&lt;br&gt;chunks KB + embeddings" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="230" y="265" width="120" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="Redis&lt;br&gt;sessions + cache semantique" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="30" y="395" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="audit_store" value="Audit / event store&lt;br&gt;traces consultations" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="230" y="395" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="human" value="Escalade humaine" style="swimlane;startSize=30;fillColor=#fce4ec;strokeColor=#b85450;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="540" width="590" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="handoff" value="Handoff gateway&lt;br&gt;demande client ou incertitude" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
+          <mxGeometry x="30" y="55" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="agent" value="Agent humain&lt;br&gt;support facturation" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
+          <mxGeometry x="270" y="55" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="handoff_context" value="Resume contexte&lt;br&gt;preuves BSS + historique" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
+          <mxGeometry x="30" y="150" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ccaas" value="CCaaS / centre contact&lt;br&gt;file conseiller" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
+          <mxGeometry x="270" y="150" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ai" value="Ports IA et fournisseurs interchangeables" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="670" y="710" width="430" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="llm_port" value="LlmPort&lt;br&gt;generation / reformulation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
+          <mxGeometry x="30" y="55" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="llm_providers" value="LLM providers&lt;br&gt;Mistral / Ollama / autre" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
+          <mxGeometry x="250" y="55" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="embedding_port" value="EmbeddingPort&lt;br&gt;Ollama aujourd'hui" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
+          <mxGeometry x="30" y="145" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="voice_ports" value="SttPort / TtsPort&lt;br&gt;Gradium puis alternatives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
+          <mxGeometry x="250" y="145" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ops" value="Exploitation, securite et SLO" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="710" width="400" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="otel" value="OpenTelemetry&lt;br&gt;spans pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
+          <mxGeometry x="30" y="55" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dashboards" value="Grafana / Tempo / Loki&lt;br&gt;SLO first audio" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
+          <mxGeometry x="220" y="55" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="secrets" value="Secrets manager&lt;br&gt;cles fournisseurs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
+          <mxGeometry x="30" y="145" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rbac" value="RBAC + PII masking&lt;br&gt;logs sans donnees sensibles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
+          <mxGeometry x="220" y="145" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="&lt;b&gt;Legende&lt;/b&gt;&lt;br&gt;Vert = coeur produit&lt;br&gt;Orange = edge voix&lt;br&gt;Jaune = donnees&lt;br&gt;Violet = IA/voix interchangeable&lt;br&gt;Rouge = externe / humain&lt;br&gt;Gris = exploitation" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="830" width="250" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_phone" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="user" target="phone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_web_voice" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="user" target="web_voice">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_web_text" value="optionnel" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_voice" target="web_text">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_phone_telephony" value="audio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="phone" target="telephony">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_web_ingress" value="WebSocket" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_voice" target="ingress">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_text_ingress" value="texte" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_text" target="ingress">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_telephony_pipecat" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="telephony" target="pipecat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ingress_api" value="requete" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ingress" target="conversation_api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pipecat_api" value="texte + contexte" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="pipecat" target="conversation_api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pipecat_gradium" value="STT / TTS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="pipecat" target="gradium">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_orch" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="conversation_api" target="orchestrator">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orch_intent" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="orchestrator" target="intent_guardrails">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orch_billing" value="intention billing" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="orchestrator" target="billing_capability">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_billing_comparison" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="billing_capability" target="comparison">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_comparison_explanation" value="ecarts calcules" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="comparison" target="explanation">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_explanation_confidence" value="preuves" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="explanation" target="confidence">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_confidence_handoff" value="incertain" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="confidence" target="handoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_comparison_bssport" value="lecture BSS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="comparison" target="bss_port">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bssport_bss" value="REST / SOAP / SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="bss_port" target="bss">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bssport_snapshot" value="snapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#d6b656;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="bss_port" target="billing_snapshot">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_explanation_embedding" value="recherche KB" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="explanation" target="embedding_port">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_embedding_vector" value="similarite" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="embedding_port" target="vector_store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_kb_vector" value="ingestion" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="kb_connectors" target="vector_store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_explanation_llm" value="prompt verifie" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="explanation" target="llm_port">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_llm_providers" value="adapter" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="llm_port" target="llm_providers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_voice_ports_gradium" value="adapter initial" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="voice_ports" target="gradium">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orch_redis" value="session" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="orchestrator" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_audit" value="audit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="conversation_api" target="audit_store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_handoff_agent" value="transfert" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff" target="agent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_handoff_context" value="resume" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff" target="handoff_context">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_context_ccaas" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff_context" target="ccaas">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_otel_dashboards" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="otel" target="dashboards">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_backend_otel" value="spans" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="confidence" target="otel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_security_backend" value="politiques" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="rbac" target="conversation_api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

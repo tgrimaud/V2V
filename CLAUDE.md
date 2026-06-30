@@ -19,6 +19,9 @@
 - Le parcours **Voice2Voice est obligatoire** : activation par telephone ou chat vocal web, avec ecrit seulement comme canal complementaire.
 - La source de verite billing est le **BSS en lecture seule**. Le LLM formule une explication traçable apres calcul deterministe des ecarts ; il ne doit pas deviner les montants.
 - Le coeur produit doit rester agnostique des fournisseurs **LLM / STT / TTS** via ports/adapters configurables pour tester facilement plusieurs solutions.
+- Le backlog produit V1 vit dans `product-backlog/` (EPICs, user stories, decisions, open questions) pour rester versionne avec le repo applicatif avant migration Jira.
+- Utiliser le skill local `.cursor/skills/product-business/` pour produire ou relire PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
+- Le schema cible editable est `docs/diagrams/target-v1-solution.drawio`.
 
 ## Deux modèles d'IA distincts (NE PAS confondre)
 

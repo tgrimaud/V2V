@@ -39,3 +39,19 @@
 - `docs/backlog.md` — rappel des prerequis techniques pour la cible `first audio < 700 ms`.
 - `CLAUDE.md` — decisions produit et architecture a retenir.
 - `AGENTS.md` — pieges a eviter pour les futurs agents.
+
+## 2026-06-30 — Backlog produit V1 + skill Product Business + schema cible
+
+**Summary:**
+
+- Creation du backlog produit local dans `product-backlog/` avec index, 9 EPICs, 27 user stories, 5 decisions et 3 open questions pour preparer une future migration Jira.
+- Integration du skill local `product-business` inspire de Flo pour cadrer PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
+- Generation du schema Draw.io cible de la solution V1 : canaux Voice2Voice, edge voix, backend billing, BSS, RAG/KB, IA agnostique, observabilite et escalade humaine.
+- Clarification de workflow : conserver les artefacts produit avec le repo `voice-support-bot` dans `product-backlog/` sauf demande explicite d'un depot externe.
+
+### Files changed
+- `product-backlog/` — backlog produit V1 local et migrable Jira.
+- `.cursor/skills/product-business/` — skill Product / Business local.
+- `docs/diagrams/target-v1-solution.drawio` — diagramme cible editable.
+- `docs/v1-scope.md` — ajouts sur Gradium/Pipecat, escalade humaine et exigences techniques structurantes.
+- `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees.

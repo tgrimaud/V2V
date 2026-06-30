@@ -27,6 +27,8 @@
 - Utiliser un MCP generique comme acces BSS principal en runtime client : preferer un port metier typé lecture seule (`BssBillingPort`) avec adapters BSS ; reserver MCP a l'exploration et aux outils internes.
 - Coupler le coeur produit a un SDK LLM/STT/TTS precis : exposer ces capacites via ports/adapters configurables pour benchmarker et changer facilement de fournisseur.
 - Fermer le produit a la facturation uniquement : V1 = explication de facture, mais l'architecture doit rester extensible a d'autres domaines support operateur.
+- Creer un repo separe pour le backlog produit quand l'utilisateur veut surtout le conserver avec le projet : par defaut, stocker les artefacts dans `product-backlog/` du repo `voice-support-bot` sauf demande explicite d'un depot Git externe.
+- Rediger EPICs/US produit sans le skill `product-business` : ce skill garde les stories au niveau besoin, valeur, regles metier et acceptance observable, sans details d'API ou implementation.
 
 ## Checklist après changement substantiel
 

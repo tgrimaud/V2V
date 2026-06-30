@@ -110,6 +110,20 @@ En V1, l'utilisateur final doit pouvoir :
 Le coeur de valeur V1 est l'explication de facture basee sur les donnees BSS,
 delivree en Voice2Voice sur les canaux telephone et web vocal.
 
+### Escalade vers un agent humain
+
+Le bot doit pouvoir transferer la conversation vers un agent humain dans deux
+cas :
+
+- le client demande explicitement a parler a un conseiller ;
+- le bot ne peut pas repondre avec un niveau de certitude suffisant, par
+  exemple donnees BSS manquantes, incoherentes, ou absence de preuve permettant
+  d'expliquer l'ecart.
+
+Dans ce cas, le bot doit annoncer clairement la limite rencontree, resumer le
+contexte deja collecte et transmettre les elements utiles a l'agent humain pour
+eviter au client de repeter toute sa demande.
+
 ## Besoins non fonctionnels
 
 ### Fiabilite
@@ -155,6 +169,36 @@ fiable : si l'analyse metier necessite plus de temps, le bot doit pouvoir
 produire un accuse de reception oral rapide, puis livrer l'explication fiable
 quand les preuves BSS sont disponibles.
 
+### Exigences techniques structurantes V1
+
+Certains items du backlog deviennent des pre-requis directs du scope V1, car
+ils conditionnent l'experience Voice2Voice, l'omnicanal et l'exploitation en
+cloud prive.
+
+La V1 doit donc prevoir :
+
+- STT streaming reel et detection de fin de tour cote serveur pour eviter de
+  dependre uniquement du VAD navigateur, notamment sur le canal telephone ;
+- TTS streaming chunke et connexion TTS persistante pour demarrer la reponse
+  orale sans attendre la generation audio complete ;
+- etat conversationnel partage, par exemple Redis, pour permettre les parcours
+  omnicanaux et le scale-out du backend ;
+- memoire conversationnelle persistante pour reprendre une session et fournir
+  le contexte utile en cas de transfert vers un agent humain ;
+- cache semantique pour les questions frequentes et les explications tarifaires
+  recurrentes, sans contourner la verification des preuves BSS ;
+- observabilite par span sur tout le pipeline : STT, recuperation BSS,
+  comparaison, recherche KB, LLM first-token, TTS first-audio et transfert agent
+  humain ;
+- co-localisation en cloud prive des composants critiques du chemin vocal
+  lorsque la cible `first audio < 700 ms` doit etre tenue en production ;
+- connecteurs KB supplementaires, notamment PDF, Confluence ou base de donnees,
+  pour enrichir les regles tarifaires et les contenus d'explication.
+
+Ces exigences doivent rester reliees au backlog pour le decoupage en epics et
+user stories. Le scope V1 indique pourquoi elles sont necessaires ; le backlog
+porte le detail d'execution et les priorites.
+
 ### Agnosticite des fournisseurs IA et voix
 
 Le coeur produit doit rester agnostique des fournisseurs et modeles utilises
@@ -173,6 +217,12 @@ Les implementations concretes peuvent varier selon l'environnement : solution
 cloud, solution self-hosted en cloud prive, modele local, ou fournisseur
 manage. Le changement de fournisseur ne doit pas remettre en cause le modele
 metier billing, le moteur de comparaison, ni le contrat fonctionnel du bot.
+
+Pour demarrer le POC/V1, les adapters vocaux de reference seront bases sur
+Gradium pour les capacites STT/TTS et sur Pipecat pour l'orchestration temps
+reel du pipeline vocal. Ces choix servent de point de depart operationnel et de
+base de benchmark, sans fermer la possibilite de tester ou remplacer ces
+solutions ensuite.
 
 Cette agnosticite doit aussi permettre de tester facilement plusieurs solutions
 LLM, STT ou TTS pendant les phases de POC, benchmark et industrialisation. Le
@@ -205,6 +255,9 @@ La V1 sera consideree utile si elle permet de repondre correctement a ces cas :
 - Y a-t-il eu un changement d'offre ou d'option ?
 - Peux-tu me resumer l'explication pour un client ?
 - Peux-tu me montrer les preuves dans la facture ou le BSS ?
+- Je veux parler a un conseiller.
+- Le bot transfere vers un agent humain lorsqu'il ne peut pas expliquer l'ecart
+  avec assez de certitude.
 
 ## Formulation synthetique du besoin
 
