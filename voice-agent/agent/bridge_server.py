@@ -59,12 +59,19 @@ async def handle_client(websocket):
     response_task: asyncio.Task | None = None
 
     try:
-        await _send_welcome(websocket, backend, conversation_id)
         async for message in websocket:
             if isinstance(message, bytes):
                 audio_buffer.extend(message)
             elif isinstance(message, str):
-                if message == "END_OF_SPEECH":
+                if message == "START_CALL":
+                    # The welcome is triggered when the user actually starts
+                    # the call (mic activation = a user gesture), NOT on raw
+                    # WebSocket connect. The WS connects on page mount, so
+                    # greeting there would speak before the user starts and is
+                    # blocked by browser autoplay anyway. Mirrors strategy B,
+                    # where joining WebRTC is itself the start gesture.
+                    await _send_welcome(websocket, backend, conversation_id)
+                elif message == "END_OF_SPEECH":
                     if response_task and not response_task.done():
                         response_task.cancel()
                         try:
@@ -106,16 +113,16 @@ async def handle_client(websocket):
 
 
 async def _send_welcome(websocket, backend, conversation_id):
-    """Speak a scripted welcome at connection and seed it into the backend
-    history (mirrors strategy B / bot.py).
+    """Speak a scripted welcome when the user starts the call and seed it into
+    the backend history (mirrors strategy B / bot.py).
+
+    Triggered by the ``START_CALL`` control message (sent on mic activation),
+    not on WebSocket connect, so nothing is spoken before the user starts.
 
     Seeding records the welcome as an assistant turn so the LLM has prior
     context and does not greet again on the user's first message. The welcome
     is sent through the normal answer protocol (answer_chunk -> audio ->
     answer_done) so the frontend renders it as a regular assistant bubble.
-
-    Note: browsers may defer playback of this audio until the first user
-    gesture (autoplay policy); the text bubble always appears immediately.
     """
     try:
         await backend.seed_greeting(WELCOME_MESSAGE, conversation_id)

@@ -93,6 +93,12 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     }
   }, [])
 
+  const startCall = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send('START_CALL')
+    }
+  }, [])
+
   const sendEndOfSpeech = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send('END_OF_SPEECH')
@@ -117,5 +123,5 @@ export function useVoiceWebSocket(options: UseVoiceWebSocketOptions) {
     return () => disconnect()
   }, [connect, disconnect])
 
-  return { connectionState, connect, disconnect, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage }
+  return { connectionState, connect, disconnect, startCall, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage }
 }

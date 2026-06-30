@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useVoiceWebSocket } from './useVoiceWebSocket'
 import { useVAD } from './useVAD'
 import { useAudioQueue } from './useAudioQueue'
@@ -76,7 +76,7 @@ export function VoiceChat() {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role, text, timestamp: new Date() }])
   }, [])
 
-  const { connectionState, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage } = useVoiceWebSocket({
+  const { connectionState, startCall, sendAudio, sendEndOfSpeech, sendBargeIn, sendLanguage } = useVoiceWebSocket({
     onTranscription: (text) => {
       setMessages(prev => {
         const lastMsg = prev[prev.length - 1]
@@ -163,6 +163,8 @@ export function VoiceChat() {
     },
   })
 
+  const callStartedRef = useRef(false)
+
   const handleMicToggle = async () => {
     if (vadActive) {
       stopVAD()
@@ -172,6 +174,13 @@ export function VoiceChat() {
       await startVAD()
       setVadActive(true)
       setVoiceState('listening')
+      // Trigger the scripted welcome only when the user actually starts the
+      // call (this click is the user gesture that unblocks audio autoplay).
+      // Once per call; handleEndConversation resets it so a new call greets.
+      if (!callStartedRef.current) {
+        callStartedRef.current = true
+        startCall()
+      }
     }
   }
 
@@ -186,6 +195,7 @@ export function VoiceChat() {
     setMessages([])
     setVoiceState('idle')
     setTextInput('')
+    callStartedRef.current = false
   }
 
   const handleTextSubmit = async (e: React.FormEvent) => {
