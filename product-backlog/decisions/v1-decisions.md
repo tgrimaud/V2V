@@ -109,3 +109,40 @@ et de confiance. Une absence de preuve doit etre visible et actionnable.
 
 Le backlog inclut un EPIC dedie a l'escalade, avec transmission du contexte deja
 collecte a l'agent humain.
+
+---
+
+## DEC-006 - Backend metier Java et voice-agent Python
+
+**Status:** Proposed  
+**Date:** 2026-06-30
+
+### Decision
+
+La V1 conserve une architecture hybride :
+
+- le backend metier reste en Java/Spring Boot ;
+- le voice-agent reste en Python ;
+- aucune reecriture du backend metier en Python n'est prevue pour la V1.
+
+### Rationale
+
+Le backend porte les responsabilites critiques de la V1 : acces BSS en lecture,
+comparaison deterministe de factures, regles de preuve, audit, securite et API
+stables. Java/Spring Boot est adapte a ces besoins entreprise et au modele
+hexagonal deja en place.
+
+Python reste le bon choix pour la couche audio et IA temps reel : WebSocket
+audio, STT/TTS, integration Gradium, orchestration vocale et prototypage de
+providers IA.
+
+### Implication
+
+Le systeme reste separe en deux responsabilites :
+
+- Java/Spring Boot pour le coeur produit fiable, testable et auditable ;
+- Python pour le bord vocal temps reel et les integrations audio.
+
+Un worker IA Python pourra etre ajoute plus tard si certaines capacites IA
+necessitent un runtime Python dedie, mais il devra rester derriere un contrat
+clair et ne pas absorber les regles metier de comparaison facture.

@@ -42,4 +42,7 @@
 |-----|----------|--------|
 | DEC-001 | V1 centree sur explication de facture, produit extensible au support generaliste | Proposed |
 | DEC-002 | BSS source de verite, LLM uniquement pour formulation explicative | Proposed |
-| DEC-003 | Gradium et Pipecat comme adapters vocaux de reference au demarrage | Proposed |
+| DEC-003 | Voice2Voice obligatoire en V1 | Proposed |
+| DEC-004 | Gradium et Pipecat comme point de depart | Proposed |
+| DEC-005 | Escalade humaine requise | Proposed |
+| DEC-006 | Backend metier Java et voice-agent Python | Proposed |

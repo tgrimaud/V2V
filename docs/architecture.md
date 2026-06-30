@@ -9,6 +9,9 @@ L'architecture est **hybride** :
 - Un **agent vocal Python** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
 - Un **frontend React** fournit l'interface utilisateur avec VAD navigateur (détection automatique de parole), WebSocket audio + streaming texte, et barge-in (interruption du bot)
 
+La cible machines/VM pour un pilote operateur V1 est detaillee dans
+[`infra-v1.md`](infra-v1.md).
+
 ## Diagramme d'architecture
 
 ```mermaid
