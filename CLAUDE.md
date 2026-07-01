@@ -47,6 +47,8 @@
 - Endpoints KB : `POST /api/knowledge/ingest` (upload ponctuel) et `POST /api/knowledge/sync` / `/sync/{sourceType}` (synchro connecteurs).
 - Conversation streaming : `GET /api/conversation/ask-stream` (SSE) ; sync : `POST /api/conversation/ask`.
 - Le `domain` (support|billing|commercial) tague chaque chunk ; la recherche filtre `domain == X OR general`. Les front-matter markdown doivent matcher les domaines historiques (telecom→support, billing→billing, commercial→commercial) pour un comportement identique.
+- Galaxion Billing V1 : utiliser `billing-api`, pas `billing-service` (plus utilise). La recuperation de facture passe par `GET /bill-run-documents/search` puis `GET /bill-run-documents/{document_id}/download`.
+- Aucun endpoint Galaxion identifie ne fournit les lignes facture structurees pour la V1 ; le detail facture doit venir du PDF via un `InvoicePdfExtractor` deterministe avant comparaison.
 
 ## Testing commands
 
@@ -69,3 +71,5 @@ cd voice-agent && python -m pytest tests/
 | Parser un front-matter YAML en Java | `org.yaml.snakeyaml.Yaml` est dispo **transitivement** via Spring Boot — pas de dépendance à ajouter. |
 | Ajouter une nouvelle source KB | Implémenter un `KnowledgeSourceConnector` + le déclarer en `@Bean` ; `KnowledgeSyncService` injecte `List<KnowledgeSourceConnector>` → la nouvelle source est prise automatiquement (scheduler inclus). |
 | draw.io via MCP | `open_drawio_xml` ouvre l'éditeur (navigateur) ; sauvegarder aussi le `.drawio` (XML) dans `docs/` pour le versionner. |
+| Supposer que `billing-service` est la source facture Galaxion | `billing-service` n'est plus utilise ; cibler `billing-api` uniquement pour Billing. |
+| Utiliser `invoices/composed` comme detail facture client | Ce n'est pas le chemin retenu V1. Recuperer le PDF via `bill-run-documents` puis extraire un JSON facture structure avant le moteur de comparaison. |

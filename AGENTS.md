@@ -29,6 +29,9 @@
 - Fermer le produit a la facturation uniquement : V1 = explication de facture, mais l'architecture doit rester extensible a d'autres domaines support operateur.
 - Creer un repo separe pour le backlog produit quand l'utilisateur veut surtout le conserver avec le projet : par defaut, stocker les artefacts dans `product-backlog/` du repo `voice-support-bot` sauf demande explicite d'un depot Git externe.
 - Rediger EPICs/US produit sans le skill `product-business` : ce skill garde les stories au niveau besoin, valeur, regles metier et acceptance observable, sans details d'API ou implementation.
+- Prendre `billing-service` comme source Galaxion pour les factures : il n'est plus utilise. Pour la V1, cibler `billing-api` uniquement.
+- Chercher un endpoint Galaxion de lignes facture structurees sans preuve : aucun n'a ete identifie. Recuperer le PDF via `bill-run-documents` et passer par un `InvoicePdfExtractor` deterministe.
+- Faire lire le PDF facture directement au LLM pour calculer les montants : interdit. Extraire d'abord un JSON structure, verifier la reconciliation, puis seulement formuler l'explication.
 
 ## Checklist après changement substantiel
 

@@ -36,9 +36,10 @@ quand on passe du mock au BSS reel.
 | Besoin V1 | Microservice source | Priorite | Notes |
 |-----------|---------------------|----------|-------|
 | Identifier / rechercher un client | `contacts-service` + `accounts-service` | Medium | Peut etre simplifie au debut si le canal fournit deja le client |
-| Lister les factures / periodes | `billing-service` ou `billing-api` | High | Necessaire pour selectionner les periodes comparables |
-| Recuperer une facture detaillee | `billing-service` ou `billing-api` | High | Necessaire au delta global et aux preuves facture |
-| Recuperer les lignes de facture | `billing-service` ou `billing-api` a confirmer | High | Point ouvert : verifier si les lignes sont dans la facture detaillee ou endpoint separe |
+| Lister les factures / periodes | `billing-api` | High | `billing-service` n'est plus utilise |
+| Recuperer une facture / document facture | `billing-api` | High | Utiliser `bill-run-documents/search` avec un ou plusieurs criteres |
+| Recuperer une facture detaillee structuree | PDF facture + `InvoicePdfExtractor` | High | Aucun endpoint structure identifie pour les lignes facture |
+| Recuperer les lignes de facture | PDF facture + `InvoicePdfExtractor` | High | Extraire et normaliser les lignes depuis le PDF |
 | Recuperer remises / options / contrat | `accounts-service`, `contracts-service`, `addons-service`, `discounts-service` | High | Necessaire pour expliquer expiration de remise, option, offre, abonnement |
 | Recuperer consommations hors forfait | `cdr-usage-consumption-service` ou `usages-service` | Medium | Necessaire pour expliquer les causes de consommation |
 | Recuperer evenements billing | `customer-history-service`, `events-store-service`, `change-offers-service`, `adjustments-service` | High | Activation option, changement offre, regularisation, prorata |
@@ -101,18 +102,17 @@ Pour eviter de disperser l'analyse, les premiers Swagger a ouvrir sont :
 
 | Ordre | Microservice | Pourquoi |
 |-------|--------------|----------|
-| 1 | `billing-api` | Verifier s'il existe une facade plus stable que `billing-service` pour factures et lignes. Analyse comparative initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
-| 2 | `billing-service` | Recuperer historique et details facture. Analyse comparative initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
-| 3 | `accounts-service` | Relier client, compte, abonnement et contexte commercial |
-| 4 | `contracts-service` | Recuperer contrat, offre et abonnement actifs sur les periodes comparees |
-| 5 | `discounts-service` | Identifier remises, validite et expiration |
-| 6 | `addons-service` | Identifier options et services factures |
-| 7 | `cdr-usage-consumption-service` | Expliquer les hors-forfait et consommations detaillees |
-| 8 | `customer-history-service` | Retrouver les evenements metier utiles a l'explication |
-| 9 | `events-store-service` | Verifier s'il contient les evenements techniques/metier manquants |
-| 10 | `change-offers-service` | Expliquer les changements d'offre |
-| 11 | `adjustments-service` | Expliquer regularisations, ajustements et gestes |
-| 12 | `contacts-service` | Identifier ou confirmer le client si le canal ne suffit pas |
+| 1 | `billing-api` | Source cible pour periodes, bill runs, recherche et telechargement de documents facture. Analyse initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
+| 2 | `accounts-service` | Relier client, compte, abonnement et contexte commercial |
+| 3 | `contracts-service` | Recuperer contrat, offre et abonnement actifs sur les periodes comparees |
+| 4 | `discounts-service` | Identifier remises, validite et expiration |
+| 5 | `addons-service` | Identifier options et services factures |
+| 6 | `cdr-usage-consumption-service` | Expliquer les hors-forfait et consommations detaillees |
+| 7 | `customer-history-service` | Retrouver les evenements metier utiles a l'explication |
+| 8 | `events-store-service` | Verifier s'il contient les evenements techniques/metier manquants |
+| 9 | `change-offers-service` | Expliquer les changements d'offre |
+| 10 | `adjustments-service` | Expliquer regularisations, ajustements et gestes |
+| 11 | `contacts-service` | Identifier ou confirmer le client si le canal ne suffit pas |
 
 ## Ordre d'analyse des Swagger
 
@@ -124,18 +124,19 @@ Questions a resoudre :
 
 - Comment lister les factures ou periodes pour un client ?
 - Comment identifier la derniere facture et la periode precedente ?
+- Comment recuperer un document facture via `bill-run-documents/search` ?
 - Comment recuperer le total facture, devise, dates de periode et statut ?
-- Les lignes de facture sont-elles incluses dans le detail facture ?
-- Les taxes, frais ponctuels, regularisations et proratas sont-ils des lignes
-  explicites ou des objets separes ?
+- Comment extraire les lignes, taxes, frais ponctuels, regularisations et
+  proratas depuis le PDF facture ?
 - Quels codes erreur existent pour facture introuvable, client introuvable,
   acces interdit et donnees indisponibles ?
 
 Endpoints attendus a reperer :
 
 - list invoices by customer/account ;
-- get invoice detail ;
-- get invoice lines, si endpoint separe ;
+- search invoice document ;
+- download invoice document ;
+- extract invoice lines from PDF ;
 - get billing periods, si distinct des factures.
 
 ### 2. Account
@@ -228,6 +229,13 @@ Le mock doit couvrir au moins quatre parcours.
 - Une facture ou une preuve manque.
 - Le bot doit expliquer la limite et ne pas inventer la cause.
 
+### Extraction PDF non fiable
+
+- Le PDF est telecharge mais certaines lignes ne sont pas parsees de maniere
+  fiable.
+- Le bot doit signaler que l'analyse est incomplete et ne pas presenter les
+  montants incertains comme confirmes.
+
 ## Fixtures recommandees
 
 | Fixture | Objectif |
@@ -237,6 +245,7 @@ Le mock doit couvrir au moins quatre parcours.
 | `customer-eir-003` | Hors forfait data avec preuve CDR |
 | `customer-eir-004` | Option activee en milieu de periode avec prorata |
 | `customer-eir-005` | Donnees BSS incompletes |
+| `customer-eir-006` | PDF facture avec extraction partielle ou ambigue |
 
 Les donnees doivent etre anonymisees et rester realistes : montants en EUR,
 periodes mensuelles, offres telecom plausibles, dates coherentes et deltas qui
@@ -255,6 +264,8 @@ Le mock doit reproduire les erreurs utiles au comportement produit :
 - timeout ;
 - donnees partielles ;
 - donnees incoherentes.
+- PDF facture introuvable ;
+- PDF facture non parseable.
 
 Chaque erreur doit avoir le meme format que le BSS cible lorsque ce format sera
 connu.
@@ -275,6 +286,7 @@ Pour chaque microservice, extraire :
 - headers requis : correlation id, tenant, channel, locale ;
 - pagination ;
 - conventions de date, devise et timezone.
+- format et type des documents facture retournes.
 
 ## Decisions ouvertes
 
@@ -286,6 +298,9 @@ Pour chaque microservice, extraire :
   facade BSS operateur existante ?
 - Le mock doit-il etre un service dedie dans `docker-compose` ou un profile du
   backend Java ?
+- Quel outil d'extraction PDF donne la meilleure fiabilite sur les factures
+  Galaxion ?
+- Faut-il stocker les JSON extraits pour audit et regression tests ?
 
 ## Recommandation implementation
 
@@ -303,6 +318,7 @@ Implementation recommandee :
 
 - `bss-mock/` pour le faux serveur et les fixtures ;
 - endpoints alignes sur les Swagger reels des que disponibles ;
+- fixtures PDF et JSON attendus d'extraction ;
 - tests de contrat sur les payloads utiles V1 ;
 - configuration backend `BSS_BASE_URL` ou equivalent ;
 - profil local `bss-mock` dans `docker-compose`.

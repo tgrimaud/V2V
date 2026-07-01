@@ -11,13 +11,12 @@ Swaggers analyses :
 
 ## Lecture rapide
 
-La verite d'integration semble etre entre les deux services :
+Decision mise a jour : `billing-service` n'est plus utilise. La cible V1 doit
+utiliser uniquement `billing-api` pour le perimetre Billing.
 
-- `billing-service` est le meilleur point de depart pour retrouver les factures
-  d'un compte : il expose directement l'historique par `accountId`.
-- `billing-api` expose une facture composee plus riche pour la comparaison
-  detaillee, mais son acces passe par les concepts de bill periods, bill runs et
-  bill run accounts.
+`billing-service` reste documente ci-dessous uniquement comme reference
+historique de l'analyse. Il ne doit pas etre implemente dans le mock V1, ni etre
+utilise par le backend Voice Support Bot.
 
 `billing-api` expose des endpoints de bill runs, periodes de facturation et
 factures. Pour la V1 Voice Support Bot, les endpoints directement utiles sont :
@@ -25,24 +24,32 @@ factures. Pour la V1 Voice Support Bot, les endpoints directement utiles sont :
 - `/bill-periods`
 - `/bill-periods/{bill_period_id}`
 - `/bill-runs/{bill_run_id}/bill-run-accounts/search`
-- `/invoices/selected`
-- `/invoices/composed`
+- `/bill-run-documents/search`
+- `/bill-run-documents/{document_id}/download`
 
-`billing-service` expose des endpoints plus proches du parcours client :
+Flux cible : bill periods -> bill runs -> bill run accounts -> documents de
+facture -> PDF facture -> extraction structuree.
 
-- `/api/v1/accounts/{account_id}/invoices`
-- `/api/v1/invoices/{invoice_number}`
-- `/api/v1/invoices/{invoice_number}/details`
-- `/api/v1/invoices/{invoice_number}/detail-report`
-- `/api/v1/invoices/{invoice_number}/summary-report`
+## Decision d'integration
 
-Hypothese actuelle : demarrer le mock par `billing-service` pour l'historique de
-factures et utiliser `billing-api` si le detail structure necessaire a la
-comparaison n'est pas disponible dans `billing-service`.
+| Sujet | Decision |
+|-------|----------|
+| Source Billing cible | `billing-api` uniquement |
+| `billing-service` | Non utilise / hors cible V1 |
+| Recherche facture/document | `GET /bill-run-documents/search` |
+| Telechargement facture/document | `GET /bill-run-documents/{document_id}/download` |
+| Detail facture exploitable | Extraction structuree depuis le PDF facture |
+| Selection des periodes | `GET /bill-periods?year={year}` |
+| Lien compte -> facture | `GET /bill-runs/{bill_run_id}/bill-run-accounts/search` |
+| Mock V1 | Reproduire les endpoints utiles de `billing-api`, pas ceux de `billing-service` |
 
-## Billing-service
+## Billing-service non retenu
 
-### Historique de factures par compte
+`billing-service` expose des endpoints plus proches du parcours client, mais il
+n'est plus utilise dans Galaxion pour ce besoin. Cette section reste en archive
+pour expliquer pourquoi il ne doit pas etre pris comme dependance V1.
+
+### Historique de factures par compte non retenu
 
 ```text
 GET /api/v1/accounts/{account_id}/invoices
@@ -73,14 +80,13 @@ Champs utiles de `InvoiceHistoryResponse` :
 | `invoiceDate` | date | Date facture |
 | `dueDate` | date | Date d'echeance |
 
-Lecture V1 :
+Lecture :
 
-Cet endpoint repond directement au besoin "lister les factures/periodes" pour un
-compte. C'est le meilleur candidat pour selectionner les deux factures a
-comparer, sous reserve de confirmer l'unite du champ `amount` et le lien avec
-les periodes de facturation.
+Cet endpoint semblait repondre directement au besoin "lister les
+factures/periodes" pour un compte, mais il ne doit pas etre utilise dans la cible
+V1 car `billing-service` est hors usage.
 
-### Recuperer le PDF facture
+### Recuperer le PDF facture non retenu
 
 ```text
 GET /api/v1/invoices/{invoice_number}?accountId={accountId}&optionalInvoice={optionalInvoice}
@@ -108,7 +114,7 @@ Le PDF n'est pas le meilleur support pour le moteur deterministe, mais il peut
 servir de preuve ou de fallback humain. Il ne doit pas devenir la source
 principale de calcul si des donnees structurees existent.
 
-### Recuperer les details de facture
+### Recuperer les details de facture non retenu
 
 ```text
 GET /api/v1/invoices/{invoice_number}/details
@@ -142,7 +148,7 @@ dire que le schema est incomplet dans la documentation, ou que le vrai detail es
 porte par les CSV/PDF ou par `billing-api`. Avant de conclure, il faut tester un
 exemple reel de reponse ou demander un payload anonymise.
 
-### Rapports CSV facture
+### Rapports CSV facture non retenus
 
 ```text
 GET /api/v1/invoices/{invoice_number}/detail-report
@@ -157,13 +163,12 @@ Reponse :
 
 Lecture V1 :
 
-Ces endpoints peuvent contenir les lignes de facture exploitables si
-`InvoiceDetailsResponse` est trop pauvre. Ils sont interessants pour le mock si
-le BSS reel utilise deja ces exports comme source de detail facture.
+Ces endpoints ne doivent pas etre reproduits dans le mock V1 tant que
+`billing-service` reste hors cible.
 
 ## Billing-api
 
-### Endpoints retenus pour le mock V1 candidat
+### Endpoints retenus pour le mock V1
 
 ### Recuperer les periodes de facturation
 
@@ -246,6 +251,68 @@ Champs utiles de `BillRunAccountResponse` :
 | `brand` | Marque |
 | `accountType` | B2C/B2B ou equivalent |
 
+### Rechercher les documents de facture
+
+```text
+GET /bill-run-documents/search
+```
+
+Parametres utiles V1 :
+
+| Nom | In | Obligatoire | Type | Usage V1 |
+|-----|----|-------------|------|----------|
+| `billRunAccountId` | query | non | uuid | Recherche directe depuis le bill run account |
+| `accountId` | query | non | string | Recherche par compte client |
+| `invoiceNumber` | query | non | string | Recherche par numero de facture |
+| `billPeriodId` | query | non | uuid | Recherche par periode |
+
+Reponse :
+
+```text
+200 -> BillRunDocumentResponse[]
+```
+
+Champs utiles de `BillRunDocumentResponse` :
+
+| Champ | Type | Usage V1 |
+|-------|------|----------|
+| `id` | uuid | Identifiant du document a telecharger |
+| `filename` | string | Nom du document facture |
+| `contentType` | string | Type de contenu du document |
+
+Lecture V1 :
+
+Cet endpoint est le point d'entree pour recuperer une facture/document a partir
+d'un ou plusieurs criteres : `billRunAccountId`, `accountId`, `invoiceNumber`,
+`billPeriodId`. Il doit etre reproduit dans le mock car il couvre le cas
+"retrouver la facture" sans imposer un seul identifiant d'appel.
+
+### Telecharger un document de facture
+
+```text
+GET /bill-run-documents/{document_id}/download
+```
+
+Parametres :
+
+| Nom | In | Obligatoire | Type | Usage V1 |
+|-----|----|-------------|------|----------|
+| `document_id` | path | oui | uuid | Document retourne par `/bill-run-documents/search` |
+| `billPeriodId` | query | non | uuid | Contexte periode si necessaire |
+
+Reponse :
+
+```text
+200 -> application/octet-stream
+```
+
+Lecture V1 :
+
+Le document telecharge est la source principale du detail facture lorsque
+Galaxion ne fournit pas d'endpoint structure pour les lignes de facture. Le
+backend doit extraire les donnees utiles du PDF vers un format interne structure
+avant de lancer le moteur de comparaison.
+
 ### Recuperer une facture selectionnee
 
 ```text
@@ -273,7 +340,7 @@ lignes et sections, mais sans montants composes explicites au niveau facture,
 section et item. Les items portent `defaultPrice` en cents, des taxes et des
 periodes de reference/effectivite.
 
-### Recuperer une facture composee
+### Facture composee non retenue pour le detail facture V1
 
 ```text
 GET /invoices/composed
@@ -293,21 +360,80 @@ Reponse :
 200 -> ComposedInvoiceResponse
 ```
 
-Lecture V1 :
+Lecture :
 
-`composed` est le meilleur candidat pour le moteur de comparaison car il expose
-des montants composes :
+`invoices/composed` ne correspond pas au besoin courant de recuperation du detail
+facture client. Il ne doit pas etre utilise comme source principale pour le mock
+V1 tant que son role exact dans Galaxion n'est pas clarifie.
 
-- `amount` au niveau facture ;
-- `amount` au niveau section ;
-- `amount` au niveau item ;
-- taxes composees avec `amount`.
+## Extraction PDF facture
 
-## Schemas utiles
+Comme aucun endpoint structure de lignes facture n'a ete identifie, la V1 doit
+introduire un composant `InvoicePdfExtractor`.
+
+```text
+PDF facture Galaxion
+        |
+        v
+InvoicePdfExtractor
+        |
+        v
+Invoice normalisee JSON
+        |
+        v
+Moteur deterministe de comparaison
+```
+
+Responsabilites :
+
+- extraire le texte et les tableaux du PDF facture ;
+- identifier le total facture, les dates, les sections et les lignes ;
+- normaliser les montants, devises, taxes, remises, frais et proratas ;
+- produire un JSON interne stable pour le moteur de comparaison ;
+- signaler les zones non parsees ou ambigues ;
+- verifier que les lignes extraites reconciliant le total dans une tolerance
+  definie.
+
+Le LLM ne doit pas lire directement le PDF pour deduire les montants. Il peut
+formuler l'explication uniquement apres extraction structuree et validation.
+
+### JSON cible d'extraction
+
+Le format exact sera ajuste apres analyse de PDFs anonymises, mais le mock et
+les tests doivent viser une structure de ce type :
+
+```json
+{
+  "invoice_number": "2025123214540001",
+  "account_id": "100231079",
+  "period": {
+    "start": "2026-06-01",
+    "end": "2026-06-30"
+  },
+  "invoice_date": "2026-07-01",
+  "due_date": "2026-07-15",
+  "currency": "EUR",
+  "total_tax_included": 68.4,
+  "lines": [
+    {
+      "id": "line-1",
+      "label": "Mobile plan",
+      "category": "subscription",
+      "amount_tax_included": 29.99,
+      "period_start": "2026-06-01",
+      "period_end": "2026-06-30",
+      "evidence_text": "Mobile plan ... 29.99 EUR"
+    }
+  ],
+  "warnings": []
+}
+```
+
+## Schemas utiles hors chemin principal
 
 ### `ComposedInvoiceResponse`
 
-Champs utiles V1 :
+Champs eventuellement utiles si `invoices/composed` est requalifie plus tard :
 
 | Champ | Type | Usage |
 |-------|------|-------|
@@ -359,9 +485,9 @@ Attention : `defaultPrice` est en cents, alors que `AmountResponse` est expose
 comme `number`. Il faudra verifier si ces montants sont en euros ou en cents via
 des exemples reels.
 
-## Flux candidat pour recuperer deux factures
+## Flux cible pour recuperer deux factures
 
-Flux hypothese a valider avec exemples reels :
+Flux a valider avec exemples reels :
 
 1. Recuperer les periodes via `GET /bill-periods?year={year}`.
 2. Choisir les deux periodes comparables, par exemple mois courant et mois
@@ -371,98 +497,88 @@ Flux hypothese a valider avec exemples reels :
    `GET /bill-runs/{bill_run_id}/bill-run-accounts/search?accountIdTerm={accountId}&billPeriodId={billPeriodId}`.
 5. Extraire `BillRunAccountResponse.id` comme `billRunAccountId` et
    `invoiceNumber`.
-6. Recuperer la facture composee via
-   `GET /invoices/composed?billRunAccountId={billRunAccountId}`.
-7. Utiliser `ComposedInvoiceResponse.amount`, `sections[]`, `items[]` et
-   `taxes[]` pour le moteur de comparaison.
+6. Rechercher les documents facture via
+   `GET /bill-run-documents/search?billRunAccountId={billRunAccountId}` ou
+   `GET /bill-run-documents/search?accountId={accountId}&invoiceNumber={invoiceNumber}`.
+7. Telecharger le PDF facture via
+   `GET /bill-run-documents/{document_id}/download`.
+8. Extraire le PDF avec `InvoicePdfExtractor`.
+9. Utiliser le JSON normalise extrait pour le moteur de comparaison.
 
 ## Mapping vers le domaine Voice Support Bot
 
-| Domaine cible | Source billing-api |
-|---------------|--------------------|
-| `Invoice.id` | `ComposedInvoiceResponse.id` |
-| `Invoice.number` | `invoiceNumber` |
-| `Invoice.accountId` | `accountId` |
-| `Invoice.totalAmount` | `amount.amountTaxesIncluded` |
-| `Invoice.period` | `usagePeriod` ou `recurringPeriod`, a confirmer |
-| `InvoiceLine.id` | `ComposedItemResponse.id` |
-| `InvoiceLine.code` | `ComposedItemResponse.code` |
-| `InvoiceLine.label` | `ComposedItemResponse.description` |
-| `InvoiceLine.type` | `ComposedItemResponse.type` |
-| `InvoiceLine.amount` | `ComposedItemResponse.amount.amountTaxesIncluded` |
-| `InvoiceLine.volume` | `ComposedItemResponse.volume` |
-| `InvoiceLine.effectiveAt` | `ComposedItemResponse.effectiveAt` |
-| `InvoiceLine.referencePeriod` | `ComposedItemResponse.referencePeriod` |
-| `InvoiceLine.effectivePeriod` | `ComposedItemResponse.effectivePeriod` |
-| `Tax.amount` | `ComposedTaxResponse.amount` |
-| `Tax.rate` | `ComposedTaxResponse.rate` |
+| Domaine cible | Source |
+|---------------|--------|
+| `Invoice.number` | PDF extrait / `BillRunDocumentResponse.filename` / critere `invoiceNumber` |
+| `Invoice.accountId` | Critere de recherche `accountId` ou PDF extrait |
+| `Invoice.totalAmount` | PDF extrait |
+| `Invoice.period` | PDF extrait |
+| `InvoiceLine.id` | Identifiant interne d'extraction |
+| `InvoiceLine.label` | PDF extrait |
+| `InvoiceLine.type` | Classification post-extraction |
+| `InvoiceLine.amount` | PDF extrait |
+| `InvoiceLine.volume` | PDF extrait si present |
+| `InvoiceLine.evidenceText` | Fragment de texte PDF source |
 | `Evidence.source` | `billing-api` |
+| `Evidence.documentId` | `BillRunDocumentResponse.id` |
+| `Evidence.documentFilename` | `BillRunDocumentResponse.filename` |
+| `Evidence.documentContentType` | `BillRunDocumentResponse.contentType` |
 
 ## Endpoints a reproduire dans le mock
 
-Pour un premier mock API-compatible, reproduire en priorite cote
-`billing-service` :
-
-- `GET /api/v1/accounts/{account_id}/invoices`
-- `GET /api/v1/invoices/{invoice_number}/details`
-- `GET /api/v1/invoices/{invoice_number}/detail-report`, si les lignes sont
-  dans le CSV
-
-Ajouter cote `billing-api` si le detail structure de facture n'est pas suffisant
-dans `billing-service` :
+Pour un premier mock API-compatible, reproduire uniquement cote `billing-api` :
 
 - `GET /bill-periods?year={year}`
 - `GET /bill-periods/{bill_period_id}`
 - `GET /bill-runs/{bill_run_id}/bill-run-accounts/search`
-- `GET /invoices/composed`
+- `GET /bill-run-documents/search`
+- `GET /bill-run-documents/{document_id}/download`
 
 `GET /invoices/selected` est utile en second temps pour verifier la difference
-entre facture selectionnee et facture composee, mais il n'est pas le meilleur
-point de depart pour le moteur de comparaison car les montants composes sont
-moins explicites.
+entre facture selectionnee et facture composee, mais il n'est pas dans le chemin
+principal V1.
 
 ## Questions ouvertes
 
-- Le `InvoiceDetailsResponse` de `billing-service` est-il vraiment limite a
-  `accountId` et `invoiceNumber`, ou le Swagger est-il incomplet ?
-- Les lignes de facture V1 sont-elles dans
-  `/api/v1/invoices/{invoice_number}/detail-report` ?
-- Le champ `InvoiceHistoryResponse.amount` est-il en cents, euros, ou autre
-  unite ?
-- Quel est le sens exact de `optionalInvoice` sur le PDF facture ?
-- `billing-api` est-il bien la facade recommandee pour consultation client, ou
-  seulement une API interne de bill-run ?
-- Existe-t-il dans `billing-service` un endpoint plus direct pour lister les
-  factures d'un compte ?
-- `AmountResponse` est-il en euros, cents, ou unite monetaire dependante du
-  contexte ?
-- Faut-il utiliser `usagePeriod` ou `recurringPeriod` comme periode principale
-  de comparaison ?
+- Quel flux exact permet, depuis un `accountId`, de retrouver les deux derniers
+  `billRunAccountId` exploitables dans `billing-api` ?
+- Quels `contentType` sont retournes par `/bill-run-documents/search` pour les
+  factures : PDF, CSV, JSON, autre ?
+- Le document telecharge contient-il seulement le PDF client, ou aussi un export
+  structure exploitable ?
+- Quel moteur d'extraction PDF utiliser pour obtenir texte et tableaux avec une
+  qualite suffisante ?
+- Quelle tolerance de reconciliation accepter entre somme des lignes extraites et
+  total facture ?
 - Quels statuts de `BillRunAccountResponse.status` indiquent qu'une facture est
   exploitable par le bot ?
 - Les lignes remises, proratas, regularisations et hors forfait sont-elles
-  distinguables via `ComposedItemResponse.type`, `code`, `metadata`, ou faut-il
-  interroger `discounts-service`, `adjustments-service` et `CDR` ?
+  distinguables dans le PDF seul, ou faut-il enrichir avec `discounts-service`,
+  `adjustments-service` et `CDR` ?
 - Quel format d'erreur standard Galaxion faut-il reproduire dans le mock ?
 
 ## Conclusion provisoire
 
-Preference provisoire :
+Conclusion mise a jour :
 
-- utiliser `billing-service` pour l'historique facture et la selection des deux
-  factures ;
-- verifier par exemple reel si `billing-service` fournit les lignes detaillees ;
-- utiliser `billing-api /invoices/composed` comme source de detail structure si
-  `billing-service` ne fournit pas les lignes et montants exploitables.
+- utiliser `billing-api` uniquement pour le perimetre Billing ;
+- reproduire le flux `bill-periods -> bill-runs -> bill-run-accounts ->
+  bill-run-documents/search -> download` dans le mock ;
+- ajouter un composant `InvoicePdfExtractor` pour transformer le PDF en JSON
+  structure ;
+- ne pas implementer les endpoints `billing-service` dans le mock V1.
 
 ## Prochaine analyse
 
-Analyser un exemple reel ou anonymise de :
+Analyser un exemple reel ou anonymise du flux `billing-api` :
 
-- `GET /api/v1/accounts/{account_id}/invoices` ;
-- `GET /api/v1/invoices/{invoice_number}/details` ;
-- `GET /api/v1/invoices/{invoice_number}/detail-report`.
+- periodes disponibles via `GET /bill-periods?year={year}` ;
+- bill runs associes a une periode ;
+- recherche `BillRunAccount` pour un `accountId` ;
+- recherche document via `GET /bill-run-documents/search` avec un ou plusieurs
+  criteres ;
+- telechargement document via `GET /bill-run-documents/{document_id}/download` ;
+- extraction du PDF vers le JSON cible.
 
-Si ces exemples ne donnent pas les lignes detaillees, continuer avec
-`billing-api /invoices/composed` et analyser `accounts-service`,
-`contracts-service`, `discounts-service` et `CDR` pour les causes metier.
+Puis analyser `accounts-service`, `contracts-service`, `discounts-service` et
+`CDR` pour les causes metier.

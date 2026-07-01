@@ -55,3 +55,19 @@
 - `docs/architecture/diagrams/target-v1-solution.drawio` — diagramme cible editable.
 - `docs/product/v1-scope.md` — ajouts sur Gradium/Pipecat, escalade humaine et exigences techniques structurantes.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees.
+
+## 2026-07-01 — Galaxion Billing contracts + documentation structure
+
+**Summary:**
+
+- Reorganisation de `docs/` par usage : product, architecture, integrations, knowledge-base, engineering et operations.
+- Analyse Galaxion Billing : `billing-service` n'est plus utilise pour la V1 ; la cible Billing est `billing-api` uniquement.
+- Decision d'integration : retrouver les documents facture via `GET /bill-run-documents/search`, telecharger via `GET /bill-run-documents/{document_id}/download`, puis extraire le PDF en JSON structure.
+- Le LLM ne doit pas calculer les montants depuis le PDF ; un `InvoicePdfExtractor` deterministe doit produire les lignes, montants, preuves et warnings avant le moteur de comparaison.
+- Prochaine tache de reprise : obtenir 1-2 PDFs facture anonymises Galaxion, definir le JSON cible d'extraction final et choisir/prototyper l'outil d'extraction PDF.
+
+### Files changed
+- `docs/` — arborescence reorganisee et index ajoute.
+- `docs/integrations/galaxion/bss-integration-plan.md` — plan BSS mis a jour autour de `billing-api` et des PDFs facture.
+- `docs/integrations/galaxion/galaxion-billing-contracts.md` — contrat Billing initial et flux `bill-run-documents`.
+- `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — apprentissages Galaxion et prochaine tache.
