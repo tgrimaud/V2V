@@ -98,10 +98,11 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         }
 
         long startNanos = System.nanoTime();
-        List<Document> results = vectorStore.similaritySearch(builder.build());
+        List<Document> found = vectorStore.similaritySearch(builder.build());
+        List<Document> results = found != null ? found : List.of();
         long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
         log.info("[LATENCY] step=vector_search ms={} top_k={} domain={} results={}",
-                elapsedMs, topK, domain != null ? domain : "all", results != null ? results.size() : 0);
+                elapsedMs, topK, domain != null ? domain : "all", results.size());
 
         return results.stream()
                 .map(doc -> new Citation(

@@ -1,18 +1,8 @@
 package com.voicesupport.infrastructure.adapter.out.llm;
 
-import com.voicesupport.domain.port.out.LlmPort;
-import com.voicesupport.domain.port.out.LlmStreamingPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import reactor.core.publisher.Flux;
 
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
-
-    private static final Logger log = LoggerFactory.getLogger(MistralLlmAdapter.class);
+public class MistralLlmAdapter extends AbstractChatClientLlmAdapter {
 
     private static final String DEFAULT_SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI.
@@ -35,72 +25,12 @@ public class MistralLlmAdapter implements LlmPort, LlmStreamingPort {
             {context}
             """;
 
-    private final ChatClient chatClient;
-
     public MistralLlmAdapter(ChatClient chatClient) {
-        this.chatClient = chatClient;
+        super(chatClient);
     }
 
     @Override
-    public String generateAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
-        return generateAnswer(question, contextChunks, conversationHistory, null);
-    }
-
-    @Override
-    public String generateAnswer(String question, List<String> contextChunks,
-                                  List<String> conversationHistory, String systemPrompt) {
-        String context = String.join("\n---\n", contextChunks);
-        String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
-        String systemMessage = prompt.replace("{context}", context);
-
-        if (!conversationHistory.isEmpty()) {
-            systemMessage += "\n\nHistorique de la conversation (ne répète PAS de salutation si un 'Bonjour' apparaît déjà) :\n"
-                    + String.join("\n", conversationHistory);
-        }
-
-        return chatClient.prompt()
-                .system(systemMessage)
-                .user(question)
-                .call()
-                .content();
-    }
-
-    @Override
-    public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
-        return streamAnswer(question, contextChunks, conversationHistory, null);
-    }
-
-    @Override
-    public Flux<String> streamAnswer(String question, List<String> contextChunks,
-                                      List<String> conversationHistory, String systemPrompt) {
-        String context = String.join("\n---\n", contextChunks);
-        String prompt = (systemPrompt != null) ? systemPrompt : DEFAULT_SYSTEM_PROMPT;
-        String systemMessage = prompt.replace("{context}", context);
-
-        if (!conversationHistory.isEmpty()) {
-            systemMessage += "\n\nHistorique de la conversation (ne répète PAS de salutation si un 'Bonjour' apparaît déjà) :\n"
-                    + String.join("\n", conversationHistory);
-        }
-
-        final String finalSystemMessage = systemMessage;
-        return Flux.defer(() -> {
-            long startNanos = System.nanoTime();
-            AtomicBoolean firstToken = new AtomicBoolean(true);
-            return chatClient.prompt()
-                    .system(finalSystemMessage)
-                    .user(question)
-                    .stream()
-                    .content()
-                    .doOnNext(token -> {
-                        if (firstToken.compareAndSet(true, false)) {
-                            long ms = (System.nanoTime() - startNanos) / 1_000_000;
-                            log.info("[LATENCY] step=llm_first_token ms={}", ms);
-                        }
-                    })
-                    .doOnComplete(() -> {
-                        long ms = (System.nanoTime() - startNanos) / 1_000_000;
-                        log.info("[LATENCY] step=llm_total ms={}", ms);
-                    });
-        });
+    protected String defaultSystemPrompt() {
+        return DEFAULT_SYSTEM_PROMPT;
     }
 }
