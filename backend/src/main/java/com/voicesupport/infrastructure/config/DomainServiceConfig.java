@@ -3,6 +3,7 @@ package com.voicesupport.infrastructure.config;
 import com.voicesupport.domain.model.AgentProfile;
 import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
+import com.voicesupport.domain.port.in.CompareInvoicesUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.domain.port.in.SyncKnowledgeSourceUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
@@ -16,6 +17,7 @@ import com.voicesupport.domain.port.out.VectorStorePort;
 import com.voicesupport.domain.service.ConversationOrchestrator;
 import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.GuardrailService;
+import com.voicesupport.domain.service.InvoiceComparisonService;
 import com.voicesupport.domain.service.IntentClassifier;
 import com.voicesupport.domain.service.KnowledgeIngestionService;
 import com.voicesupport.domain.service.KnowledgeSyncService;
@@ -170,6 +172,11 @@ public class DomainServiceConfig {
     @Bean
     public AskQuestionUseCase askQuestionUseCase(ConversationOrchestrator orchestrator) {
         return orchestrator;
+    }
+
+    @Bean
+    public CompareInvoicesUseCase compareInvoicesUseCase() {
+        return new InvoiceComparisonService();
     }
 
     @Bean
