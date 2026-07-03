@@ -1,0 +1,38 @@
+{
+  "expectations": [
+    {
+      "text": "The contract is written in English and uses stable JSON field names.",
+      "passed": true,
+      "evidence": "Checked English markers and JSON field names."
+    },
+    {
+      "text": "The contract represents monetary amounts as integer cents for calculation fields.",
+      "passed": true,
+      "evidence": "Looked for *_cents fields and integer wording."
+    },
+    {
+      "text": "The contract defines parseable, partial, and unusable extraction statuses or equivalent gating statuses.",
+      "passed": true,
+      "evidence": "Checked for the three gating statuses."
+    },
+    {
+      "text": "The contract includes reconciliation rules, warnings, and questions to validate with anonymized PDFs.",
+      "passed": true,
+      "evidence": "Checked for reconciliation, warnings, and validation questions."
+    },
+    {
+      "text": "The contract states that the LLM must not calculate invoice amounts or infer billing causes directly from the PDF.",
+      "passed": true,
+      "evidence": "Checked for explicit LLM prohibition around PDF/amount reasoning."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": null
+  }
+}

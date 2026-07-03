@@ -1,0 +1,314 @@
+{
+  "metadata": {
+    "skill_name": "technical-writer",
+    "skill_path": "/Users/tgrimaud/Workspace/Code/BMad/voice-support-bot/.cursor/skills/technical-writer",
+    "executor_model": "gpt-5.5",
+    "analyzer_model": "gpt-5.5",
+    "timestamp": "2026-07-02T15:20:06.863569+00:00",
+    "evals_run": [
+      0,
+      1,
+      2
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "eval_name": "missing-inputs",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The output documentation is written in English.",
+          "passed": true,
+          "evidence": "Checked for common French documentation markers."
+        },
+        {
+          "text": "The document lists anonymized invoice PDFs and associated bill-run document metadata as required inputs.",
+          "passed": true,
+          "evidence": "Looked for anonymized PDFs and bill-run document metadata references."
+        },
+        {
+          "text": "The document includes a section describing what can move forward without the missing BSS inputs.",
+          "passed": true,
+          "evidence": "Looked for a section explaining work that can continue or a minimum-start scope."
+        },
+        {
+          "text": "The document does not invent unavailable Galaxion answers and frames unknowns as missing inputs or open questions.",
+          "passed": true,
+          "evidence": "Looked for explicit request/open-question framing rather than definitive unsupported answers."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "eval_name": "missing-inputs",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The output documentation is written in English.",
+          "passed": true,
+          "evidence": "Checked for common French documentation markers."
+        },
+        {
+          "text": "The document lists anonymized invoice PDFs and associated bill-run document metadata as required inputs.",
+          "passed": true,
+          "evidence": "Looked for anonymized PDFs and bill-run document metadata references."
+        },
+        {
+          "text": "The document includes a section describing what can move forward without the missing BSS inputs.",
+          "passed": true,
+          "evidence": "Looked for a section explaining work that can continue or a minimum-start scope."
+        },
+        {
+          "text": "The document does not invent unavailable Galaxion answers and frames unknowns as missing inputs or open questions.",
+          "passed": true,
+          "evidence": "Looked for explicit request/open-question framing rather than definitive unsupported answers."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "mermaid-arrows",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The corrected diagram keeps the V1 Pipecat path distinct from the legacy bridge/fallback path.",
+          "passed": true,
+          "evidence": "Checked for Pipecat and legacy bridge nodes/labels."
+        },
+        {
+          "text": "The retrieval label is attached to the pgvector/vector-store interaction rather than an ambiguous internal backend handoff.",
+          "passed": true,
+          "evidence": "Checked for retrieval labeling on PgVecAdapter to PgVector edge."
+        },
+        {
+          "text": "The generation labels are attached to the Mistral/Ollama interactions rather than ambiguous internal backend handoffs.",
+          "passed": false,
+          "evidence": "Checked for generation labeling around Mistral/Ollama adapter edges."
+        },
+        {
+          "text": "The output is a Mermaid diagram excerpt and remains in English.",
+          "passed": true,
+          "evidence": "Checked Mermaid fence and language markers."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "mermaid-arrows",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The corrected diagram keeps the V1 Pipecat path distinct from the legacy bridge/fallback path.",
+          "passed": true,
+          "evidence": "Checked for Pipecat and legacy bridge nodes/labels."
+        },
+        {
+          "text": "The retrieval label is attached to the pgvector/vector-store interaction rather than an ambiguous internal backend handoff.",
+          "passed": true,
+          "evidence": "Checked for retrieval labeling on PgVecAdapter to PgVector edge."
+        },
+        {
+          "text": "The generation labels are attached to the Mistral/Ollama interactions rather than ambiguous internal backend handoffs.",
+          "passed": true,
+          "evidence": "Checked for generation labeling around Mistral/Ollama adapter edges."
+        },
+        {
+          "text": "The output is a Mermaid diagram excerpt and remains in English.",
+          "passed": true,
+          "evidence": "Checked Mermaid fence and language markers."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "extraction-contract",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The contract is written in English and uses stable JSON field names.",
+          "passed": true,
+          "evidence": "Checked English markers and JSON field names."
+        },
+        {
+          "text": "The contract represents monetary amounts as integer cents for calculation fields.",
+          "passed": true,
+          "evidence": "Looked for *_cents fields and integer wording."
+        },
+        {
+          "text": "The contract defines parseable, partial, and unusable extraction statuses or equivalent gating statuses.",
+          "passed": true,
+          "evidence": "Checked for the three gating statuses."
+        },
+        {
+          "text": "The contract includes reconciliation rules, warnings, and questions to validate with anonymized PDFs.",
+          "passed": true,
+          "evidence": "Checked for reconciliation, warnings, and validation questions."
+        },
+        {
+          "text": "The contract states that the LLM must not calculate invoice amounts or infer billing causes directly from the PDF.",
+          "passed": true,
+          "evidence": "Checked for explicit LLM prohibition around PDF/amount reasoning."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "extraction-contract",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The contract is written in English and uses stable JSON field names.",
+          "passed": true,
+          "evidence": "Checked English markers and JSON field names."
+        },
+        {
+          "text": "The contract represents monetary amounts as integer cents for calculation fields.",
+          "passed": true,
+          "evidence": "Looked for *_cents fields and integer wording."
+        },
+        {
+          "text": "The contract defines parseable, partial, and unusable extraction statuses or equivalent gating statuses.",
+          "passed": true,
+          "evidence": "Checked for the three gating statuses."
+        },
+        {
+          "text": "The contract includes reconciliation rules, warnings, and questions to validate with anonymized PDFs.",
+          "passed": true,
+          "evidence": "Checked for reconciliation, warnings, and validation questions."
+        },
+        {
+          "text": "The contract states that the LLM must not calculate invoice amounts or infer billing causes directly from the PDF.",
+          "passed": true,
+          "evidence": "Checked for explicit LLM prohibition around PDF/amount reasoning."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 0.9166666666666666,
+        "stddev": 0.11785113019775792,
+        "min": 0.75,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "tokens": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      },
+      "tokens": {
+        "mean": 0,
+        "stddev": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "-0.08",
+      "time_seconds": "n/a",
+      "tokens": "n/a"
+    }
+  },
+  "notes": [
+    "Timing and token counts were not available in the task completion notifications, so this benchmark compares assertion pass rates only.",
+    "Both configurations performed well on missing-inputs and extraction-contract evals.",
+    "The with-skill Mermaid run missed the generation-edge placement assertion; this is a useful improvement target for the skill diagram guidance.",
+    "Some assertions are presence-based and may not fully capture qualitative quality; human review remains important."
+  ]
+}

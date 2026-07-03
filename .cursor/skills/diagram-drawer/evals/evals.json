@@ -1,0 +1,44 @@
+{
+  "skill_name": "diagram-drawer",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Fix a Mermaid architecture diagram where the labels retrieval and generation are attached to internal backend arrows. The corrected excerpt must show PgVector retrieval and Mistral/Ollama generation labels on the external service interactions, while preserving the Pipecat V1 target path and legacy bridge fallback path.",
+      "expected_output": "A Mermaid diagram excerpt with target Pipecat flows, dashed legacy bridge flows, retrieval labeling on the PgVector interaction, and generation labeling on the Mistral/Ollama interactions.",
+      "files": [],
+      "expectations": [
+        "The output is a Mermaid diagram excerpt.",
+        "The V1 Pipecat path is visually distinct from the legacy bridge fallback path.",
+        "The retrieval label is attached to the PgVector or vector-store interaction, not only to an internal backend handoff.",
+        "The generation labels are attached to Mistral and Ollama external interactions, not only to internal adapter handoffs.",
+        "Repository-facing labels are written in English."
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Create a Draw.io XML excerpt for a backend adapter calling an external pgvector database. The edge label should stay attached to the correct boxes even when imported into Draw.io.",
+      "expected_output": "A Draw.io XML excerpt with well-formed mxGraphModel content and an edge using explicit exit and entry anchors.",
+      "files": [],
+      "expectations": [
+        "The output contains Draw.io XML with mxGraphModel.",
+        "The labeled edge includes explicit exitX and exitY anchors.",
+        "The labeled edge includes explicit entryX and entryY anchors.",
+        "The label describes the external pgvector retrieval interaction.",
+        "The XML can be parsed as well-formed XML."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review a diagram plan for the Voice Support Bot billing V1 flow. The user wrote the request in French, but the diagram will be committed under docs/. Produce the final diagram guidance and a small Mermaid sketch.",
+      "expected_output": "English diagram guidance and a Mermaid sketch that keeps billing-api, InvoicePdfExtractor, deterministic comparison, and LLM response formulation in their correct roles.",
+      "files": [],
+      "expectations": [
+        "The output uses English for repository-facing diagram labels.",
+        "The diagram shows billing-api as the V1 billing source.",
+        "The diagram shows InvoicePdfExtractor before deterministic invoice comparison.",
+        "The diagram does not show the LLM calculating invoice amounts directly from PDFs.",
+        "The guidance includes a note about label placement or edge semantics."
+      ]
+    }
+  ]
+}

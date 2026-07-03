@@ -56,21 +56,18 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 
 ### L1. STT streaming réel + turn-detection serveur
 - **Priorité** : 🟠 Moyenne · **Statut** : À faire
-- **État actuel** : `stt_streaming.py` n'expose qu'une **couture** ; l'impl
-  concrète `BatchSttSession` fait un `POST` Gradium sur tout le buffer (REST
-  batch). La fin de parole repose sur le **VAD navigateur** (absent en
-  téléphonie côté serveur).
-- **Objectif** : STT streaming WebSocket (transcription pendant que l'utilisateur
-  parle) + détection de fin de tour sémantique côté serveur (endpointing).
+- **État actuel** : la cible V1 Pipecat (`agent/bot.py`) utilise Gradium STT dans
+  le pipeline Pipecat avec VAD serveur Silero. Le bridge legacy conserve
+  `stt_streaming.py` + `BatchSttSession` (REST batch) pour fallback/comparaison.
+- **Objectif** : benchmarker le STT streaming Pipecat/Gradium sur web et
+  téléphonie, puis décider si un provider STT alternatif ou self-hosté est requis.
 
 ### L2. TTS streaming chunké + WebSocket TTS persistante
 - **Priorité** : 🟠 Moyenne · **Statut** : À faire
-- **État actuel** : `gradium_tts.py` ouvre une **nouvelle WebSocket par phrase**
-  et **bufferise tous les chunks** avant de renvoyer l'audio complet.
-- **Objectif** : (a) maintenir une WebSocket TTS persistante par session
-  (handshake éliminé, ~50-100 ms/phrase) ; (b) streamer les chunks PCM vers le
-  frontend au fil de l'eau (`useAudioQueue`) → la voix démarre dès les premiers
-  ~100 ms au lieu d'attendre la phrase complète.
+- **État actuel** : Pipecat utilise `GradiumTTSService` dans le pipeline cible V1.
+  Le bridge legacy conserve `gradium_tts.py`, qui ouvre une WebSocket par phrase.
+- **Objectif** : mesurer le first-audio Pipecat/Gradium, puis n'optimiser le TTS
+  legacy que si le fallback reste nécessaire.
 
 ### L3. Cache sémantique des FAQ fréquentes
 - **Priorité** : 🟠 Moyenne · **Statut** : À faire
@@ -158,7 +155,7 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 ## Fait (référence)
 
 - [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
-- [x] VAD navigateur (Silero) — conversation naturelle sans clic stop
+- [x] VAD serveur Pipecat/Silero — conversation naturelle sans clic stop
 - [x] Barge-in — interrompre le bot en parlant
 - [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
 - [x] Fallback Mistral API quand Ollama est trop lent (`LLM_PROVIDER`)

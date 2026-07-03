@@ -1,0 +1,3 @@
+Produced a standalone English missing-inputs document for the Galaxion / BSS invoice comparison work.
+
+The document prioritizes blocking BSS inputs, cause-evidence payloads, security and operational requirements, mock fixture expectations, safe preparatory work, and open questions. It follows the repository's technical-writing conventions: English documentation, explicit unknowns, `billing-api` as the V1 target, deterministic PDF-to-JSON extraction, and no LLM-side amount calculation.

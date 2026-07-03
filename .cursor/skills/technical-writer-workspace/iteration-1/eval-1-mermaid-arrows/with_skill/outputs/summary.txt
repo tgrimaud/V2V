@@ -1,0 +1,1 @@
+Corrected the first architecture Mermaid diagram excerpt by moving the semantic retrieval and generation labels onto the RAG pipeline-to-adapter arrows. The adapter-to-external-service arrows now carry protocol labels only, reducing visual ambiguity while preserving the solid target V1 Pipecat path and dotted legacy/fallback bridge path.

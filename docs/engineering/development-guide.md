@@ -234,9 +234,11 @@ première synchro : `DELETE FROM vector_store;` puis `POST /api/knowledge/sync`.
 | `relation "vector_store" does not exist` | Schema pas initialisé | Ajouter `initialize-schema: true` dans la config pgvector |
 | `model 'llama3.1' not found` | Mauvais tag de modèle | Utiliser `llama3.1:8b` (vérifier avec `ollama list`) |
 | Port 8081 occupé | Autre instance tourne | `kill $(lsof -ti:8081)` |
-| Port 8765/8766 occupé | Agent Pipecat déjà lancé | `kill $(lsof -ti:8765)` |
+| Port 7860 occupé | Agent Pipecat déjà lancé | `kill $(lsof -ti:7860)` |
+| Port 8765/8766 occupé | Bridge custom legacy déjà lancé | `kill $(lsof -ti:8765)` |
 | Ingestion lente | Ollama génère les embeddings | Normal au premier appel (~1s/chunk), ensuite caché |
-| Frontend ne se connecte pas au voice agent | URL incorrecte | Vérifier `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
+| UI Pipecat indisponible | Runner non démarré | `cd voice-agent && python -m agent.bot -t webrtc`, puis ouvrir `http://localhost:7860` |
+| Frontend React legacy ne se connecte pas au voice agent | URL incorrecte | Vérifier `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
 | `GRADIUM_API_KEY not set` | Variable manquante | `cp voice-agent/.env.example voice-agent/.env` et configurer |
 | `Embeddings not found for default` | `GRADIUM_VOICE_ID` invalide | Utiliser un vrai ID du [catalogue](https://docs.gradium.ai/guides/voices/all-voices) (ex: `b35yykvVppLXyw_l` pour Elise FR) |
 | Audio TTS non joué dans le navigateur | PCM brut non décodable par `decodeAudioData` | Le bridge doit wrapper le PCM dans un header WAV (44 octets) avant envoi |
@@ -244,10 +246,10 @@ première synchro : `DELETE FROM vector_store;` puis `POST /api/knowledge/sync`.
 | VAD charge `silero_vad_legacy.onnx` | Mauvais modèle par défaut | Ajouter `model: 'v5'` dans les options `MicVAD.new()` |
 | VAD `Can't create a session` | Fichier ONNX manquant dans `public/` | Copier `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` et `vad.worklet.bundle.min.js` dans `frontend/public/` |
 | VAD ne détecte pas la parole | `startOnLoad: true` + double-mount React | Ajouter `startOnLoad: false` et appeler `vad.start()` manuellement |
-| Barge-in ne coupe pas le bot | Bridge utilise l'ancien code | Redémarrer le bridge (`kill $(lsof -ti:8765)` puis relancer) |
+| Barge-in ne coupe pas le bot | Mauvais chemin vocal lancé | Utiliser Pipecat (`python -m agent.bot -t webrtc`) pour la cible V1, ou redémarrer le bridge legacy |
 | `401 Unauthorized` de Mistral | Clé API non chargée | Lancer le backend avec `export $(cat backend/.env \| xargs) && mvn spring-boot:run` ou sourcer le `.env` avant |
 | Bot répond hors-sujet sur "Bonjour" | Guardrails non actifs | Vérifier que `GuardrailService` est dans `DomainServiceConfig` et redémarrer le backend |
-| Le bot re-salue au 1er message (strategy B) | Le message d'accueil joué par le TTS n'est pas dans l'historique backend | `bot.py` doit appeler `POST /api/conversation/seed` au `on_client_connected` ; redémarrer l'agent vocal après mise à jour |
+| Le bot re-salue au 1er message Pipecat | Le message d'accueil joué par le TTS n'est pas dans l'historique backend | `bot.py` doit appeler `POST /api/conversation/seed` au `on_client_connected` ; redémarrer l'agent vocal après mise à jour |
 | Routing multi-agent ne fonctionne pas | KB non taguée | Ré-ingérer avec le paramètre `domain=support\|billing\|commercial` |
 | Réponses génériques malgré routing | Chunks sans domaine en BDD | Vider la table et ré-ingérer : `DELETE FROM vector_store;` puis re-curl ingest |
 
@@ -265,31 +267,21 @@ cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js frontend/publi
 # Lancer le backend Java (charger le .env pour la clé Mistral)
 cd backend && export $(cat .env | xargs) && mvn spring-boot:run
 
-# Lancer l'agent vocal (bridge unifié : navigateur ws:8765 + téléphonie ws:8766)
-# Depuis ADR-009, bridge_server sert AUSSI la téléphonie Twilio Media Streams
-# (μ-law 8kHz) sur TWILIO_WS_PORT (défaut 8766), même pipeline que le web.
-cd voice-agent && python -u -m agent.bridge_server
-
-# Lancer l'agent vocal (navigateur — Pipecat natif, sans bridge)
-cd voice-agent && python -m agent.ws_server
-
-# Lancer l'agent vocal téléphonie via Pipecat (legacy, alternative au bridge unifié)
-cd voice-agent && python -m agent.twilio_server
-
-# --- Strategy B : pile Pipecat unifiee (ADR-010), parallele au bridge (strategy A) ---
-# Web (WebRTC) + UI prebuilt sur http://localhost:7860 ; coexiste avec A (5173/8765/8766)
+# Lancer l'agent vocal cible V1 (Pipecat + Gradium)
+# Web (WebRTC) + UI prebuilt sur http://localhost:7860
 cd voice-agent && python -m agent.bot -t webrtc
 # Tous transports (web + telephonie) :
 cd voice-agent && python -m agent.bot
 # Telephonie Pipecat (necessite un proxy public, ex: ngrok) :
 cd voice-agent && python -m agent.bot -t twilio -x <votre-host-public>
-# Comparer A vs B : ouvrir http://localhost:5173 (A) et http://localhost:7860 (B),
-# puis agreger les logs [LATENCY] des deux avec tools/latency_report.py
+
+# Lancer le bridge custom legacy/fallback (React :5173, ws:8765/8766)
+cd voice-agent && python -u -m agent.bridge_server
 
 # Tester le streaming SSE (réponse token par token)
 curl -N "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=test"
 
-# Amorcer l'historique avec le message d'accueil (utilisé par le bot Pipecat B)
+# Amorcer l'historique avec le message d'accueil (utilisé par le bot Pipecat)
 # pour éviter que le LLM ne re-salue au 1er message utilisateur
 curl -X POST http://localhost:8081/api/conversation/seed \
   -H "Content-Type: application/json" \
@@ -361,22 +353,24 @@ Le chemin critique est instrumenté avec des logs structurés préfixés `[LATEN
 | `vector_search` | Backend | `PgVectorStoreAdapter` |
 | `llm_first_token` / `llm_total` | Backend | `MistralLlmAdapter` / `OllamaLlmAdapter` |
 | `tts` | Voice agent | `voice-agent/agent/gradium_tts.py` |
-| `time_to_first_audio` | Voice agent | `bridge_server.py` (de la fin de parole au 1er audio envoyé) |
-| `turn_total` | Voice agent | `bridge_server.py` (durée totale du tour) |
+| `time_to_first_audio` | Voice agent | `bridge_server.py` legacy ou Pipecat metrics selon le chemin testé |
+| `turn_total` | Voice agent | `bridge_server.py` legacy ou Pipecat metrics selon le chemin testé |
 
 **SLO de référence** : `time_to_first_audio` p95 < 800 ms.
 
 ### Capturer et agréger une baseline
 
 ```bash
-# 1. Capturer les logs des deux services pendant une session de test
+# 1. Capturer les logs des services pendant une session Pipecat
 cd backend && export $(cat .env | xargs) && mvn spring-boot:run 2>&1 | tee /tmp/backend.log
-cd voice-agent && python -u -m agent.bridge_server 2>&1 | tee /tmp/bridge.log
+cd voice-agent && python -m agent.bot -t webrtc 2>&1 | tee /tmp/pipecat.log
 
 # 2. Mener quelques échanges vocaux représentatifs (10-20 tours)
 
 # 3. Agréger en p50/p95 par étape
-python voice-agent/tools/latency_report.py /tmp/backend.log /tmp/bridge.log
+python voice-agent/tools/latency_report.py /tmp/backend.log /tmp/pipecat.log
 ```
 
-Le rapport affiche `n / p50 / p95 / min / max / mean` par étape et marque `OK`/`FAIL` sur le SLO `time_to_first_audio`. C'est la baseline de référence avant les optimisations de Phase 1.
+Le rapport affiche `n / p50 / p95 / min / max / mean` par étape et marque
+`OK`/`FAIL` sur le SLO `time_to_first_audio`. Le bridge legacy peut être lancé à
+part pour comparaison, mais la baseline V1 doit partir de Pipecat.

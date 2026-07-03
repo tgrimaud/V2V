@@ -1,0 +1,22 @@
+{
+  "eval_id": 2,
+  "eval_name": "extraction-contract",
+  "prompt": "Write a draft technical contract for the JSON produced by InvoicePdfExtractor from Galaxion PDFs. Include statuses, reconciliation rules, warnings, and questions to validate with anonymized PDFs.",
+  "assertions": [
+    {
+      "text": "The contract is written in English and uses stable JSON field names."
+    },
+    {
+      "text": "The contract represents monetary amounts as integer cents for calculation fields."
+    },
+    {
+      "text": "The contract defines parseable, partial, and unusable extraction statuses or equivalent gating statuses."
+    },
+    {
+      "text": "The contract includes reconciliation rules, warnings, and questions to validate with anonymized PDFs."
+    },
+    {
+      "text": "The contract states that the LLM must not calculate invoice amounts or infer billing causes directly from the PDF."
+    }
+  ]
+}

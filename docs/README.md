@@ -17,6 +17,8 @@
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
 - Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
+- Missing Galaxion inputs: [`integrations/galaxion/missing-inputs.md`](integrations/galaxion/missing-inputs.md)
+- Invoice PDF extraction JSON: [`integrations/galaxion/invoice-extraction-json.md`](integrations/galaxion/invoice-extraction-json.md)
 - Knowledge base guide: [`knowledge-base/knowledge-base-guide.md`](knowledge-base/knowledge-base-guide.md)
 - Development guide: [`engineering/development-guide.md`](engineering/development-guide.md)
 - Operational backlog: [`operations/backlog.md`](operations/backlog.md)

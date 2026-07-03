@@ -1,0 +1,33 @@
+{
+  "expectations": [
+    {
+      "text": "The output documentation is written in English.",
+      "passed": true,
+      "evidence": "Checked for common French documentation markers."
+    },
+    {
+      "text": "The document lists anonymized invoice PDFs and associated bill-run document metadata as required inputs.",
+      "passed": true,
+      "evidence": "Looked for anonymized PDFs and bill-run document metadata references."
+    },
+    {
+      "text": "The document includes a section describing what can move forward without the missing BSS inputs.",
+      "passed": true,
+      "evidence": "Looked for a section explaining work that can continue or a minimum-start scope."
+    },
+    {
+      "text": "The document does not invent unavailable Galaxion answers and frames unknowns as missing inputs or open questions.",
+      "passed": true,
+      "evidence": "Looked for explicit request/open-question framing rather than definitive unsupported answers."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": null
+  }
+}

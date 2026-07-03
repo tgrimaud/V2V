@@ -1,0 +1,70 @@
+{
+  "skill_name": "technical-writer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a new Galaxion missing-inputs document listing what we need from the BSS team before implementing invoice comparison. The user explains the requirements in French, but repository docs must follow project conventions.",
+      "expected_output": "Creates or updates an English documentation file, records missing BSS inputs without inventing answers, and updates relevant indexes or references.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "The output documentation is written in English."
+        },
+        {
+          "text": "The document lists anonymized invoice PDFs and associated bill-run document metadata as required inputs."
+        },
+        {
+          "text": "The document includes a section describing what can move forward without the missing BSS inputs."
+        },
+        {
+          "text": "The document does not invent unavailable Galaxion answers and frames unknowns as missing inputs or open questions."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review the first Mermaid architecture diagram in docs/architecture/architecture.md. The retrieval and generation arrows are visually attached to the wrong boxes. Fix the diagram while preserving the V1 Pipecat target and legacy bridge distinction.",
+      "expected_output": "Uses Mermaid guidance, keeps the document in English, moves labels to the correct edges, and preserves target V1 vs legacy/fallback semantics.",
+      "files": [
+        "docs/architecture/architecture.md"
+      ],
+      "assertions": [
+        {
+          "text": "The corrected diagram keeps the V1 Pipecat path distinct from the legacy bridge/fallback path."
+        },
+        {
+          "text": "The retrieval label is attached to the pgvector/vector-store interaction rather than an ambiguous internal backend handoff."
+        },
+        {
+          "text": "The generation labels are attached to the Mistral/Ollama interactions rather than ambiguous internal backend handoffs."
+        },
+        {
+          "text": "The output is a Mermaid diagram excerpt and remains in English."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Write a draft technical contract for the JSON produced by InvoicePdfExtractor from Galaxion PDFs. Include statuses, reconciliation rules, warnings, and questions to validate with anonymized PDFs.",
+      "expected_output": "Produces an English technical contract with integer-cent amounts, deterministic extraction rules, explicit unknowns, and no claim that the LLM reads PDFs or computes amounts.",
+      "files": [],
+      "assertions": [
+        {
+          "text": "The contract is written in English and uses stable JSON field names."
+        },
+        {
+          "text": "The contract represents monetary amounts as integer cents for calculation fields."
+        },
+        {
+          "text": "The contract defines parseable, partial, and unusable extraction statuses or equivalent gating statuses."
+        },
+        {
+          "text": "The contract includes reconciliation rules, warnings, and questions to validate with anonymized PDFs."
+        },
+        {
+          "text": "The contract states that the LLM must not calculate invoice amounts or infer billing causes directly from the PDF."
+        }
+      ]
+    }
+  ]
+}

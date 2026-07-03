@@ -1,0 +1,33 @@
+{
+  "expectations": [
+    {
+      "text": "The corrected diagram keeps the V1 Pipecat path distinct from the legacy bridge/fallback path.",
+      "passed": true,
+      "evidence": "Checked for Pipecat and legacy bridge nodes/labels."
+    },
+    {
+      "text": "The retrieval label is attached to the pgvector/vector-store interaction rather than an ambiguous internal backend handoff.",
+      "passed": true,
+      "evidence": "Checked for retrieval labeling on PgVecAdapter to PgVector edge."
+    },
+    {
+      "text": "The generation labels are attached to the Mistral/Ollama interactions rather than ambiguous internal backend handoffs.",
+      "passed": false,
+      "evidence": "Checked for generation labeling around Mistral/Ollama adapter edges."
+    },
+    {
+      "text": "The output is a Mermaid diagram excerpt and remains in English.",
+      "passed": true,
+      "evidence": "Checked Mermaid fence and language markers."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  },
+  "timing": {
+    "total_duration_seconds": null
+  }
+}

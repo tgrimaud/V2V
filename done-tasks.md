@@ -71,3 +71,20 @@
 - `docs/integrations/galaxion/bss-integration-plan.md` — plan BSS mis a jour autour de `billing-api` et des PDFs facture.
 - `docs/integrations/galaxion/galaxion-billing-contracts.md` — contrat Billing initial et flux `bill-run-documents`.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — apprentissages Galaxion et prochaine tache.
+
+## 2026-07-03 — Skills documentation, diagrams and presentation V1
+
+**Summary:**
+
+- Clarification finale de la cible voix V1 : Gradium + Pipecat est le chemin cible, le bridge custom reste legacy/fallback.
+- Creation des docs Galaxion manquantes : contrat JSON `InvoicePdfExtractor` et liste priorisee des inputs a demander au BSS.
+- Creation de skills locaux : `technical-writer` (docs techniques en anglais), `diagram-drawer` (Mermaid/Draw.io, labels et anchors), `presentation-maker` (decks high-level depuis `Presentation.odp`).
+- Generation d'une presentation projet lisible en anglais (`.pptx`) avec scope V1 et deux diagrammes simplifies d'architecture/flux billing.
+- Decouverte : patcher directement `Presentation.odp` peut produire un XML contenant du texte mais des slides visuellement vides ; en absence de LibreOffice, privilegier un PPTX genere avec formes texte standard.
+
+### Files changed
+- `.cursor/skills/{technical-writer,diagram-drawer,presentation-maker}/` — skills locaux et evals initiales.
+- `docs/integrations/galaxion/{invoice-extraction-json.md,missing-inputs.md}` — contrat d'extraction facture et inputs manquants.
+- `docs/architecture/architecture.md` — clarification Pipecat cible vs bridge legacy et labels Mermaid.
+- `outputs/presentations/voice-support-bot-scope-architecture/` — storyboard et presentation PPTX.
+- `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees mises a jour.

@@ -1,0 +1,3 @@
+Produced a standalone draft technical contract for JSON emitted by InvoicePdfExtractor from Galaxion invoice PDFs.
+
+The contract defines the V1 JSON shape, parseable/partial/unusable statuses, reconciliation rules, normalized warnings, line categories, pairwise comparison rules, and validation questions for anonymized PDFs.

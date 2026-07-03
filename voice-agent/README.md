@@ -7,10 +7,15 @@ Agent vocal temps réel pour le support télécom, utilisant :
 
 ## Architecture
 
+La cible V1 est le bot Pipecat (`agent/bot.py`) avec Gradium pour STT/TTS :
+WebRTC côté web et Twilio Media Streams côté téléphonie. Le bridge WebSocket
+custom (`agent/bridge_server.py`) reste disponible comme chemin POC historique /
+fallback, mais ce n'est plus le lancement recommandé pour la V1.
+
 ```
 Browser/Téléphone
      │
-     ▼ WebSocket (audio PCM 16kHz ou μ-law 8kHz)
+     ▼ WebRTC ou Twilio Media Streams
 ┌─────────────────────────────┐
 │      Pipecat Pipeline       │
 │  ┌───────┐  ┌───┐  ┌───┐   │
@@ -44,37 +49,36 @@ cp .env.example .env
 uv pip install -e .
 ```
 
-### Lancement
+### Lancement recommandé — Pipecat
 
-**Mode WebSocket (navigateur) :**
+**Mode WebRTC (web) :**
 ```bash
-python -u -m agent.bridge_server
-# → écoute sur ws://localhost:8765
+python -m agent.bot -t webrtc
+# → UI prebuilt sur http://localhost:7860
 ```
 
-**Mode Twilio (téléphonie) :**
+**Mode multi-transport (web + téléphonie) :**
 ```bash
-python -m agent.twilio_server
-# → écoute sur ws://localhost:8766
+python -m agent.bot
 ```
 
-### Deux stratégies d'unification des canaux
+**Mode Twilio seul :**
+```bash
+python -m agent.bot -t twilio -x <host-public>
+```
 
-Le projet contient deux implémentations **parallèles** (voir ADR-009 / ADR-010) qui peuvent tourner en même temps (backend Java partagé) :
+### Chemin legacy / fallback
 
-| | Strategy A (bridge custom) | Strategy B (Pipecat) |
+Le projet contient encore deux implémentations qui peuvent tourner en parallèle
+(backend Java partagé), mais leur statut n'est pas équivalent :
+
+| | Legacy / fallback | Cible V1 |
 |---|---|---|
 | Entrée | `python -u -m agent.bridge_server` | `python -m agent.bot` |
 | Web | `ws://localhost:8765` + frontend React (`:5173`) | WebRTC + UI prebuilt sur `http://localhost:7860` |
 | Téléphonie | `ws://localhost:8766` (Twilio Media Streams) | `python -m agent.bot -t twilio -x <host-public>` |
 | STT | Gradium REST (batch) | Gradium streaming |
 | VAD | navigateur + heuristique RMS | Silero (serveur) |
-
-**Strategy B — démarrage :**
-```bash
-python -m agent.bot -t webrtc   # web seul → http://localhost:7860
-python -m agent.bot             # web + téléphonie
-```
 
 ## Configuration
 
@@ -83,24 +87,25 @@ python -m agent.bot             # web + téléphonie
 | `GRADIUM_API_KEY` | — | Clé API Gradium (obligatoire) |
 | `GRADIUM_VOICE_ID` | `b35yykvVppLXyw_l` | ID de la voix Gradium ([catalogue](https://docs.gradium.ai/guides/voices/all-voices)) |
 | `BACKEND_URL` | `http://localhost:8081` | URL du backend Java |
-| `VOICE_AGENT_HOST` | `0.0.0.0` | Host d'écoute WebSocket |
-| `VOICE_AGENT_PORT` | `8765` | Port WebSocket (navigateur) |
-| `TWILIO_WS_PORT` | `8766` | Port WebSocket (Twilio) |
+| `VOICE_AGENT_HOST` | `0.0.0.0` | Host d'écoute du bridge legacy |
+| `VOICE_AGENT_PORT` | `8765` | Port WebSocket du bridge legacy navigateur |
+| `TWILIO_WS_PORT` | `8766` | Port WebSocket du bridge legacy Twilio |
 
 ## Pipeline vocal
 
-1. **Audio in** → Le navigateur ou Twilio envoie un flux audio via WebSocket
-2. **Gradium STT** → Transcription temps réel avec VAD sémantique
+1. **Audio in** → Le navigateur envoie l'audio via WebRTC, Twilio via Media Streams
+2. **Pipecat + Gradium STT** → Transcription temps réel avec VAD serveur
 3. **RAG Processor** → Appel HTTP au backend Java (`POST /api/conversation/ask`)
-4. **Gradium TTS** → Synthèse vocale du texte de réponse
+4. **Gradium TTS** → Synthèse vocale du texte de réponse dans le pipeline Pipecat
 5. **Audio out** → Renvoi du flux audio au client
 
 ## Formats audio supportés
 
 | Transport | Format | Sample rate |
 |-----------|--------|-------------|
-| Navigateur (WebSocket) | PCM 16-bit | 16 kHz |
+| Navigateur (Pipecat WebRTC) | PCM dans le pipeline | géré par Pipecat |
 | Twilio (Media Streams) | μ-law | 8 kHz |
+| Navigateur legacy (WebSocket) | PCM 16-bit | 16 kHz |
 
 ## Notes techniques
 

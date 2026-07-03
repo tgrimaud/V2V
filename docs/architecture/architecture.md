@@ -6,8 +6,9 @@ Voice Support Bot est un agent vocal intelligent qui répond aux questions de su
 
 L'architecture est **hybride** :
 - Un **backend Java** (hexagonal) gère la logique métier, le RAG, et l'administration
-- Un **agent vocal Python** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
-- Un **frontend React** fournit l'interface utilisateur avec VAD navigateur (détection automatique de parole), WebSocket audio + streaming texte, et barge-in (interruption du bot)
+- Un **agent vocal Python Pipecat** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
+- Un canal **WebRTC Pipecat** sert le parcours web cible V1, avec Twilio Media Streams pour la téléphonie
+- Le **frontend React + bridge WebSocket custom** reste disponible comme POC historique / fallback, mais n'est plus le chemin cible V1
 
 La cible machines/VM pour un pilote operateur V1 est detaillee dans
 [`infra-v1.md`](infra-v1.md). Le plan d'integration BSS et du mock
@@ -22,18 +23,17 @@ graph TB
     Browser["👤 Browser"]
     Twilio["👤 Twilio"]
 
-    %% ─── Notre code : Frontend ───
-    subgraph frontend ["🟢 Frontend — React/TypeScript"]
-        VoiceChat[VoiceChat + useVAD + useAudioQueue]
+    %% ─── Notre code : Frontend / UI ───
+    subgraph frontend ["🟢 Web UI"]
+        PipecatUI[Pipecat prebuilt UI WebRTC :7860]
+        VoiceChat[React VoiceChat legacy :5173]
     end
 
     %% ─── Notre code : Voice Agent ───
     subgraph voiceAgent ["🟢 Voice Agent — Python"]
-        BridgeServer[bridge_server.py]
-        SttClient[gradium_stt.py]
-        TtsClient[gradium_tts.py]
-        SentenceSplitter[sentence_splitter.py]
-        TTSWorker[TTS Worker Queue]
+        PipecatBot[agent/bot.py Pipecat pipeline]
+        StreamingRAG[streaming_rag_processor.py]
+        BridgeServer[bridge_server.py legacy fallback]
         BackendClient[backend_client.py]
     end
 
@@ -69,16 +69,20 @@ graph TB
     PgVector["🔴 PostgreSQL + pgvector :5433"]
 
     %% ─── Flux entrants ───
-    Browser -->|"ws:8765"| VoiceChat
-    VoiceChat -->|"ws:8765 PCM + JSON"| BridgeServer
-    Twilio -->|"ws:8766 μ-law"| BridgeServer
+    Browser -->|"WebRTC :7860"| PipecatUI
+    PipecatUI --> PipecatBot
+    Twilio -->|"Media Streams"| PipecatBot
+    Browser -.->|"legacy ws:8765"| VoiceChat
+    VoiceChat -.->|"legacy PCM + JSON"| BridgeServer
 
     %% ─── Voice Agent → Gradium (externe) ───
-    BridgeServer --> SttClient
-    SttClient -->|"HTTPS POST"| GradiumSTT
+    PipecatBot -->|"GradiumSTTService streaming"| GradiumSTT
+    BridgeServer -.->|"legacy HTTPS POST"| GradiumSTT
 
     %% ─── Voice Agent → Backend (interne) ───
-    BridgeServer --> BackendClient
+    PipecatBot --> StreamingRAG
+    StreamingRAG --> BackendClient
+    BridgeServer -.-> BackendClient
     BackendClient -->|"GET SSE /ask-stream"| StreamController
 
     %% ─── Backend interne ───
@@ -90,20 +94,18 @@ graph TB
     ConvController --> Orchestrator
 
     %% ─── Pipeline RAG → Adapters ───
-    RAGPipeline -->|"retrieval"| PgVecAdapter
-    RAGPipeline -->|"generation"| MistralAdapter
-    RAGPipeline -->|"generation"| OllamaAdapter
+    RAGPipeline --> PgVecAdapter
+    RAGPipeline --> MistralAdapter
+    RAGPipeline --> OllamaAdapter
 
     %% ─── Voice Agent → TTS (externe) ───
-    BridgeServer --> SentenceSplitter
-    SentenceSplitter --> TTSWorker
-    TTSWorker --> TtsClient
-    TtsClient -->|"WSS"| GradiumTTS
+    PipecatBot -->|"GradiumTTSService streaming"| GradiumTTS
+    BridgeServer -.->|"legacy WSS"| GradiumTTS
 
     %% ─── Backend → Services externes ───
-    MistralAdapter -->|"HTTPS streaming"| MistralAPI
-    OllamaAdapter -->|"HTTP streaming"| Ollama
-    PgVecAdapter -->|"SQL + HNSW"| PgVector
+    MistralAdapter -->|"generation HTTPS streaming"| MistralAPI
+    OllamaAdapter -->|"generation HTTP streaming"| Ollama
+    PgVecAdapter -->|"retrieval SQL + HNSW"| PgVector
 ```
 
 > **Légende** : 🟢 = notre code · 🔴 = service externe
@@ -118,18 +120,20 @@ Le système appelle les services externes suivants :
 | **LLM Generation (alt)** | HTTP (streaming) | `OllamaLlmAdapter` → Ollama local :11434 | Prompt + contexte → tokens streamés |
 | **Vector Search** | SQL (TCP :5433) | `PgVectorStoreAdapter` → PostgreSQL/pgvector | Query embedding → top-K chunks HNSW |
 | **Embedding Generation** | HTTP | Spring AI → Ollama (nomic-embed-text) | Texte → vecteur 768 dimensions |
-| **STT Transcription** | HTTPS POST | `gradium_stt.py` → `api.gradium.ai/api/post/speech/asr` | Audio PCM → NDJSON words |
-| **TTS Synthesis** | WSS | `gradium_tts.py` → `wss://api.gradium.ai/api/speech/tts` | Texte → PCM audio chunks |
-| **RAG Query (streaming)** | HTTP SSE | `bridge_server.py` → Backend :8081 `/api/conversation/ask-stream` | Question → SSE token stream |
-| **RAG Query (fallback)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
-| **Greeting seed** | HTTP POST | `bot.py` → Backend :8081 `/api/conversation/seed` | Message d'accueil (strategy B) enregistré dans l'historique pour éviter une re-salutation |
+| **STT Transcription** | Pipecat service / HTTPS | `agent/bot.py` → Gradium STT | Audio WebRTC/Twilio → transcription |
+| **TTS Synthesis** | Pipecat service / WSS | `agent/bot.py` → Gradium TTS | Texte → audio stream |
+| **RAG Query (streaming)** | HTTP SSE | `streaming_rag_processor.py` → Backend :8081 `/api/conversation/ask-stream` | Question → SSE token stream |
+| **RAG Query (fallback legacy)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
+| **Greeting seed** | HTTP POST | `bot.py` → Backend :8081 `/api/conversation/seed` | Message d'accueil Pipecat enregistré dans l'historique pour éviter une re-salutation |
 
 ## Séparation des responsabilités
 
 | Composant | Langage | Responsabilité |
 |-----------|---------|---------------|
-| **Frontend React** | TypeScript | Interface utilisateur, VAD navigateur (Silero via `@ricky0123/vad-web`), barge-in, audio queue playback, streaming texte |
-| **Voice Agent** | Python | Orchestration audio, STT/TTS via Gradium, sentence splitting, SSE consumer, gestion BARGE_IN (cancel async) |
+| **Pipecat Web UI** | TypeScript / prebuilt | Interface WebRTC cible V1 pour le parcours vocal web |
+| **Frontend React legacy** | TypeScript | Interface POC WebSocket, VAD navigateur, audio queue playback, streaming texte |
+| **Voice Agent Pipecat** | Python | Orchestration audio WebRTC/Twilio, STT/TTS via Gradium, VAD serveur, barge-in framework |
+| **Bridge custom legacy** | Python | Chemin POC/fallback WebSocket, STT/TTS Gradium, sentence splitting, SSE consumer |
 | **Gradium** | API cloud | STT (transcription) et TTS (synthèse vocale) |
 | **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), logique métier, escalade, admin |
 | **Mistral AI** | API cloud | LLM génération (provider par défaut, streaming) |
@@ -239,58 +243,52 @@ Client → POST /api/conversation/ask
          ← JSON { answer, citations, conversationId }
 ```
 
-### Mode vocal (SSE streaming — pipeline optimisé)
+### Mode vocal cible V1 (Pipecat WebRTC — pipeline optimisé)
 
 ```mermaid
 sequenceDiagram
-    participant FE as Frontend React
-    participant VAD as Silero VAD
-    participant BR as Bridge Python
+    participant FE as Pipecat WebRTC UI
+    participant BOT as Pipecat Bot
+    participant VAD as Silero VAD (serveur)
     participant STT as Gradium STT
     participant BE as Backend Java
     participant LLM as Mistral API
     participant TTS as Gradium TTS
 
-    Note over FE,VAD: Utilisateur active le micro (toggle)
-    FE->>VAD: start()
+    Note over FE,BOT: Utilisateur rejoint la session WebRTC
+    FE->>BOT: Flux audio WebRTC
 
-    Note over VAD: Detection automatique debut/fin de parole
-    VAD-->>FE: onSpeechEnd(audio Float32 16kHz)
-    FE->>BR: PCM Int16 + END_OF_SPEECH
-    BR->>STT: POST /api/post/speech/asr
-    STT-->>BR: NDJSON transcription (~200ms)
-    BR->>FE: {"type":"transcription","text":"..."}
+    BOT->>VAD: Endpointing et barge-in serveur
+    BOT->>STT: GradiumSTTService (streaming)
+    STT-->>BOT: Transcription
 
-    BR->>BE: GET /api/conversation/ask-stream?question=...
+    BOT->>BE: GET /api/conversation/ask-stream?question=...
     Note over BE: Vector search (~200ms)
     BE->>LLM: ChatClient.stream()
     LLM-->>BE: token stream
 
     loop Pour chaque phrase detectee
-        BE-->>BR: SSE event:chunk {"text":"token..."}
-        Note over BR: Sentence Splitter accumule
-        BR->>FE: {"type":"answer_chunk","text":"phrase complete"}
-        BR->>TTS: WSS text -> audio PCM
-        TTS-->>BR: PCM chunks
-        BR->>FE: Binary WAV (1 phrase)
-        Note over FE: Audio Queue joue immediatement
+        BE-->>BOT: SSE event:chunk {"text":"token..."}
+        Note over BOT: StreamingRAGProcessor pousse un TextFrame par phrase
+        BOT->>TTS: GradiumTTSService
+        TTS-->>BOT: Audio chunks
+        BOT-->>FE: Audio WebRTC
     end
 
-    BE-->>BR: SSE event:done
-    BR->>FE: {"type":"answer_done","text":"reponse complete"}
+    BE-->>BOT: SSE event:done
 
-    Note over FE,BR: --- Barge-in (interruption) ---
-    VAD-->>FE: onSpeechStart() pendant speaking
-    FE->>FE: flush audio queue
-    FE->>BR: BARGE_IN
-    Note over BR: Cancel asyncio task (SSE + TTS)
-    BR->>FE: {"type":"answer_done","text":"[interrompu]"}
+    Note over FE,BOT: --- Barge-in (interruption) ---
+    FE->>BOT: L'utilisateur parle pendant la réponse
+    BOT->>BOT: Pipecat interrompt la sortie audio et le pipeline courant
     Note over FE: Nouveau cycle : audio -> STT -> RAG
 ```
 
 **Gain de latence perçue :** L'utilisateur entend la première phrase en **~700ms** au lieu de ~2.2s dans le mode séquentiel.
 
-### Protocole WebSocket (Frontend ↔ Bridge)
+### Protocole legacy WebSocket (Frontend React ↔ Bridge)
+
+Ce protocole reste documenté pour le POC historique et les tests de fallback. La
+cible V1 web est le transport WebRTC Pipecat.
 
 | Direction | Message | Format | Quand |
 |-----------|---------|--------|-------|
@@ -304,35 +302,29 @@ sequenceDiagram
 | → Client | Fin réponse | JSON `{"type":"answer_done","text":"..."}` | Fin génération complète |
 | → Client | Langue ack | JSON `{"type":"language_changed","language":"..."}` | Après set_language |
 
-### Mode téléphonie (Twilio Media Streams → bridge unifié + Gradium)
+### Mode téléphonie cible V1 (Twilio Media Streams → Pipecat + Gradium)
 
-Depuis ADR-009 (Phase 1), la téléphonie est servie par le **bridge unifié**
-(`bridge_server.py`, sans Pipecat), au même titre que le canal navigateur. Le
-bridge expose un second serveur WebSocket dédié à la téléphonie et réutilise le
-même pipeline (turn-detector serveur + abstraction STT streaming + RAG SSE + TTS).
+La cible V1 sert la téléphonie via `agent/bot.py` et le transport Twilio créé par
+Pipecat (`create_transport`). WebRTC et Twilio partagent le même pipeline :
+transport input → VAD serveur → Gradium STT → RAG SSE → Gradium TTS → transport
+output.
 
 ```
 Appel téléphonique entrant
   → Twilio → POST /api/twilio/voice (webhook sur backend Java)
   ← TwiML <Response><Connect><Stream url="wss://.../ws/twilio"/></Connect></Response>
 
-  → Twilio Media Streams (WebSocket JSON) → ws://localhost:8766 (TWILIO_WS_PORT)
-  → bridge: parse les frames Twilio (telephony.parse_twilio_message)
-  → décode μ-law 8kHz → PCM16 (audio_codec.mulaw_to_pcm16)
-  → détection de fin de tour côté serveur (turn_detector, 8kHz, pas de VAD client)
-  → Gradium STT (input_format: ulaw_8000) → transcription
+  → Twilio Media Streams → Pipecat Twilio transport
+  → Silero VAD serveur
+  → Gradium STT streaming → transcription
   → GET /api/conversation/ask-stream (SSE) → réponse en streaming par phrase
-  → Gradium TTS (output_format: ulaw_8000) → μ-law brut
-  → frames média Twilio (telephony.build_media_message) → diffusé à l'appelant
+  → Gradium TTS streaming
+  → Pipecat Twilio transport → audio diffusé à l'appelant
 ```
 
-Modules : `telephony.py` (protocole Twilio Media Streams : parser/builders purs +
-handler de session), `audio_codec.py` (codec G.711 μ-law ↔ PCM16, sans dépendance),
-`turn_detector.py` (endpointing 8kHz), `stt_streaming.py` (abstraction STT).
-
-> L'ancien agent Pipecat (`twilio_server.py`, transport `WebSocketServerTransport` +
-> Silero VAD) reste disponible comme alternative legacy sur le même port, mais le
-> bridge unifié est le chemin recommandé (cohérent avec le canal web, sans Pipecat).
+Les modules `telephony.py`, `audio_codec.py`, `turn_detector.py`,
+`stt_streaming.py` et `bridge_server.py` restent utiles pour le chemin legacy /
+fallback et les tests bas niveau, mais ils ne portent plus la cible V1.
 
 ## Stratégie de chunking
 
@@ -560,11 +552,16 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 - Le frontend `useAudioQueue` chaîne les chunks audio WAV sans gap audible
 - Backward-compatible : fallback automatique vers POST /ask si SSE échoue
 
-### ADR-006 : VAD navigateur (Silero) avec barge-in
+### ADR-006 : VAD navigateur legacy (Silero) avec barge-in
 
 **Contexte** : Le mode push-to-talk obligeait l'utilisateur à cliquer "stop" après chaque phrase. L'interaction était non-naturelle comparée à un appel téléphonique.
 
-**Décision** : Remplacer le push-to-talk par un VAD (Voice Activity Detection) côté navigateur utilisant Silero v5 via `@ricky0123/vad-web`, avec support du barge-in.
+**Décision historique** : Remplacer le push-to-talk du frontend React legacy par
+un VAD (Voice Activity Detection) côté navigateur utilisant Silero v5 via
+`@ricky0123/vad-web`, avec support du barge-in.
+
+**Statut actuel** : la cible V1 Pipecat utilise le VAD serveur Silero fourni par
+le pipeline Pipecat. Le VAD navigateur reste propre au chemin React/bridge legacy.
 
 **Raisons** :
 - **Conversation naturelle** : le VAD détecte automatiquement début/fin de parole (~500ms de silence = fin)
@@ -616,34 +613,41 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 - **Pure domain** : `IntentClassifier` et `AgentRegistry` sont du domaine pur (pas de Spring)
 - **Backward-compatible** : les anciens endpoints continuent de fonctionner via `AskQuestionUseCase`
 
-### ADR-009 : Optimisation latence (déploiement opérateur) — Phase 1 code
+### ADR-009 : Optimisation latence bridge custom — chemin legacy/fallback
 
 **Contexte** : Pour un déploiement omnicanal (téléphonie SIP + web + mobile) chez un opérateur télécom, la latence de tour de parole doit descendre sous ~800ms (idéalement ~500ms) pour une conversation naturelle. Le pipeline initial atteint ~700ms jusqu'à la première phrase audible **hors** détection de fin de parole (latence réelle perçue ≈ 1.2-1.5s).
 
-**Décision** : livrer d'abord les changements applicatifs (Phase 1) déployables sur l'infra actuelle, l'infra (Phase 2) suivant après validation.
+**Décision historique** : livrer d'abord les changements applicatifs sur le
+bridge custom (`bridge_server.py`) pour instrumenter la latence, unifier le POC
+web/téléphonie et disposer d'un fallback sans nouvelle dépendance.
+
+**Statut actuel** : ce chemin reste utile pour comparaison, tests bas niveau et
+fallback, mais la cible V1 produit est désormais Gradium + Pipecat (ADR-010).
 
 **Instrumentation (Phase 0)** : logs structurés `[LATENCY] step=<nom> ms=<valeur>` sur tout le chemin critique (`stt`, `vector_search`, `llm_first_token`, `llm_total`, `tts`, `time_to_first_audio`, `turn_total`) + `voice-agent/tools/latency_report.py` qui agrège en p50/p95 avec SLO `time_to_first_audio` p95 < 800ms.
 
 **Détection de fin de tour côté serveur** : `voice-agent/agent/turn_detector.py` — endpointing déterministe (RMS + silence) requis pour la téléphonie (pas de VAD navigateur). Pur, sans dépendance, testable avec PCM synthétique.
 
-**Abstraction STT streaming** : `voice-agent/agent/stt_streaming.py` — `StreamingSttSession` (Protocol) avec `feed()`/`finalize()`. L'implémentation concrète actuelle (`BatchSttSession`) conserve le comportement Gradium REST derrière une couture streaming ; un futur client WebSocket ASR ou un STT self-hosté (faster-whisper) s'y branche sans toucher au bridge.
+**Abstraction STT streaming** : `voice-agent/agent/stt_streaming.py` — `StreamingSttSession` (Protocol) avec `feed()`/`finalize()`. L'implémentation concrète actuelle (`BatchSttSession`) conserve le comportement Gradium REST derrière une couture streaming pour le bridge legacy ; Pipecat utilise son service Gradium STT dédié.
 
 **Backend stateless** : l'état de session sort de la JVM derrière le port `ConversationStore` (`load`/`save`). `InMemoryConversationStore` aujourd'hui, adapter Redis en Phase 2 — débloque l'autoscaling horizontal. Le pattern explicite `load → mutation → save` est compatible store distribué.
 
-**Transport téléphonie unifié** : `voice-agent/agent/telephony.py` intègre le protocole Twilio Media Streams (μ-law 8kHz) **dans le bridge** plutôt qu'un agent Pipecat séparé. Parser/builders purs (`parse_twilio_message`, `build_media_message`) testés unitairement ; codec G.711 sans dépendance (`audio_codec.py`, `audioop` retiré en Python 3.13) ; le turn-detector serveur tourne en 8kHz. Web (`pcm_16000`) et téléphonie (`ulaw_8000`) partagent désormais le même pipeline STT→RAG→TTS — un seul code-path à maintenir et à optimiser. `bridge_server.main()` lance les deux serveurs WebSocket (8765 web, 8766 téléphonie via `TWILIO_WS_PORT`).
+**Transport téléphonie legacy** : `voice-agent/agent/telephony.py` intègre le protocole Twilio Media Streams (μ-law 8kHz) dans le bridge custom. Parser/builders purs (`parse_twilio_message`, `build_media_message`) testés unitairement ; codec G.711 sans dépendance (`audio_codec.py`, `audioop` retiré en Python 3.13) ; le turn-detector serveur tourne en 8kHz. `bridge_server.main()` lance les deux serveurs WebSocket legacy (8765 web, 8766 téléphonie via `TWILIO_WS_PORT`).
 
 **Raisons** :
 - **Mesure d'abord** : on ne peut pas optimiser ce qu'on ne mesure pas ; la baseline conditionne les choix.
 - **Téléphonie-ready** : le turn-detector serveur débloque le canal SIP qui n'a pas de VAD client.
 - **Découplage moteur STT** : la couture permet d'adopter un STT streaming (gain ~300-500ms) sans réécriture.
-- **Unification des canaux** : web et téléphonie sur un seul pipeline élimine la dérive entre deux implémentations et évite la dépendance Pipecat sur le chemin critique.
+- **Unification legacy des canaux** : web et téléphonie sur un seul pipeline custom permettent une comparaison directe avec Pipecat.
 - **Réversible et sans nouvelle dépendance** : logs structurés plutôt qu'un stack d'observabilité lourd (déféré à la Phase 2).
 
-### ADR-010 : Stratégie B — unification sur Pipecat (alternative parallèle à ADR-009)
+### ADR-010 : Cible V1 — unification sur Pipecat
 
-**Contexte** : ADR-009 (stratégie A) unifie web + téléphonie sur le **bridge custom** (`bridge_server.py`, sans Pipecat). Pour évaluer si une pile **Pipecat** ferait mieux en latence/robustesse, on construit une implémentation **parallèle** (stratégie B) sans toucher A, afin de comparer les deux têtes à tête.
+**Contexte** : ADR-009 a livré un bridge custom POC/fallback. Pour la V1
+opérateur, la décision produit est de démarrer avec **Gradium + Pipecat** comme
+solution de référence, puis d'ajuster après benchmark si nécessaire.
 
-**Décision** : un bot Pipecat unique multi-transports (`voice-agent/agent/bot.py`) servant les deux canaux via le **development runner** Pipecat :
+**Décision** : un bot Pipecat unique multi-transports (`voice-agent/agent/bot.py`) sert les deux canaux via le **development runner** Pipecat :
 - **Web** : WebRTC (`SmallWebRTCTransport`) avec l'**UI prebuilt** (`pipecat-ai-prebuilt`) servie sur `http://localhost:7860/client` — aucun frontend custom à écrire.
 - **Téléphonie** : Twilio Media Streams via `TwilioFrameSerializer` (sélection automatique par `create_transport`).
 - Les deux transports partagent **le même pipeline** : `transport.input() → Gradium STT (streaming) → StreamingRAGProcessor → Gradium TTS → transport.output()`.
@@ -652,13 +656,13 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 - `agent/bot.py` : `bot(runner_args)` + `create_transport(runner_args, transport_params)` ; Silero VAD sur les deux canaux (endpointing **et** barge-in gérés par le framework).
 - `agent/streaming_rag_processor.py` : `iter_answer_sentences()` (générateur pur, testé) consomme le SSE `/ask-stream` et pousse un `TextFrame` **par phrase** → la TTS démarre dès la 1ère phrase. Logs `[LATENCY] step=llm_first_token|rag_total` au même format que A pour comparaison directe.
 
-**Amorçage de l'historique (anti re-salutation)** : le message d'accueil de B (`WELCOME_MESSAGE`) est joué côté client par le TTS au `on_client_connected` et n'atteint donc **pas** le backend. Sans correctif, l'historique backend de la conversation est vide quand le premier message utilisateur arrive, et le LLM re-salue (« Bonjour, … »). À la connexion, `bot.py` appelle `POST /api/conversation/seed` (→ `ConversationOrchestrator.seedAssistantMessage`) pour enregistrer le message d'accueil comme un tour assistant. Le premier tour utilisateur voit alors un contexte assistant antérieur et le LLM ne re-salue plus. En stratégie A, la salutation provient du guardrail backend, donc elle est déjà dans l'historique — d'où l'asymétrie.
+**Amorçage de l'historique (anti re-salutation)** : le message d'accueil Pipecat (`WELCOME_MESSAGE`) est joué côté client par le TTS au `on_client_connected` et n'atteint donc **pas** le backend. Sans correctif, l'historique backend de la conversation est vide quand le premier message utilisateur arrive, et le LLM re-salue (« Bonjour, … »). À la connexion, `bot.py` appelle `POST /api/conversation/seed` (→ `ConversationOrchestrator.seedAssistantMessage`) pour enregistrer le message d'accueil comme un tour assistant. Le premier tour utilisateur voit alors un contexte assistant antérieur et le LLM ne re-salue plus.
 
-**Coexistence** : A (bridge 8765/8766, frontend 5173) et B (runner 7860) tournent en parallèle, backend Java partagé (8081). Aucun fichier de A modifié.
+**Coexistence** : le bridge legacy (8765/8766, frontend 5173) et Pipecat (runner 7860) peuvent tourner en parallèle, backend Java partagé (8081). Le bridge legacy sert de fallback et de référence de comparaison, pas de cible V1.
 
 **Différences clés A vs B** :
 
-| Aspect | A (bridge custom) | B (Pipecat) |
+| Aspect | Legacy bridge custom | Cible V1 Pipecat |
 |---|---|---|
 | Transport web | WebSocket + protocole maison | WebRTC (Opus, jitter buffer) |
 | Frontend web | React existant (riche : multi-agents, erreurs typées) | UI prebuilt Pipecat (générique) |
@@ -668,7 +672,9 @@ Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la télép
 | Métadonnées multi-agents | exposées au client | non propagées (UI générique) |
 | Dépendances | légères, sans Pipecat sur le hot path | aiortc + runner + prebuilt |
 
-**Statut** : B est une **piste d'évaluation**, pas un remplacement décidé. L'arbitrage A vs B (latence mesurée, robustesse VAD télécom réelle, richesse UI) est à trancher au jalon de validation Phase 1.
+**Statut** : Pipecat est le **point de départ V1**. Le benchmark reste nécessaire
+pour mesurer latence, robustesse VAD télécom réelle et richesse UI, mais il ne
+remet pas en cause le choix de démarrage Gradium + Pipecat.
 
 ### ADR-011 : Ingestion KB multi-sources via format pivot + synchro idempotente
 

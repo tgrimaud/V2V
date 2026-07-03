@@ -9,7 +9,7 @@
 | Part | Path | Stack |
 |------|------|-------|
 | Backend | `backend/` | Java 21, Spring Boot 3.4.3, Spring AI 1.0.0, Maven, hexagonal |
-| Voice agent | `voice-agent/` | Python, bridge WebSocket + Gradium STT/TTS (+ piste Pipecat) |
+| Voice agent | `voice-agent/` | Python, Pipecat WebRTC/Twilio + Gradium STT/TTS (bridge WebSocket custom en legacy/fallback) |
 | Frontend | `frontend/` | React 19, TypeScript, Vite, TailwindCSS 4 |
 
 ## Product scope V1
@@ -19,9 +19,17 @@
 - Le parcours **Voice2Voice est obligatoire** : activation par telephone ou chat vocal web, avec ecrit seulement comme canal complementaire.
 - La source de verite billing est le **BSS en lecture seule**. Le LLM formule une explication traçable apres calcul deterministe des ecarts ; il ne doit pas deviner les montants.
 - Le coeur produit doit rester agnostique des fournisseurs **LLM / STT / TTS** via ports/adapters configurables pour tester facilement plusieurs solutions.
+- La cible V1 voix demarre avec **Gradium + Pipecat** (`voice-agent/agent/bot.py`) : WebRTC pour le web et Twilio Media Streams pour la telephonie. `bridge_server.py` reste un POC historique / fallback, pas le chemin cible.
 - Le backlog produit V1 vit dans `product-backlog/` (EPICs, user stories, decisions, open questions) pour rester versionne avec le repo applicatif avant migration Jira.
 - Utiliser le skill local `.cursor/skills/product-business/` pour produire ou relire PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
 - Le schema cible editable est `docs/architecture/diagrams/target-v1-solution.drawio`.
+- Documentation under `docs/` must be written in English.
+- Use `.cursor/skills/technical-writer/SKILL.md` before creating, editing,
+  translating or reviewing technical documentation.
+- Use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or
+  reviewing Mermaid/Draw.io diagrams.
+- Use `.cursor/skills/presentation-maker/SKILL.md` before creating or refining
+  high-level technical/strategy presentations from `~/Downloads/Presentation.odp`.
 
 ## Deux modèles d'IA distincts (NE PAS confondre)
 
@@ -71,5 +79,9 @@ cd voice-agent && python -m pytest tests/
 | Parser un front-matter YAML en Java | `org.yaml.snakeyaml.Yaml` est dispo **transitivement** via Spring Boot — pas de dépendance à ajouter. |
 | Ajouter une nouvelle source KB | Implémenter un `KnowledgeSourceConnector` + le déclarer en `@Bean` ; `KnowledgeSyncService` injecte `List<KnowledgeSourceConnector>` → la nouvelle source est prise automatiquement (scheduler inclus). |
 | draw.io via MCP | `open_drawio_xml` ouvre l'éditeur (navigateur) ; sauvegarder aussi le `.drawio` (XML) dans `docs/` pour le versionner. |
+| Mermaid labels on wrong arrows | Put labels such as `retrieval` and `generation` on the edge where the real interaction happens, typically adapter -> PgVector or adapter -> external LLM, not on ambiguous internal backend handoffs. |
+| Draw.io detached arrows | Use explicit `exitX/exitY` and `entryX/entryY` anchors for important labeled edges, especially inside or across swimlanes. |
 | Supposer que `billing-service` est la source facture Galaxion | `billing-service` n'est plus utilise ; cibler `billing-api` uniquement pour Billing. |
 | Utiliser `invoices/composed` comme detail facture client | Ce n'est pas le chemin retenu V1. Recuperer le PDF via `bill-run-documents` puis extraire un JSON facture structure avant le moteur de comparaison. |
+| ODP template slides stayed visually blank despite text in `content.xml` | Do not keep patching ODP placeholders blindly. Generate a PPTX with standard PowerPoint text shapes (e.g. via `python-pptx` in a temp venv) when no LibreOffice renderer is available. |
+| Presentation content overflowed template frames | For `Presentation.odp`, prefer simple large layouts, one idea per slide, and two short bullets max; do not fill every placeholder just because it exists. |

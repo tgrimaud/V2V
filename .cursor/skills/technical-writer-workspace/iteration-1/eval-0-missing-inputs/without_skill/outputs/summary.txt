@@ -1,0 +1,3 @@
+Produced a standalone English markdown document listing the Galaxion/BSS inputs needed before implementing invoice comparison in the Voice Support Bot.
+
+The document covers the requested BSS delivery package, invoice discovery, PDF structure, amount semantics, delta causes, customer identification, error handling, access requirements, minimum implementation inputs, and open questions for the BSS team.

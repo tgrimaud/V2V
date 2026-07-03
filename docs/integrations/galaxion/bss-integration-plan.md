@@ -270,9 +270,13 @@ Le mock doit reproduire les erreurs utiles au comportement produit :
 Chaque erreur doit avoir le meme format que le BSS cible lorsque ce format sera
 connu.
 
-## Informations a demander quand les Swagger sont disponibles
+## Information To Request When Swaggers Are Available
 
-Pour chaque microservice, extraire :
+The living list of missing inputs is maintained in
+[`missing-inputs.md`](missing-inputs.md). It must be updated after every BSS,
+PDF or security feedback loop.
+
+For each microservice, extract:
 
 - base path ;
 - endpoints utiles V1 ;
@@ -318,7 +322,8 @@ Implementation recommandee :
 
 - `bss-mock/` pour le faux serveur et les fixtures ;
 - endpoints alignes sur les Swagger reels des que disponibles ;
-- fixtures PDF et JSON attendus d'extraction ;
+- fixtures PDF et JSON attendus d'extraction, alignes sur
+  [`invoice-extraction-json.md`](invoice-extraction-json.md) ;
 - tests de contrat sur les payloads utiles V1 ;
 - configuration backend `BSS_BASE_URL` ou equivalent ;
 - profil local `bss-mock` dans `docker-compose`.

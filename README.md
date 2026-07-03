@@ -6,7 +6,7 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 
 ## Fonctionnalités
 
-- **Conversation vocale naturelle** — VAD navigateur (Silero) détecte automatiquement début/fin de parole, sans clic
+- **Conversation vocale naturelle** — VAD serveur Pipecat/Silero détecte automatiquement début/fin de parole, sans clic
 - **Barge-in** — interrompre le bot en parlant coupe instantanément sa réponse
 - **Streaming temps réel** — réponse phrase par phrase (texte + audio) en ~700ms
 - **Chat texte** — fallback texte pour tester ou pour les contextes non-vocaux
@@ -30,7 +30,7 @@ Le bot écoute la question du client (voix), la transcrit, cherche la réponse d
 | Vector Store | PostgreSQL 16 + pgvector (HNSW) | Recherche de similarité |
 | Téléphonie | Twilio Media Streams → Pipecat | Appels téléphoniques |
 | Frontend | React 19, TypeScript, Vite 6, TailwindCSS 4 | Interface web |
-| VAD navigateur | Silero v5 (`@ricky0123/vad-web`) | Détection vocale client-side |
+| VAD | Silero via Pipecat | Détection vocale serveur pour WebRTC et téléphonie |
 
 ## Architecture
 
@@ -354,16 +354,23 @@ mvn spring-boot:run
 
 Le backend démarre sur http://localhost:8081.
 
-### 5. Lancer l'agent vocal (Pipecat + Gradium)
+### 5. Lancer l'agent vocal cible V1 (Pipecat + Gradium)
 
 ```bash
 cd voice-agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-python -u -m agent.bridge_server
+python -m agent.bot -t webrtc
 ```
 
-L'agent vocal écoute sur `ws://localhost:8765`.
+Le bot Pipecat expose l'UI WebRTC prebuilt sur `http://localhost:7860`.
+
+Le bridge custom historique reste disponible pour le frontend React POC :
+
+```bash
+python -u -m agent.bridge_server
+# ws://localhost:8765
+```
 
 ### 6. Lancer le frontend
 
@@ -440,10 +447,10 @@ Response: 204 No Content
 ```
 
 Enregistre un message **assistant** dans l'historique d'une conversation. Utilisé
-par le bot Pipecat (strategy B) au moment de la connexion : le message d'accueil
-est joué côté client par le TTS et n'atteint donc pas le backend ; sans cet
-amorçage, le LLM considère le premier message utilisateur comme le début de
-conversation et **re-salue**. Le seed corrige ce comportement.
+par le bot Pipecat au moment de la connexion : le message d'accueil est joué côté
+client par le TTS et n'atteint donc pas le backend ; sans cet amorçage, le LLM
+considère le premier message utilisateur comme le début de conversation et
+**re-salue**. Le seed corrige ce comportement.
 
 ### Ingestion de connaissance
 
@@ -478,11 +485,12 @@ GET /api/admin/events?limit=N — dernières conversations
 GET /api/admin/top-questions  — top 10 questions les plus fréquentes
 ```
 
-### WebSocket (voice — agent Pipecat)
+### Voice agent
 
 ```
-ws://localhost:8765   — WebSocket bidirectionnel (navigateur)
-ws://localhost:8766   — WebSocket pour Twilio Media Streams (μ-law 8kHz)
+http://localhost:7860 — UI WebRTC Pipecat cible V1
+ws://localhost:8765   — WebSocket legacy navigateur (bridge custom)
+ws://localhost:8766   — WebSocket legacy Twilio Media Streams (bridge custom)
 ```
 
 ### Health
@@ -602,7 +610,7 @@ cd voice-agent && python -m pytest tests/
 > Suivi détaillé des items ouverts (priorité, domaine, pistes) : [`docs/operations/backlog.md`](docs/operations/backlog.md).
 
 - [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
-- [x] VAD navigateur (Silero) — conversation naturelle sans clic stop
+- [x] VAD serveur Pipecat/Silero — conversation naturelle sans clic stop
 - [x] Barge-in — interrompre le bot en parlant
 - [ ] Mémoire conversationnelle persistante (JPA)
 - [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium

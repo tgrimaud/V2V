@@ -1,0 +1,45 @@
+{
+  "skill_name": "presentation-maker",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Create a high-level presentation for business and technical stakeholders explaining the Voice Support Bot V1 direction: Gradium + Pipecat for voice, billing-api for invoice retrieval, deterministic invoice comparison, and LLM only for response formulation. Use the local Presentation.odp template.",
+      "expected_output": "A stakeholder-friendly deck or storyboard that explains context, direction, target picture, roadmap, risks, and next steps without overloading slides with implementation detail.",
+      "files": [],
+      "expectations": [
+        "The output uses the Presentation.odp template as the required visual source.",
+        "The deck or storyboard is high-level and stakeholder-oriented.",
+        "The narrative preserves Gradium + Pipecat as the V1 voice target.",
+        "The narrative preserves billing-api and deterministic invoice comparison as the V1 billing direction.",
+        "The LLM is not presented as calculating invoice amounts directly from PDFs.",
+        "The output includes generated deck/storyboard file paths or clearly states why only a storyboard was produced."
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Turn a technical architecture note into a 7-slide strategy deck for leadership. The deck should explain the direction, trade-offs, phased plan, and decisions needed. Use Presentation.odp from Downloads and produce an editable presentation artifact if possible.",
+      "expected_output": "A concise leadership deck structure using the template, with conclusion-led slide titles and a clear decision-oriented flow.",
+      "files": [],
+      "expectations": [
+        "The output defines a 7-slide deck or creates a 7-slide presentation.",
+        "Slide titles are conclusion-led rather than only topic labels.",
+        "The deck includes direction, trade-offs, phased plan, and decisions needed.",
+        "The output avoids low-level code or API dumps.",
+        "The template file in Downloads is treated as a source and not modified directly."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Draft a French executive presentation from technical content about a new billing explanation capability. The deck should explain why the capability matters, how it works at a high level, what inputs are missing, and what the next validation steps are. Use the Presentation.odp template.",
+      "expected_output": "A French high-level executive deck or storyboard that keeps technical details understandable and uses the local template.",
+      "files": [],
+      "expectations": [
+        "The presentation content is in French because the prompt asks for a French executive deck.",
+        "The deck explains business value before implementation details.",
+        "The deck includes missing inputs or validation needs.",
+        "The deck includes next steps.",
+        "The output uses or references the Presentation.odp template."
+      ]
+    }
+  ]
+}

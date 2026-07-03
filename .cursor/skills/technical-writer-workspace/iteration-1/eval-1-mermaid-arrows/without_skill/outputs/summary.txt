@@ -1,0 +1,3 @@
+Corrected the first architecture Mermaid excerpt by making the RAG retrieval and generation paths explicit: the retrieval arrow now runs from Pipeline RAG to PgVectorStoreAdapter to PostgreSQL/pgvector, while generation runs from Pipeline RAG to MistralLlmAdapter to Mistral AI, with Ollama shown as a dashed generation fallback.
+
+The V1 Pipecat path remains the primary solid WebRTC/SSE flow, and the React/bridge path remains a dashed legacy fallback using POST /ask.

@@ -1,0 +1,3 @@
+Produced a standalone draft technical contract for the JSON emitted by InvoicePdfExtractor from Galaxion invoice PDFs.
+
+The contract defines the V1 JSON shape, extraction statuses, confidence rules, reconciliation rules, warning codes, comparison preconditions, restitution rules, and questions to validate with anonymized PDFs. It is grounded in the Voice Support Bot Galaxion documentation and preserves the rule that invoice amounts must be extracted deterministically before any LLM explanation.

@@ -1,0 +1,19 @@
+{
+  "eval_id": 0,
+  "eval_name": "missing-inputs",
+  "prompt": "Add a new Galaxion missing-inputs document listing what we need from the BSS team before implementing invoice comparison. The user explains the requirements in French, but repository docs must follow project conventions.",
+  "assertions": [
+    {
+      "text": "The output documentation is written in English."
+    },
+    {
+      "text": "The document lists anonymized invoice PDFs and associated bill-run document metadata as required inputs."
+    },
+    {
+      "text": "The document includes a section describing what can move forward without the missing BSS inputs."
+    },
+    {
+      "text": "The document does not invent unavailable Galaxion answers and frames unknowns as missing inputs or open questions."
+    }
+  ]
+}

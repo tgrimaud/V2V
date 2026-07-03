@@ -397,35 +397,76 @@ Responsabilites :
 Le LLM ne doit pas lire directement le PDF pour deduire les montants. Il peut
 formuler l'explication uniquement apres extraction structuree et validation.
 
-### JSON cible d'extraction
+### Target Extraction JSON
 
-Le format exact sera ajuste apres analyse de PDFs anonymises, mais le mock et
-les tests doivent viser une structure de ce type :
+The exact format will be adjusted after reviewing anonymized PDFs. The working
+version is detailed in
+[`invoice-extraction-json.md`](invoice-extraction-json.md).
+
+The structuring principles are:
+
+- amounts as integer cents (`*_cents`);
+- extraction status: `parseable`, `partial` or `unusable`;
+- textual evidence attached to extracted lines;
+- normalized warnings for ambiguous areas;
+- explicit reconciliation between line sum and invoice total.
+
+Simplified excerpt:
 
 ```json
 {
-  "invoice_number": "2025123214540001",
-  "account_id": "100231079",
-  "period": {
-    "start": "2026-06-01",
-    "end": "2026-06-30"
+  "schema_version": "invoice-extraction.v1",
+  "extraction": {
+    "status": "parseable",
+    "confidence": "high",
+    "warnings": []
   },
-  "invoice_date": "2026-07-01",
-  "due_date": "2026-07-15",
-  "currency": "EUR",
-  "total_tax_included": 68.4,
-  "lines": [
+  "source_document": {
+    "source": "billing-api",
+    "document_id": "2f6098b1-83e4-4cc0-8a2a-4e7d3f70d5f5",
+    "filename": "invoice-2026-06-100231079.pdf"
+  },
+  "invoice": {
+    "invoice_number": "202606100231079",
+    "account_id": "100231079",
+    "period": {
+      "start": "2026-06-01",
+      "end": "2026-06-30"
+    },
+    "currency": "EUR",
+    "amounts": {
+      "total_tax_included_cents": 6840
+    }
+  },
+  "sections": [
     {
-      "id": "line-1",
-      "label": "Mobile plan",
+      "id": "section-subscriptions",
+      "label": "Monthly charges",
       "category": "subscription",
-      "amount_tax_included": 29.99,
-      "period_start": "2026-06-01",
-      "period_end": "2026-06-30",
-      "evidence_text": "Mobile plan ... 29.99 EUR"
+      "lines": [
+        {
+          "id": "line-001",
+          "label": "Mobile plan 100GB",
+          "category": "subscription",
+          "amount_tax_included_cents": 2999,
+          "evidence": {
+            "page": 2,
+            "text": "Mobile plan 100GB 01 Jun - 30 Jun EUR 29.99"
+          },
+          "extraction_confidence": "high",
+          "warnings": []
+        }
+      ]
     }
   ],
-  "warnings": []
+  "reconciliation": {
+    "status": "reconciled",
+    "line_sum_tax_included_cents": 6840,
+    "invoice_total_tax_included_cents": 6840,
+    "difference_cents": 0,
+    "tolerance_cents": 1,
+    "unexplained_amount_cents": 0
+  }
 }
 ```
 
