@@ -22,37 +22,48 @@ class KnowledgeIngestionServiceTest {
     }
 
     @Test
-    void shouldSplitContentIntoChunks() {
+    void ingest_splits_content_into_stored_chunks() {
+        // GIVEN
         String content = "## Section 1\n\nParagraphe un.\n\n## Section 2\n\nParagraphe deux assez long pour tester.";
 
+        // WHEN
         int chunks = service.ingest(content, "test.md");
 
+        // THEN
         assertTrue(chunks > 0);
         assertFalse(vectorStorePort.storedChunks.isEmpty());
     }
 
     @Test
-    void shouldExtractSectionFromChunk() {
+    void ingest_extracts_section_from_chunk() {
+        // GIVEN
         String content = "## Problèmes Wi-Fi\n\nLe Wi-Fi ne fonctionne pas, vérifiez les branchements.";
 
+        // WHEN
         service.ingest(content, "faq.md");
 
+        // THEN
         assertEquals("Problèmes Wi-Fi", vectorStorePort.storedChunks.get(0).section);
     }
 
     @Test
-    void shouldUseSourceName() {
+    void ingest_uses_source_name_for_stored_chunk() {
+        // GIVEN / WHEN
         service.ingest("Contenu simple.", "ma-source.md");
 
+        // THEN
         assertEquals("ma-source.md", vectorStorePort.storedChunks.get(0).source);
     }
 
     @Test
-    void shouldIngestWithDomain() {
+    void ingest_stores_domain_when_provided() {
+        // GIVEN
         String content = "## Factures\n\nConsultez votre espace client pour voir vos factures.";
 
+        // WHEN
         int chunks = service.ingest(content, "billing-faq.md", "billing");
 
+        // THEN
         assertTrue(chunks > 0);
         assertEquals("billing", vectorStorePort.storedChunks.get(0).domain);
     }

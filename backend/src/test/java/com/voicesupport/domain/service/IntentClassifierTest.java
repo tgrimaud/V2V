@@ -23,63 +23,93 @@ class IntentClassifierTest {
     }
 
     @Test
-    void shouldRouteToBillingOnInvoiceQuestion() {
+    void classify_routes_to_billing_on_invoice_question() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Je ne comprends pas ma facture ce mois-ci", null);
+
+        // THEN
         assertEquals("billing", result.id());
     }
 
     @Test
-    void shouldRouteToSupportOnConnectivityQuestion() {
+    void classify_routes_to_support_on_connectivity_question() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Ma connexion internet est très lente", null);
+
+        // THEN
         assertEquals("support", result.id());
     }
 
     @Test
-    void shouldRouteToCommercialOnSubscriptionQuestion() {
+    void classify_routes_to_commercial_on_subscription_question() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Je voudrais souscrire à une nouvelle offre fibre", null);
+
+        // THEN
         assertEquals("commercial", result.id());
     }
 
     @Test
-    void shouldFallbackToCurrentAgentWhenAmbiguous() {
+    void classify_falls_back_to_current_agent_when_ambiguous() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("j'ai un problème", "billing");
+
+        // THEN
         assertEquals("billing", result.id());
     }
 
     @Test
-    void shouldFallbackToDefaultWhenNoCurrentAgent() {
+    void classify_falls_back_to_default_when_no_current_agent() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("bonjour", null);
+
+        // THEN
         assertEquals("support", result.id());
     }
 
     @Test
-    void shouldSwitchAgentWhenNewIntentIsClear() {
+    void classify_switches_agent_when_new_intent_is_clear() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify(
                 "En fait je voudrais déménager et garder mon numéro avec la portabilité", "support");
+
+        // THEN
         assertEquals("commercial", result.id());
     }
 
     @Test
-    void shouldDetectBillingPaymentKeywords() {
+    void classify_detects_billing_payment_keywords() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Mon prélèvement a été rejeté par la banque", null);
+
+        // THEN
         assertEquals("billing", result.id());
     }
 
     @Test
-    void shouldDetectSupportWifiKeywords() {
+    void classify_detects_support_wifi_keywords() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Le wifi ne fonctionne pas dans la chambre", null);
+
+        // THEN
         assertEquals("support", result.id());
     }
 
     @Test
-    void shouldDetectCommercialTvOption() {
+    void classify_detects_commercial_tv_option() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("Quels sont les bouquets TV sport disponibles ?", null);
+
+        // THEN
         assertEquals("commercial", result.id());
     }
 
     @Test
-    void shouldStickToCurrentAgentOnFollowUp() {
+    void classify_sticks_to_current_agent_on_follow_up() {
+        // GIVEN / WHEN
         AgentProfile result = classifier.classify("ok et quoi d'autre ?", "commercial");
+
+        // THEN
         assertEquals("commercial", result.id());
     }
 }

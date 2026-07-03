@@ -34,11 +34,14 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void shouldIngestNewDocument() {
+    void sync_all_ingests_new_document() {
+        // GIVEN
         connector.add(doc("faq.md", "## Titre\n\nContenu initial."));
 
+        // WHEN
         SyncReport report = service.syncAll();
 
+        // THEN
         assertEquals(1, report.ingested());
         assertEquals(0, report.skipped());
         assertFalse(vectorStorePort.storedChunks.isEmpty());
@@ -46,13 +49,16 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void shouldSkipUnchangedDocument() {
+    void sync_all_skips_unchanged_document() {
+        // GIVEN
         SourceDocument document = doc("faq.md", "## Titre\n\nContenu stable.");
         statePort.upsertState("markdown", "faq.md", document.contentHash(), document.updatedAt(), 1);
         connector.add(document);
 
+        // WHEN
         SyncReport report = service.syncAll();
 
+        // THEN
         assertEquals(0, report.ingested());
         assertEquals(1, report.skipped());
         assertTrue(vectorStorePort.storedChunks.isEmpty());
@@ -60,12 +66,15 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void shouldReingestChangedDocument() {
+    void sync_all_reingests_changed_document() {
+        // GIVEN
         statePort.upsertState("markdown", "faq.md", "ancien-hash", Instant.now(), 1);
         connector.add(doc("faq.md", "## Titre\n\nNouveau contenu modifie."));
 
+        // WHEN
         SyncReport report = service.syncAll();
 
+        // THEN
         assertEquals(1, report.ingested());
         assertEquals(0, report.skipped());
         assertTrue(vectorStorePort.deletedSources.contains("markdown::faq.md"));
@@ -73,19 +82,23 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void shouldDeleteStaleDocumentNoLongerInSource() {
+    void sync_all_deletes_stale_document_no_longer_in_source() {
+        // GIVEN
         statePort.upsertState("markdown", "obsolete.md", "hash", Instant.now(), 2);
         connector.add(doc("faq.md", "## Titre\n\nContenu present."));
 
+        // WHEN
         SyncReport report = service.syncAll();
 
+        // THEN
         assertEquals(1, report.deleted());
         assertTrue(vectorStorePort.deletedSources.contains("markdown::obsolete.md"));
         assertTrue(statePort.findHash("markdown", "obsolete.md").isEmpty());
     }
 
     @Test
-    void shouldThrowWhenSyncingUnknownSourceType() {
+    void sync_throws_when_source_type_is_unknown() {
+        // WHEN / THEN
         assertThrows(IllegalArgumentException.class, () -> service.sync("pdf"));
     }
 
