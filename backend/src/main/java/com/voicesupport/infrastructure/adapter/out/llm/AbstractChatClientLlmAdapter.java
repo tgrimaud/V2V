@@ -1,5 +1,6 @@
 package com.voicesupport.infrastructure.adapter.out.llm;
 
+import com.voicesupport.domain.model.TokenStream;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import org.slf4j.Logger;
@@ -42,15 +43,17 @@ public abstract class AbstractChatClientLlmAdapter implements LlmPort, LlmStream
     }
 
     @Override
-    public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+    public TokenStream streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
         return streamAnswer(question, contextChunks, conversationHistory, null);
     }
 
     @Override
-    public Flux<String> streamAnswer(String question, List<String> contextChunks,
-                                     List<String> conversationHistory, String systemPrompt) {
+    public TokenStream streamAnswer(String question, List<String> contextChunks,
+                                    List<String> conversationHistory, String systemPrompt) {
         String systemMessage = buildSystemMessage(contextChunks, conversationHistory, systemPrompt);
-        return Flux.defer(() -> streamWithLatencyLogging(systemMessage, question));
+        return () -> Flux.defer(() -> streamWithLatencyLogging(systemMessage, question))
+                .toIterable()
+                .iterator();
     }
 
     protected String buildSystemMessage(List<String> contextChunks, List<String> conversationHistory,

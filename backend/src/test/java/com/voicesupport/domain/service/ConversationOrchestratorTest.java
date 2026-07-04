@@ -5,6 +5,8 @@ import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.model.ConversationEvent;
 import com.voicesupport.domain.model.ConversationResponse;
+import com.voicesupport.domain.model.ConversationStreamResponse;
+import com.voicesupport.domain.model.TokenStream;
 import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
@@ -12,7 +14,6 @@ import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -213,15 +214,16 @@ class ConversationOrchestratorTest {
         llmPort.setStreamTokens(List.of("Vous ", "pouvez ", "changer ", "votre RIB."));
 
         // WHEN
-        ConversationOrchestrator.StreamingResult result =
+        ConversationStreamResponse result =
                 orchestrator.askStream("conv-stream", "Comment changer mon RIB ?");
 
         // THEN
         assertFalse(result.escalated());
         assertFalse(result.guardrailBlocked());
         assertEquals("billing", result.agentId());
-        String fullAnswer = String.join("", result.tokens().collectList().block());
-        assertTrue(fullAnswer.contains("RIB"));
+        StringBuilder fullAnswer = new StringBuilder();
+        result.tokens().forEach(fullAnswer::append);
+        assertTrue(fullAnswer.toString().contains("RIB"));
     }
 
     static class FakeVectorSearchPort implements VectorSearchPort {
@@ -264,15 +266,15 @@ class ConversationOrchestratorTest {
         }
 
         @Override
-        public Flux<String> streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
+        public TokenStream streamAnswer(String question, List<String> contextChunks, List<String> conversationHistory) {
             return streamAnswer(question, contextChunks, conversationHistory, null);
         }
 
         @Override
-        public Flux<String> streamAnswer(String question, List<String> contextChunks,
-                                          List<String> conversationHistory, String systemPrompt) {
+        public TokenStream streamAnswer(String question, List<String> contextChunks,
+                                        List<String> conversationHistory, String systemPrompt) {
             this.lastHistory = conversationHistory;
-            return Flux.fromIterable(streamTokens);
+            return TokenStream.fromIterable(streamTokens);
         }
     }
 

@@ -150,6 +150,25 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 - **Déclencheurs** : TCO managé > TCO GPU, contrainte réglementaire de
   non-sortie des données, ou besoin latence < 600 ms p95 inatteignable en managé.
 
+### FUT2. Pipecat comme couche voix temps réel approfondie
+- **Intention** : utiliser Pipecat plus profondément comme moteur d'orchestration
+  voix temps réel, sans déplacer le métier hors du backend Java. Pipecat doit
+  piloter le chemin audio (WebRTC/Twilio → STT → backend RAG streaming → TTS →
+  retour audio), tandis que le backend conserve les règles métier, guardrails,
+  routage d'agents, RAG/vector search, facturation et persistance conversationnelle.
+- **Pistes** : faire de Pipecat le seul chemin voix cible, supprimer
+  progressivement le bridge legacy, unifier WebRTC et Twilio dans un pipeline
+  Pipecat, exploiter le barge-in framework, propager les événements RTVI/UI
+  (`listening`, `thinking`, `speaking`, agent courant, citations, erreurs typées)
+  et consommer `/api/conversation/ask-stream` en streaming end-to-end.
+- **Signaux à remonter au backend/observabilité** : début/fin de parole,
+  confidence STT, interruptions, silences, time-to-first-token,
+  time-to-first-audio, latence STT/RAG/TTS et taux de barge-in.
+- **À ne pas déplacer dans Pipecat** : décisions métier, comparaison de factures,
+  règles de sécurité, modèle conversationnel persistant et logique RAG. Ces
+  responsabilités restent côté backend Java pour préserver l'architecture
+  hexagonale et la testabilité.
+
 ---
 
 ## Fait (référence)

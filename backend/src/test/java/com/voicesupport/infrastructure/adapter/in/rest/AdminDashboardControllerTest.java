@@ -1,11 +1,11 @@
 package com.voicesupport.infrastructure.adapter.in.rest;
 
 import com.voicesupport.domain.model.ConversationEvent;
+import com.voicesupport.domain.service.AdminDashboardService;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -17,16 +17,16 @@ class AdminDashboardControllerTest {
         InMemoryConversationEventStore store = new InMemoryConversationEventStore();
         store.save(event("How much?", 100, false));
         store.save(event("I want a human", 300, true));
-        AdminDashboardController controller = new AdminDashboardController(store);
+        AdminDashboardController controller = new AdminDashboardController(new AdminDashboardService(store));
 
         // WHEN
-        Map<String, Object> stats = controller.getStats().getBody();
+        AdminDashboardController.AdminStatsDto stats = controller.getStats().getBody();
 
         // THEN
-        assertEquals(2L, stats.get("total_conversations"));
-        assertEquals(1L, stats.get("escalated_count"));
-        assertEquals(50.0, stats.get("escalation_rate_percent"));
-        assertEquals(200L, stats.get("average_latency_ms"));
+        assertEquals(2L, stats.totalConversations());
+        assertEquals(1L, stats.escalatedCount());
+        assertEquals(50.0, stats.escalationRatePercent());
+        assertEquals(200L, stats.averageLatencyMs());
     }
 
     @Test
@@ -35,10 +35,10 @@ class AdminDashboardControllerTest {
         InMemoryConversationEventStore store = new InMemoryConversationEventStore();
         store.save(event("first", 100, false));
         store.save(event("second", 200, false));
-        AdminDashboardController controller = new AdminDashboardController(store);
+        AdminDashboardController controller = new AdminDashboardController(new AdminDashboardService(store));
 
         // WHEN
-        List<ConversationEvent> events = controller.getEvents(1).getBody();
+        List<AdminDashboardController.ConversationEventDto> events = controller.getEvents(1).getBody();
 
         // THEN
         assertEquals(1, events.size());
@@ -51,14 +51,14 @@ class AdminDashboardControllerTest {
         InMemoryConversationEventStore store = new InMemoryConversationEventStore();
         store.save(event("  My invoice increased  ", 100, false));
         store.save(event("my invoice increased", 200, false));
-        AdminDashboardController controller = new AdminDashboardController(store);
+        AdminDashboardController controller = new AdminDashboardController(new AdminDashboardService(store));
 
         // WHEN
-        List<Map<String, Object>> topQuestions = controller.getTopQuestions().getBody();
+        List<AdminDashboardController.TopQuestionDto> topQuestions = controller.getTopQuestions().getBody();
 
         // THEN
-        assertEquals("my invoice increased", topQuestions.getFirst().get("question"));
-        assertEquals(2L, topQuestions.getFirst().get("count"));
+        assertEquals("my invoice increased", topQuestions.getFirst().question());
+        assertEquals(2L, topQuestions.getFirst().count());
     }
 
     private ConversationEvent event(String question, long latencyMs, boolean escalated) {

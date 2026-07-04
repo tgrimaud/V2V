@@ -7,6 +7,7 @@ import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 class HexagonalArchitectureTest {
@@ -39,6 +40,50 @@ class HexagonalArchitectureTest {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..domain..")
                 .should().dependOnClassesThat().resideInAPackage("org.springframework..");
+
+        // WHEN / THEN
+        rule.check(productionClasses);
+    }
+
+    @Test
+    void domain_should_not_depend_on_reactor() {
+        // GIVEN
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..domain..")
+                .should().dependOnClassesThat().resideInAPackage("reactor..");
+
+        // WHEN / THEN
+        rule.check(productionClasses);
+    }
+
+    @Test
+    void input_adapters_should_not_depend_on_domain_services() {
+        // GIVEN
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..infrastructure.adapter.in..")
+                .should().dependOnClassesThat().resideInAPackage("..domain.service..");
+
+        // WHEN / THEN
+        rule.check(productionClasses);
+    }
+
+    @Test
+    void input_adapters_should_not_depend_on_output_ports() {
+        // GIVEN
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..infrastructure.adapter.in..")
+                .should().dependOnClassesThat().resideInAPackage("..domain.port.out..");
+
+        // WHEN / THEN
+        rule.check(productionClasses);
+    }
+
+    @Test
+    void ports_should_be_interfaces() {
+        // GIVEN
+        ArchRule rule = classes()
+                .that().resideInAPackage("..domain.port..")
+                .should().beInterfaces();
 
         // WHEN / THEN
         rule.check(productionClasses);

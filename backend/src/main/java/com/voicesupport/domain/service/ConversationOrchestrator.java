@@ -5,18 +5,20 @@ import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.model.Conversation;
 import com.voicesupport.domain.model.ConversationEvent;
 import com.voicesupport.domain.model.ConversationResponse;
+import com.voicesupport.domain.model.ConversationStreamResponse;
 import com.voicesupport.domain.model.GuardrailResult;
+import com.voicesupport.domain.model.TokenStream;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
+import com.voicesupport.domain.port.in.AskQuestionStreamingUseCase;
 import com.voicesupport.domain.port.out.ConversationEventStore;
 import com.voicesupport.domain.port.out.ConversationStore;
 import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
-import reactor.core.publisher.Flux;
 
 import java.util.List;
 
-public class ConversationOrchestrator implements AskQuestionUseCase {
+public class ConversationOrchestrator implements AskQuestionUseCase, AskQuestionStreamingUseCase {
 
     private static final int TOP_K = 5;
     private static final int HISTORY_WINDOW = 6;
@@ -82,7 +84,8 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         return completeAsk(conversation, conversationId, question, agent, citations, startTime);
     }
 
-    public StreamingResult askStream(String conversationId, String question) {
+    @Override
+    public ConversationStreamResponse askStream(String conversationId, String question) {
         long startTime = System.currentTimeMillis();
         Conversation conversation = conversationStore.load(conversationId);
         boolean alreadyGreeted = conversation.hasAssistantTurn();
@@ -109,17 +112,18 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         return completeStream(conversation, conversationId, question, agent, citations);
     }
 
-    private StreamingResult completeStream(Conversation conversation, String conversationId, String question,
-                                           AgentProfile agent, List<Citation> citations) {
+    private ConversationStreamResponse completeStream(Conversation conversation, String conversationId, String question,
+                                                      AgentProfile agent, List<Citation> citations) {
         List<String> contextChunks = relevantTexts(citations);
         List<String> history = buildHistory(conversation);
         conversationStore.save(conversationId, conversation);
 
-        Flux<String> tokenStream = llmStreamingPort.streamAnswer(
+        TokenStream tokenStream = llmStreamingPort.streamAnswer(
                 question, contextChunks, history, agent.systemPrompt());
-        return new StreamingResult(tokenStream, citations, false, false, agent.id(), agent.name());
+        return new ConversationStreamResponse(tokenStream, citations, false, false, agent.id(), agent.name());
     }
 
+    @Override
     public void seedAssistantMessage(String conversationId, String message) {
         if (message == null || message.isBlank()) {
             return;
@@ -129,6 +133,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         conversationStore.save(conversationId, conversation);
     }
 
+    @Override
     public void recordCompletion(String conversationId, String question,
                                   String fullAnswer, List<Citation> citations, long startTime) {
         Conversation conversation = conversationStore.load(conversationId);
@@ -139,6 +144,7 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
                 fullAnswer, citations.size(), latency, false));
     }
 
+    @Override
     public String getCurrentAgentId(String conversationId) {
         return conversationStore.load(conversationId).getCurrentAgentId();
     }
@@ -172,19 +178,20 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
         return new ConversationResponse(result.fallbackMessage(), citations, null, null, actualBlock);
     }
 
-    private StreamingResult escalatedStream(Conversation conversation, String conversationId,
-                                            String question, long startTime) {
+    private ConversationStreamResponse escalatedStream(Conversation conversation, String conversationId,
+                                                       String question, long startTime) {
         String msg = escalationDetector.getEscalationMessage();
         persistAssistantMessage(conversation, conversationId, question, msg, CHANNEL_VOICE, true, startTime);
-        return new StreamingResult(Flux.just(msg), List.of(), true, false, null, null);
+        return new ConversationStreamResponse(TokenStream.single(msg), List.of(), true, false, null, null);
     }
 
-    private StreamingResult blockedStream(Conversation conversation, String conversationId, String question,
-                                          GuardrailResult result, List<Citation> citations,
-                                          boolean actualBlock, long startTime) {
+    private ConversationStreamResponse blockedStream(Conversation conversation, String conversationId, String question,
+                                                     GuardrailResult result, List<Citation> citations,
+                                                     boolean actualBlock, long startTime) {
         persistAssistantMessage(conversation, conversationId, question,
                 result.fallbackMessage(), CHANNEL_VOICE, false, startTime);
-        return new StreamingResult(Flux.just(result.fallbackMessage()), citations, false, actualBlock, null, null);
+        return new ConversationStreamResponse(
+                TokenStream.single(result.fallbackMessage()), citations, false, actualBlock, null, null);
     }
 
     private void persistAssistantMessage(Conversation conversation, String conversationId, String question,
@@ -223,8 +230,4 @@ public class ConversationOrchestrator implements AskQuestionUseCase {
                 .map(turn -> turn.role().name() + ": " + turn.text())
                 .toList();
     }
-
-    public record StreamingResult(Flux<String> tokens, List<Citation> citations,
-                                   boolean escalated, boolean guardrailBlocked,
-                                   String agentId, String agentName) {}
 }

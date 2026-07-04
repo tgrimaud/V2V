@@ -2,6 +2,8 @@ package com.voicesupport.infrastructure.config;
 
 import com.voicesupport.domain.model.AgentProfile;
 import com.voicesupport.domain.model.AgentRegistry;
+import com.voicesupport.domain.port.in.AdminDashboardUseCase;
+import com.voicesupport.domain.port.in.AskQuestionStreamingUseCase;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
 import com.voicesupport.domain.port.in.CompareInvoicesUseCase;
 import com.voicesupport.domain.port.in.IngestKnowledgeUseCase;
@@ -14,6 +16,7 @@ import com.voicesupport.domain.port.out.LlmPort;
 import com.voicesupport.domain.port.out.LlmStreamingPort;
 import com.voicesupport.domain.port.out.VectorSearchPort;
 import com.voicesupport.domain.port.out.VectorStorePort;
+import com.voicesupport.domain.service.AdminDashboardService;
 import com.voicesupport.domain.service.ConversationOrchestrator;
 import com.voicesupport.domain.service.EscalationDetector;
 import com.voicesupport.domain.service.GuardrailService;
@@ -23,25 +26,14 @@ import com.voicesupport.domain.service.KnowledgeIngestionService;
 import com.voicesupport.domain.service.KnowledgeSyncService;
 import com.voicesupport.domain.service.QueryReformulator;
 import com.voicesupport.domain.service.TextChunker;
-import com.voicesupport.infrastructure.adapter.out.llm.MistralLlmAdapter;
-import com.voicesupport.infrastructure.adapter.out.llm.OllamaLlmAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
 import com.voicesupport.infrastructure.adapter.out.persistence.JpaKnowledgeSourceStateAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.KbSourceStateRepository;
 import com.voicesupport.infrastructure.adapter.out.source.MarkdownFolderConnector;
 import com.voicesupport.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.mistralai.MistralAiChatModel;
-import org.springframework.ai.mistralai.MistralAiChatOptions;
-import org.springframework.ai.mistralai.api.MistralAiApi;
-import org.springframework.ai.ollama.OllamaChatModel;
-import org.springframework.ai.ollama.api.OllamaApi;
-import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -49,60 +41,6 @@ import java.util.List;
 
 @Configuration
 public class DomainServiceConfig {
-
-    @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public MistralAiChatModel mistralChatModel(
-            @Value("${spring.ai.mistralai.api-key}") String apiKey,
-            @Value("${spring.ai.mistralai.chat.options.model:mistral-small-latest}") String model,
-            @Value("${spring.ai.mistralai.chat.options.temperature:0.3}") double temperature) {
-        MistralAiApi mistralApi = new MistralAiApi(apiKey);
-        return MistralAiChatModel.builder()
-                .mistralAiApi(mistralApi)
-                .defaultOptions(MistralAiChatOptions.builder()
-                        .model(model)
-                        .temperature(temperature)
-                        .build())
-                .build();
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
-    public OllamaChatModel ollamaChatModel(
-            OllamaApi ollamaApi,
-            @Value("${spring.ai.ollama.chat.model:llama3.1:8b}") String model,
-            @Value("${spring.ai.ollama.chat.options.temperature:0.3}") double temperature) {
-        return OllamaChatModel.builder()
-                .ollamaApi(ollamaApi)
-                .defaultOptions(OllamaOptions.builder()
-                        .model(model)
-                        .temperature(temperature)
-                        .build())
-                .build();
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
-    public OllamaApi ollamaApi(@Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl) {
-        return OllamaApi.builder().baseUrl(baseUrl).build();
-    }
-
-    @Bean
-    public ChatClient chatClient(ChatModel chatModel) {
-        return ChatClient.builder(chatModel).build();
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public MistralLlmAdapter mistralLlmAdapter(ChatClient chatClient) {
-        return new MistralLlmAdapter(chatClient);
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama", matchIfMissing = false)
-    public OllamaLlmAdapter ollamaLlmAdapter(ChatClient chatClient) {
-        return new OllamaLlmAdapter(chatClient);
-    }
 
     @Bean
     public PgVectorStoreAdapter pgVectorStoreAdapter(VectorStore vectorStore) {
@@ -146,6 +84,11 @@ public class DomainServiceConfig {
     }
 
     @Bean
+    public AdminDashboardUseCase adminDashboardUseCase(ConversationEventStore eventStore) {
+        return new AdminDashboardService(eventStore);
+    }
+
+    @Bean
     public AgentRegistry agentRegistry() {
         return new AgentRegistry(
                 List.of(AgentProfile.support(), AgentProfile.billing(), AgentProfile.commercial()),
@@ -171,6 +114,11 @@ public class DomainServiceConfig {
 
     @Bean
     public AskQuestionUseCase askQuestionUseCase(ConversationOrchestrator orchestrator) {
+        return orchestrator;
+    }
+
+    @Bean
+    public AskQuestionStreamingUseCase askQuestionStreamingUseCase(ConversationOrchestrator orchestrator) {
         return orchestrator;
     }
 

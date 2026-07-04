@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.domain.model.Citation;
-import com.voicesupport.domain.service.ConversationOrchestrator;
-import com.voicesupport.domain.service.ConversationOrchestrator.StreamingResult;
+import com.voicesupport.domain.model.ConversationStreamResponse;
+import com.voicesupport.domain.port.in.AskQuestionStreamingUseCase;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -32,12 +33,12 @@ public class StreamingConversationController {
 
     private static final Logger log = LoggerFactory.getLogger(StreamingConversationController.class);
 
-    private final ConversationOrchestrator orchestrator;
+    private final AskQuestionStreamingUseCase streamingUseCase;
     private final ObjectMapper objectMapper;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public StreamingConversationController(ConversationOrchestrator orchestrator, ObjectMapper objectMapper) {
-        this.orchestrator = orchestrator;
+    public StreamingConversationController(AskQuestionStreamingUseCase streamingUseCase, ObjectMapper objectMapper) {
+        this.streamingUseCase = streamingUseCase;
         this.objectMapper = objectMapper;
     }
 
@@ -55,8 +56,13 @@ public class StreamingConversationController {
     @PostMapping("/seed")
     public ResponseEntity<Void> seed(@RequestBody SeedRequest request) {
         String conversationId = request.conversationId() != null ? request.conversationId() : "default";
-        orchestrator.seedAssistantMessage(conversationId, request.message());
+        streamingUseCase.seedAssistantMessage(conversationId, request.message());
         return ResponseEntity.noContent().build();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdown();
     }
 
     public record SeedRequest(String message,
@@ -64,7 +70,7 @@ public class StreamingConversationController {
 
     private void streamAnswer(SseEmitter emitter, String conversationId, String question, long startTime) {
         try {
-            StreamingResult result = orchestrator.askStream(conversationId, question);
+            ConversationStreamResponse result = streamingUseCase.askStream(conversationId, question);
             if (result.escalated()) {
                 sendSingleShot(emitter, result, conversationId, false);
             } else if (result.guardrailBlocked()) {
@@ -77,35 +83,41 @@ public class StreamingConversationController {
         }
     }
 
-    private void sendSingleShot(SseEmitter emitter, StreamingResult result,
+    private void sendSingleShot(SseEmitter emitter, ConversationStreamResponse result,
                                 String conversationId, boolean guardrailBlocked) {
-        String text = result.tokens().blockFirst();
+        String text = firstToken(result);
         sendStart(emitter, result.agentId(), result.agentName(), guardrailBlocked);
         sendChunk(emitter, text);
         sendDone(emitter, text, result.citations(), conversationId, result.agentId(), result.agentName());
         emitter.complete();
     }
 
-    private void streamTokens(SseEmitter emitter, StreamingResult result,
+    private void streamTokens(SseEmitter emitter, ConversationStreamResponse result,
                               String conversationId, String question, long startTime) {
         StringBuilder fullAnswer = new StringBuilder();
         sendStart(emitter, result.agentId(), result.agentName(), result.guardrailBlocked());
-        result.tokens()
-                .doOnNext(token -> {
-                    fullAnswer.append(token);
-                    sendChunk(emitter, token);
-                })
-                .doOnComplete(() -> completeStream(emitter, result, conversationId, question, fullAnswer, startTime))
-                .doOnError(error -> failStream(emitter, error))
-                .subscribe();
+        try {
+            for (String token : result.tokens()) {
+                fullAnswer.append(token);
+                sendChunk(emitter, token);
+            }
+            completeStream(emitter, result, conversationId, question, fullAnswer, startTime);
+        } catch (RuntimeException e) {
+            failStream(emitter, e);
+        }
     }
 
-    private void completeStream(SseEmitter emitter, StreamingResult result, String conversationId,
+    private void completeStream(SseEmitter emitter, ConversationStreamResponse result, String conversationId,
                                 String question, StringBuilder fullAnswer, long startTime) {
         String answer = fullAnswer.toString();
-        orchestrator.recordCompletion(conversationId, question, answer, result.citations(), startTime);
+        streamingUseCase.recordCompletion(conversationId, question, answer, result.citations(), startTime);
         sendDone(emitter, answer, result.citations(), conversationId, result.agentId(), result.agentName());
         emitter.complete();
+    }
+
+    private String firstToken(ConversationStreamResponse result) {
+        var iterator = result.tokens().iterator();
+        return iterator.hasNext() ? iterator.next() : "";
     }
 
     private void failStream(SseEmitter emitter, Throwable error) {
