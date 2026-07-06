@@ -14,11 +14,20 @@ public class Conversation {
     private String currentAgentId;
 
     public Conversation() {
-        this.id = UUID.randomUUID().toString();
-        this.turns = new ArrayList<>();
-        this.startedAt = Instant.now();
-        this.sessionLanguage = "fr";
-        this.currentAgentId = null;
+        this(UUID.randomUUID().toString());
+    }
+
+    public Conversation(String id) {
+        this(id, List.of(), Instant.now(), "fr", null);
+    }
+
+    public Conversation(String id, List<Turn> turns, Instant startedAt,
+                        String sessionLanguage, String currentAgentId) {
+        this.id = id;
+        this.turns = new ArrayList<>(turns);
+        this.startedAt = startedAt;
+        this.sessionLanguage = sessionLanguage;
+        this.currentAgentId = currentAgentId;
     }
 
     public void addUserTurn(String text) {

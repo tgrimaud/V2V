@@ -1,5 +1,6 @@
 package com.voicesupport.infrastructure.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.domain.model.AgentProfile;
 import com.voicesupport.domain.model.AgentRegistry;
 import com.voicesupport.domain.port.in.AdminDashboardUseCase;
@@ -26,17 +27,23 @@ import com.voicesupport.domain.service.KnowledgeIngestionService;
 import com.voicesupport.domain.service.KnowledgeSyncService;
 import com.voicesupport.domain.service.QueryReformulator;
 import com.voicesupport.domain.service.TextChunker;
+import com.voicesupport.infrastructure.adapter.out.persistence.ConversationEventRepository;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationEventStore;
 import com.voicesupport.infrastructure.adapter.out.persistence.InMemoryConversationStore;
+import com.voicesupport.infrastructure.adapter.out.persistence.JpaConversationEventStore;
 import com.voicesupport.infrastructure.adapter.out.persistence.JpaKnowledgeSourceStateAdapter;
 import com.voicesupport.infrastructure.adapter.out.persistence.KbSourceStateRepository;
+import com.voicesupport.infrastructure.adapter.out.persistence.RedisConversationStore;
 import com.voicesupport.infrastructure.adapter.out.source.MarkdownFolderConnector;
 import com.voicesupport.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.time.Duration;
 import java.util.List;
 
 @Configuration
@@ -74,13 +81,36 @@ public class DomainServiceConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(
+            name = "voice-support.persistence.conversation-event-store",
+            havingValue = "memory",
+            matchIfMissing = true)
     public ConversationEventStore conversationEventStore() {
         return new InMemoryConversationEventStore();
     }
 
     @Bean
+    @ConditionalOnProperty(
+            name = "voice-support.persistence.conversation-store",
+            havingValue = "memory",
+            matchIfMissing = true)
     public ConversationStore conversationStore() {
         return new InMemoryConversationStore();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "voice-support.persistence.conversation-event-store", havingValue = "jpa")
+    public ConversationEventStore jpaConversationEventStore(ConversationEventRepository repository) {
+        return new JpaConversationEventStore(repository);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "voice-support.persistence.conversation-store", havingValue = "redis")
+    public ConversationStore redisConversationStore(
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            @Value("${voice-support.persistence.conversation-ttl-seconds:86400}") long ttlSeconds) {
+        return new RedisConversationStore(redisTemplate, objectMapper, Duration.ofSeconds(ttlSeconds));
     }
 
     @Bean

@@ -12,7 +12,7 @@ public class InMemoryConversationStore implements ConversationStore {
 
     @Override
     public Conversation load(String conversationId) {
-        return sessions.computeIfAbsent(conversationId, id -> new Conversation());
+        return sessions.computeIfAbsent(conversationId, Conversation::new);
     }
 
     @Override

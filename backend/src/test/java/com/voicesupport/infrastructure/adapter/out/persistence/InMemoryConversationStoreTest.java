@@ -22,6 +22,7 @@ class InMemoryConversationStoreTest {
 
         // THEN
         assertNotNull(conversation);
+        assertEquals("unknown", conversation.getId());
         assertTrue(conversation.getTurns().isEmpty());
     }
 

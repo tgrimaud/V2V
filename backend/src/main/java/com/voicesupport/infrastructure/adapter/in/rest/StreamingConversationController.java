@@ -9,6 +9,7 @@ import com.voicesupport.domain.port.in.AskQuestionStreamingUseCase;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,7 +38,9 @@ public class StreamingConversationController {
     private final ObjectMapper objectMapper;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public StreamingConversationController(AskQuestionStreamingUseCase streamingUseCase, ObjectMapper objectMapper) {
+    public StreamingConversationController(
+            @Qualifier("askQuestionStreamingUseCase") AskQuestionStreamingUseCase streamingUseCase,
+            ObjectMapper objectMapper) {
         this.streamingUseCase = streamingUseCase;
         this.objectMapper = objectMapper;
     }

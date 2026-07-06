@@ -7,6 +7,11 @@ spring:
     username: ${DB_USERNAME:voicesupport}
     password: ${DB_PASSWORD:voicesupport}
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -41,6 +46,10 @@ server:
   port: 8081
 
 voice-support:
+  persistence:
+    conversation-store: ${CONVERSATION_STORE:memory}
+    conversation-event-store: ${CONVERSATION_EVENT_STORE:memory}
+    conversation-ttl-seconds: ${CONVERSATION_TTL_SECONDS:86400}
   llm:
     provider: ${LLM_PROVIDER:mistral-api}
   knowledge:

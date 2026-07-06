@@ -31,17 +31,13 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 ## Scalabilité & omnicanal
 
 ### S1. Backend stateless + état partagé (Redis)
-- **Priorité** : 🔴 Haute · **Statut** : À faire
-- **État actuel** : l'état conversationnel est **en mémoire mono-instance**
-  (`InMemoryConversationStore`, `InMemoryConversationEventStore`,
-  `ConcurrentHashMap`) → impossible de scaler horizontalement.
-- **Objectif** : sortir l'état de la JVM derrière un adapter **Redis** (state +
-  futur cache sémantique), events en Postgres/Kafka. Permet N instances backend
-  derrière un load-balancer → indispensable pour l'omnicanal à volume.
-- **Pistes** : le port `ConversationEventStore` existe déjà → ajouter l'adapter
-  sans toucher au domaine. Partage l'abstraction avec **C1** (persistance JPA) :
-  une même interface `ConversationStore`, impl. Redis (partage + faible latence)
-  et/ou JPA (durabilité).
+- **Priorité** : 🔴 Haute · **Statut** : Fait
+- **Réalisé** : `ConversationStore` dispose d'un adapter **Redis** activable via
+  `CONVERSATION_STORE=redis`, avec TTL (`CONVERSATION_TTL_SECONDS`). Docker
+  Compose lance Redis et configure le backend sur Redis pour les sessions actives.
+- **Effet** : N instances backend peuvent partager l'état chaud des conversations
+  derrière un load-balancer, au lieu de dépendre d'une map mémoire mono-instance.
+- **Suite possible** : réutiliser Redis pour cache sémantique et verrous courts.
 
 ### S2. Co-location + Kubernetes / autoscaling
 - **Priorité** : 🟢 Basse (infra) · **Statut** : À faire
@@ -105,10 +101,12 @@ ont été **vérifiés dans le code** (les plans contenaient des statuts obsolè
 ## Conversation
 
 ### C1. Mémoire conversationnelle persistante (JPA)
-- **Priorité** : 🟠 Moyenne · **Statut** : À faire
-- **Objectif** : persister l'historique en base (JPA) pour survivre aux
-  redémarrages et permettre la reprise de session. Partage l'abstraction
-  `ConversationStore` avec **S1** (Redis) — à traiter ensemble.
+- **Priorité** : 🟠 Moyenne · **Statut** : Fait
+- **Réalisé** : `ConversationEventStore` dispose d'un adapter JPA/Postgres,
+  activable via `CONVERSATION_EVENT_STORE=jpa`, pour conserver l'historique admin
+  et les métriques après redémarrage.
+- **Décision** : les sessions actives restent dans Redis (**S1**) ; Postgres garde
+  les événements durables plutôt que le state chaud conversationnel.
 
 ---
 

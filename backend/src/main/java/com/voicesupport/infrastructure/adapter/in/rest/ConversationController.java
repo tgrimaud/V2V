@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.voicesupport.domain.model.Citation;
 import com.voicesupport.domain.model.ConversationResponse;
 import com.voicesupport.domain.port.in.AskQuestionUseCase;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +20,7 @@ public class ConversationController {
 
     private final AskQuestionUseCase askQuestionUseCase;
 
-    public ConversationController(AskQuestionUseCase askQuestionUseCase) {
+    public ConversationController(@Qualifier("askQuestionUseCase") AskQuestionUseCase askQuestionUseCase) {
         this.askQuestionUseCase = askQuestionUseCase;
     }
 

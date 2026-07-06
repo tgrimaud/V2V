@@ -345,16 +345,38 @@ cd voice-agent && cp .env.example .env
 # Configurer GRADIUM_API_KEY + GRADIUM_VOICE_ID
 ```
 
-### 4. Lancer le backend Java
+### 4. Lancer la stack locale (recommandé)
+
+```bash
+docker compose up --build
+```
+
+La stack lance :
+- Postgres + pgvector (`localhost:5433`)
+- Redis (`localhost:6379`)
+- backend Java (`http://localhost:8081`)
+- frontend React (`http://localhost:5173`)
+- voice-agent (`ws://localhost:8765`, `ws://localhost:8766`)
+- Pipecat WebRTC UI (`http://localhost:7860`)
+
+En Docker Compose, le backend utilise `CONVERSATION_STORE=redis` pour les
+sessions actives et `CONVERSATION_EVENT_STORE=jpa` pour les événements admin. Le
+service `pipecat-agent` lance le chemin voix cible WebRTC ; `voice-agent` garde
+le bridge WebSocket legacy en fallback. Le frontend React expose les deux modes :
+`Solution A · WebSocket` et `Solution B · WebRTC`.
+
+### 4bis. Lancer le backend Java manuellement
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-Le backend démarre sur http://localhost:8081.
+Le backend démarre sur http://localhost:8081. En mode manuel, le stockage
+conversationnel reste en mémoire par défaut ; exporter `CONVERSATION_STORE=redis`
+et `CONVERSATION_EVENT_STORE=jpa` pour utiliser Redis/Postgres.
 
-### 5. Lancer l'agent vocal cible V1 (Pipecat + Gradium)
+### 5. Lancer l'agent vocal cible V1 (Pipecat + Gradium, mode manuel)
 
 ```bash
 cd voice-agent
@@ -588,6 +610,11 @@ voice-support-bot/
 | `OLLAMA_MODEL` | Modèle LLM Ollama | `llama3.1:8b` |
 | `OLLAMA_EMBEDDING_MODEL` | Modèle d'embeddings | `nomic-embed-text` |
 | `GUARDRAIL_CONFIDENCE_THRESHOLD` | Seuil de confiance RAG (0.0 à 1.0) | `0.65` |
+| `REDIS_HOST` | Hôte Redis pour les sessions actives | `localhost` |
+| `REDIS_PORT` | Port Redis | `6379` |
+| `CONVERSATION_STORE` | Stockage sessions actives (`memory` ou `redis`) | `memory` |
+| `CONVERSATION_EVENT_STORE` | Stockage événements/admin (`memory` ou `jpa`) | `memory` |
+| `CONVERSATION_TTL_SECONDS` | TTL des sessions Redis | `86400` |
 
 ## Tests
 
@@ -612,7 +639,7 @@ cd voice-agent && python -m pytest tests/
 - [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
 - [x] VAD serveur Pipecat/Silero — conversation naturelle sans clic stop
 - [x] Barge-in — interrompre le bot en parlant
-- [ ] Mémoire conversationnelle persistante (JPA)
+- [x] Mémoire conversationnelle partagée (Redis) + événements persistants (JPA)
 - [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
 - [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
 - [x] Fallback Mistral API quand Ollama est trop lent (configurable via `LLM_PROVIDER`)
