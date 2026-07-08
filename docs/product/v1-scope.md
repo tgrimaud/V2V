@@ -1,5 +1,28 @@
 # V1 Scope - Operator Invoice Explanation Assistant
 
+## Product Hierarchy
+
+This document is the canonical V1 value slice. It narrows the broader functional
+specification in [`cahier-des-charges-fonctionnel.md`](cahier-des-charges-fonctionnel.md)
+to the first business outcome: reliable invoice explanation based on BSS
+evidence.
+
+The broader support/RAG assistant is the product foundation and target vision.
+Billing/BSS invoice explanation is the V1 value focus, as captured in
+[ADR-0017](../architecture/adrs/ADR-0017-billing-v1-with-general-support-foundation.md).
+
+The billing V1 scope is governed by:
+
+- [ADR-0003](../architecture/adrs/ADR-0003-billing-v1-uses-read-only-bss-and-deterministic-comparison.md):
+  BSS read-only evidence and deterministic comparison before LLM wording;
+- [ADR-0004](../architecture/adrs/ADR-0004-bss-integration-through-typed-domain-ports.md):
+  runtime BSS access through typed domain ports, not MCP;
+- [ADR-0005](../architecture/adrs/ADR-0005-invoice-pdf-extraction-before-llm-explanation.md):
+  invoice PDF extraction before explanation when no validated structured line
+  endpoint is available;
+- [Galaxion BSS integration plan](../integrations/galaxion/bss-integration-plan.md);
+- [Invoice extraction JSON contract](../integrations/galaxion/invoice-extraction-json.md).
+
 ## Context
 
 The application primarily targets the operator's end users and helps them

@@ -41,21 +41,21 @@ edits.
 
 ### Product Scope And Roadmap
 
-- [ ] Decide the canonical product hierarchy: V1 billing/BSS invoice explanation
+- [x] Decide the canonical product hierarchy: V1 billing/BSS invoice explanation
       vs broader general telecom support assistant.
-- [ ] Update `docs/README.md` so it links both product documents and explains
+- [x] Update `docs/README.md` so it links both product documents and explains
       their relationship.
-- [ ] Update `docs/product/v1-scope.md` to link to the functional specification,
+- [x] Update `docs/product/v1-scope.md` to link to the functional specification,
       ADRs, and Galaxion integration docs.
-- [ ] Update `docs/product/cahier-des-charges-fonctionnel.md` to clarify whether
+- [x] Update `docs/product/cahier-des-charges-fonctionnel.md` to clarify whether
       it is the broad product vision, MVP scope, or target-state functional spec.
-- [ ] Align the product docs with ADR-0003, ADR-0004, and ADR-0005: BSS
+- [x] Align the product docs with ADR-0003, ADR-0004, and ADR-0005: BSS
       read-only source of truth, deterministic comparison, PDF extraction before
       LLM explanation.
-- [ ] Explicitly document that the broader support/RAG assistant is either the
+- [x] Explicitly document that the broader support/RAG assistant is either the
       current MVP foundation or the long-term product vision, while billing/BSS is
       the V1 value focus if that remains the intended direction.
-- [ ] Add an ADR for the product pivot: "billing/BSS V1 vs general support MVP".
+- [x] Add an ADR for the product pivot: "billing/BSS V1 vs general support MVP".
 
 ### ADR Governance
 
@@ -213,15 +213,21 @@ edits.
 ### Indexes And Cross-Links
 
 - [x] Add this review document to `docs/README.md`.
-- [ ] Add cross-links from product docs to ADRs and Galaxion docs.
-- [ ] Add cross-links from ADRs to the product docs they affect.
+- [x] Add cross-links from product docs to ADRs and Galaxion docs.
+- [x] Add cross-links from ADRs to the product docs they affect.
 - [ ] Add cross-links from `architecture.md` to ADR-0002, ADR-0008, ADR-0009,
       ADR-0010, and any new ADRs created from this cleanup.
-- [ ] Ensure every new or moved document is reachable from an index.
+- [x] Ensure every new or moved document is reachable from an index.
 
 ## Complete Findings
 
 ### 1. Product Documentation Findings
+
+Status after cleanup: the product hierarchy is now explicit. The functional
+specification describes the broad support assistant foundation and target vision,
+while `docs/product/v1-scope.md` defines the V1 billing/BSS invoice explanation
+value slice. This decision is captured in ADR-0017 and linked from both product
+documents and `docs/README.md`.
 
 #### 1.1 Two incompatible V1 product definitions
 

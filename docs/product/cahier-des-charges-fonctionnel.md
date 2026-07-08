@@ -1,5 +1,27 @@
 # Functional Specification — Voice Support Bot
 
+## Document Status
+
+This document describes the broad functional target for Voice Support Bot: a
+telecom support assistant with voice, text, RAG, multi-agent routing,
+escalation, admin monitoring, and future omnichannel readiness.
+
+It is not the narrow V1 value slice by itself. The canonical V1 scope is
+[`v1-scope.md`](v1-scope.md): billing/BSS invoice explanation delivered through
+the shared support assistant foundation. This hierarchy is recorded in
+[ADR-0017](../architecture/adrs/ADR-0017-billing-v1-with-general-support-foundation.md).
+
+For billing questions in V1, this functional specification must be read together
+with:
+
+- [ADR-0003](../architecture/adrs/ADR-0003-billing-v1-uses-read-only-bss-and-deterministic-comparison.md):
+  read-only BSS evidence and deterministic invoice comparison;
+- [ADR-0004](../architecture/adrs/ADR-0004-bss-integration-through-typed-domain-ports.md):
+  typed runtime BSS ports;
+- [ADR-0005](../architecture/adrs/ADR-0005-invoice-pdf-extraction-before-llm-explanation.md):
+  PDF extraction before LLM explanation when needed;
+- [Galaxion BSS integration plan](../integrations/galaxion/bss-integration-plan.md).
+
 ## 1. Context and Objectives
 
 Voice Support Bot is a voice-to-voice conversational assistant for the customer support of a Telecom/ISP operator. It allows a customer to ask a question orally or in writing, receive an answer guided by an internal knowledge base, and be routed to a human advisor when the request exceeds the automatable scope.

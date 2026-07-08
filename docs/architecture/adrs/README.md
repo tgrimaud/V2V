@@ -26,3 +26,4 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0014](ADR-0014-domain-guardrails-before-and-after-rag.md) | Accepted | Guardrails run in the backend domain pipeline before and after retrieval. |
 | [ADR-0015](ADR-0015-keyword-routing-with-session-stickiness.md) | Accepted | Multi-agent routing uses deterministic keyword scoring with session stickiness. |
 | [ADR-0016](ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) | Accepted | The custom bridge remains a legacy fallback and comparison path, not the V1 target. |
+| [ADR-0017](ADR-0017-billing-v1-with-general-support-foundation.md) | Accepted | Billing invoice explanation is the V1 value focus on top of the general support assistant foundation. |

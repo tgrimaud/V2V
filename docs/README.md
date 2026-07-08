@@ -4,7 +4,7 @@
 
 | Folder | Audience | Contents |
 |--------|----------|----------|
-| [`product/`](product/) | Product / delivery | V1 scope and product framing |
+| [`product/`](product/) | Product / delivery | Broad functional specification and V1 billing/BSS scope |
 | [`architecture/`](architecture/) | Architecture / engineering | System architecture, ADRs, infra target and architecture diagrams |
 | [`integrations/`](integrations/) | Architecture / backend / BSS | External system integration plans and contracts |
 | [`knowledge-base/`](knowledge-base/) | Content contributors / engineering | RAG knowledge base authoring and technical docs |
@@ -13,7 +13,10 @@
 
 ## Main Entry Points
 
-- Product scope: [`product/v1-scope.md`](product/v1-scope.md)
+- Product hierarchy: [`product/cahier-des-charges-fonctionnel.md`](product/cahier-des-charges-fonctionnel.md)
+  describes the broad support assistant target, while
+  [`product/v1-scope.md`](product/v1-scope.md) defines the billing/BSS invoice
+  explanation V1 value slice.
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
 - Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
 - Documentation coherence review: [`architecture/documentation-coherence-review-2026-07-08.md`](architecture/documentation-coherence-review-2026-07-08.md)

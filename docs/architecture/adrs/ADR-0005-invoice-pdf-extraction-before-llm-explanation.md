@@ -41,5 +41,6 @@ evidence, but it must not parse the PDF as the primary calculation mechanism.
 
 ## Related Documents
 
+- `docs/product/v1-scope.md`
 - `docs/integrations/galaxion/bss-integration-plan.md`
 - `docs/integrations/galaxion/invoice-extraction-json.md`
