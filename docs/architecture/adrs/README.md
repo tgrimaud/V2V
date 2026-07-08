@@ -27,3 +27,5 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0015](ADR-0015-keyword-routing-with-session-stickiness.md) | Accepted | Multi-agent routing uses deterministic keyword scoring with session stickiness. |
 | [ADR-0016](ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) | Accepted | The custom bridge remains a legacy fallback and comparison path, not the V1 target. |
 | [ADR-0017](ADR-0017-billing-v1-with-general-support-foundation.md) | Accepted | Billing invoice explanation is the V1 value focus on top of the general support assistant foundation. |
+| [ADR-0018](ADR-0018-voice-latency-targets-and-slo-measurement.md) | Accepted | Voice latency uses a shared taxonomy: ~700 ms experience target, p95 < 800 ms pilot criterion, production SLO deferred until observability gates are met. |
+| [ADR-0019](ADR-0019-escalation-rules-and-handoff-contract.md) | Accepted | Escalation decisions stay in the backend and future contact-center handoff uses a shared payload. |

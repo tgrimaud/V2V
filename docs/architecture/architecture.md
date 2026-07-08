@@ -145,6 +145,53 @@ The system calls the following external services:
 | **Ollama** | Local | Local LLM inference (configurable alternative) |
 | **PostgreSQL + pgvector** | — | Vector storage and similarity search |
 
+## Channel / Backend Contract
+
+ADR-0009, ADR-0010, ADR-0011, and ADR-0019 define the omnichannel boundary:
+channels are adapters, while the Java backend owns conversation behavior,
+guardrails, billing reasoning, routing, escalation, and memory.
+
+### Current MVP Routes
+
+The current routes are sufficient for the V1 web/Pipecat MVP:
+
+| Route | Current use | Contract status |
+|---|---|---|
+| `POST /api/conversation/ask` | Synchronous text answer and legacy bridge fallback | MVP route, not the final omnichannel envelope |
+| `GET /api/conversation/ask-stream` | Backend SSE stream consumed by Pipecat and text clients | MVP streaming route, not the final omnichannel envelope |
+| `POST /api/conversation/seed` | Store the Pipecat greeting in backend history | Voice-runtime support route |
+
+Before production WhatsApp, Genesys, or equivalent channel integrations, channel
+adapters must normalize an envelope containing:
+
+| Field | Purpose |
+|---|---|
+| `channel` | Source channel such as `web_voice`, `phone`, `web_chat`, `whatsapp_text`, `whatsapp_voice`, or `contact_center_chat` |
+| `conversation_id` | Internal backend conversation id |
+| `external_session_id` | Channel/provider session id, e.g. Twilio call SID, WhatsApp thread id, or contact-center conversation id |
+| `message_id` | Channel/provider inbound message or event id |
+| `idempotency_key` | Duplicate protection for retries and asynchronous delivery |
+| `reply_mode` | Expected response mode: `sync`, `stream`, `async`, or `handoff` |
+| `customer_reference` | Optional safe customer/account reference resolved by the channel adapter |
+| `escalation_context` | Optional handoff context following ADR-0019 |
+
+Current `ask` and `ask-stream` calls may keep accepting `question` and
+`conversation_id` for the MVP. A future channel-oriented API or compatibility
+adapter must add the envelope above before production-grade asynchronous
+channels. This keeps WhatsApp and Genesys integration from duplicating business
+logic or hiding idempotency and escalation behavior inside channel code.
+
+### Channel Roles
+
+| Channel / Layer | Status | Responsibility |
+|---|---|---|
+| Pipecat WebRTC | Target V1 voice path | Real-time web voice transport through Pipecat |
+| Twilio Media Streams | Target telephony voice path | Phone audio transport through Pipecat |
+| Web chat text | MVP/direct text path | Calls the Java backend directly |
+| WhatsApp text | Future async channel adapter | Calls the Java backend with the channel envelope; not production before contract, SLO, quotas, and observability are ready |
+| WhatsApp voice/call | Future voice channel adapter | Goes through a WhatsApp voice proxy to Pipecat |
+| Genesys Cloud CX | Future contact-center and escalation layer | Owns queues, agent desktop, supervision, and human handoff only; does not own RAG, billing reasoning, guardrails, or memory |
+
 ## Domain Layer (Pure Java)
 
 The domain contains **no Spring annotations**. It is testable with simple fakes.
@@ -290,8 +337,11 @@ sequenceDiagram
     Note over FE: New cycle: audio -> STT -> RAG
 ```
 
-**Perceived latency gain:** The user hears the first sentence in **~700ms**
-instead of ~2.2s in sequential mode.
+**Perceived latency gain:** the optimized streaming path targets a first audible
+sentence around **700ms** instead of ~2.2s in sequential mode. Per
+[`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md), this
+is an aspirational user-experience target; the measurable pilot criterion is
+`time_to_first_audio` p95 below 800 ms in a pre-warmed, co-located environment.
 
 ### Legacy WebSocket Protocol (React Frontend ↔ Bridge)
 
@@ -428,6 +478,11 @@ only sync accounting (hash, counters), not content.
 
 ## Escalation Detection
 
+Per [ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md), the Java
+backend owns escalation decisions. Channel adapters, Pipecat, WhatsApp, and
+future contact-center integrations must display or speak the backend decision
+instead of replacing support policy locally.
+
 `EscalationDetector` is a pure domain component that short-circuits the RAG pipeline:
 
 ```
@@ -441,8 +496,18 @@ EscalationDetector.shouldEscalate()
     └─ NO → normal RAG pipeline
 ```
 
-Trigger keywords: cancellation, complaint, refund, technician, GDPR, hacking,
-explicit frustration.
+Generic support triggers include cancellation, complaint, refund, dispute,
+technician or field intervention request, GDPR/privacy, suspected hacking,
+explicit advisor request, repeated automation failure, and strong frustration.
+
+Billing/BSS triggers include unavailable account data, inconsistent invoice
+evidence, unusable invoice extraction, low-confidence monetary lines, or a
+deterministic comparison that cannot explain the requested invoice delta.
+
+Future contact-center handoff uses an `EscalationHandoff` envelope with
+`conversation_id`, `channel`, `external_session_id`, `message_id`,
+`customer_reference`, `current_agent_id`, `reason_code`, `priority`, `summary`,
+`last_user_message`, evidence references, and recommended next action.
 
 Escalation is **instantaneous** (<1ms) because it goes through neither the vector
 store nor the LLM.
@@ -464,7 +529,7 @@ identity.
 
 ## Latency Budget
 
-### Streaming Mode (Optimized Pipeline — Production)
+### Streaming Mode (Optimized Pipeline — Target Budget)
 
 | Step | Time | Component | Perceived impact |
 |-------|-------|-----------|-------------|
@@ -476,6 +541,12 @@ identity.
 | **First audible sentence** | **~700ms** | | |
 | Complete LLM response (total) | ~1200ms | Java Backend → Mistral | In parallel with TTS |
 | TTS all sentences | ~400ms | Voice Agent → Gradium | Sequential per sentence |
+
+This table is a target budget, not a production SLO. ADR-0018 defines the
+current measurable pilot criterion (`time_to_first_audio` p95 below 800 ms) and
+keeps production SLO acceptance gated by ADR-0010: per-step/channel
+observability, dashboards, alerting, degraded modes, retries/timeouts, and
+provider outage tests.
 
 ### Synchronous Mode (Fallback / Text Mode)
 
@@ -551,3 +622,4 @@ The former inline ADRs from this page were migrated as follows:
 | ADR-009 Custom bridge latency optimization | Covered as a legacy path by [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
 | ADR-010 Pipecat V1 target | Covered by [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
 | ADR-011 Multi-source KB ingestion | Covered by [ADR-0007](adrs/ADR-0007-source-document-knowledge-sync.md) |
+| Voice latency targets and measurement | Covered by [ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) |

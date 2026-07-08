@@ -2,13 +2,17 @@
 
 **Voice-to-voice** customer support agent for the Telecom/ISP domain, powered by RAG (Retrieval-Augmented Generation) over a knowledge base, accessible through a **web browser** and **traditional telephony** (Twilio).
 
-The bot listens to the customer's voice question, transcribes it, searches for the answer in its knowledge base, generates a concise response, and speaks it back to the customer — all streamed, with the first audible sentence in ~700ms.
+The bot listens to the customer's voice question, transcribes it, searches for
+the answer in its knowledge base, generates a concise response, and speaks it
+back to the customer — all streamed. The optimized V1 path targets a first
+audible sentence around 700 ms, with `time_to_first_audio` p95 below 800 ms as
+the current pilot validation criterion.
 
 ## Features
 
 - **Natural voice conversation** — server-side Pipecat/Silero VAD automatically detects start/end of speech, with no click
 - **Barge-in** — interrupting the bot by speaking instantly cuts off its response
-- **Real-time streaming** — sentence-by-sentence response (text + audio) in ~700ms
+- **Real-time streaming** — sentence-by-sentence response (text + audio), targeting a first audible sentence around 700 ms on the optimized path
 - **Text chat** — text fallback for testing or non-voice contexts
 - **Twilio telephony** — voice response on a traditional phone number
 - **Knowledge-base RAG** — factual answers with sourced citations

@@ -13,18 +13,20 @@ code** (the plans contained obsolete statuses).
 
 ---
 
-## Private Cloud / 700 ms Target
+## Private Cloud / Voice Latency Target
 
-### P1. Technical prerequisites to meet `first audio < 700 ms`
+### P1. Technical prerequisites for the voice latency pilot criterion
 - **Priority**: 🔴 High · **Status**: To do
 - **Objective**: document and implement the prerequisites needed to meet a
-  `first audio < 700 ms` latency target in a private cloud.
+  `time_to_first_audio` p95 below 800 ms pilot criterion in a private cloud.
+  ADR-0018 keeps the ~700 ms first-audible-sentence value as an aspirational
+  user-experience target, not a production SLO.
 - **To cover**: real streaming STT (**L1**), chunked/persistent streaming TTS
   (**L2**), semantic cache (**L3**), Redis shared conversational state (**S1**),
   and span-based observability (**O1**).
 - **Validation criterion**: measure the latency budget per step
   (STT → retrieval → LLM first-token → TTS first-audio → network) and verify the
-  SLO in a co-located and pre-warmed environment.
+  pilot criterion in a co-located and pre-warmed environment.
 
 ---
 
@@ -41,8 +43,8 @@ code** (the plans contained obsolete statuses).
 
 ### S2. Co-location + Kubernetes / autoscaling
 - **Priority**: 🟢 Low (infra) · **Status**: To do
-- **Objective**: deploy bridge + backend + AI services in the same VPC/region
-  (remove internet hops from the critical path), HPA on backend + bridge
+- **Objective**: deploy Pipecat voice agents + backend + AI services in the same VPC/region
+  (remove internet hops from the critical path), HPA on backend + voice agents
   (custom "active calls" metric), separate CPU/GPU node pools, anti cold-start
   pre-warming. Depends on S1.
 
@@ -115,8 +117,10 @@ code** (the plans contained obsolete statuses).
 
 ### O1. OpenTelemetry traces on the pipeline
 - **Priority**: 🟠 Medium · **Status**: To do
-- **Objective**: instrument each step (STT → vector → LLM first-token → TTS) with
-  a budget per span, "first audio < 800 ms p95" SLO, dashboards + alerting.
+- **Objective**: instrument each step (STT → backend request → vector → LLM
+  first-token → TTS → channel output) with a budget per span, the
+  `time_to_first_audio` p95 below 800 ms pilot criterion, dashboards, and
+  alerting. Production SLOs remain gated by ADR-0010 and ADR-0018.
 
 ---
 
@@ -126,6 +130,22 @@ code** (the plans contained obsolete statuses).
 - **Priority**: 🟢 Low · **Status**: To do
 - **Objective**: pipeline latency visualizations, hourly conversation heatmap,
   usage metrics.
+
+---
+
+## Omnichannel Contracts
+
+### OM1. Channel/backend envelope and escalation handoff
+- **Priority**: 🔴 High before production omnichannel · **Status**: To do
+- **Objective**: implement the architecture envelope with `channel`,
+  `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, and
+  optional `escalation_context`.
+- **Escalation**: shape the `EscalationHandoff` payload from ADR-0019 so Genesys
+  Cloud CX or an equivalent contact-center platform receives channel, summary,
+  reason, priority, evidence status, and recommended next action.
+- **Gate**: WhatsApp and Genesys production integrations stay future work until
+  this contract, per-channel quotas, idempotency tests, observability, and
+  degraded modes are validated.
 
 ---
 

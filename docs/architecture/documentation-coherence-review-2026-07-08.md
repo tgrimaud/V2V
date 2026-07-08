@@ -110,33 +110,33 @@ edits.
 
 ### SLOs And NFRs
 
-- [ ] Choose the official voice latency SLO: 700 ms, 800 ms p95, or another
+- [x] Choose the official voice latency SLO: 700 ms, 800 ms p95, or another
       measured target.
-- [ ] Create a formal ADR for the SLO and its measurement conditions.
-- [ ] Update `docs/product/v1-scope.md`, `docs/product/cahier-des-charges-fonctionnel.md`,
+- [x] Create a formal ADR for the SLO and its measurement conditions.
+- [x] Update `docs/product/v1-scope.md`, `docs/product/cahier-des-charges-fonctionnel.md`,
       `docs/architecture/architecture.md`, `docs/operations/backlog.md`, and
       `docs/engineering/development-guide.md` to use the same SLO language.
-- [ ] Separate aspirational target, measured baseline, acceptance criterion, and
+- [x] Separate aspirational target, measured baseline, acceptance criterion, and
       production SLO.
-- [ ] Ensure ADR-0010's industrialization gates are referenced from
+- [x] Ensure ADR-0010's industrialization gates are referenced from
       `architecture.md` and `infra-v1.md`.
-- [ ] Add explicit observability requirements for every pipeline step and channel.
+- [x] Add explicit observability requirements for every pipeline step and channel.
 
 ### Omnichannel, Genesys, WhatsApp, And Escalation
 
-- [ ] Add a channel/backend contract section to `docs/architecture/architecture.md`.
-- [ ] Include `channel`, `external_session_id`, `message_id`, `idempotency_key`,
+- [x] Add a channel/backend contract section to `docs/architecture/architecture.md`.
+- [x] Include `channel`, `external_session_id`, `message_id`, `idempotency_key`,
       `reply_mode`, and escalation context in that contract.
-- [ ] Clarify whether current routes `ask` and `ask-stream` are sufficient or
+- [x] Clarify whether current routes `ask` and `ask-stream` are sufficient or
       whether a future channel-oriented API is required.
-- [ ] Reflect ADR-0009 and ADR-0010 in the architecture spine, not only in ADRs.
-- [ ] Clarify WhatsApp as a future asynchronous channel adapter, not a production
+- [x] Reflect ADR-0009 and ADR-0010 in the architecture spine, not only in ADRs.
+- [x] Clarify WhatsApp as a future asynchronous channel adapter, not a production
       channel available before the channel contracts and SLOs are formalized.
-- [ ] Clarify Genesys Cloud CX as an optional contact-center and escalation layer,
+- [x] Clarify Genesys Cloud CX as an optional contact-center and escalation layer,
       not the owner of RAG, billing reasoning, guardrails, or memory.
-- [ ] Create or update escalation rules to include both generic support triggers
+- [x] Create or update escalation rules to include both generic support triggers
       and billing/BSS confidence failures.
-- [ ] Add an ADR for escalation rules if they are treated as an architectural or
+- [x] Add an ADR for escalation rules if they are treated as an architectural or
       product decision.
 
 ### BSS And Billing Integration
@@ -278,7 +278,11 @@ The functional spec and README do not fully reflect this. They describe generic
 RAG over a KB and progressively connecting to business systems, which can be read
 as pushing BSS integration later than V1.
 
-#### 1.3 Escalation criteria diverge
+#### 1.3 Escalation criteria are aligned after cleanup
+
+Remediation status: fixed by ADR-0019 and the architecture/product cleanup.
+Escalation now includes both the billing/BSS uncertainty path from `v1-scope.md`
+and the generic support triggers from the functional specification.
 
 `v1-scope.md` escalates when:
 
@@ -296,18 +300,18 @@ The functional specification escalates on:
 - technician request;
 - frustration.
 
-`architecture.md` mostly follows the generic support keyword list and does not
-explicitly include BSS confidence failures as an escalation trigger.
+`architecture.md` now explicitly includes billing/BSS confidence failures as an
+escalation trigger and documents the future `EscalationHandoff` payload.
 
-#### 1.4 WhatsApp and Genesys timing is ambiguous
+#### 1.4 WhatsApp and Genesys timing is clarified after cleanup
 
-The functional specification lists WhatsApp in project scope and includes a
-journey, but ADR-0009 and ADR-0010 position WhatsApp as a future async channel
-adapter gated by contracts, SLOs, and observability.
+Remediation status: fixed. The functional specification now labels WhatsApp as a
+future asynchronous omnichannel extension, not a production channel in the
+current V1, and points to the architecture channel/backend envelope.
 
-Genesys is more consistent: it is positioned as a future contact-center layer,
-not the conversation engine. The missing piece is making that positioning visible
-from the architecture spine and infra docs.
+Genesys is consistently positioned as a future contact-center layer, not the
+conversation engine. `architecture.md` and `infra-v1.md` now make that
+positioning visible.
 
 #### 1.5 Product docs lack cross-links
 
@@ -394,11 +398,11 @@ target V1 path, and mark `bridge_server.py` as legacy/fallback/comparison:
 - `development-guide.md`;
 - legacy `architecture-overview.drawio` labels.
 
-#### 2.5 Channel/backend contract is defined in ADRs but absent from the
-architecture spine
+#### 2.5 Channel/backend contract is aligned after cleanup
 
-ADR-0009, ADR-0010, and the adversarial review define the expected channel
-contract fields:
+Remediation status: fixed in `architecture.md`. ADR-0009, ADR-0010, ADR-0011,
+and ADR-0019 now appear in the architecture spine through a channel/backend
+contract section. The expected envelope fields are:
 
 - `channel`;
 - `external_session_id`;
@@ -407,31 +411,39 @@ contract fields:
 - `reply_mode`;
 - escalation context.
 
-`architecture.md` documents only the current `ask` and `ask-stream` flows with
-`question` and `conversation_id`. It does not explain whether those APIs are the
-final omnichannel contract or whether a future channel-oriented API is required.
+The current `ask` and `ask-stream` routes are documented as MVP routes. A future
+channel-oriented API or compatibility adapter is required before production
+WhatsApp, Genesys, or equivalent omnichannel integrations.
 
-#### 2.6 Genesys and WhatsApp are absent from the architecture spine
+#### 2.6 Genesys and WhatsApp are visible in the architecture spine
 
-The product spec and ADRs position them correctly:
+Remediation status: fixed. The product spec, ADRs, `architecture.md`, and
+`infra-v1.md` now position them consistently:
 
 - Genesys = contact-center and human escalation layer;
 - WhatsApp = future async channel adapter;
 - Java backend keeps RAG, billing reasoning, guardrails, routing, and memory.
 
-`architecture.md` and `infra-v1.md` do not yet make this visible.
+ADR-0019 now defines the escalation triggers and future `EscalationHandoff`
+payload, including both generic support triggers and billing/BSS evidence
+failures.
 
-#### 2.7 SLO/NFR language is unresolved
+#### 2.7 SLO/NFR language is aligned after cleanup
 
-The corpus uses several targets:
+Remediation status: fixed by
+[`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md).
+The corpus now uses this taxonomy:
 
-- `first audio < 700 ms` as an obligatory Voice2Voice criterion;
-- first audible response under one second;
-- `time_to_first_audio p95 < 800 ms`;
-- adversarial review says the official SLO is not settled.
+- aspirational user-experience target: first audible sentence around 700 ms;
+- pilot acceptance criterion: `time_to_first_audio` p95 below 800 ms in a
+  pre-warmed, co-located environment, measured per channel;
+- measured baseline: sample size, p50, p95, p99, min, max, mean, channel,
+  environment, provider configuration, and warm/cold state;
+- production SLO: deferred until ADR-0010 observability, dashboards, alerts,
+  degraded modes, and provider failure tests are in place.
 
-`architecture.md` presents `~700ms` as a production-like budget, while backlog
-items say the prerequisites are still to do. This needs a formal decision.
+`architecture.md`, `infra-v1.md`, product docs, the engineering guide, and the
+operations backlog now reference this split.
 
 ### 3. Galaxion/BSS Integration Findings
 
@@ -610,13 +622,15 @@ Treat this as a documentation stabilization mini-epic.
 
 Recommended order:
 
-1. Establish the product hierarchy and capture it in an ADR.
-2. Remove duplicate inline ADRs from `architecture.md`.
+1. Establish the product hierarchy and capture it in an ADR. Done via ADR-0017.
+2. Remove duplicate inline ADRs from `architecture.md`. Done.
 3. Align architecture docs to current code: `TokenStream`, Redis/JPA, Pipecat V1,
-   bridge legacy.
-4. Decide the language policy and apply it consistently.
+   bridge legacy. Done.
+4. Decide the language policy and apply it consistently. Done: English-only.
 5. Normalize contract details: `conversation_id`, `BssBillingPort`, PDF-first,
    integer cents.
-6. Add missing ADRs for SLO, `TokenStream`, bridge retirement, and product pivot.
+6. Add missing ADRs for SLO, `TokenStream`, bridge status, product pivot, and
+   escalation handoff. Done via ADR-0013, ADR-0016, ADR-0017, ADR-0018, and
+   ADR-0019.
 7. Update cross-links and indexes.
 8. Run another coherence review after the cleanup.

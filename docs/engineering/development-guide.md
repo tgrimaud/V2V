@@ -364,7 +364,12 @@ without any additional dependency. Each step emits a
 | `time_to_first_audio` | Voice agent | legacy `bridge_server.py` or Pipecat metrics depending on the tested path |
 | `turn_total` | Voice agent | legacy `bridge_server.py` or Pipecat metrics depending on the tested path |
 
-**Reference SLO**: `time_to_first_audio` p95 < 800 ms.
+Per
+[`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
+the current pilot acceptance criterion is `time_to_first_audio` p95 < 800 ms in
+a pre-warmed, co-located environment. The ~700 ms value is an aspirational
+user-experience target; production SLOs remain deferred until ADR-0010
+observability and degraded-mode gates are met.
 
 ### Capture and Aggregate a Baseline
 
@@ -380,5 +385,7 @@ python voice-agent/tools/latency_report.py /tmp/backend.log /tmp/pipecat.log
 ```
 
 The report shows `n / p50 / p95 / min / max / mean` by step and marks the
-`time_to_first_audio` SLO as `OK`/`FAIL`. The legacy bridge can be launched
-separately for comparison, but the V1 baseline must start from Pipecat.
+`time_to_first_audio` pilot criterion as `OK`/`FAIL`. Record the channel,
+environment, provider configuration, and whether caches/connections were warm.
+The legacy bridge can be launched separately for comparison, but the V1 baseline
+must start from Pipecat.

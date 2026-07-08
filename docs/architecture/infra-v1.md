@@ -114,6 +114,12 @@ prerequisite, unless required by contract.
 - Controlled internet egress: managed STT/TTS/LLM, updates, observability.
 - Private BSS link: VPN, peering, private endpoint, or dedicated interconnect.
 
+Genesys Cloud CX, WhatsApp, or equivalent omnichannel providers are optional
+future edge integrations. They should enter through dedicated channel adapters or
+contact-center connectors and must not own RAG, billing reasoning, guardrails, or
+memory. Production activation is gated by ADR-0010 channel contracts, ADR-0018
+SLO measurement, and ADR-0019 escalation handoff readiness.
+
 ## Sizing by Voice Load
 
 The values below are starting points to validate through load testing.
@@ -130,13 +136,25 @@ generation time.
 
 ## Minimal Observability
 
+Per
+[`ADR-0010`](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md)
+and
+[`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
+production voice SLOs are not accepted until observability covers every channel
+and pipeline step. The pilot validation target is `time_to_first_audio` p95
+below 800 ms in a pre-warmed, co-located environment.
+
 Each conversation must make it possible to measure:
 
+- voice channel and transport;
 - time to first STT transcription;
+- backend request time;
 - BSS retrieval time;
 - vector search time;
 - time to first LLM token;
 - time to first TTS audio;
+- channel output time;
+- time to first audio;
 - escalation count and reasons;
 - STT/TTS/LLM provider errors;
 - BSS errors or insufficient data.

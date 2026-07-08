@@ -49,6 +49,8 @@ Genesys Cloud CX, the project must formalize:
 
 ## Related Documents
 
+- `docs/architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md`
+- `docs/architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md`
 - `docs/architecture/adversarial-architecture-review-2026-07-08.md`
 - `docs/operations/backlog.md`
 - `docs/product/cahier-des-charges-fonctionnel.md`

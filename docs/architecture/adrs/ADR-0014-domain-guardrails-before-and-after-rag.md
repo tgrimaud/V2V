@@ -47,4 +47,5 @@ instead of replacing the decision locally.
 
 - `docs/architecture/adrs/ADR-0001-java-backend-owns-conversation-domain.md`
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`
+- `docs/architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md`
 - `docs/architecture/architecture.md`

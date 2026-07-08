@@ -34,8 +34,8 @@ the backend.
   `GradiumTTSService` are instantiated directly in the Python pipelines.
   Replacing Gradium will require more than a simple new adapter.
 - **Genesys/WhatsApp still conceptual**: they are correctly positioned in the
-  vision, but there is no integration contract, escalation payload,
-  conversation mapping, idempotency, or error strategy yet.
+  vision and the target contracts are now documented, but there is still no
+  production adapter, idempotency test suite, quota policy, or error strategy.
 - **Non-verifiable SLOs**: the documentation states latency targets, but
   per-step observability and measured budgets remain to be implemented.
 - **Documentation drift risk**: some architecture docs may lag behind the code,
@@ -44,8 +44,14 @@ the backend.
 
 ## Hard Questions
 
-- Which official SLO must be met: first audio p95 below 700 ms, 800 ms, or
-  1 second?
+Post-review status: the voice latency question is now answered by
+[`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md). The
+project uses ~700 ms as an aspirational first-audible-sentence target and
+`time_to_first_audio` p95 below 800 ms as the pilot acceptance criterion.
+Production SLOs remain blocked by the observability and degraded-mode gaps below.
+
+- Resolved by ADR-0018: the pilot criterion is `time_to_first_audio` p95 below
+  800 ms; ~700 ms remains an aspirational user-experience target.
 - What happens if Gradium STT is slow but text channels are working?
 - What happens if Genesys Cloud CX is unavailable at the moment of escalation?
 - Can a channel be disabled, restarted, or deployed without redeploying the
@@ -69,6 +75,11 @@ The vision is correct, but it must be translated into stable objects and
 contracts: `channel`, `conversation_id`, `external_session_id`, `message_id`,
 `idempotency_key`, `reply_mode`, `escalation_context`.
 
+Post-review status: `architecture.md` now documents the expected
+channel/backend envelope and ADR-0019 defines the escalation handoff payload.
+Implementation, idempotency tests, quotas, and degraded modes remain open before
+production WhatsApp or Genesys activation.
+
 ### Pipecat as the Voice Target
 
 Pipecat is a credible choice for real-time voice. However, the project must
@@ -88,32 +99,35 @@ or conversation memory.
 |---|---|---|---|---|
 | Gradium STT/TTS | Transcription and speech synthesis | Hard | Direct coupling in the Python pipelines. | Introduce an STT/TTS provider abstraction on the voice-agent side. |
 | Twilio | Telephony / Media Streams | Moderate | The protocol is partially isolated but remains tied to the telephony flow. | Keep Twilio as a channel adapter and define an internal telephony contract. |
-| Genesys Cloud CX | Future contact-center layer | Unknown | No connector or escalation payload yet. | Define an `EscalationHandoff` contract. |
-| WhatsApp | Future messaging channel | Unknown | No adapter or async contract yet. | Create a messaging contract with idempotency. |
+| Genesys Cloud CX | Future contact-center layer | Unknown | No connector yet; `EscalationHandoff` is defined by ADR-0019. | Implement a connector only after channel contracts, observability, and degraded modes are validated. |
+| WhatsApp | Future messaging channel | Unknown | Channel envelope is documented; no production adapter, idempotency tests, or async error strategy yet. | Implement only after channel contract and quota behavior are validated. |
 | Mistral / Ollama | LLM generation | Good | Backend ports exist. | Add fallback, timeout, and provider error tests. |
 | PostgreSQL / pgvector | Vector store and events | Moderate | pgvector remains structural in the implementation. | Keep `VectorSearchPort` and document a possible migration. |
 | Redis | Active sessions | Good | Adapter exists, but failure mode must be formalized. | Add Redis failure strategy, business TTL, and controlled fallback. |
 
 ## NFR / SLA Gaps
 
-- SLOs are not stabilized: p95/p99, time-to-first-audio,
-  time-to-first-token, error rate, escalation time.
-- No clear per-step budget: STT, RAG, vector search, LLM, TTS, network.
+- Pilot voice latency is now stabilized by ADR-0018, but production SLOs still
+  need p99, time-to-first-token, error rate, escalation time, dashboards, and
+  alerting.
+- Pilot per-step budget exists in `architecture.md`, but production budget
+  validation and dashboarding still need measured baselines by channel.
 - No documented circuit breaker or retry strategy per provider.
 - No rate limiting per channel.
 - No priority policy between real-time channels and asynchronous channels.
-- No human escalation contract usable by Genesys or an equivalent platform.
+- ADR-0019 defines the human escalation handoff contract, but no Genesys or
+  equivalent connector implements it yet.
 - OpenTelemetry observability and latency dashboard still in the backlog.
 
 ## Recommended Changes
 
 ### 1. Must fix before production
 
-- Define measurable SLOs: first audio p95, STT/TTS/LLM timeouts, error rate,
-  escalation time.
+- Finalize production SLOs from the ADR-0018 pilot criterion: first audio p95,
+  STT/TTS/LLM timeouts, error rate, and escalation time.
 - Instrument metrics per step and per channel.
-- Define the human escalation contract compatible with Genesys or an equivalent
-  platform.
+- Implement the human escalation connector compatible with Genesys or an
+  equivalent platform.
 - Add timeouts, quotas, and rate limiting per channel.
 
 ### 2. Should fix before pilot

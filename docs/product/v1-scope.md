@@ -132,6 +132,9 @@ Voice2Voice on phone and web voice channels.
 
 ### Escalation to a Human Agent
 
+Escalation follows
+[`ADR-0019`](../architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md).
+
 The bot must be able to transfer the conversation to a human agent in two cases:
 
 - the customer explicitly asks to speak to an advisor;
@@ -181,11 +184,17 @@ The comparison must be fast enough for conversational use by an end user.
 Recommended objective: initial comparison result in less than a few seconds on a
 standard invoice.
 
-The `first audio < 700 ms` target is a mandatory criterion for the Voice2Voice
-experience. However, it must not lead to producing an unreliable explanation: if
-the business analysis requires more time, the bot must be able to produce a fast
-oral acknowledgement, then deliver the reliable explanation when the BSS evidence
-is available.
+Voice latency follows
+[`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md):
+the optimized voice journey aims for a first audible sentence around 700 ms, and
+the measurable pilot acceptance criterion is `time_to_first_audio` p95 below
+800 ms in a pre-warmed, co-located environment. This is not yet a contractual
+production SLO.
+
+The latency target must not lead to producing an unreliable explanation: if the
+business analysis requires more time, the bot must be able to produce a fast oral
+acknowledgement, then deliver the reliable explanation when the BSS evidence is
+available.
 
 ### Structuring V1 Technical Requirements
 
@@ -209,7 +218,7 @@ V1 must therefore provide for:
   comparison, KB search, LLM first-token, TTS first-audio, and human agent
   transfer;
 - co-location in a private cloud of the critical components on the voice path
-  when the `first audio < 700 ms` target must be met in production;
+  when the `time_to_first_audio` p95 below 800 ms pilot criterion must be met;
 - additional KB connectors, especially PDF, Confluence, or database connectors,
   to enrich pricing rules and explanation content.
 

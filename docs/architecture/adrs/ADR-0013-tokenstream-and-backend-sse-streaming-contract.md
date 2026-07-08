@@ -35,8 +35,8 @@ through Pipecat.
 - Provider-specific streaming APIs are isolated inside adapters.
 - Sentence grouping and audio playback remain voice-runtime concerns, not
   backend business rules.
-- The official production latency SLO remains governed by ADR-0010 and must be
-  measured separately before being treated as a contractual target.
+- Voice latency targets and measurement conditions are governed by ADR-0018.
+  Production SLO acceptance remains gated by ADR-0010.
 
 ## Alternatives Considered
 
@@ -49,5 +49,6 @@ through Pipecat.
 
 - `docs/architecture/adrs/ADR-0001-java-backend-owns-conversation-domain.md`
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`
+- `docs/architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md`
 - `docs/architecture/architecture.md`
 - `docs/engineering/development-guide.md`

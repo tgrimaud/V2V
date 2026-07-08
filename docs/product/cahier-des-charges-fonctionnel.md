@@ -124,10 +124,13 @@ The bot must trigger an escalation when it detects:
 - hacking or suspected compromise;
 - request for a technician or field intervention;
 - strong frustration or dissatisfaction.
+- insufficient billing or BSS evidence, including unavailable account data,
+  unusable invoice extraction, low-confidence monetary lines, or an invoice
+  comparison that cannot reliably explain the requested delta.
 
 The bot must answer with a clear message indicating that the request requires a human advisor.
 
-In the short term, escalation can be simulated or handled by the project's internal mechanisms. During industrialization, this escalation must be transmissible to a contact-center platform such as Genesys Cloud CX, with useful context: channel, conversation, reason, specialized agent, summary, and urgency level.
+In the short term, escalation can be simulated or handled by the project's internal mechanisms. During industrialization, this escalation must be transmissible to a contact-center platform such as Genesys Cloud CX, with useful context defined by [`ADR-0019`](../architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md): channel, conversation, external session, reason, specialized agent, summary, evidence status, priority, and recommended next action.
 
 ### 5.5 WhatsApp and Messaging Channels
 
@@ -137,7 +140,10 @@ In the short term, escalation can be simulated or handled by the project's inter
 4. Citations, links, or resolution steps can be summarized or transformed into simple actions.
 5. In case of escalation, the bot indicates that a human advisor must take over the conversation.
 
-This channel is planned as an omnichannel extension: it must reuse the same business logic, the same knowledge base, and the same escalation rules as the other channels.
+This channel is a future asynchronous omnichannel extension, not a production
+channel in the current V1. It must reuse the same business logic, the same
+knowledge base, and the same escalation rules as the other channels through the
+channel/backend envelope described in the architecture.
 
 ### 5.6 Knowledge Base Management
 
@@ -224,7 +230,7 @@ This channel is planned as an omnichannel extension: it must reuse the same busi
 
 - The system must allow startup without a mandatory dependency on an external contact-center solution.
 - The system must keep business logic, RAG, guardrails, and multi-agent routing in the existing backend.
-- The system must provide for future integration with Genesys Cloud CX or an equivalent solution.
+- The system must provide for future integration with Genesys Cloud CX or an equivalent solution, as an optional contact-center layer.
 - Contact-center integration must primarily cover channels, queues, transfer to advisor, agent desktop, and supervision.
 - During escalation, the system must be able to transmit context usable by a human advisor.
 - The choice to use Genesys Cloud CX must not require rewriting the conversational engine.
@@ -233,7 +239,12 @@ This channel is planned as an omnichannel extension: it must reuse the same busi
 
 ### Performance
 
-- The target voice journey must aim for a first audible answer under one second in a pre-warmed environment.
+- The target voice journey must aim for a first audible answer under one second
+  in a pre-warmed environment. Per
+  [`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
+  the current measurable pilot criterion is `time_to_first_audio` p95 below
+  800 ms; production SLOs remain gated by observability and degraded-mode
+  readiness.
 - Text answers must be streamed when possible.
 - Critical components must limit unnecessary calls to external services.
 
@@ -259,7 +270,9 @@ This channel is planned as an omnichannel extension: it must reuse the same busi
 
 ### Observability
 
-- The system must track the main pipeline latencies: STT, search, LLM, TTS, time before first audio.
+- The system must track the main pipeline latencies by channel: STT, backend
+  request, vector search, LLM first token, TTS first audio, channel output, and
+  `time_to_first_audio`.
 - Escalation and error events must be usable by administration.
 
 ## 8. Data Handled
