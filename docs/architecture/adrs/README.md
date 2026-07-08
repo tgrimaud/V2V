@@ -1,0 +1,22 @@
+# Architecture Decision Records
+
+This folder contains Architecture Decision Records (ADRs) for Voice Support Bot.
+
+ADRs capture structural decisions that should remain visible beyond code, chats,
+diagrams, and planning notes. When a decision changes, create a new ADR and mark
+the previous one as superseded instead of rewriting history.
+
+## Index
+
+| ADR | Status | Decision |
+|---|---|---|
+| [ADR-0001](ADR-0001-java-backend-owns-conversation-domain.md) | Accepted | Java backend owns conversation, RAG, guardrails, routing, escalation, and persistence. |
+| [ADR-0002](ADR-0002-pipecat-gradium-target-voice-path.md) | Accepted | Pipecat + Gradium is the target V1 voice path; custom bridge remains legacy/fallback. |
+| [ADR-0003](ADR-0003-billing-v1-uses-read-only-bss-and-deterministic-comparison.md) | Accepted | Billing V1 uses read-only BSS data and deterministic invoice comparison before LLM wording. |
+| [ADR-0004](ADR-0004-bss-integration-through-typed-domain-ports.md) | Accepted | BSS access goes through typed domain ports and contract-compatible adapters, not runtime MCP. |
+| [ADR-0005](ADR-0005-invoice-pdf-extraction-before-llm-explanation.md) | Accepted | Invoice PDFs are extracted into deterministic JSON before comparison and explanation. |
+| [ADR-0006](ADR-0006-mistral-chat-and-ollama-embeddings.md) | Accepted | Mistral is the default chat LLM; Ollama `nomic-embed-text` remains the embedding model. |
+| [ADR-0007](ADR-0007-source-document-knowledge-sync.md) | Accepted | Knowledge ingestion uses a source-agnostic `SourceDocument` pivot and idempotent sync. |
+| [ADR-0008](ADR-0008-redis-active-sessions-postgres-durable-events.md) | Accepted | Redis stores active conversation state; PostgreSQL stores durable events and vector data. |
+| [ADR-0009](ADR-0009-independent-channel-adapters-shared-java-backend.md) | Accepted | Omnichannel entry points stay independent while sharing the Java conversation backend. |
+| [ADR-0010](ADR-0010-industrialization-requires-contracts-slos-and-observability.md) | Accepted | Industrialization requires channel contracts, escalation contract, measurable SLOs, and observability before adding real channels. |

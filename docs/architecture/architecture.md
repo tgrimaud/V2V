@@ -14,6 +14,8 @@ La cible machines/VM pour un pilote operateur V1 est detaillee dans
 [`infra-v1.md`](infra-v1.md). Le plan d'integration BSS et du mock
 contract-compatible est detaille dans
 [`bss-integration-plan.md`](../integrations/galaxion/bss-integration-plan.md).
+Les décisions structurantes sont suivies sous forme d'ADR dans
+[`adrs/`](adrs/).
 
 ## Diagramme d'architecture
 

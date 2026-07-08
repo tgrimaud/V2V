@@ -24,6 +24,7 @@
 - Revue adversariale omnicanale (2026-07-08) : score global **2.8/5** — bon socle MVP, mais pas encore plateforme industrialisee sans contrats canal/backend, contrat d'escalade, SLOs mesurables, observabilite par etape/canal et modes degrades testes.
 - Utiliser le skill local `.cursor/skills/product-business/` pour produire ou relire PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
 - Utiliser le skill local `.cursor/skills/adversarial-architecture-review/` pour challenger les choix d'architecture, NFR/SLA, modularite, remplaçabilite des providers externes et readiness Genesys/WhatsApp/omnicanal.
+- Utiliser le skill local `.cursor/skills/software-architect/` pour toute decision structurante et creer/mettre a jour l'ADR correspondant dans `docs/architecture/adrs/`.
 - Le schema cible editable est `docs/architecture/diagrams/target-v1-solution.drawio`.
 - Documentation under `docs/` must be written in English.
 - Use `.cursor/skills/technical-writer/SKILL.md` before creating, editing,

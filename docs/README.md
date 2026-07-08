@@ -5,7 +5,7 @@
 | Folder | Audience | Contents |
 |--------|----------|----------|
 | [`product/`](product/) | Product / delivery | V1 scope and product framing |
-| [`architecture/`](architecture/) | Architecture / engineering | System architecture, infra target and architecture diagrams |
+| [`architecture/`](architecture/) | Architecture / engineering | System architecture, ADRs, infra target and architecture diagrams |
 | [`integrations/`](integrations/) | Architecture / backend / BSS | External system integration plans and contracts |
 | [`knowledge-base/`](knowledge-base/) | Content contributors / engineering | RAG knowledge base authoring and technical docs |
 | [`engineering/`](engineering/) | Developers | Development guide and implementation conventions |
@@ -15,6 +15,7 @@
 
 - Product scope: [`product/v1-scope.md`](product/v1-scope.md)
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
+- Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
 - Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
 - Missing Galaxion inputs: [`integrations/galaxion/missing-inputs.md`](integrations/galaxion/missing-inputs.md)

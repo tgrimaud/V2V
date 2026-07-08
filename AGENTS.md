@@ -16,6 +16,7 @@
 6. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
 7. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
 8. Presentation work : use `.cursor/skills/presentation-maker/SKILL.md` to create high-level technical/strategy decks from `~/Downloads/Presentation.odp`.
+9. Architecture decisions : use `.cursor/skills/software-architect/SKILL.md` and create or update an ADR under `docs/architecture/adrs/`.
 
 ## Common mistakes to avoid
 
@@ -45,6 +46,7 @@
 - Trop remplir les cadres du template de presentation : utiliser un layout large, une idee par slide et deux bullets courts maximum pour garder une presentation lisible.
 - Presenter la vision omnicanale comme industrialisee parce que le diagramme est propre : faux. Tant que contrats canal/backend, contrat d'escalade, SLOs, observabilite, rate limiting par canal et modes degrades ne sont pas definis/testes, c'est un MVP solide avec vision saine, pas une plateforme production.
 - Ajouter WhatsApp, Genesys ou un nouveau canal avant de formaliser le contrat commun (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) — cela duplique la logique et rend les canaux couples.
+- Prendre une decision d'architecture sans ADR : chaque decision structurante doit etre documentee sous `docs/architecture/adrs/` avec contexte, decision, consequences et alternatives.
 
 ## Checklist après changement substantiel
 

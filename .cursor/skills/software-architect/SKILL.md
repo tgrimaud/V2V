@@ -4,13 +4,15 @@ description: >-
   Software architecture patterns for building maintainable, modular, and microservices-ready
   applications. Covers hexagonal architecture (ports & adapters), GoF design patterns,
   DDD tactical patterns, the Hive pattern for modular monoliths, feature-based frontend
-  modularization, and architecture enforcement with ArchUnit. Use proactively when designing
-  new modules, extracting bounded contexts, restructuring packages, defining port/adapter
-  boundaries, applying design patterns, deciding between modular monolith vs. microservices,
+  modularization, Architecture Decision Records (ADRs), and architecture enforcement with
+  ArchUnit. Use proactively when designing new modules, extracting bounded contexts,
+  restructuring packages, defining port/adapter boundaries, applying design patterns,
+  deciding between modular monolith vs. microservices, documenting architecture decisions,
   discussing architecture trade-offs, or reviewing code for architectural violations. Also
   use when the user mentions "architecture", "hexagonal", "ports and adapters", "DDD",
-  "bounded context", "modular monolith", "microservices extraction", "the Hive", "layer
-  rules", "dependency direction", "design patterns", "GoF", or "feature modules".
+  "bounded context", "modular monolith", "microservices extraction", "the Hive", "ADR",
+  "architecture decision", "layer rules", "dependency direction", "design patterns",
+  "GoF", or "feature modules".
 ---
 
 # Software Architect
@@ -18,6 +20,65 @@ description: >-
 Architecture patterns and principles for building systems that are modular by design, testable in isolation, and ready for extraction into microservices when the business demands it — without requiring an architectural rewrite.
 
 This skill owns the **structural decisions**. Language-specific implementation details (Spring annotations, Java records, React hooks) live in their respective skills (`java-backend-developer`, `react-frontend-developer`). This skill tells you *what* the architecture looks like and *why*; those skills tell you *how* to implement it.
+
+---
+
+## Architecture Decision Records (Mandatory)
+
+Every architecture decision must be captured by an ADR. Do not leave structural
+choices only in chat, diagrams, READMEs, or implementation notes.
+
+Create or update an ADR when any of these changes:
+
+- system boundaries, bounded contexts, or module ownership;
+- ports/adapters, provider abstractions, or integration contracts;
+- runtime topology, channel architecture, deployment model, or persistence;
+- external provider choices (LLM, STT, TTS, BSS, contact center, database,
+  vector store, messaging, telephony);
+- NFR/SLA strategy, observability, resilience, or scale-out model;
+- legacy/fallback status of a component.
+
+ADR location for this repository:
+
+```text
+docs/architecture/adrs/
+```
+
+Use this naming pattern:
+
+```text
+ADR-0001-short-kebab-title.md
+```
+
+Use this structure:
+
+```markdown
+# ADR-0001: Decision title
+
+## Status
+Accepted | Proposed | Superseded by ADR-XXXX
+
+## Context
+
+## Decision
+
+## Consequences
+
+## Alternatives Considered
+
+## Related Documents
+```
+
+When changing an existing decision, do not rewrite history. Add a new ADR and
+mark the old one as superseded.
+
+Before finishing any architecture task, check:
+
+- Is there at least one ADR for every new structural decision?
+- Does the ADR state why alternatives were rejected?
+- Does the ADR mention consequences and future migration impact?
+- Is `docs/architecture/adrs/README.md` updated?
+- Are related architecture/product docs linked instead of duplicating content?
 
 ---
 
