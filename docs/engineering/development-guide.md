@@ -41,8 +41,8 @@ public class OpenAILlmAdapter implements LlmPort, LlmStreamingPort {
     }
 
     @Override
-    public Flux<String> streamAnswer(...) {
-        return chatClient.prompt().system(sys).user(q).stream().content();
+    public TokenStream streamAnswer(...) {
+        return TokenStream.fromIterable(chatClient.prompt().system(sys).user(q).stream().content().toIterable());
     }
 }
 ```
@@ -78,7 +78,7 @@ dependencies = [
 ]
 ```
 
-2. Modifier `voice-agent/agent/ws_server.py` — instancier le bon service :
+2. Modifier le pipeline cible `voice-agent/agent/bot.py` — instancier le bon service Pipecat :
 
 ```python
 from pipecat.services.deepgram import DeepgramSTTService
@@ -88,7 +88,10 @@ stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 tts = CartesiaTTSService(api_key=os.getenv("CARTESIA_API_KEY"), voice_id="...")
 ```
 
-Aucune modification du backend Java n'est nécessaire — le `RAGProcessor` communique via HTTP.
+Aucune modification du backend Java n'est nécessaire — le processeur RAG Pipecat
+continue d'appeler la même API conversationnelle backend. Si le bridge WebSocket
+legacy reste utilisé pour comparaison, documenter séparément son adapter STT/TTS
+au lieu d'en faire le chemin cible.
 
 ## Ajouter un nouvel agent spécialisé
 

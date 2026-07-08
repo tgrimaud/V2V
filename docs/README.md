@@ -16,6 +16,7 @@
 - Product scope: [`product/v1-scope.md`](product/v1-scope.md)
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
 - Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
+- Documentation coherence review: [`architecture/documentation-coherence-review-2026-07-08.md`](architecture/documentation-coherence-review-2026-07-08.md)
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
 - Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
 - Missing Galaxion inputs: [`integrations/galaxion/missing-inputs.md`](integrations/galaxion/missing-inputs.md)

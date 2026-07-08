@@ -146,7 +146,9 @@ Le système appelle les services externes suivants :
 
 Le domaine ne contient **aucune annotation Spring**. Il est testable avec de simples fakes.
 
-> **Exception** : `LlmStreamingPort` utilise `Flux<String>` (Reactor) pour le streaming — compromis pragmatique accepté pour le POC.
+Le streaming LLM reste également dans le langage du domaine via `TokenStream`.
+Les adapters Spring AI/Reactor convertissent leurs flux techniques vers cette
+abstraction avant de revenir dans le domaine.
 
 ### Modèles
 
@@ -192,13 +194,13 @@ Le domaine ne contient **aucune annotation Spring**. Il est testable avec de sim
 | Port | Contrat | Adapters |
 |------|---------|----------|
 | `LlmPort` | Générer une réponse complète (blocking `.call()`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `LlmStreamingPort` | Streamer les tokens de réponse (`Flux<String>`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmStreamingPort` | Streamer les tokens de réponse (`TokenStream`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
 | `VectorSearchPort` | Chercher les chunks pertinents (global ou filtré par domaine) | `PgVectorStoreAdapter` |
 | `VectorStorePort` | Stocker un chunk (`store` legacy + `storeChunk` avec métadonnées enrichies depuis un `SourceDocument`) et supprimer par source (`deleteBySource`) | `PgVectorStoreAdapter` |
 | `KnowledgeSourceConnector` | Lister les `SourceDocument` d'une source (`sourceType()` + `fetchAll()`) — un connecteur par type de source | `MarkdownFolderConnector` (référence) ; Confluence/PDF/DB à venir |
 | `KnowledgeSourceStatePort` | Ledger de synchro : hash connu, upsert, liste des ids, suppression | `JpaKnowledgeSourceStateAdapter` (table `kb_source_state`) |
-| `ConversationEventStore` | Persister les événements de conversation | `InMemoryConversationEventStore` |
-| `ConversationStore` | Charger/sauver l'état d'une session (`load`/`save`) | `InMemoryConversationStore` (Redis en Phase 2) |
+| `ConversationEventStore` | Persister les événements de conversation | `JpaConversationEventStore` en runtime Docker ; `InMemoryConversationEventStore` pour local/dev/tests |
+| `ConversationStore` | Charger/sauver l'état d'une session (`load`/`save`) | `RedisConversationStore` en runtime Docker ; `InMemoryConversationStore` pour local/dev/tests |
 
 > **Note** : Chaque adapter LLM implémente **les deux ports** (`LlmPort` + `LlmStreamingPort`). Un seul bean Spring satisfait les deux interfaces.
 > Les ports `SpeechToTextPort` et `TextToSpeechPort` ne sont plus utilisés côté Java — STT/TTS sont gérés par l'agent Python via Gradium.
@@ -431,7 +433,12 @@ L'escalade est **instantanée** (<1ms) car elle ne passe ni par le vector store 
 
 L'état de session est accédé via le port `ConversationStore` (`load(id)` / `save(id, conversation)`), ce qui rend l'`ConversationOrchestrator` **sans état JVM** : il ne conserve plus de map interne. L'historique des 6 derniers tours est injecté dans le prompt LLM pour assurer la cohérence multi-tour.
 
-L'implémentation actuelle (`InMemoryConversationStore`) reste volatile et mono-instance, mais le port permet de basculer vers un **adapter Redis partagé** (Phase 2) sans toucher au domaine — débloquant l'autoscaling horizontal du backend. Le pattern explicite `load` → mutation → `save` est déjà compatible avec un store distribué (pas de dépendance à l'identité de référence en mémoire).
+En local/dev/test, les adapters mémoire restent disponibles par défaut pour
+démarrer sans infrastructure. En runtime Docker, `CONVERSATION_STORE=redis` et
+`CONVERSATION_EVENT_STORE=jpa` activent respectivement `RedisConversationStore`
+pour les sessions actives et `JpaConversationEventStore` pour les événements
+durables. Le pattern explicite `load` → mutation → `save` reste compatible avec
+un store distribué, sans dépendre de l'identité de référence en mémoire.
 
 ## Budget latence
 
@@ -467,7 +474,9 @@ Le provider LLM est configurable via `voice-support.llm.provider` :
 | **Mistral API** (défaut) | `mistral-api` | Oui (SSE) | ~150ms | Production |
 | Ollama local | `ollama` | Oui (SSE) | ~500ms | Développement offline |
 
-Les deux adapters implémentent `LlmPort` (blocking) et `LlmStreamingPort` (reactive `Flux<String>`).
+Les deux adapters implémentent `LlmPort` (blocking) et `LlmStreamingPort`.
+Le domaine expose un `TokenStream`; les adapters peuvent utiliser Reactor ou
+l'API streaming du provider en interne, mais cette dépendance ne traverse pas le port.
 
 ## Extensibilité
 
@@ -488,212 +497,24 @@ Modifier `voice-agent/agent/gradium_stt.py` et `gradium_tts.py` pour appeler un 
 
 Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la téléphonie Twilio Media Streams (ws:8766, μ-law 8kHz) via deux serveurs WebSocket lancés ensemble dans `main()`. Les deux canaux partagent le même pipeline (turn-detector + STT streaming + RAG SSE + TTS) ; seuls le format audio (`pcm_16000` vs `ulaw_8000`) et le protocole d'enveloppe (binaire WAV vs frames média Twilio JSON) diffèrent. Pour ajouter un nouveau transport (ex: SIP natif, LiveKit), créer un handler WebSocket dédié réutilisant `create_stt_session(...)`, `TurnDetector`, et `synthesize_speech(...)` avec le bon `output_format`.
 
-## Décisions d'architecture (ADR)
+## Décisions d'architecture
 
-### ADR-001 : Pipeline modulaire plutôt que Realtime API
+Les décisions d'architecture canoniques sont les ADRs formels dans
+[`adrs/`](adrs/). Cette page ne maintient plus d'ADRs inline pour éviter les
+conflits de numérotation et les décisions contradictoires.
 
-**Contexte** : OpenAI Realtime API et Gemini Live offrent du voice-to-voice en une seule API.
+Les anciens ADRs inline de cette page ont été migrés comme suit :
 
-**Décision** : Pipeline STT → RAG → LLM → TTS.
-
-**Raisons** :
-- Contrôle total sur le RAG (coeur du produit)
-- Pas de vendor-lock
-- Local-first possible
-- Coût 12x inférieur (~$0.005/min vs ~$0.06/min)
-
-### ADR-002 : Gradium pour STT/TTS via Pipecat
-
-**Contexte** : Le MVP initial utilisait Deepgram (STT cloud) et Piper (TTS local).
-
-**Décision** : Migrer vers Gradium (STT + TTS) orchestré par Pipecat (Python).
-
-**Raisons** :
-- Gradium offre STT et TTS dans une seule API avec latence très basse (~200ms STT, ~300ms TTS)
-- Support natif `ulaw_8000` (format téléphonie) — pas de conversion audio nécessaire
-- Pipecat fournit le framework d'orchestration avec VAD intégrée, multiplexage, et transports pluggables
-- La séparation Java (RAG) / Python (voix) suit le principe de responsabilité unique
-- Pipecat a une intégration native Gradium (`pipecat-ai[gradium]`)
-
-### ADR-003 : Architecture hybride Java + Python
-
-**Contexte** : Le STT/TTS et l'orchestration audio sont mieux servis par Python, le RAG par Java.
-
-**Décision** : Garder les deux : Java backend comme "cerveau" (RAG), Python comme "bouche/oreille" (voix).
-
-**Raisons** :
-- Le backend Java est mature (hexagonal, tests, Spring AI intégré)
-- Python excelle dans l'orchestration audio temps réel
-- Couplage lâche via HTTP/SSE (streaming) et HTTP POST (fallback)
-- Chaque composant est déployable et scalable indépendamment
-- Pas de réécriture nécessaire du code existant
-
-### ADR-004 : In-memory event store plutôt que JPA
-
-**Contexte** : Le tracking des conversations pourrait être en base.
-
-**Décision** : `InMemoryConversationEventStore` (CopyOnWriteArrayList) pour le MVP.
-
-**Raisons** :
-- Simplicité de démarrage
-- Pas de migration de schéma à gérer
-- Suffisant pour le volume MVP
-- Le port `ConversationEventStore` permet de basculer vers JPA sans toucher au domaine
-
-### ADR-005 : Streaming inter-étapes (SSE + sentence splitting)
-
-**Contexte** : Le pipeline séquentiel (STT → RAG complet → TTS complet) prenait ~2.2s avant la première syllabe audible.
-
-**Décision** : Streamer les tokens LLM via SSE, les découper en phrases, et lancer le TTS par phrase en parallèle.
-
-**Raisons** :
-- Réduit la latence perçue de ~2.2s à ~700ms (première phrase)
-- L'utilisateur perçoit une conversation naturelle (réponse quasi-immédiate)
-- Le sentence splitting (`find_sentence_boundary`) produit des phrases TTS-friendly (≥20 chars, pas de coupure numérique)
-- Le TTS worker concurrent (`asyncio.Queue`) permet de synthétiser la phrase N+1 pendant que la phrase N est jouée
-- Le frontend `useAudioQueue` chaîne les chunks audio WAV sans gap audible
-- Backward-compatible : fallback automatique vers POST /ask si SSE échoue
-
-### ADR-006 : VAD navigateur legacy (Silero) avec barge-in
-
-**Contexte** : Le mode push-to-talk obligeait l'utilisateur à cliquer "stop" après chaque phrase. L'interaction était non-naturelle comparée à un appel téléphonique.
-
-**Décision historique** : Remplacer le push-to-talk du frontend React legacy par
-un VAD (Voice Activity Detection) côté navigateur utilisant Silero v5 via
-`@ricky0123/vad-web`, avec support du barge-in.
-
-**Statut actuel** : la cible V1 Pipecat utilise le VAD serveur Silero fourni par
-le pipeline Pipecat. Le VAD navigateur reste propre au chemin React/bridge legacy.
-
-**Raisons** :
-- **Conversation naturelle** : le VAD détecte automatiquement début/fin de parole (~500ms de silence = fin)
-- **Barge-in** : l'utilisateur peut interrompre le bot en parlant → flush audio + cancel SSE/TTS
-- **Client-side** : le VAD tourne dans le navigateur (WebAssembly + AudioWorklet), zéro latence réseau pour la détection
-- **Modèle Silero v5** : léger (~1.5MB ONNX), précis, et éprouvé dans la communauté
-- **Pas de modification backend** : seul le bridge Python gère le nouveau message `BARGE_IN` via `asyncio.Task.cancel()`
-- **Rétrocompatible** : le protocole WebSocket reste identique (PCM + END_OF_SPEECH), seul le déclencheur change (VAD au lieu de clic manuel)
-
-### ADR-007 : Guardrails (salutations + off-topic + score de confiance)
-
-**Contexte** : Sans protection, le bot répond à toute question même hors domaine, avec un risque d'hallucination quand la base de connaissances ne couvre pas le sujet. De plus, un simple "Bonjour" déclenchait le RAG et retournait une réponse non pertinente.
-
-**Décision** : Implémenter un `GuardrailService` avec trois niveaux de filtrage :
-1. **Salutations** : détection de "Bonjour", "Salut", "Hello", etc. → réponse de courtoisie directe sans RAG ni LLM
-2. **Pré-recherche** : détection off-topic par patterns regex (météo, blagues, culture générale)
-3. **Post-recherche** : évaluation du score de similarité vectorielle — si le meilleur score est sous le seuil configurable (défaut 0.65), réponse dégradée
-
-**Raisons** :
-- **Salutations naturelles** : le bot accueille l'utilisateur avant qu'il ne pose sa question, sans consommer de ressources LLM
-- **Fail-safe** : plutôt que halluciner, le bot admet son ignorance et propose une escalade humaine
-- **Configurable** : seuil externalisé via `voice-support.guardrails.confidence-threshold`
-- **Trois étapes** : salutations et off-topic économisent embedding + vectorsearch + LLM pour les messages simples
-- **Bilingue** : messages de fallback en FR et EN selon la langue détectée
-- **Indicateur visuel** : badge ambre "⚠️ Confiance faible" côté frontend quand le guardrail de confiance déclenche
-- **Pure domain** : pas de dépendance Spring, testable avec de simples fakes
-
-### ADR-008 : Multi-agent routing avec classification par mots-clés
-
-**Contexte** : Un seul agent avec un system prompt générique ne peut pas être expert sur tous les sujets (support technique, facturation, commercial). Les réponses manquent de précision sur les questions spécialisées et le RAG ramène des chunks de domaines non pertinents.
-
-**Décision** : Implémenter un système multi-agent avec :
-1. **AgentProfile** : chaque agent a son propre system prompt, son domaine KB, et ses mots-clés d'intent
-2. **IntentClassifier** : classification par scoring de mots-clés (rapide, déterministe, extensible)
-3. **ConversationOrchestrator** : pipeline unifié qui route vers l'agent approprié et filtre la recherche vectorielle par domaine
-4. **Session stickiness** : le `currentAgentId` est maintenu dans la `Conversation` pour assurer la continuité des follow-ups
-
-**Agents définis (POC) :**
-- **Support** (défaut) : problèmes techniques, box, connexion, Wi-Fi, débit
-- **Billing** : facturation, paiements, prélèvements, offres, résiliation
-- **Commercial** : souscription, déménagement, portabilité, options TV, parrainage
-
-**Raisons** :
-- **Précision accrue** : chaque agent utilise un system prompt spécialisé et ne cherche que dans sa KB
-- **Zéro latence de routing** : classification par regex/mots-clés (~0ms) vs LLM (~200ms)
-- **Transparent pour l'utilisateur** : aucune question supplémentaire posée, le routing est implicite
-- **Extensible** : ajouter un agent = ajouter un `AgentProfile` dans le registre + un fichier KB + `domain` tag
-- **Stickiness** : les questions de suivi restent sur le même agent sans re-classification inutile
-- **Pure domain** : `IntentClassifier` et `AgentRegistry` sont du domaine pur (pas de Spring)
-- **Backward-compatible** : les anciens endpoints continuent de fonctionner via `AskQuestionUseCase`
-
-### ADR-009 : Optimisation latence bridge custom — chemin legacy/fallback
-
-**Contexte** : Pour un déploiement omnicanal (téléphonie SIP + web + mobile) chez un opérateur télécom, la latence de tour de parole doit descendre sous ~800ms (idéalement ~500ms) pour une conversation naturelle. Le pipeline initial atteint ~700ms jusqu'à la première phrase audible **hors** détection de fin de parole (latence réelle perçue ≈ 1.2-1.5s).
-
-**Décision historique** : livrer d'abord les changements applicatifs sur le
-bridge custom (`bridge_server.py`) pour instrumenter la latence, unifier le POC
-web/téléphonie et disposer d'un fallback sans nouvelle dépendance.
-
-**Statut actuel** : ce chemin reste utile pour comparaison, tests bas niveau et
-fallback, mais la cible V1 produit est désormais Gradium + Pipecat (ADR-010).
-
-**Instrumentation (Phase 0)** : logs structurés `[LATENCY] step=<nom> ms=<valeur>` sur tout le chemin critique (`stt`, `vector_search`, `llm_first_token`, `llm_total`, `tts`, `time_to_first_audio`, `turn_total`) + `voice-agent/tools/latency_report.py` qui agrège en p50/p95 avec SLO `time_to_first_audio` p95 < 800ms.
-
-**Détection de fin de tour côté serveur** : `voice-agent/agent/turn_detector.py` — endpointing déterministe (RMS + silence) requis pour la téléphonie (pas de VAD navigateur). Pur, sans dépendance, testable avec PCM synthétique.
-
-**Abstraction STT streaming** : `voice-agent/agent/stt_streaming.py` — `StreamingSttSession` (Protocol) avec `feed()`/`finalize()`. L'implémentation concrète actuelle (`BatchSttSession`) conserve le comportement Gradium REST derrière une couture streaming pour le bridge legacy ; Pipecat utilise son service Gradium STT dédié.
-
-**Backend stateless** : l'état de session sort de la JVM derrière le port `ConversationStore` (`load`/`save`). `InMemoryConversationStore` aujourd'hui, adapter Redis en Phase 2 — débloque l'autoscaling horizontal. Le pattern explicite `load → mutation → save` est compatible store distribué.
-
-**Transport téléphonie legacy** : `voice-agent/agent/telephony.py` intègre le protocole Twilio Media Streams (μ-law 8kHz) dans le bridge custom. Parser/builders purs (`parse_twilio_message`, `build_media_message`) testés unitairement ; codec G.711 sans dépendance (`audio_codec.py`, `audioop` retiré en Python 3.13) ; le turn-detector serveur tourne en 8kHz. `bridge_server.main()` lance les deux serveurs WebSocket legacy (8765 web, 8766 téléphonie via `TWILIO_WS_PORT`).
-
-**Raisons** :
-- **Mesure d'abord** : on ne peut pas optimiser ce qu'on ne mesure pas ; la baseline conditionne les choix.
-- **Téléphonie-ready** : le turn-detector serveur débloque le canal SIP qui n'a pas de VAD client.
-- **Découplage moteur STT** : la couture permet d'adopter un STT streaming (gain ~300-500ms) sans réécriture.
-- **Unification legacy des canaux** : web et téléphonie sur un seul pipeline custom permettent une comparaison directe avec Pipecat.
-- **Réversible et sans nouvelle dépendance** : logs structurés plutôt qu'un stack d'observabilité lourd (déféré à la Phase 2).
-
-### ADR-010 : Cible V1 — unification sur Pipecat
-
-**Contexte** : ADR-009 a livré un bridge custom POC/fallback. Pour la V1
-opérateur, la décision produit est de démarrer avec **Gradium + Pipecat** comme
-solution de référence, puis d'ajuster après benchmark si nécessaire.
-
-**Décision** : un bot Pipecat unique multi-transports (`voice-agent/agent/bot.py`) sert les deux canaux via le **development runner** Pipecat :
-- **Web** : WebRTC (`SmallWebRTCTransport`) avec l'**UI prebuilt** (`pipecat-ai-prebuilt`) servie sur `http://localhost:7860/client` — aucun frontend custom à écrire.
-- **Téléphonie** : Twilio Media Streams via `TwilioFrameSerializer` (sélection automatique par `create_transport`).
-- Les deux transports partagent **le même pipeline** : `transport.input() → Gradium STT (streaming) → StreamingRAGProcessor → Gradium TTS → transport.output()`.
-
-**Composants** :
-- `agent/bot.py` : `bot(runner_args)` + `create_transport(runner_args, transport_params)` ; Silero VAD sur les deux canaux (endpointing **et** barge-in gérés par le framework).
-- `agent/streaming_rag_processor.py` : `iter_answer_sentences()` (générateur pur, testé) consomme le SSE `/ask-stream` et pousse un `TextFrame` **par phrase** → la TTS démarre dès la 1ère phrase. Logs `[LATENCY] step=llm_first_token|rag_total` au même format que A pour comparaison directe.
-
-**Amorçage de l'historique (anti re-salutation)** : le message d'accueil Pipecat (`WELCOME_MESSAGE`) est joué côté client par le TTS au `on_client_connected` et n'atteint donc **pas** le backend. Sans correctif, l'historique backend de la conversation est vide quand le premier message utilisateur arrive, et le LLM re-salue (« Bonjour, … »). À la connexion, `bot.py` appelle `POST /api/conversation/seed` (→ `ConversationOrchestrator.seedAssistantMessage`) pour enregistrer le message d'accueil comme un tour assistant. Le premier tour utilisateur voit alors un contexte assistant antérieur et le LLM ne re-salue plus.
-
-**Coexistence** : le bridge legacy (8765/8766, frontend 5173) et Pipecat (runner 7860) peuvent tourner en parallèle, backend Java partagé (8081). Le bridge legacy sert de fallback et de référence de comparaison, pas de cible V1.
-
-**Différences clés A vs B** :
-
-| Aspect | Legacy bridge custom | Cible V1 Pipecat |
-|---|---|---|
-| Transport web | WebSocket + protocole maison | WebRTC (Opus, jitter buffer) |
-| Frontend web | React existant (riche : multi-agents, erreurs typées) | UI prebuilt Pipecat (générique) |
-| STT | Gradium REST **batch** (par tour) | Gradium **streaming** (partiels) |
-| VAD / endpointing | navigateur (web) + heuristique RMS (tél.) | Silero (ML) côté serveur, les 2 canaux |
-| Barge-in | annulation de tâche basique | géré par le framework |
-| Métadonnées multi-agents | exposées au client | non propagées (UI générique) |
-| Dépendances | légères, sans Pipecat sur le hot path | aiortc + runner + prebuilt |
-
-**Statut** : Pipecat est le **point de départ V1**. Le benchmark reste nécessaire
-pour mesurer latence, robustesse VAD télécom réelle et richesse UI, mais il ne
-remet pas en cause le choix de démarrage Gradium + Pipecat.
-
-### ADR-011 : Ingestion KB multi-sources via format pivot + synchro idempotente
-
-**Contexte** : la KB n'était alimentée que par un upload manuel (`POST /api/knowledge/ingest`) de fichiers Markdown. Pour un déploiement réel, le contenu vient de sources hétérogènes et vivantes (Confluence/wiki, PDF, base de données) qui changent dans le temps — il faut les ingérer, détecter les mises à jour et les suppressions, sans dupliquer la logique par source.
-
-**Décision** : introduire un **socle source-agnostique** (hexagonal) :
-1. **Format pivot `SourceDocument`** : toute source est normalisée vers ce modèle avant ingestion (identité `sourceType`/`sourceId`, contenu, `domain`, `contentHash`, `updatedAt`, `url`).
-2. **Port `KnowledgeSourceConnector`** : un connecteur par type de source (`fetchAll()`), le premier étant `MarkdownFolderConnector` (référence, front-matter YAML).
-3. **`KnowledgeSyncService`** : synchro idempotente pilotée par `contentHash` (skip/upsert/deletion-diff), réutilisant `TextChunker`.
-4. **Ledger `kb_source_state`** (port `KnowledgeSourceStatePort`, adapter JPA) : bookkeeping hash/compteurs pour l'idempotence et la détection de suppression.
-5. **Pull planifié** (`KnowledgeSyncScheduler`, cron) + déclenchement manuel (`POST /api/knowledge/sync[/{sourceType}]`).
-
-**Raisons** :
-- **Ajout de source = un seul connecteur** : aucun impact sur le cœur (le scheduler injecte automatiquement tous les `KnowledgeSourceConnector`).
-- **Idempotent et économe** : un document inchangé n'est pas ré-embeddé (coût/latence évités).
-- **Pas de migration de schéma vectoriel** : les métadonnées enrichies tiennent dans la colonne JSONB de `vector_store` ; seule la table de ledger est ajoutée (auto-créée par Hibernate).
-- **Cohérent avec l'existant** : l'upload ponctuel `/ingest` reste disponible (rétrocompatible).
-- **Pure domain** : `SourceDocument`, `KnowledgeSyncService`, `TextChunker` sont du domaine pur, testés avec des fakes.
-
-**Statut** : Lot 0 (socle + connecteur Markdown de référence) livré. Connecteurs réels (Confluence/PDF/DB) et citations enrichies (`url`/`title`) à suivre.
+| Ancien inline | Statut dans le registre formel |
+|---|---|
+| ADR-001 Pipeline modulaire plutôt que Realtime API | Couvert par [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
+| ADR-002 Gradium pour STT/TTS via Pipecat | Couvert par [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
+| ADR-003 Architecture hybride Java + Python | Couvert par [ADR-0001](adrs/ADR-0001-java-backend-owns-conversation-domain.md), [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md), et [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
+| ADR-004 In-memory event store plutôt que JPA | Supersedé par [ADR-0008](adrs/ADR-0008-redis-active-sessions-postgres-durable-events.md) |
+| ADR-005 Streaming inter-étapes | Couvert par [ADR-0013](adrs/ADR-0013-tokenstream-and-backend-sse-streaming-contract.md) |
+| ADR-006 VAD navigateur legacy | Couvert comme chemin legacy par [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
+| ADR-007 Guardrails | Couvert par [ADR-0014](adrs/ADR-0014-domain-guardrails-before-and-after-rag.md) |
+| ADR-008 Multi-agent routing | Couvert par [ADR-0015](adrs/ADR-0015-keyword-routing-with-session-stickiness.md) |
+| ADR-009 Optimisation latence bridge custom | Couvert comme chemin legacy par [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
+| ADR-010 Cible V1 Pipecat | Couvert par [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
+| ADR-011 Ingestion KB multi-sources | Couvert par [ADR-0007](adrs/ADR-0007-source-document-knowledge-sync.md) |

@@ -64,7 +64,7 @@ classDiagram
         }
         class LlmStreamingPort {
             <<port out>>
-            +streamAnswer(question, context, history, systemPrompt) Flux~String~
+            +streamAnswer(question, context, history, systemPrompt) TokenStream
         }
         class VectorSearchPort {
             <<port out>>
@@ -173,10 +173,10 @@ classDiagram
             <<adapter>>
             kb_source_state
         }
-        class InMemoryConversationStore {
+        class RedisConversationStore {
             <<adapter>>
         }
-        class InMemoryConversationEventStore {
+        class JpaConversationEventStore {
             <<adapter>>
         }
     }
@@ -231,8 +231,8 @@ classDiagram
     PgVectorStoreAdapter ..|> VectorSearchPort
     MarkdownFolderConnector ..|> KnowledgeSourceConnector
     JpaKnowledgeSourceStateAdapter ..|> KnowledgeSourceStatePort
-    InMemoryConversationStore ..|> ConversationStore
-    InMemoryConversationEventStore ..|> ConversationEventStore
+    RedisConversationStore ..|> ConversationStore
+    JpaConversationEventStore ..|> ConversationEventStore
 
     %% Inbound adapters use ports in
     ConversationController --> AskQuestionUseCase
@@ -571,10 +571,12 @@ voice-support-bot/
 │           └── config/                     #   DomainServiceConfig, SchedulingConfig
 ├── voice-agent/                            # Python Pipecat agent (orchestration vocale)
 │   ├── agent/
-│   │   ├── bridge_server.py               #   Bridge WebSocket (protocole frontend ↔ Gradium)
-│   │   ├── ws_server.py                   #   Pipecat pipeline (mode natif)
-│   │   ├── twilio_server.py               #   Twilio Media Streams
-│   │   ├── rag_processor.py               #   Pipecat processor: STT → RAG → TTS
+│   │   ├── bot.py                         #   Pipeline Pipecat cible V1
+│   │   ├── streaming_rag_processor.py     #   Pipecat processor: texte STT → backend SSE → TTS
+│   │   ├── bridge_server.py               #   Bridge WebSocket legacy / fallback
+│   │   ├── ws_server.py                   #   Serveur WebSocket legacy web
+│   │   ├── twilio_server.py               #   Serveur Twilio legacy / comparaison
+│   │   ├── rag_processor.py               #   Processeur legacy du bridge custom
 │   │   └── backend_client.py              #   Client HTTP vers le backend Java
 │   ├── pyproject.toml                      #   Dépendances (pipecat-ai[gradium])
 │   └── Dockerfile

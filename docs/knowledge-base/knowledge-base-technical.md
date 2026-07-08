@@ -366,9 +366,9 @@ Run: `cd backend && mvn test`.
 
 ---
 
-## 14. Design decisions (see `../architecture/architecture.md` for the full ADRs)
+## 14. Design decisions (see `../architecture/adrs/` for the full ADRs)
 
-- **ADR-011 — multi-source ingestion.** A pivot `SourceDocument` + per-source
+- **ADR-0007 — multi-source ingestion.** A pivot `SourceDocument` + per-source
   connectors + an idempotent sync ledger decouple the core from any specific
   source, enabling staged addition of Confluence/PDF/DB connectors without
   touching the RAG pipeline.

@@ -20,3 +20,9 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0008](ADR-0008-redis-active-sessions-postgres-durable-events.md) | Accepted | Redis stores active conversation state; PostgreSQL stores durable events and vector data. |
 | [ADR-0009](ADR-0009-independent-channel-adapters-shared-java-backend.md) | Accepted | Omnichannel entry points stay independent while sharing the Java conversation backend. |
 | [ADR-0010](ADR-0010-industrialization-requires-contracts-slos-and-observability.md) | Accepted | Industrialization requires channel contracts, escalation contract, measurable SLOs, and observability before adding real channels. |
+| [ADR-0011](ADR-0011-voice-channels-through-pipecat-text-channels-to-backend.md) | Accepted | Voice channels go through channel proxies to Pipecat; text channels go directly to the Java backend. |
+| [ADR-0012](ADR-0012-modular-voice-pipeline-over-realtime-api.md) | Accepted | Voice support uses a modular STT/RAG/LLM/TTS pipeline instead of an all-in-one realtime provider. |
+| [ADR-0013](ADR-0013-tokenstream-and-backend-sse-streaming-contract.md) | Accepted | Backend streaming uses the domain `TokenStream` contract and SSE at the API boundary. |
+| [ADR-0014](ADR-0014-domain-guardrails-before-and-after-rag.md) | Accepted | Guardrails run in the backend domain pipeline before and after retrieval. |
+| [ADR-0015](ADR-0015-keyword-routing-with-session-stickiness.md) | Accepted | Multi-agent routing uses deterministic keyword scoring with session stickiness. |
+| [ADR-0016](ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) | Accepted | The custom bridge remains a legacy fallback and comparison path, not the V1 target. |
