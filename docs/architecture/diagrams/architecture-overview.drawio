@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;" value="&lt;b&gt;Legende&lt;/b&gt;  🟢 notre code   🔴 service externe" vertex="1">
+        <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;spacingLeft=8;" value="&lt;b&gt;Legacy bridge overview&lt;/b&gt;  🟢 our code   🔴 external service" vertex="1">
           <mxGeometry height="30" width="360" x="528.75" y="20" as="geometry" />
         </mxCell>
         <mxCell id="browser" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="👤 Browser" vertex="1">
@@ -22,7 +22,7 @@
         <mxCell id="voiceAgent" parent="1" style="swimlane;startSize=28;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="🟢 Voice Agent — Python" vertex="1">
           <mxGeometry height="285" width="620" x="355" y="405" as="geometry" />
         </mxCell>
-        <mxCell id="bridge" parent="voiceAgent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="bridge_server.py" vertex="1">
+        <mxCell id="bridge" parent="voiceAgent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="bridge_server.py&#xa;legacy/fallback" vertex="1">
           <mxGeometry height="40" width="180" x="55" y="28" as="geometry" />
         </mxCell>
         <mxCell id="stt" parent="voiceAgent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="gradium_stt.py" vertex="1">
@@ -100,13 +100,13 @@
         <mxCell id="pgvector" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="🔴 PostgreSQL + pgvector :5433" vertex="1">
           <mxGeometry height="90" width="180" x="911" y="1488" as="geometry" />
         </mxCell>
-        <mxCell id="o1" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="voicechat" value="ws:8765">
+        <mxCell id="o1" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="voicechat" value="legacy ws:8765">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="o2" edge="1" parent="1" source="voicechat" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.6667;entryY=0;" target="bridge" value="ws:8765 PCM + JSON">
+        <mxCell id="o2" edge="1" parent="1" source="voicechat" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.6667;entryY=0;" target="bridge" value="legacy ws:8765 PCM + JSON">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="o3" edge="1" parent="1" source="twilio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.3333;entryY=0;" target="bridge" value="ws:8766 μ-law">
+        <mxCell id="o3" edge="1" parent="1" source="twilio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;exitX=0.5;exitY=1;entryX=0.3333;entryY=0;" target="bridge" value="legacy ws:8766 μ-law">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="o4" edge="1" parent="1" source="bridge" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;curved=0;" target="stt" value="">

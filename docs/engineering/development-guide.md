@@ -244,7 +244,7 @@ Migration from the old `curl /ingest` seeding: pre-existing rows have no
 | Legacy React frontend does not connect to the voice agent | Wrong URL | Check `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
 | `GRADIUM_API_KEY not set` | Missing variable | `cp voice-agent/.env.example voice-agent/.env` and configure it |
 | `Embeddings not found for default` | Invalid `GRADIUM_VOICE_ID` | Use a real ID from the [catalog](https://docs.gradium.ai/guides/voices/all-voices) (e.g. `b35yykvVppLXyw_l` for Elise FR) |
-| TTS audio not played in the browser | Raw PCM cannot be decoded by `decodeAudioData` | The bridge must wrap PCM in a WAV header (44 bytes) before sending |
+| Legacy browser TTS audio not played | Raw PCM cannot be decoded by `decodeAudioData` | The legacy bridge must wrap PCM in a WAV header (44 bytes) before sending |
 | Pipecat agent does not start | Missing dependencies | `cd voice-agent && uv pip install -e .` |
 | VAD loads `silero_vad_legacy.onnx` | Wrong default model | Add `model: 'v5'` in `MicVAD.new()` options |
 | VAD `Can't create a session` | Missing ONNX file in `public/` | Copy `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` and `vad.worklet.bundle.min.js` into `frontend/public/` |
@@ -262,6 +262,9 @@ Migration from the old `curl /ingest` seeding: pre-existing rows have no
 # Check service status
 curl http://localhost:8081/api/health
 docker compose ps
+
+# Start the local stack, including the V1 Pipecat WebRTC agent
+docker compose up --build pipecat-agent backend frontend
 
 # Install VAD assets after npm install
 cp node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx frontend/public/

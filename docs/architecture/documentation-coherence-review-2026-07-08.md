@@ -83,30 +83,30 @@ edits.
       current streaming contract.
 - [x] Update `README.md` diagrams and class examples if they still show
       `Flux~String~`.
-- [ ] Replace stale `InMemoryConversationStore` / `InMemoryConversationEventStore`
+- [x] Replace stale `InMemoryConversationStore` / `InMemoryConversationEventStore`
       architecture statements with the accepted Redis active sessions +
       PostgreSQL/JPA durable events split.
-- [ ] Clarify which in-memory adapters remain available only for local/dev/tests.
+- [x] Clarify which in-memory adapters remain available only for local/dev/tests.
 - [x] Update `docs/architecture/architecture.md` so ADR-0008 is reflected in the
       port/adapters table and memory section.
 
 ### Voice Path And Runtime Topology
 
-- [ ] Make `voice-agent/agent/bot.py` and `streaming_rag_processor.py` the primary
+- [x] Make `voice-agent/agent/bot.py` and `streaming_rag_processor.py` the primary
       documented V1 voice path everywhere.
-- [ ] Mark `voice-agent/agent/bridge_server.py` consistently as
+- [x] Mark `voice-agent/agent/bridge_server.py` consistently as
       legacy/fallback/comparison.
-- [ ] Update `README.md` sequence diagrams and ASCII diagrams that still describe
+- [x] Update `README.md` sequence diagrams and ASCII diagrams that still describe
       WebSocket PCM as the main voice path.
-- [ ] Update `docs/architecture/infra-v1.md` terminology from "Voice bridge
+- [x] Update `docs/architecture/infra-v1.md` terminology from "Voice bridge
       Python" to "Pipecat voice agent" where the target V1 path is meant.
-- [ ] Keep a separate explicit "legacy bridge" section for ports 8765/8766 and
+- [x] Keep a separate explicit "legacy bridge" section for ports 8765/8766 and
       React POC behavior.
-- [ ] Correct any references to `voice-support-bot/bridge/`; the code lives under
+- [x] Correct any references to `voice-support-bot/bridge/`; the code lives under
       `voice-support-bot/voice-agent/`.
-- [ ] Review root workspace guidance files and Cursor rules that still present
+- [x] Review root workspace guidance files and Cursor rules that still present
       the bridge as the central architecture.
-- [ ] Decide and document the legacy bridge retirement policy through an ADR.
+- [x] Decide and document the current legacy bridge policy through ADR-0016.
 
 ### SLOs And NFRs
 
@@ -185,11 +185,11 @@ edits.
 
 ### Docker And Developer Guidance
 
-- [ ] Update Docker/dev docs so Pipecat is the default target V1 path.
-- [ ] Document how to start `pipecat-agent` with Docker Compose.
-- [ ] Clarify that legacy `voice-agent` WebSocket services are fallback or
+- [x] Update Docker/dev docs so Pipecat is the default target V1 path.
+- [x] Document how to start `pipecat-agent` with Docker Compose.
+- [x] Clarify that legacy `voice-agent` WebSocket services are fallback or
       comparison paths.
-- [ ] Document that Ollama must be running for embeddings if it is not provided
+- [x] Document that Ollama must be running for embeddings if it is not provided
       by Docker Compose.
 - [ ] Add or document a `bss-mock` service only if it exists; otherwise mark it as
       planned.
@@ -363,41 +363,36 @@ if the accepted code direction is `TokenStream`.
 
 #### 2.3 Redis/Postgres persistence drift
 
-ADR-0008 and the operations backlog say:
+Remediation status: fixed. ADR-0008 and the operations backlog say:
 
 - Redis stores active conversation/session state;
 - PostgreSQL/JPA stores durable conversation events;
 - Docker Compose wires `CONVERSATION_STORE=redis` and
   `CONVERSATION_EVENT_STORE=jpa`.
 
-`architecture.md` still says:
+`architecture.md` now reflects this split in the port table and conversation
+memory section. It keeps `InMemoryConversationStore` and
+`InMemoryConversationEventStore` only as local/dev/test adapters. The hexagonal
+Draw.io diagram now shows `RedisConversationStore` for active sessions and
+`JpaConversationEventStore` for durable events.
 
-- `ConversationStore` uses `InMemoryConversationStore` with Redis in Phase 2;
-- the current implementation is volatile and mono-instance;
-- inline ADR-004 keeps `InMemoryConversationEventStore` as the MVP decision.
+#### 2.4 Pipecat target path is aligned after cleanup
 
-`README.md` diagrams also still show only in-memory stores. This is stale and
-contradicts the accepted ADR and current Compose setup.
-
-#### 2.4 Pipecat target path is partly aligned but legacy drift remains
-
-Aligned sources:
+Remediation status: fixed in the topology cleanup batch. The following sources
+now describe `voice-agent/agent/bot.py` and `streaming_rag_processor.py` as the
+target V1 path, and mark `bridge_server.py` as legacy/fallback/comparison:
 
 - ADR-0002;
+- ADR-0016;
 - top-level `voice-support-bot/CLAUDE.md`;
 - top-level `voice-support-bot/AGENTS.md`;
-- parts of `architecture.md`;
-- parts of `backlog.md`.
-
-Drift remains in:
-
-- root workspace `CLAUDE.md` and `AGENTS.md`, which still mention
-  `voice-support-bot/bridge/`;
-- `infra-v1.md`, which uses "Voice bridge Python" as the target runtime term;
-- `architecture.md` extensibility section, which explains adding transports via
-  `bridge_server.py`;
-- `README.md`, which still emphasizes WebSocket PCM flows and omits `bot.py` in
-  parts of the project tree.
+- root workspace `CLAUDE.md` and `AGENTS.md`;
+- root Cursor rule `.cursor/rules/voice-support-bot.mdc`;
+- `architecture.md`;
+- `infra-v1.md`;
+- `README.md`;
+- `development-guide.md`;
+- legacy `architecture-overview.drawio` labels.
 
 #### 2.5 Channel/backend contract is defined in ADRs but absent from the
 architecture spine
@@ -551,17 +546,21 @@ changes separately.
 
 #### 5.3 Docker and dev startup docs do not fully reflect the V1 path
 
-The guide documents manual Pipecat startup, but does not clearly document the
-Docker Compose `pipecat-agent` workflow.
+Remediation status: partially fixed. `README.md` and `development-guide.md` now
+document `pipecat-agent` as the Docker Compose V1 path and label the
+`voice-agent` WebSocket service as legacy/fallback/comparison. `README.md` also
+states that host Ollama must be running when local embeddings or local LLM
+inference are used.
 
-Docker Compose starts legacy WebSocket services as well, which can be correct for
-fallback, but the docs must state which service is canonical for V1.
+Remaining open item: only add or document a `bss-mock` service if it exists;
+otherwise mark it as planned in the BSS integration cleanup batch.
 
 #### 5.4 Ollama embedding dependency is underdocumented
 
-KB sync/query embeddings require Ollama `nomic-embed-text`. Docker Compose does
-not provide Ollama. The docs should explicitly state that Ollama must run locally
-or be provided externally before KB sync/search works.
+Remediation status: fixed in `README.md`. KB sync/query embeddings require
+Ollama `nomic-embed-text`; Docker Compose does not provide Ollama by default, so
+the README now states that host Ollama must be running when local embeddings or
+local LLM inference are used.
 
 #### 5.5 `bss-mock` is recommended but not present
 
@@ -584,41 +583,26 @@ filenames, or domain keywords intentionally kept as data.
 
 #### 6.1 Current rule says English-only docs
 
-`CLAUDE.md`, `AGENTS.md`, and `technical-writer` say all files under `docs/`
-must be written in English.
-
-Many key docs are French:
-
-- product scope;
-- functional specification;
-- architecture;
-- infrastructure;
-- Galaxion integration;
-- development guide;
-- operations backlog;
-- adversarial architecture review;
-- README.
+Remediation status: fixed. `CLAUDE.md`, `AGENTS.md`, and related documentation
+guidance require English-only docs, and the previously French product,
+architecture, infrastructure, Galaxion, development, operations, adversarial
+review, and README content has been translated.
 
 #### 6.2 French docs are not even stylistically consistent
 
-Some French docs avoid accents. Others use accents. Some files mix English
-headings into French prose. The team should either translate or explicitly
-support bilingual documentation with a convention.
+Remediation status: fixed by the English translation pass. Remaining French
+phrases should be treated as domain examples, test data, or proper nouns unless
+a later scan proves otherwise.
 
 ### 7. Root Workspace Guidance Findings
 
 The nested `voice-support-bot/CLAUDE.md` and `voice-support-bot/AGENTS.md` are
 mostly current.
 
-The root workspace `CLAUDE.md`, root `AGENTS.md`, and related Cursor rules still
-contain older voice-support-bot descriptions:
-
-- path `voice-support-bot/bridge/` instead of `voice-agent/`;
-- bridge described as central;
-- Pipecat not clearly marked as target V1.
-
-These root-level files can mislead future agents working from the workspace
-root.
+Remediation status: fixed in the topology cleanup batch. The root workspace
+`CLAUDE.md`, root `AGENTS.md`, and `.cursor/rules/voice-support-bot.mdc` now
+point to `voice-support-bot/voice-agent/`, mark Pipecat as the V1 target, and
+label the custom WebSocket bridge as legacy/fallback.
 
 ## Consolidated Recommendation
 

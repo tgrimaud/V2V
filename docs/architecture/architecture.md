@@ -519,14 +519,16 @@ provider. The internal contract (functions `transcribe_audio()` and
 
 ### Adding a Transport
 
-The bridge server handles browser clients (ws:8765, PCM 16kHz) and Twilio Media
-Streams telephony (ws:8766, μ-law 8kHz) through two WebSocket servers launched
-together in `main()`. Both channels share the same pipeline (turn detector + STT
-streaming + RAG SSE + TTS); only the audio format (`pcm_16000` vs `ulaw_8000`)
-and envelope protocol (WAV binary vs Twilio JSON media frames) differ. To add a
-new transport (for example native SIP, LiveKit), create a dedicated WebSocket
-handler that reuses `create_stt_session(...)`, `TurnDetector`, and
-`synthesize_speech(...)` with the correct `output_format`.
+New target transports should be added through the Pipecat voice agent first.
+`agent/bot.py` creates the runtime transport and keeps the shared pipeline:
+transport input → server VAD → Gradium STT → backend SSE → Gradium TTS →
+transport output.
+
+To add a V1 transport such as native SIP, LiveKit, or another WebRTC gateway,
+extend the Pipecat transport creation path and keep the Java backend contract
+unchanged. The custom bridge (`bridge_server.py`, `ws_server.py`,
+`twilio_server.py`) remains available for fallback and comparison, but should not
+be the default extension path for new production channels.
 
 ## Architecture Decisions
 

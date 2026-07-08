@@ -115,10 +115,10 @@
         <mxCell id="aOllama" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="OllamaLlmAdapter" vertex="1">
           <mxGeometry height="40" width="230" x="280" y="28" as="geometry" />
         </mxCell>
-        <mxCell id="aConvStore" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="InMemoryConversationStore" vertex="1">
+        <mxCell id="aConvStore" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="RedisConversationStore&#xa;active sessions" vertex="1">
           <mxGeometry height="40" width="230" x="800" y="28" as="geometry" />
         </mxCell>
-        <mxCell id="aEvt" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="InMemoryConversationEventStore" vertex="1">
+        <mxCell id="aEvt" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="JpaConversationEventStore&#xa;durable events" vertex="1">
           <mxGeometry height="40" width="230" x="10" y="28" as="geometry" />
         </mxCell>
         <mxCell id="aJpa" parent="cAout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;" value="JpaKnowledgeSourceStateAdapter" vertex="1">

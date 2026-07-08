@@ -28,7 +28,7 @@ This option is suitable for an operator demonstration or controlled pilot.
 |------|--------|-------------------|-----------|
 | Load balancer / ingress | 1 managed service | N/A | TLS, HTTPS/WSS routing, health checks |
 | Backend Java | 2 VMs or pods | 2-4 vCPU, 4-8 GB RAM | Conversation API, RAG, business orchestration |
-| Voice bridge Python | 2 VMs or pods | 2-4 vCPU, 4-8 GB RAM | WebSocket audio, STT/TTS, telephony |
+| Pipecat voice agent | 2 VMs or pods | 2-4 vCPU, 4-8 GB RAM | WebRTC/Twilio audio, STT/TTS, voice orchestration |
 | PostgreSQL + pgvector | 1 managed instance | 4 vCPU, 16 GB RAM, SSD | KB, embeddings, technical state |
 | Redis | 1 managed instance | 2 vCPU, 4-8 GB RAM | Sessions, shared conversation state, cache |
 | Observability | Managed or 1 VM | 2-4 vCPU, 8 GB RAM | Logs, traces, dashboards |
@@ -45,7 +45,7 @@ This option is the recommended target for an operator-ready V1.
 | Pool / Service | Count | Indicative size | Usage |
 |----------------|--------|-------------------|-------|
 | General Kubernetes worker pool | 3 VMs | 4-8 vCPU, 16-32 GB RAM | Backend Java, KB jobs, small services |
-| Voice Kubernetes worker pool | 2-3 VMs | 4-8 vCPU, 16 GB RAM | Voice bridge, WebSocket audio, telephony |
+| Voice Kubernetes worker pool | 2-3 VMs | 4-8 vCPU, 16 GB RAM | Pipecat voice agents, WebRTC/Twilio audio, telephony |
 | PostgreSQL + pgvector HA | 2 managed instances | 4-8 vCPU, 16-32 GB RAM, SSD | KB data, vector store, persistent state |
 | Redis HA | 2 managed instances | 2-4 vCPU, 8-16 GB RAM | Sessions, cache, low-latency shared state |
 | Observability | Managed service or 2 VMs | 4-8 vCPU, 16-32 GB RAM | OpenTelemetry, logs, metrics, alerting |
@@ -63,13 +63,15 @@ level of managed services selected.
 - Stateless as much as possible.
 - Conversation state shared in Redis or persisted in the database as needed.
 
-### Voice bridge Python
+### Pipecat Voice Agent
 
 - Separate pool from the backend to scale according to simultaneous calls.
 - Minimum 2 replicas.
 - Sensitive to network latency toward STT/TTS and the backend.
 - Must be co-located in the same region as the backend.
 - Plan session draining before restarts to avoid cutting off active calls.
+- The custom WebSocket bridge remains a legacy/fallback path and should not size
+  the V1 target unless it is explicitly kept for comparison.
 
 ### PostgreSQL + pgvector
 
@@ -82,7 +84,7 @@ level of managed services selected.
 
 - Prefer a managed HA service.
 - Used for shared conversation state, sessions, and short-lived caches.
-- Required as soon as multiple backend or voice bridge instances run in parallel.
+- Required as soon as multiple backend or Pipecat voice-agent instances run in parallel.
 
 ### Frontend
 
@@ -107,7 +109,7 @@ prerequisite, unless required by contract.
 ## Recommended Network Zones
 
 - Public subnet: load balancer, public ingress, optional bastion.
-- Private application subnet: backend Java, voice bridge, jobs.
+- Private application subnet: backend Java, Pipecat voice agents, jobs.
 - Private data subnet: Postgres, Redis, internal storage.
 - Controlled internet egress: managed STT/TTS/LLM, updates, observability.
 - Private BSS link: VPN, peering, private endpoint, or dedicated interconnect.
@@ -116,13 +118,13 @@ prerequisite, unless required by contract.
 
 The values below are starting points to validate through load testing.
 
-| Simultaneous calls | Backend Java | Voice bridge | Data |
+| Simultaneous calls | Backend Java | Pipecat voice agent | Data |
 |-------------------|--------------|--------------|---------|
 | 5-10 | 2 replicas, 2 vCPU each | 2 replicas, 2 vCPU each | Postgres 4 vCPU, Redis 2 vCPU |
 | 20-50 | 3-4 replicas, 2-4 vCPU each | 3-5 replicas, 4 vCPU each | Postgres 4-8 vCPU, Redis 2-4 vCPU |
 | 50-100 | 5+ replicas, 4 vCPU each | 6+ replicas, 4-8 vCPU each | Postgres 8+ vCPU, Redis HA 4 vCPU |
 
-The voice bridge must be scaled based on active calls and audio latency. The
+The Pipecat voice-agent pool must be scaled based on active calls and audio latency. The
 backend must be scaled based on conversation count, BSS latency, and LLM
 generation time.
 
@@ -144,7 +146,7 @@ Each conversation must make it possible to measure:
 For an operator pilot, start with:
 
 - 3 general Kubernetes VMs;
-- 2 dedicated voice bridge Kubernetes VMs;
+- 2 dedicated Pipecat voice-agent Kubernetes VMs;
 - managed HA PostgreSQL + pgvector;
 - managed HA Redis;
 - frontend on CDN;

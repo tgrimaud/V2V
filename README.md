@@ -254,48 +254,49 @@ classDiagram
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant VA as Voice Agent (Python)
+    participant P as Pipecat Voice Agent
     participant STT as Gradium STT
     participant BE as Java Backend
     participant VS as pgvector
     participant LLM as Mistral / Ollama
     participant TTS as Gradium TTS
 
-    B->>VA: Audio PCM 16kHz (WebSocket)
-    B->>VA: "END_OF_SPEECH"
-    VA->>STT: POST /api/post/speech/asr
-    STT-->>VA: NDJSON words
-    VA->>BE: POST /api/conversation/ask {question}
+    B->>P: WebRTC audio
+    P->>P: Server-side VAD / barge-in
+    P->>STT: Gradium STT stream
+    STT-->>P: Transcribed text
+    P->>BE: GET /api/conversation/ask-stream
     BE->>VS: Similarity search (top 5)
     VS-->>BE: KnowledgeChunk[]
     BE->>LLM: System prompt + context + question
-    LLM-->>BE: Answer text
-    BE-->>VA: {answer, citations}
-    VA->>TTS: WebSocket setup + text
-    TTS-->>VA: Audio base64 chunks
-    VA-->>B: JSON {answer} + WAV binary
+    LLM-->>BE: TokenStream
+    BE-->>P: SSE tokens / done event
+    P->>P: Sentence grouping
+    P->>TTS: Gradium TTS stream
+    TTS-->>P: Audio frames
+    P-->>B: WebRTC audio output
 ```
 
 ### Simplified View (ASCII)
 
 ```
-Browser/Phone
+Web voice / Phone voice
      │
-     ▼ WebSocket (PCM 16kHz or μ-law 8kHz audio)
+     ▼ WebRTC or Twilio Media Streams
 ┌─────────────────────────────────┐
-│     Voice Agent (Python)        │
-│  ┌─────────┐  ┌────┐  ┌──────┐ │
-│  │ Gradium │→ │RAG │→ │Gradium│ │
-│  │  STT    │  │API │  │ TTS  │ │
-│  └─────────┘  └────┘  └──────┘ │
+│ Pipecat Voice Agent             │
+│ VAD / barge-in / STT / TTS      │
 └─────────────────────────────────┘
                   │
-                  ▼ HTTP POST /api/conversation/ask
+                  ▼ shared Conversation API (SSE/POST)
            ┌─────────────┐
            │ Java Backend │
-           │ (Spring AI + │
-           │  pgvector)   │
+           │ RAG + rules  │
+           │ pgvector/BSS │
            └─────────────┘
+
+Legacy React/WebSocket mode (`ws://localhost:8765`, `ws://localhost:8766`) remains
+available for fallback and comparison only.
 ```
 
 ## Documentation
@@ -335,6 +336,10 @@ ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
+Docker Compose points the backend to `http://host.docker.internal:11434` by
+default. Keep Ollama running on the host when using local embeddings or the local
+LLM provider.
+
 ### 3. Configure Environment Variables
 
 ```bash
@@ -356,7 +361,7 @@ The stack starts:
 - Redis (`localhost:6379`)
 - Java backend (`http://localhost:8081`)
 - frontend React (`http://localhost:5173`)
-- voice-agent (`ws://localhost:8765`, `ws://localhost:8766`)
+- legacy custom bridge (`ws://localhost:8765`, `ws://localhost:8766`)
 - Pipecat WebRTC UI (`http://localhost:7860`)
 
 In Docker Compose, the backend uses `CONVERSATION_STORE=redis` for active
@@ -527,22 +532,29 @@ GET /api/health → { "status": "up", "service": "voice-support-bot" }
 ## Voice Pipeline
 
 ```
-┌──────────┐    ┌─────────┐    ┌─────────────────┐    ┌─────────┐    ┌──────────┐
-│  Audio   │───▶│ Gradium │───▶│  Java Backend   │───▶│ Gradium │───▶│  Audio   │
-│  (mic)   │    │  STT    │    │ (RAG + Ollama)  │    │  TTS    │    │(speaker) │
-└──────────┘    └─────────┘    └─────────────────┘    └─────────┘    └──────────┘
-                    ~200ms           ~1500ms               ~300ms
-                                                                Total: ~2s
+┌──────────┐   ┌────────────────┐   ┌─────────┐   ┌─────────────────┐
+│  Voice   │──▶│ Pipecat Agent  │──▶│ Gradium │──▶│  Java Backend   │
+│ channel  │   │ VAD / barge-in │   │  STT    │   │ RAG + business  │
+└──────────┘   └────────────────┘   └─────────┘   └─────────────────┘
+      ▲                                                    │
+      │                                                    ▼
+┌──────────┐   ┌────────────────┐   ┌─────────┐   ┌─────────────────┐
+│  Audio   │◀──│ Pipecat Agent  │◀──│ Gradium │◀──│ SSE TokenStream │
+│ output   │   │ transport out  │   │  TTS    │   │ shared API      │
+└──────────┘   └────────────────┘   └─────────┘   └─────────────────┘
 ```
 
 ## Telephony (Twilio)
 
 1. Create a Twilio account and buy a French number
-2. Expose the backend through a tunnel: `ngrok http 8081`
-3. Configure the Twilio webhook: `POST https://<ngrok-url>/api/twilio/voice`
-4. Call the number -> the bot answers, greets, and listens
+2. Expose the Pipecat voice agent through a public URL or tunnel
+3. Start the Pipecat Twilio transport: `python -m agent.bot -t twilio -x <public-host>`
+4. Configure Twilio Media Streams to connect to the Pipecat endpoint
+5. Call the number -> Pipecat answers, streams audio, calls the shared backend,
+   and speaks the response
 
-The Twilio audio stream is **mulaw 8kHz**, natively supported by Gradium.
+The legacy custom bridge can still expose `ws://localhost:8766` for comparison,
+but the V1 telephony target goes through Pipecat.
 
 ## Escalation Detection
 
@@ -588,7 +600,7 @@ voice-support-bot/
 │   └── src/features/voice-chat/           #   VoiceChat, useVAD, useAudioQueue, useVoiceWebSocket
 ├── knowledge-base/                         # Telecom FAQ documents to ingest
 ├── docs/                                   # Architecture + development guide
-├── docker-compose.yml                      # PostgreSQL + pgvector + voice-agent
+├── docker-compose.yml                      # PostgreSQL + pgvector + voice agents
 └── .env.example
 ```
 
@@ -601,8 +613,8 @@ voice-support-bot/
 | `GRADIUM_API_KEY` | Gradium API key (required) | — |
 | `GRADIUM_VOICE_ID` | Gradium voice ID (see catalog) | `b35yykvVppLXyw_l` (Elise, FR) |
 | `BACKEND_URL` | Java backend URL | `http://localhost:8081` |
-| `VOICE_AGENT_PORT` | Browser WebSocket port | `8765` |
-| `TWILIO_WS_PORT` | Twilio WebSocket port | `8766` |
+| `VOICE_AGENT_PORT` | Legacy browser WebSocket bridge port | `8765` |
+| `TWILIO_WS_PORT` | Legacy Twilio WebSocket bridge port | `8766` |
 
 ### Java Backend (`backend/.env` or environment variables)
 
