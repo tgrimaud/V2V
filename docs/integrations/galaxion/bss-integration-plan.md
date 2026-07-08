@@ -12,13 +12,20 @@ realistic anonymized fixtures.
 
 ## Architecture Principle
 
+This plan implements
+[`ADR-0004`](../../architecture/adrs/ADR-0004-bss-integration-through-typed-domain-ports.md):
+BSS access for customer-facing runtime flows goes through typed domain ports and
+contract-compatible adapters. MCP or ad-hoc tools may be used to explore
+Galaxion APIs, inspect Swagger files, or prepare fixtures, but they are not a
+runtime BSS access path for the bot.
+
 The Java backend must not consume bot-specific internal fixtures directly. It
 must consume a stable BSS contract through an adapter.
 
 ```text
 Voice Support Backend
         |
-        | domain port: BillingContextPort / BssCustomerContextPort
+        | domain ports: BssBillingPort / BssCustomerContextPort
         v
 BSS adapter
         |
@@ -31,6 +38,10 @@ The mock must be replaceable by configuration: URL, authentication and
 environment profile. The invoice comparison domain must not change when moving
 from the mock to the real BSS.
 
+The planned `bss-mock` is not currently a Docker Compose service. Until it is
+implemented, documentation and tests must describe it as planned contract work,
+not as an available local service.
+
 ## Identified BSS Microservices
 
 | V1 Need | Source Microservice | Priority | Notes |
@@ -38,8 +49,8 @@ from the mock to the real BSS.
 | Identify / search for a customer | `contacts-service` + `accounts-service` | Medium | Can be simplified at first if the channel already provides the customer |
 | List invoices / periods | `billing-api` | High | `billing-service` is no longer used |
 | Retrieve an invoice / invoice document | `billing-api` | High | Use `bill-run-documents/search` with one or more criteria |
-| Retrieve a detailed structured invoice | Invoice PDF + `InvoicePdfExtractor` | High | No structured endpoint identified for invoice lines |
-| Retrieve invoice lines | Invoice PDF + `InvoicePdfExtractor` | High | Extract and normalize lines from the PDF |
+| Retrieve a detailed structured invoice | Invoice PDF + `InvoicePdfExtractor` | High | ADR-0005: no validated structured endpoint identified for invoice lines |
+| Retrieve invoice lines | Invoice PDF + `InvoicePdfExtractor` | High | Extract and normalize lines from the PDF until a structured source is validated |
 | Retrieve discounts / options / contract | `accounts-service`, `contracts-service`, `addons-service`, `discounts-service` | High | Needed to explain discount expiration, option, offer, subscription |
 | Retrieve out-of-bundle usage | `cdr-usage-consumption-service` or `usages-service` | Medium | Needed to explain usage causes |
 | Retrieve billing events | `customer-history-service`, `events-store-service`, `change-offers-service`, `adjustments-service` | High | Option activation, offer change, adjustment, proration |
@@ -121,6 +132,10 @@ are:
 
 First Swagger to analyze.
 
+V1 source of truth: `billing-api`, specifically the bill-period, bill-run,
+bill-run-account, and bill-run-document flow. The older `billing-service`
+analysis is historical archive only and must not be implemented in the V1 mock.
+
 Questions to answer:
 
 - How are invoices or periods listed for a customer?
@@ -128,7 +143,8 @@ Questions to answer:
 - How is an invoice document retrieved through `bill-run-documents/search`?
 - How are the invoice total, currency, period dates and status retrieved?
 - How are lines, taxes, one-off fees, adjustments and proratas extracted from
-  the invoice PDF?
+  the invoice PDF according to
+  [`invoice-extraction-json.md`](invoice-extraction-json.md)?
 - Which error codes exist for invoice not found, customer not found, forbidden
   access and unavailable data?
 
@@ -137,7 +153,8 @@ Expected endpoints to locate:
 - list invoices by customer/account;
 - search invoice document;
 - download invoice document;
-- extract invoice lines from PDF;
+- extract invoice lines from PDF, unless a structured line endpoint is validated
+  later behind `BssBillingPort`;
 - get billing periods, if distinct from invoices.
 
 ### 2. Account
@@ -203,8 +220,10 @@ The mock must cover at least four journeys.
 
 - Customer identified.
 - Two comparable invoices.
+- Both extracted invoices have status `parseable`.
 - Global delta reconciled with explainable causes.
 - Evidence available for each main cause.
+- Amounts normalized as integer cents (`*_cents`) before comparison.
 
 ### Expired Discount
 
@@ -232,6 +251,7 @@ The mock must cover at least four journeys.
 ### Unreliable PDF Extraction
 
 - The PDF is downloaded but some lines are not parsed reliably.
+- Extraction status is `partial` or `unusable`.
 - The bot must state that the analysis is incomplete and must not present
   uncertain amounts as confirmed.
 
@@ -250,6 +270,10 @@ The data must be anonymized and remain realistic: EUR amounts, monthly periods,
 plausible telecom offers, consistent dates and deltas that reconcile with the
 stated causes.
 
+Fixture payloads must use integer cents internally (`*_cents`). If a Galaxion
+source field has unknown units, keep the raw field in fixture metadata and map
+it to internal cents only after the unit is verified.
+
 ## Errors To Reproduce
 
 The mock must reproduce errors that are useful for product behavior:
@@ -262,9 +286,12 @@ The mock must reproduce errors that are useful for product behavior:
 - BSS service unavailable;
 - timeout;
 - partial data;
-- inconsistent data.
+- inconsistent data;
 - invoice PDF not found;
-- invoice PDF not parseable.
+- invoice PDF not parseable;
+- partial invoice extraction;
+- unusable invoice extraction;
+- unknown external amount unit.
 
 Each error must use the same format as the target BSS once that format is known.
 
@@ -301,10 +328,11 @@ For each microservice, extract:
 - Which PDF extraction tool provides the best reliability on Galaxion invoices?
 - Should extracted JSON be stored for audit and regression tests?
 
-## Implementation Recommendation
+## Planned Implementation Recommendation
 
-Start with a separate fake BSS server in `docker-compose`, exposed on a dedicated
-port, with versioned JSON fixtures.
+When the contract-compatible mock is implemented, start with a separate fake BSS
+server in `docker-compose`, exposed on a dedicated port, with versioned JSON
+fixtures. This service does not exist yet.
 
 Benefits:
 
@@ -322,4 +350,4 @@ Recommended implementation:
   [`invoice-extraction-json.md`](invoice-extraction-json.md);
 - contract tests on useful V1 payloads;
 - backend configuration `BSS_BASE_URL` or equivalent;
-- local `bss-mock` profile in `docker-compose`.
+- planned `bss-mock` Docker Compose profile.

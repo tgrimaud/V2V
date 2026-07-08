@@ -88,7 +88,8 @@ code** (the plans contained obsolete statuses).
 ## Knowledge Base
 
 ### K1. Confluence / PDF (Tika) / database connectors
-- **Priority**: 🔴 High · **Status**: To do
+- **Priority**: 🟠 Medium · **Status**: To do · **Scope**: post-MVP roadmap,
+  not a V1 prerequisite
 - **Objective**: add new connectors to the multi-source foundation to ingest
   heterogeneous documents without manual Markdown conversion.
 - **Ideas**: implement `KnowledgeSourceConnector` (`sourceType()` + `fetchAll()`)

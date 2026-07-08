@@ -21,6 +21,11 @@ retrieved and injected into the LLM prompt as context.
 The KB never "trains" the model. It is a searchable index that grounds the LLM's
 answers in approved content, which is what keeps answers accurate and on-topic.
 
+For billing explanations, the KB is explanatory context only: tariff rules,
+offer descriptions, support procedures, and wording guidance. Invoice amounts,
+line deltas, discounts, usage, and billing events must come from BSS evidence or
+deterministic invoice PDF extraction, not from retrieved KB passages.
+
 ### Two distinct AI models
 
 The system uses **two different models** with different roles. Do not confuse

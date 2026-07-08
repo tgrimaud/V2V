@@ -24,7 +24,7 @@ Browser/Téléphone
 │  └───────┘  └───┘  └───────┘│
 └─────────────────────────────┘
                 │
-                ▼ HTTP POST /api/conversation/ask
+                ▼ HTTP SSE /api/conversation/ask-stream
          ┌─────────────┐
          │ Java Backend │
          │ (Spring AI + │
@@ -95,7 +95,7 @@ Le projet contient encore deux implémentations qui peuvent tourner en parallèl
 
 1. **Audio in** → Le navigateur envoie l'audio via WebRTC, Twilio via Media Streams
 2. **Pipecat + Gradium STT** → Transcription temps réel avec VAD serveur
-3. **RAG Processor** → Appel HTTP au backend Java (`POST /api/conversation/ask`)
+3. **RAG Processor** → Appel SSE au backend Java (`GET /api/conversation/ask-stream?question=...&conversation_id=...`)
 4. **Gradium TTS** → Synthèse vocale du texte de réponse dans le pipeline Pipecat
 5. **Audio out** → Renvoi du flux audio au client
 

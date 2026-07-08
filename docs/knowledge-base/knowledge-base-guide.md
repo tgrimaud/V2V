@@ -25,6 +25,10 @@ too.
 > If the bot can't find a confident match, it says it doesn't have the
 > information and offers to transfer to a human advisor — it will **not** guess.
 
+For billing questions, the KB explains tariff, offer, and business rules. It
+does **not** replace invoice PDF extraction, BSS evidence, or deterministic
+billing comparison for amounts, deltas, discounts, and usage.
+
 ---
 
 ## 2. Where the content lives

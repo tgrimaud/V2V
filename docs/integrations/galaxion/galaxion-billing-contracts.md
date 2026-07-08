@@ -18,6 +18,15 @@ only `billing-api` for the Billing scope.
 the analysis. It must not be implemented in the V1 mock, nor used by the Voice
 Support Bot backend.
 
+This document implements
+[`ADR-0004`](../../architecture/adrs/ADR-0004-bss-integration-through-typed-domain-ports.md)
+and
+[`ADR-0005`](../../architecture/adrs/ADR-0005-invoice-pdf-extraction-before-llm-explanation.md):
+runtime billing access goes through `BssBillingPort`, and invoice lines come from
+deterministic PDF extraction until a structured Galaxion line endpoint is
+validated behind that same port. MCP or ad-hoc tools may support exploration
+only; they are not part of runtime customer flows.
+
 `billing-api` exposes bill run, billing period and invoice endpoints. For Voice
 Support Bot V1, the directly useful endpoints are:
 
@@ -110,9 +119,12 @@ Response:
 
 V1 reading:
 
-The PDF is not the best support for the deterministic engine, but it can serve
-as evidence or a human fallback. It must not become the main calculation source
-if structured data exists.
+This endpoint is historical because it belongs to `billing-service`, which is not
+retained for V1. The current accepted V1 path retrieves invoice documents through
+`billing-api` and extracts them into deterministic JSON before comparison. If a
+validated structured line source is found later, it can replace PDF extraction
+behind `BssBillingPort`; until then, this archived endpoint must not reopen the
+decision.
 
 ### Retrieve Invoice Details Not Retained
 
@@ -340,6 +352,10 @@ sections, but without explicit composed amounts at invoice, section and item
 level. Items carry `defaultPrice` in cents, taxes and reference/effective
 periods.
 
+This endpoint is not the accepted V1 source for invoice lines. It remains useful
+only as a future validation candidate. The current V1 path stays:
+`bill-run-documents` → PDF download → `InvoicePdfExtractor` → normalized JSON.
+
 ### Composed Invoice Not Retained For V1 Invoice Detail
 
 ```text
@@ -365,6 +381,11 @@ Reading:
 `invoices/composed` does not match the current need to retrieve customer invoice
 detail. It must not be used as the main source for the V1 mock until its exact
 role in Galaxion is clarified.
+
+If `invoices/composed` or `invoices/selected` is validated later as a reliable
+structured source, it should be mapped behind `BssBillingPort` and must produce
+the same internal invoice JSON shape as PDF extraction. It must not introduce a
+second comparison model.
 
 ## Invoice PDF Extraction
 
@@ -522,9 +543,10 @@ Useful V1 fields:
 | `amountTaxesExcluded` | number | Tax-excluded amount |
 | `amountTaxesIncluded` | number | Tax-included amount |
 
-Warning: `defaultPrice` is in cents, while `AmountResponse` is exposed as
-`number`. Real examples will be needed to verify whether these amounts are in
-euros or cents.
+Unit warning: `defaultPrice` appears to be integer cents, while
+`AmountResponse` is exposed as `number`. Real examples are required before using
+`AmountResponse` for calculations. Unknown-unit fields must stay raw metadata
+until their unit is confirmed; internal domain fields must use integer cents.
 
 ## Target Flow To Retrieve Two Invoices
 
@@ -552,12 +574,12 @@ Flow to validate with real examples:
 |---------------|--------|
 | `Invoice.number` | Extracted PDF / `BillRunDocumentResponse.filename` / `invoiceNumber` criterion |
 | `Invoice.accountId` | `accountId` search criterion or extracted PDF |
-| `Invoice.totalAmount` | Extracted PDF |
+| `Invoice.totalAmount` (`Money`, emitted as `total_tax_included_cents`) | Extracted PDF normalized to integer cents |
 | `Invoice.period` | Extracted PDF |
 | `InvoiceLine.id` | Internal extraction identifier |
 | `InvoiceLine.label` | Extracted PDF |
 | `InvoiceLine.type` | Post-extraction classification |
-| `InvoiceLine.amount` | Extracted PDF |
+| `InvoiceLine.amount` (`Money`, emitted as `amount_tax_included_cents`) | Extracted PDF normalized to integer cents |
 | `InvoiceLine.volume` | Extracted PDF if present |
 | `InvoiceLine.evidenceText` | Source PDF text fragment |
 | `Evidence.source` | `billing-api` |

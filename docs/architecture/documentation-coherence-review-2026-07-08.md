@@ -67,11 +67,12 @@ edits.
 - [x] Add supersession or migration notes if historical inline ADRs are kept for
       archive purposes.
 - [x] Fix all references to inline `ADR-011` and point them to formal ADR-0007.
-- [ ] Add missing ADRs for `TokenStream`, official voice SLO, legacy bridge
+- [x] Add missing ADRs for `TokenStream`, official voice SLO, legacy bridge
       retirement, guardrails, multi-agent routing, and modular STT-RAG-LLM-TTS
       vs realtime API if these decisions remain active. `TokenStream`,
-      guardrails, multi-agent routing, modular pipeline, and legacy bridge status
-      are now covered; official SLO and final bridge retirement remain open.
+      guardrails, multi-agent routing, modular pipeline, voice SLO measurement,
+      and legacy bridge status are now covered. Final bridge removal is not an
+      accepted active decision; it remains future backlog/roadmap work.
 
 ### Architecture Alignment
 
@@ -141,46 +142,46 @@ edits.
 
 ### BSS And Billing Integration
 
-- [ ] Standardize the runtime BSS port name: prefer `BssBillingPort` if that is
+- [x] Standardize the runtime BSS port name: prefer `BssBillingPort` if that is
       the intended canonical name.
-- [ ] Replace or explain `BillingContextPort` references.
-- [ ] Update `docs/integrations/galaxion/bss-integration-plan.md` to reference
+- [x] Replace or explain `BillingContextPort` references.
+- [x] Update `docs/integrations/galaxion/bss-integration-plan.md` to reference
       ADR-0004 explicitly.
-- [ ] Make clear that MCP/ad hoc tools are for exploration only, not runtime
+- [x] Make clear that MCP/ad hoc tools are for exploration only, not runtime
       customer flows.
-- [ ] Clarify that `billing-api` is the V1 billing source and `billing-service`
+- [x] Clarify that `billing-api` is the V1 billing source and `billing-service`
       remains historical archive only.
-- [ ] Move historical `billing-service` analysis to an archive section or file if
+- [x] Move historical `billing-service` analysis to an archive section or file if
       it keeps causing confusion.
-- [ ] Resolve the open question "Do invoice lines actually come from billing?"
+- [x] Resolve the open question "Do invoice lines actually come from billing?"
       so it does not reopen the accepted PDF-first path.
-- [ ] Make PDF extraction part of the product V1 scope, not only integration docs.
-- [ ] Add `parseable`, `partial`, and `unusable` extraction statuses to product
+- [x] Make PDF extraction part of the product V1 scope, not only integration docs.
+- [x] Add `parseable`, `partial`, and `unusable` extraction statuses to product
       acceptance criteria or link to `invoice-extraction-json.md`.
-- [ ] Propagate integer-cents rules into product examples, Galaxion mapping, and
+- [x] Propagate integer-cents rules into product examples, Galaxion mapping, and
       billing domain model notes.
-- [ ] State unit uncertainty explicitly for Galaxion fields that are not known
+- [x] State unit uncertainty explicitly for Galaxion fields that are not known
       yet, and never mix unknown API units with internal cents contracts.
 
 ### API Contracts And Examples
 
-- [ ] Standardize `conversation_id` vs `conversationId` across docs and examples.
-- [ ] Verify the backend DTO contracts and update every curl example accordingly.
-- [ ] Fix examples in `docs/engineering/development-guide.md` that use
+- [x] Standardize `conversation_id` vs `conversationId` across docs and examples.
+- [x] Verify the backend DTO contracts and update every curl example accordingly.
+- [x] Fix examples in `docs/engineering/development-guide.md` that use
       `conversationId` when the backend expects `conversation_id`.
-- [ ] Add a small API contract table for sync POST, SSE GET, and seed endpoints.
-- [ ] Document which field names are JSON body fields and which are query
+- [x] Add a small API contract table for sync POST, SSE GET, and seed endpoints.
+- [x] Document which field names are JSON body fields and which are query
       parameters.
 
 ### Knowledge Base Documentation
 
 - [x] Fix the ADR reference in `knowledge-base-technical.md`: use formal ADR-0007,
       not inline ADR-011.
-- [ ] Keep `knowledge-base-guide.md` and `knowledge-base-technical.md` as the
+- [x] Keep `knowledge-base-guide.md` and `knowledge-base-technical.md` as the
       source of truth for KB sync; they are currently coherent.
-- [ ] Decide whether advanced KB connectors are V1 prerequisites or medium-term
+- [x] Decide whether advanced KB connectors are V1 prerequisites or medium-term
       roadmap items, then align `v1-scope.md`, the functional spec, and backlog.
-- [ ] Ensure KB docs state that the KB explains tariff/business rules but does
+- [x] Ensure KB docs state that the KB explains tariff/business rules but does
       not replace BSS evidence for billing deltas.
 
 ### Docker And Developer Guidance
@@ -191,7 +192,7 @@ edits.
       comparison paths.
 - [x] Document that Ollama must be running for embeddings if it is not provided
       by Docker Compose.
-- [ ] Add or document a `bss-mock` service only if it exists; otherwise mark it as
+- [x] Add or document a `bss-mock` service only if it exists; otherwise mark it as
       planned.
 - [x] Correct stale file names such as `ws_server.py` if they no longer represent
       the target path.
@@ -215,7 +216,7 @@ edits.
 - [x] Add this review document to `docs/README.md`.
 - [x] Add cross-links from product docs to ADRs and Galaxion docs.
 - [x] Add cross-links from ADRs to the product docs they affect.
-- [ ] Add cross-links from `architecture.md` to ADR-0002, ADR-0008, ADR-0009,
+- [x] Add cross-links from `architecture.md` to ADR-0002, ADR-0008, ADR-0009,
       ADR-0010, and any new ADRs created from this cleanup.
 - [x] Ensure every new or moved document is reachable from an index.
 
@@ -447,20 +448,20 @@ operations backlog now reference this split.
 
 ### 3. Galaxion/BSS Integration Findings
 
-#### 3.1 `billing-api` vs `billing-service` is mostly consistent but noisy
+#### 3.1 `billing-api` vs `billing-service` is clarified after cleanup
 
-The decision is consistent:
+Remediation status: fixed. The decision is consistent and now reinforced in the
+integration docs:
 
 - use `billing-api`;
 - do not use `billing-service`;
 - retrieve invoice documents through `bill-run-documents`;
 - extract structured invoice JSON before comparison.
 
-The residual problem is archive noise. `billing-service` details remain long and
-prominent in integration docs. This is useful as history, but easy to misread as
-a still-open option.
+`billing-service` remains only as historical archive in
+`galaxion-billing-contracts.md` and must not be implemented in the V1 mock.
 
-#### 3.2 PDF extraction vs structured invoice lines remains muddy
+#### 3.2 PDF extraction vs structured invoice lines is clarified after cleanup
 
 ADR-0005 and `invoice-extraction-json.md` settle the current path:
 
@@ -468,17 +469,13 @@ ADR-0005 and `invoice-extraction-json.md` settle the current path:
 - PDF extraction is the V1 mechanism before comparison;
 - the LLM must not read PDFs to calculate amounts.
 
-`galaxion-billing-contracts.md` still suggests that:
+`galaxion-billing-contracts.md` now labels `GET /invoices/selected` and
+`GET /invoices/composed` as future validation candidates only. The current V1
+path is `bill-run-documents` → PDF download → `InvoicePdfExtractor` →
+normalized JSON. A future structured source must map behind `BssBillingPort` and
+produce the same internal invoice JSON shape.
 
-- `GET /invoices/selected` may provide invoice lines and sections;
-- `ComposedItemResponse` has useful V1 fields;
-- PDF should not become the primary calculation source if structured data exists.
-
-That last sentence is defensible as a future migration note, but it undermines
-the current PDF-first decision unless clearly labeled as a future replacement
-condition.
-
-#### 3.3 Integer-cents contract is not propagated everywhere
+#### 3.3 Integer-cents contract is propagated after cleanup
 
 The internal contract says:
 
@@ -486,34 +483,30 @@ The internal contract says:
 - fields should use `*_cents`;
 - decimals from external systems must be normalized before domain comparison.
 
-Gaps remain:
+Product acceptance criteria, the BSS plan, and Galaxion mapping now state that
+internal monetary comparison uses integer cents. Unknown-unit Galaxion fields
+remain raw metadata until verified; they must not be mixed into internal cents
+contracts.
 
-- product examples use decimal EUR values without linking to internal cents
-  normalization;
-- Galaxion fields mix unknown `number` units, possible cents, and decimal-like
-  fields;
-- the domain mapping section does not state cents types explicitly for
-  `Invoice.totalAmount` or `InvoiceLine.amount`.
-
-#### 3.4 BSS port naming drift
+#### 3.4 BSS port naming is standardized after cleanup
 
 The canonical naming appears to be:
 
 - `BssBillingPort`;
 - `BssCustomerContextPort`.
 
-`bss-integration-plan.md` uses `BillingContextPort`, which is not defined in the
-ADRs or guidance files. This should be corrected or explicitly justified.
+`bss-integration-plan.md` now uses `BssBillingPort` and
+`BssCustomerContextPort`.
 
-#### 3.5 Runtime BSS ports vs MCP is aligned but weakly linked
+#### 3.5 Runtime BSS ports vs MCP is linked after cleanup
 
 ADR-0004 and repo guidance clearly say:
 
 - typed business ports are for runtime customer flows;
 - MCP/ad hoc tools are for exploration and internal tooling.
 
-The integration plan has the right port/adapter diagram but does not link to
-ADR-0004 or explicitly exclude runtime MCP.
+The integration plan now links ADR-0004 and explicitly excludes MCP/ad-hoc tools
+from runtime customer flows.
 
 ### 4. Knowledge Base Documentation Findings
 
@@ -529,18 +522,17 @@ guidance agree on:
 - `POST /api/knowledge/sync`;
 - one PostgreSQL vector store plus sync ledger.
 
-#### 4.2 ADR numbering is wrong in KB docs
+#### 4.2 ADR numbering in KB docs is aligned
 
-`knowledge-base-technical.md` references inline ADR-011, while the formal ADR is
-ADR-0007. This must be corrected.
+Remediation status: fixed. `knowledge-base-technical.md` points to formal
+ADR-0007 for the `SourceDocument` knowledge-sync decision.
 
-#### 4.3 KB connector priority is inconsistent
+#### 4.3 KB connector priority is aligned
 
-`v1-scope.md` says PDF/Confluence/DB connectors are V1 structural requirements.
-The functional spec says advanced connectors beyond Markdown are out of initial
-scope or medium-term roadmap.
-
-The technical foundation is coherent, but the product priority is not.
+Remediation status: fixed. Advanced PDF/Confluence/database KB connectors are
+medium-term/post-MVP roadmap work, not V1 prerequisites. The Markdown connector
+and idempotent sync foundation remain the current source-of-truth path for KB
+content.
 
 ### 5. Engineering And Developer Guidance Findings
 
@@ -558,14 +550,12 @@ changes separately.
 
 #### 5.3 Docker and dev startup docs do not fully reflect the V1 path
 
-Remediation status: partially fixed. `README.md` and `development-guide.md` now
+Remediation status: fixed for current docs. `README.md` and `development-guide.md` now
 document `pipecat-agent` as the Docker Compose V1 path and label the
 `voice-agent` WebSocket service as legacy/fallback/comparison. `README.md` also
 states that host Ollama must be running when local embeddings or local LLM
-inference are used.
-
-Remaining open item: only add or document a `bss-mock` service if it exists;
-otherwise mark it as planned in the BSS integration cleanup batch.
+inference are used. `bss-mock` is documented as planned contract-compatible mock
+work, not as an available Docker Compose service.
 
 #### 5.4 Ollama embedding dependency is underdocumented
 
@@ -576,14 +566,24 @@ local LLM inference are used.
 
 #### 5.5 `bss-mock` is recommended but not present
 
-The BSS integration plan recommends a `bss-mock/` service in Docker Compose.
-The docs should either add it, mark it as planned, or avoid implying it exists.
+Remediation status: fixed. The BSS integration plan and README now mark
+`bss-mock` as planned future work and avoid implying that it exists in the
+current Docker Compose stack.
 
-#### 5.6 `conversation_id` vs `conversationId` examples conflict
+#### 5.6 `conversation_id` vs `conversationId` examples are aligned after cleanup
 
-Some examples use `conversation_id`; others use `conversationId`. The Python
-bridge bug history makes this important: the wrong field can silently split
-conversation history.
+Remediation status: fixed. Backend DTOs were verified:
+
+- `POST /api/conversation/ask` uses JSON body fields `question` and
+  `conversation_id`;
+- `GET /api/conversation/ask-stream` uses query parameters `question` and
+  `conversation_id`;
+- `POST /api/conversation/seed` uses JSON body fields `message` and
+  `conversation_id`.
+
+`README.md` now contains a small contract table, and development examples no
+longer send `conversationId` in requests. Current response DTOs may still expose
+`conversationId`; that is documented as response-only behavior.
 
 ### 6. Documentation Language And Style Findings
 
@@ -628,9 +628,10 @@ Recommended order:
    bridge legacy. Done.
 4. Decide the language policy and apply it consistently. Done: English-only.
 5. Normalize contract details: `conversation_id`, `BssBillingPort`, PDF-first,
-   integer cents.
+   integer cents. Done.
 6. Add missing ADRs for SLO, `TokenStream`, bridge status, product pivot, and
    escalation handoff. Done via ADR-0013, ADR-0016, ADR-0017, ADR-0018, and
    ADR-0019.
-7. Update cross-links and indexes.
-8. Run another coherence review after the cleanup.
+7. Update cross-links and indexes. Done.
+8. Run another coherence review after the cleanup if the documentation changes
+   materially again.

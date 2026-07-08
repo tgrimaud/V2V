@@ -296,7 +296,7 @@ curl -X POST http://localhost:8081/api/conversation/seed \
 # Test RAG (synchronous mode)
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "My router no longer works", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "My router no longer works", "conversation_id": "test"}' | python3 -m json.tool
 
 # Measure time-to-first-byte (streaming latency)
 curl -w "\nTTFB: %{time_starttransfer}s\nTotal: %{time_total}s\n" -s -o /dev/null \
@@ -321,12 +321,12 @@ curl -s -X POST http://localhost:8081/api/conversation/ask \
 # Test guardrails — greeting (no RAG)
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Hello", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "Hello", "conversation_id": "test"}' | python3 -m json.tool
 
 # Test guardrails — off-topic
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is the weather outside?", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "What is the weather outside?", "conversation_id": "test"}' | python3 -m json.tool
 
 # Test multi-agent routing — billing
 curl -s -X POST http://localhost:8081/api/conversation/ask \

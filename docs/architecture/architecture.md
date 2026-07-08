@@ -20,6 +20,22 @@ mock are detailed in
 Structuring decisions are tracked as ADRs in
 [`adrs/`](adrs/).
 
+Key decisions referenced by this architecture spine include
+[ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) for the target
+voice path,
+[ADR-0008](adrs/ADR-0008-redis-active-sessions-postgres-durable-events.md) for
+conversation persistence,
+[ADR-0009](adrs/ADR-0009-independent-channel-adapters-shared-java-backend.md) for
+omnichannel boundaries,
+[ADR-0010](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md)
+for production gates,
+[ADR-0011](adrs/ADR-0011-voice-channels-through-pipecat-text-channels-to-backend.md)
+for voice/text channel routing,
+[ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) for
+latency targets, and
+[ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md) for escalation
+handoff.
+
 ## Architecture Diagram
 
 ```mermaid
@@ -147,9 +163,13 @@ The system calls the following external services:
 
 ## Channel / Backend Contract
 
-ADR-0009, ADR-0010, ADR-0011, and ADR-0019 define the omnichannel boundary:
-channels are adapters, while the Java backend owns conversation behavior,
-guardrails, billing reasoning, routing, escalation, and memory.
+[ADR-0009](adrs/ADR-0009-independent-channel-adapters-shared-java-backend.md),
+[ADR-0010](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md),
+[ADR-0011](adrs/ADR-0011-voice-channels-through-pipecat-text-channels-to-backend.md),
+and [ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md) define
+the omnichannel boundary: channels are adapters, while the Java backend owns
+conversation behavior, guardrails, billing reasoning, routing, escalation, and
+memory.
 
 ### Current MVP Routes
 
@@ -173,7 +193,7 @@ adapters must normalize an envelope containing:
 | `idempotency_key` | Duplicate protection for retries and asynchronous delivery |
 | `reply_mode` | Expected response mode: `sync`, `stream`, `async`, or `handoff` |
 | `customer_reference` | Optional safe customer/account reference resolved by the channel adapter |
-| `escalation_context` | Optional handoff context following ADR-0019 |
+| `escalation_context` | Optional handoff context following [ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md) |
 
 Current `ask` and `ask-stream` calls may keep accepting `question` and
 `conversation_id` for the MVP. A future channel-oriented API or compatibility
@@ -542,11 +562,13 @@ identity.
 | Complete LLM response (total) | ~1200ms | Java Backend → Mistral | In parallel with TTS |
 | TTS all sentences | ~400ms | Voice Agent → Gradium | Sequential per sentence |
 
-This table is a target budget, not a production SLO. ADR-0018 defines the
-current measurable pilot criterion (`time_to_first_audio` p95 below 800 ms) and
-keeps production SLO acceptance gated by ADR-0010: per-step/channel
-observability, dashboards, alerting, degraded modes, retries/timeouts, and
-provider outage tests.
+This table is a target budget, not a production SLO.
+[ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) defines
+the current measurable pilot criterion (`time_to_first_audio` p95 below 800 ms)
+and keeps production SLO acceptance gated by
+[ADR-0010](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md):
+per-step/channel observability, dashboards, alerting, degraded modes,
+retries/timeouts, and provider outage tests.
 
 ### Synchronous Mode (Fallback / Text Mode)
 

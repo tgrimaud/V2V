@@ -374,6 +374,10 @@ sessions and `CONVERSATION_EVENT_STORE=jpa` for admin events. The
 the legacy WebSocket bridge as a fallback. The React frontend exposes both modes:
 `Solution A · WebSocket` and `Solution B · WebRTC`.
 
+The planned `bss-mock` service is not part of Docker Compose yet. Billing V1
+docs describe it as future contract-compatible mock work, not as an available
+local service.
+
 ### 4bis. Start the Java Backend Manually
 
 ```bash
@@ -449,7 +453,7 @@ curl -X POST http://localhost:8081/api/conversation/ask \
 POST /api/conversation/ask
 Content-Type: application/json
 
-Body: { "question": "...", "conversationId": "optional-session-id" }
+Body: { "question": "...", "conversation_id": "optional-session-id" }
 
 Response: {
   "answer": "...",
@@ -482,6 +486,18 @@ bot at connection time: the greeting is played client-side by TTS and therefore
 does not reach the backend; without this initialization, the LLM treats the first
 user message as the beginning of the conversation and **greets again**. The seed
 fixes this behavior.
+
+### Conversation API Field Names
+
+| Endpoint | Input fields | Location | Response fields |
+|---|---|---|---|
+| `POST /api/conversation/ask` | `question`, `conversation_id` | JSON body | `answer`, `citations`, `conversationId`, `agent_id`, `agent_name`, `guardrail_blocked` |
+| `GET /api/conversation/ask-stream` | `question`, `conversation_id` | Query parameters | SSE events: `start`, `chunk`, `done`, `error` |
+| `POST /api/conversation/seed` | `message`, `conversation_id` | JSON body | `204 No Content` |
+
+Input uses `conversation_id` for both JSON body fields and query parameters.
+Some current response payloads still expose `conversationId`; document examples
+must not send `conversationId` in requests.
 
 ### Knowledge Ingestion
 
@@ -665,8 +681,8 @@ cd voice-agent && python -m pytest tests/
 - [ ] Enhanced admin dashboard (latency charts, hourly heatmap)
 - [x] Mistral API fallback when Ollama is too slow (configurable via `LLM_PROVIDER`)
 - [x] Multi-source KB foundation (pivot `SourceDocument` format, idempotent sync, Markdown connector, scheduled pull)
-- [ ] KB connectors for Confluence / PDF (Tika) / database
-- [ ] PDF ingestion (structured extraction)
+- [ ] KB connectors for Confluence / PDF (Tika) / database — post-MVP roadmap
+- [ ] PDF ingestion (structured extraction) — post-MVP roadmap
 - [x] Guardrails: "off-topic" detection with confidence score
 - [ ] Observability: OpenTelemetry traces over the pipeline
 - [ ] Gradium voice cloning for custom brand voice

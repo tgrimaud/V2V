@@ -74,7 +74,8 @@ used to invent amounts or compensate for missing BSS data.
 For a given customer, the application must be able to retrieve:
 
 - available invoices;
-- detailed invoice lines;
+- detailed invoice lines, from deterministic invoice PDF extraction until a
+  structured BSS line endpoint is validated behind `BssBillingPort`;
 - active contracts and subscriptions during the compared periods;
 - billed offers, options, and services;
 - commercial discounts and their validity periods;
@@ -84,6 +85,19 @@ For a given customer, the application must be able to retrieve:
   expired discount, goodwill gesture.
 
 ### Invoice Comparison
+
+When no validated structured invoice-line endpoint exists, invoice PDFs must be
+extracted into structured JSON before comparison, as defined by
+[`ADR-0005`](../architecture/adrs/ADR-0005-invoice-pdf-extraction-before-llm-explanation.md)
+and
+[`invoice-extraction-json.md`](../integrations/galaxion/invoice-extraction-json.md).
+Extraction status is part of the product behavior:
+
+- `parseable`: comparison is allowed;
+- `partial`: cautious comparison is allowed only on confirmed lines, with the
+  unexplained remainder visible;
+- `unusable`: comparison is forbidden and the bot must ask for clarification or
+  escalate.
 
 The application must compare two invoices or two periods and identify:
 
@@ -283,6 +297,10 @@ V1 will be considered useful if it can correctly handle these cases:
 - I want to speak to an advisor.
 - The bot transfers to a human agent when it cannot explain the discrepancy with
   enough certainty.
+- If one invoice extraction is `partial`, the bot clearly separates confirmed
+  causes from unexplained amounts.
+- If one invoice extraction is `unusable`, the bot does not compare amounts and
+  offers clarification or escalation.
 
 ## Synthetic Statement of Need
 

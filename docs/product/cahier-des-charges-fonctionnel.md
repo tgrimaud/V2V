@@ -301,6 +301,13 @@ The MVP is considered functional if:
 - the bot answers orally with an answer from the knowledge base;
 - the customer can interrupt the bot by speaking;
 - a billing question is routed to the Billing agent;
+- billing invoice explanations use read-only BSS evidence and deterministic
+  comparison before LLM wording;
+- invoice PDF extraction status is handled explicitly: `parseable` allows
+  comparison, `partial` allows cautious comparison on confirmed lines, and
+  `unusable` forbids comparison and triggers clarification or escalation;
+- internal monetary comparisons use integer cents (`*_cents`), even when source
+  examples are displayed as EUR values to users;
 - a sales question is routed to the Sales agent;
 - a technical question is routed to the Support agent;
 - a request for a human advisor triggers escalation;
@@ -320,7 +327,7 @@ The MVP is considered functional if:
 - Keep the legacy WebSocket bridge only as a fallback.
 - Improve the admin dashboard with latency and usage visualizations.
 - Strengthen test coverage for backend and voice-agent modules.
-- Define the minimal escalation contract toward a contact center: summary, reason, channel, priority, useful history.
+- Implement the ADR-0019 escalation contract toward a contact center: summary, reason, channel, priority, useful history.
 
 ### Medium Term
 
