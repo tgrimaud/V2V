@@ -43,6 +43,8 @@
 - Creer/editer un Draw.io XML avec des connexions importantes non ancrees : utiliser des anchors explicites `exitX/exitY` et `entryX/entryY`, surtout avec swimlanes et edges labelises.
 - Generer une presentation en patchant `Presentation.odp` sans validation visuelle : le XML peut contenir le texte tout en restant vide a l'ouverture. Si LibreOffice/soffice n'est pas disponible, generer un `.pptx` avec formes texte standard.
 - Trop remplir les cadres du template de presentation : utiliser un layout large, une idee par slide et deux bullets courts maximum pour garder une presentation lisible.
+- Presenter la vision omnicanale comme industrialisee parce que le diagramme est propre : faux. Tant que contrats canal/backend, contrat d'escalade, SLOs, observabilite, rate limiting par canal et modes degrades ne sont pas definis/testes, c'est un MVP solide avec vision saine, pas une plateforme production.
+- Ajouter WhatsApp, Genesys ou un nouveau canal avant de formaliser le contrat commun (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) — cela duplique la logique et rend les canaux couples.
 
 ## Checklist après changement substantiel
 

@@ -21,7 +21,9 @@
 - Le coeur produit doit rester agnostique des fournisseurs **LLM / STT / TTS** via ports/adapters configurables pour tester facilement plusieurs solutions.
 - La cible V1 voix demarre avec **Gradium + Pipecat** (`voice-agent/agent/bot.py`) : WebRTC pour le web et Twilio Media Streams pour la telephonie. `bridge_server.py` reste un POC historique / fallback, pas le chemin cible.
 - Le backlog produit V1 vit dans `product-backlog/` (EPICs, user stories, decisions, open questions) pour rester versionne avec le repo applicatif avant migration Jira.
+- Revue adversariale omnicanale (2026-07-08) : score global **2.8/5** — bon socle MVP, mais pas encore plateforme industrialisee sans contrats canal/backend, contrat d'escalade, SLOs mesurables, observabilite par etape/canal et modes degrades testes.
 - Utiliser le skill local `.cursor/skills/product-business/` pour produire ou relire PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
+- Utiliser le skill local `.cursor/skills/adversarial-architecture-review/` pour challenger les choix d'architecture, NFR/SLA, modularite, remplaçabilite des providers externes et readiness Genesys/WhatsApp/omnicanal.
 - Le schema cible editable est `docs/architecture/diagrams/target-v1-solution.drawio`.
 - Documentation under `docs/` must be written in English.
 - Use `.cursor/skills/technical-writer/SKILL.md` before creating, editing,

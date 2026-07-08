@@ -88,3 +88,29 @@
 - `docs/architecture/architecture.md` — clarification Pipecat cible vs bridge legacy et labels Mermaid.
 - `outputs/presentations/voice-support-bot-scope-architecture/` — storyboard et presentation PPTX.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees mises a jour.
+
+## 2026-07-08 — Revue adversariale architecture omnicanale
+
+**Summary:**
+
+- Sauvegarde de la revue adversariale de la vision omnicanale : canaux independants, backend Java commun, Genesys/WhatsApp comme adapters et non moteurs metier.
+- Score global retenu : 2.8/5 — socle MVP solide mais pas encore plateforme industrialisee sans contrats, SLOs, observabilite et modes degrades.
+- Decision structurante : formaliser les contrats canal/backend et le contrat d'escalade avant d'ajouter de nouveaux canaux reels.
+- Risques majeurs captures : backend commun comme goulot potentiel, couplage Gradium dans le voice-agent Python, Genesys/WhatsApp encore conceptuels, SLOs non verifiables.
+
+### Files changed
+- `docs/architecture/adversarial-architecture-review-2026-07-08.md` — revue adversariale complete, scorecard, risques, questions dures et recommandations.
+
+## 2026-07-08 — Skill adversarial architecture review
+
+**Summary:**
+
+- Creation du skill local `adversarial-architecture-review` pour rejouer une revue contradictoire des choix d'architecture.
+- Le skill note la solution sur NFR/SLA, modes de panne, modularite, remplaçabilite des dependances externes et capacite d'industrialisation.
+- Le skill force une sortie structuree : verdict, scorecard, risques critiques, questions dures, revue des dependances externes, gaps NFR/SLA et recommandations priorisees.
+- Decision : conserver ce skill dans le repo `voice-support-bot`, pas dans le repo parent `BMad`, car il porte les criteres de revue propres au bot vocal.
+
+### Files changed
+- `.cursor/skills/adversarial-architecture-review/SKILL.md` — skill local de revue adversariale architecture/NFR/SLA.
+- `CLAUDE.md` — apprentissage sur le score 2.8/5 et l'usage du skill.
+- `AGENTS.md` — pieges a eviter autour de l'industrialisation omnicanale sans contrats/SLOs.
