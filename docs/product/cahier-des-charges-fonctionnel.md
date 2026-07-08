@@ -331,7 +331,7 @@ The MVP is considered functional if:
 
 ### Medium Term
 
-- Add knowledge base connectors: PDF, Confluence, database.
+- Add post-MVP knowledge base connectors: generic PDF, Confluence, database.
 - Add a WhatsApp channel using the same conversational backend.
 - Prepare a Genesys Cloud CX or equivalent integration connector for escalation and omnichannel.
 - Improve time-to-first-audio measurement and end-to-end traceability.

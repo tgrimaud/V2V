@@ -17,6 +17,8 @@
   describes the broad support assistant target, while
   [`product/v1-scope.md`](product/v1-scope.md) defines the billing/BSS invoice
   explanation V1 value slice.
+- Product backlog: [`../product-backlog/`](../product-backlog/) contains the V1
+  epics, user stories, product decisions and open questions.
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
 - Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
 - Documentation coherence review: [`architecture/documentation-coherence-review-2026-07-08.md`](architecture/documentation-coherence-review-2026-07-08.md)

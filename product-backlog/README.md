@@ -1,55 +1,68 @@
 # Voice Support Bot - Product Backlog
 
-Depot local dedie au backlog produit du Voice Support Bot.
+This folder is the local product backlog for Voice Support Bot. It keeps the
+V1 epics, user stories, product decisions and open questions in Markdown before
+any future Jira migration.
 
-Objectif : conserver un decoupage EPIC / User Stories lisible en Markdown,
-versionnable localement, puis migrable vers Jira lorsque l'outillage sera pret.
+## V1 Product Baseline
 
-## Produit V1
+The canonical V1 is an operator invoice explanation assistant for end users.
+It is available by phone and web voice chat, reads billing evidence from the BSS,
+compares two invoices or billing periods, identifies the business causes of price
+deltas, and produces a clear, reliable, traceable spoken explanation.
 
-Assistant vocal d'analyse de facturation operateur, cible utilisateurs finaux,
-accessible par telephone et par chat vocal web, connecte en lecture au BSS,
-capable de comparer deux factures ou periodes client, d'identifier les causes
-metier des ecarts de prix, puis de produire une explication orale claire,
-fiable et tracable.
+The broad telecom support assistant remains the reusable product foundation.
+The V1 value focus is billing/BSS invoice explanation, as defined by
+`docs/product/v1-scope.md` and ADR-0017. Voice latency and escalation behavior
+are governed by ADR-0018 and ADR-0019.
 
-## Principes Product / Business
+## Backlog Layers
 
-- Rester au niveau probleme, besoin, valeur, regles metier et acceptance.
-- Ne pas decrire d'API, schema, table, framework ou detail d'implementation
-  dans les stories produit.
-- Ne pas inventer les faits manquants : les mettre en open questions.
-- Garder les acceptance criteria observables par un utilisateur, un conseiller,
-  un auditeur ou un metier.
-- Tracer les regles metier importantes vers des scenarios d'acceptance.
+| Layer | File | Role |
+|---|---|---|
+| Product scope | `docs/product/v1-scope.md` | Canonical V1 value slice and success criteria |
+| Product epics and stories | `product-backlog/` | Business-level backlog, acceptance criteria and open questions |
+| Technical / operations backlog | `docs/operations/backlog.md` | Engineering work, pilot gates and post-MVP roadmap |
+| BSS contract planning | `docs/integrations/galaxion/` | Evidence sources, mock fixtures and missing external inputs |
+
+## Product / Business Principles
+
+- Stay at the level of problem, value, business rules and observable acceptance.
+- Do not describe APIs, schemas, tables, frameworks or implementation details in
+  product stories unless an ADR has made them product-visible contracts.
+- Do not invent missing facts; record them as open questions or blockers.
+- Keep acceptance criteria observable by a customer, advisor, auditor, product
+  owner, billing expert or security stakeholder.
+- Link business rules to acceptance scenarios and to the ADRs that govern them.
+
+## V1 Classification
+
+| Classification | Meaning |
+|---|---|
+| `V1 core` | Directly delivers the invoice explanation value proposition |
+| `V1 enabler` | Required to deliver V1 safely or coherently |
+| `V1 pilot gate` | Required to validate the pilot before production-grade claims |
+| `Post-MVP` | Valuable later, not required for the first V1 slice |
+| `Replaced / done` | Already delivered or superseded by accepted decisions |
 
 ## Structure
 
 ```text
-epics/
-  EPIC-001-*.md
-stories/
-  US-001-*.md
-decisions/
-  DEC-001-*.md
-open-questions/
-  OQ-001-*.md
+backlog-index.md
+epics/v1-epics.md
+stories/v1-user-stories.md
+decisions/v1-decisions.md
+open-questions/v1-open-questions.md
 ```
 
-## Etats
+## States
 
-- `Draft` : brouillon en cours.
-- `Ready for review` : pret a relire avec Product / Architecture / Security.
-- `Ready for delivery split` : peut etre decoupe en taches techniques.
-- `Blocked` : decision externe requise.
-- `Done` : livre ou remplace par un artefact Jira.
+- `Draft`: still needs product review.
+- `Ready for review`: ready for Product / Architecture / Security review.
+- `Ready for delivery split`: business scope is stable enough to split into
+  technical tasks.
+- `Blocked`: external decision or input required.
+- `Done`: delivered or replaced by a stronger artifact such as an ADR.
 
-## Conventions
-
-- EPIC keys : `EPIC-001`, `EPIC-002`, ...
-- User story keys : `US-001`, `US-002`, ...
-- Open questions : `OQ-001`, `OQ-002`, ...
-- Decisions : `DEC-001`, `DEC-002`, ...
-
-Chaque story doit referencer son EPIC parent et contenir des acceptance criteria
-en langage produit.
+Every story must reference its parent epic and include product-language
+acceptance criteria.

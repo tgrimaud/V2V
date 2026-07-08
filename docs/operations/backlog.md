@@ -1,211 +1,270 @@
-# Backlog — Voice Support Bot
+# Backlog - Voice Support Bot
 
-Tracking of remaining work. The source of truth for open items is this file; the
-"Roadmap" section of `README.md` provides a condensed view.
+This is the technical and operational backlog. Product epics and user stories
+live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
+[`docs/product/v1-scope.md`](../product/v1-scope.md).
 
-The items come from the Roadmap and archived work plans (`~/.cursor/plans/`:
-*Operator Conversation Latency*, *Voice Latency Optimizations*, *Multi-Agent
-Routing POC*, *Multi-Source KB*). The statuses below have been **verified in the
-code** (the plans contained obsolete statuses).
+## Classification
 
-**Status legend**: `To do` · `In progress` · `Done`
-**Priority legend**: 🔴 High · 🟠 Medium · 🟢 Low
+| Classification | Meaning |
+|---|---|
+| `V1 core` | Directly needed to deliver the billing/BSS invoice explanation journey |
+| `V1 enabler` | Needed to deliver V1 safely, repeatedly or with enough evidence |
+| `V1 pilot gate` | Needed to validate the pilot before making production-grade claims |
+| `Post-MVP` | Useful after the first V1 slice |
+| `Done` | Delivered in the current codebase or documentation |
 
----
+## V1 Core
 
-## Private Cloud / Voice Latency Target
+### B1. Read-Only BSS Billing Access
 
-### P1. Technical prerequisites for the voice latency pilot criterion
-- **Priority**: 🔴 High · **Status**: To do
-- **Objective**: document and implement the prerequisites needed to meet a
-  `time_to_first_audio` p95 below 800 ms pilot criterion in a private cloud.
-  ADR-0018 keeps the ~700 ms first-audible-sentence value as an aspirational
-  user-experience target, not a production SLO.
-- **To cover**: real streaming STT (**L1**), chunked/persistent streaming TTS
-  (**L2**), semantic cache (**L3**), Redis shared conversational state (**S1**),
-  and span-based observability (**O1**).
-- **Validation criterion**: measure the latency budget per step
-  (STT → retrieval → LLM first-token → TTS first-audio → network) and verify the
-  pilot criterion in a co-located and pre-warmed environment.
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-001, EPIC-002, EPIC-003
+- **Objective:** retrieve the billing periods, invoice documents, customer
+  context and business events required to explain invoice deltas.
+- **Constraints:** BSS is read-only, runtime access goes through typed business
+  ports, and MCP/ad-hoc tools remain exploration-only.
 
----
+### B0. Billing Domain Model
 
-## Scalability & Omnichannel
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-001, EPIC-002, EPIC-003
+- **Objective:** define the business concepts needed by the V1 explanation
+  journey: invoice, invoice line, billing period, offer, option, discount, usage,
+  billing event, evidence, comparison and cause.
+- **Constraints:** keep monetary amounts in integer cents internally and keep the
+  domain independent from BSS transport details.
 
-### S1. Stateless backend + shared state (Redis)
-- **Priority**: 🔴 High · **Status**: Done
-- **Delivered**: `ConversationStore` has a **Redis** adapter activatable via
+### B2. Deterministic Invoice Comparison Engine
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-002
+- **Objective:** compare two invoices or billing periods, reconcile the global
+  delta with line/cause deltas, and expose any unexplained remainder.
+- **Constraints:** use integer cents internally; the LLM must not calculate
+  amounts or infer unsupported causes.
+
+### B3. Evidence-Backed Explanation Engine
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-003, EPIC-008
+- **Objective:** transform deterministic comparison results into a concise spoken
+  explanation with evidence and explicit uncertainty.
+- **Constraints:** KB content explains rules only; BSS/PDF evidence remains the
+  source of factual causes and amounts.
+
+### B4. Invoice PDF Extraction Path
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-002, EPIC-003, EPIC-010, US-010
+- **Objective:** extract invoice PDFs into structured evidence until a validated
+  structured invoice-line endpoint exists.
+- **Constraints:** product behavior must handle `parseable`, `partial` and
+  `unusable` extraction states.
+
+### V2V1. Phone And Web Voice2Voice Journeys
+
+- **Classification:** V1 core
+- **Status:** In progress
+- **Product links:** EPIC-004, EPIC-005
+- **Objective:** deliver oral question -> oral answer on phone and web voice.
+- **Current state:** Pipecat + Gradium is the V1 target path. The custom bridge
+  remains fallback/comparison only.
+- **Remaining product need:** validate that billing explanations and escalation
+  behave correctly on both channels.
+
+### V2V2. Phone Telephony Validation
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-004, US-012
+- **Objective:** validate that the phone path can carry the same billing
+  explanation and escalation behavior as the web voice path.
+- **Boundary:** this validates the V1 phone journey; it does not make the custom
+  bridge the target architecture.
+
+### E1. Human Escalation Behavior
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-006, ADR-0019
+- **Objective:** escalate on explicit advisor request or insufficient evidence,
+  and provide useful context for the advisor.
+- **Boundary:** the V1 needs a handoff contract and product behavior; a full
+  Genesys production connector remains post-MVP.
+
+## V1 Enablers
+
+### M1. Contract-Compatible BSS/PDF Fixtures
+
+- **Classification:** V1 enabler
+- **Status:** To do
+- **Product links:** EPIC-010, OQ-004
+- **Objective:** provide realistic fixtures for nominal, expired discount,
+  out-of-bundle usage, proration, insufficient data and unreliable extraction
+  journeys.
+- **Source:** `docs/integrations/galaxion/bss-integration-plan.md`.
+- **Recommended implementation:** a planned `bss-mock/` service or equivalent
+  fixture runner, not currently present in Docker Compose.
+
+### S1. Shared Active Conversation State
+
+- **Classification:** Done / V1 enabler
+- **Status:** Done
+- **Product links:** EPIC-004, EPIC-005, EPIC-006
+- **Delivered:** `ConversationStore` has a Redis adapter activatable via
   `CONVERSATION_STORE=redis`, with TTL (`CONVERSATION_TTL_SECONDS`). Docker
-  Compose starts Redis and configures the backend on Redis for active sessions.
-- **Effect**: N backend instances can share the hot state of conversations behind
-  a load balancer, instead of depending on a single-instance in-memory map.
-- **Possible next step**: reuse Redis for semantic cache and short locks.
+  Compose starts Redis and configures the backend for active sessions.
 
-### S2. Co-location + Kubernetes / autoscaling
-- **Priority**: 🟢 Low (infra) · **Status**: To do
-- **Objective**: deploy Pipecat voice agents + backend + AI services in the same VPC/region
-  (remove internet hops from the critical path), HPA on backend + voice agents
-  (custom "active calls" metric), separate CPU/GPU node pools, anti cold-start
-  pre-warming. Depends on S1.
+### C1. Durable Conversation Events
 
----
+- **Classification:** Done / V1 enabler
+- **Status:** Done
+- **Product links:** EPIC-006, EPIC-008, EPIC-009
+- **Delivered:** `ConversationEventStore` has a JPA/Postgres adapter,
+  activatable via `CONVERSATION_EVENT_STORE=jpa`, for admin history, metrics and
+  audit-oriented event review.
 
-## Latency (Time To First Audio)
+### OM1. Channel Envelope And Escalation Handoff Contract
 
-### L1. Real streaming STT + server-side turn detection
-- **Priority**: 🟠 Medium · **Status**: To do
-- **Current state**: the V1 Pipecat target (`agent/bot.py`) uses Gradium STT in
-  the Pipecat pipeline with Silero server-side VAD. The legacy bridge keeps
-  `stt_streaming.py` + `BatchSttSession` (REST batch) for fallback/comparison.
-- **Objective**: benchmark Pipecat/Gradium streaming STT on web and telephony,
-  then decide whether an alternative or self-hosted STT provider is required.
+- **Classification:** V1 enabler
+- **Status:** To do
+- **Product links:** EPIC-006, EPIC-009
+- **Objective:** shape the channel/backend envelope and `EscalationHandoff`
+  context so phone, web voice and future channels do not duplicate business
+  logic.
+- **Boundary:** implement enough for V1 escalation and traceability; WhatsApp and
+  Genesys production connectors remain post-MVP.
 
-### L2. Chunked streaming TTS + persistent TTS WebSocket
-- **Priority**: 🟠 Medium · **Status**: To do
-- **Current state**: Pipecat uses `GradiumTTSService` in the V1 target pipeline.
-  The legacy bridge keeps `gradium_tts.py`, which opens one WebSocket per
-  sentence.
-- **Objective**: measure Pipecat/Gradium first-audio, then optimize legacy TTS
-  only if the fallback remains necessary.
+### SEC1. Billing Data Security And Audit Review
 
-### L3. Semantic cache for frequent FAQs
-- **Priority**: 🟠 Medium · **Status**: To do
-- **Current state**: no cache (verified — no `@Cacheable`/semantic cache).
-- **Objective**: short-circuit vector search (and ideally the LLM) for very
-  common questions ("my box is not working") → ~150-200 ms gain.
+- **Classification:** V1 enabler
+- **Status:** To do
+- **Product links:** EPIC-008, OQ-001
+- **Objective:** validate what customer/billing information may be spoken,
+  displayed, logged and retained during the pilot.
+- **Inputs needed:** identification level, BSS access constraints, masking rules
+  and audit requirements.
 
-### L4. STT HTTP client reuse — ✅ Done
-- **Priority**: 🟢 Low (quick win) · **Status**: Done
-- **Delivered**: `gradium_stt.py` reuses a shared `httpx.AsyncClient`
-  (`get_stt_client()`, process-wide TCP/TLS connection pool) → handshake
-  eliminated between calls (~30-80 ms). Clean client shutdown is wired to bridge
-  shutdown (`close_stt_client()` in `bridge_server.main()`).
-- **Tests**: shared client lifecycle (reuse, closing, recreation) in
-  `tests/test_gradium_stt.py`.
+## V1 Pilot Gates
 
----
+### P1. Voice Latency Pilot Criterion
 
-## Knowledge Base
+- **Classification:** V1 pilot gate
+- **Status:** To do
+- **Product links:** EPIC-009, ADR-0018
+- **Objective:** verify `time_to_first_audio` p95 below 800 ms in the accepted
+  pre-warmed, co-located pilot context.
+- **To cover:** real streaming STT behavior, first LLM/backend response,
+  first TTS audio, network time and spoken acknowledgement behavior for long BSS
+  analysis.
+- **Note:** the ~700 ms first-audible-sentence value remains aspirational, not a
+  production SLO.
 
-### K1. Confluence / PDF (Tika) / database connectors
-- **Priority**: 🟠 Medium · **Status**: To do · **Scope**: post-MVP roadmap,
-  not a V1 prerequisite
-- **Objective**: add new connectors to the multi-source foundation to ingest
-  heterogeneous documents without manual Markdown conversion.
-- **Ideas**: implement `KnowledgeSourceConnector` (`sourceType()` + `fetchAll()`)
-  — integration point already in place (see `../knowledge-base/knowledge-base-technical.md`).
+### O1. Observability For Billing Voice Journeys
 
-### K2. PDF ingestion (structured extraction)
-- **Priority**: 🟠 Medium · **Status**: To do
-- **Objective**: structured extraction (headings, sections) to preserve hierarchy
-  during chunking. Linked to K1 (PDF connector via Apache Tika).
+- **Classification:** V1 pilot gate
+- **Status:** To do
+- **Product links:** EPIC-009
+- **Objective:** instrument the V1 path so Product and Operations can review
+  latency, escalation reasons, unresolved questions and evidence failures.
+- **Minimum spans/events:** STT, BSS retrieval, invoice/PDF extraction,
+  comparison, KB search, LLM first token, TTS first audio, escalation and final
+  outcome.
 
----
+### Q1. Evidence Quality And Escalation Review
 
-## Conversation
+- **Classification:** V1 pilot gate
+- **Status:** To do
+- **Product links:** EPIC-003, EPIC-006, EPIC-009, OQ-002
+- **Objective:** review pilot conversations where the bot answered, stayed
+  cautious or escalated, so the proof threshold can be tuned with Billing SME and
+  Legal stakeholders.
 
-### C1. Persistent conversational memory (JPA)
-- **Priority**: 🟠 Medium · **Status**: Done
-- **Delivered**: `ConversationEventStore` has a JPA/Postgres adapter,
-  activatable via `CONVERSATION_EVENT_STORE=jpa`, to keep admin history and
-  metrics after restart.
-- **Decision**: active sessions remain in Redis (**S1**); Postgres stores durable
-  events rather than hot conversational state.
+### P2. Invoice Comparison Response Time
 
----
+- **Classification:** V1 pilot gate
+- **Status:** To do
+- **Product links:** EPIC-002, EPIC-009, US-032
+- **Objective:** measure how long BSS retrieval, invoice/PDF extraction and
+  deterministic comparison take before the explanation can be trusted.
+- **Boundary:** comparison speed must support conversational use, but it must not
+  override evidence quality. If analysis takes longer, the voice journey should
+  acknowledge quickly and wait for reliable evidence.
 
-## Observability
+## Done Reference
 
-### O1. OpenTelemetry traces on the pipeline
-- **Priority**: 🟠 Medium · **Status**: To do
-- **Objective**: instrument each step (STT → backend request → vector → LLM
-  first-token → TTS → channel output) with a budget per span, the
-  `time_to_first_audio` p95 below 800 ms pilot criterion, dashboards, and
-  alerting. Production SLOs remain gated by ADR-0010 and ADR-0018.
+- Inter-step streaming with backend `TokenStream` and SSE.
+- Pipecat/Silero server-side VAD for the target voice path.
+- Barge-in behavior in the target voice path.
+- Multi-language voice support (FR + EN).
+- Mistral API fallback when Ollama is too slow (`LLM_PROVIDER`).
+- Multi-source KB foundation with `SourceDocument`, idempotent sync, Markdown
+  connector and scheduled pull.
+- Guardrails with off-topic / low-confidence behavior.
+- Multi-agent routing with support / billing / sales profiles and session
+  stickiness.
+- Redis active sessions and JPA/Postgres durable events.
 
----
+## Post-MVP Roadmap
 
-## Frontend / Admin
+### K1. Generic Knowledge Connectors
 
-### F1. Enhanced admin dashboard
-- **Priority**: 🟢 Low · **Status**: To do
-- **Objective**: pipeline latency visualizations, hourly conversation heatmap,
-  usage metrics.
+- **Classification:** Post-MVP
+- **Status:** To do
+- **Objective:** add Confluence, generic PDF and database connectors for broader
+  KB enrichment.
+- **Reason out of V1:** V1 invoice PDF extraction is an evidence path, not a
+  generic KB connector requirement.
 
----
+### F1. Enhanced Admin Dashboard
 
-## Omnichannel Contracts
+- **Classification:** Post-MVP unless needed by pilot review
+- **Status:** To do
+- **Objective:** richer latency charts, hourly heatmap and usage analytics.
+- **V1 boundary:** pilot review needs minimum observable events; advanced
+  dashboard UX can follow.
 
-### OM1. Channel/backend envelope and escalation handoff
-- **Priority**: 🔴 High before production omnichannel · **Status**: To do
-- **Objective**: implement the architecture envelope with `channel`,
-  `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, and
-  optional `escalation_context`.
-- **Escalation**: shape the `EscalationHandoff` payload from ADR-0019 so Genesys
-  Cloud CX or an equivalent contact-center platform receives channel, summary,
-  reason, priority, evidence status, and recommended next action.
-- **Gate**: WhatsApp and Genesys production integrations stay future work until
-  this contract, per-channel quotas, idempotency tests, observability, and
-  degraded modes are validated.
+### S2. Co-Location, Kubernetes And Autoscaling
 
----
+- **Classification:** Post-MVP / operator pilot hardening
+- **Status:** To do
+- **Objective:** deploy Pipecat agents, backend and AI services in the same
+  VPC/region, with autoscaling and node separation.
+- **V1 boundary:** required only when validating the ADR-0018 pilot criterion in
+  an operator-like environment.
 
-## Voice
+### FUT1. GPU Self-Hosting
 
-### V1. Gradium voice cloning (brand voice)
-- **Priority**: 🟢 Low · **Status**: To do
-- **Objective**: custom brand voice through Gradium voice cloning.
+- **Classification:** Post-MVP
+- **Status:** To evaluate
+- **Objective:** improve sovereignty or latency with self-hosted STT/TTS/LLM.
+- **Trigger:** managed TCO, regulatory requirements or latency needs justify the
+  operational cost.
 
----
+### FUT2. Deeper Pipecat Consolidation
 
-## Future Improvements (Out of Current Scope)
+- **Classification:** Post-MVP
+- **Status:** To evaluate
+- **Objective:** progressively remove fallback bridge paths, unify voice channel
+  handling and propagate richer real-time UI events.
 
-### FUT1. GPU self-hosting (sovereignty + ultimate latency)
-- Internalize the LLM (vLLM, continuous batching, first-token ~50-100 ms), then
-  STT/TTS on on-prem GPU. Target ~500-600 ms and 100% internal data (secrecy of
-  correspondence). GPU CAPEX + MLOps; profitable at high volume.
-- The LLM layer is already abstracted (`LlmPort`/`LlmStreamingPort`); extend the
-  same abstraction to STT/TTS to switch without rewriting. To be decided through
-  a "self-hosting vs managed" ADR.
-- **Triggers**: managed TCO > GPU TCO, regulatory requirement that data must not
-  leave the environment, or need for latency < 600 ms p95 that cannot be reached
-  with managed services.
+### CC1. WhatsApp And Genesys Production Integrations
 
-### FUT2. Pipecat as a deeper real-time voice layer
-- **Intent**: use Pipecat more deeply as the real-time voice orchestration
-  engine, without moving business logic out of the Java backend. Pipecat must
-  drive the audio path (WebRTC/Twilio → STT → backend RAG streaming → TTS →
-  audio return), while the backend keeps business rules, guardrails, agent
-  routing, RAG/vector search, billing, and conversational persistence.
-- **Ideas**: make Pipecat the only target voice path, progressively remove the
-  legacy bridge, unify WebRTC and Twilio in a Pipecat pipeline, use the barge-in
-  framework, propagate RTVI/UI events (`listening`, `thinking`, `speaking`,
-  current agent, citations, typed errors), and consume `/api/conversation/ask-stream`
-  with end-to-end streaming.
-- **Signals to report to backend/observability**: speech start/end, STT
-  confidence, interruptions, silences, time-to-first-token, time-to-first-audio,
-  STT/RAG/TTS latency, and barge-in rate.
-- **Do not move into Pipecat**: business decisions, invoice comparison, security
-  rules, persistent conversational model, and RAG logic. These responsibilities
-  remain on the Java backend side to preserve the hexagonal architecture and
-  testability.
+- **Classification:** Post-MVP
+- **Status:** To do after V1 validation
+- **Objective:** add asynchronous messaging and contact-center connectors.
+- **Gate:** channel contracts, quotas, observability, idempotency, degraded modes
+  and ADR-0019 handoff readiness.
 
----
+### V2. Custom Brand Voice
 
-## Done (Reference)
-
-- [x] Inter-step streaming (sentence-by-sentence TTS during LLM generation)
-- [x] Pipecat/Silero server-side VAD — natural conversation without clicking stop
-- [x] Barge-in — interrupt the bot by speaking
-- [x] Multi-language (FR + EN) with automatic Gradium voice selection
-- [x] Mistral API fallback when Ollama is too slow (`LLM_PROVIDER`)
-- [x] Multi-source KB foundation (`SourceDocument` pivot, idempotent sync,
-  Markdown connector, scheduled pull)
-- [x] Guardrails: "off-topic" detection with confidence score
-- [x] **Multi-agent routing** (support / billing / sales): `IntentClassifier`,
-  `AgentRegistry`, KB filtering by `domain`, agent stickiness, colored agent-name
-  badges in the chat
-- [x] **SIP/PSTN telephony**: `TwilioWebhookController`, `twilio_server.py`,
-  `telephony.py`, `ulaw_8000` codec (`audio_codec.py`) — rebuilt path
-- [x] Latency quick wins: sentence splitter threshold (10-12 chars + comma split),
-  reduced VAD silence (500 → 300 ms)
+- **Classification:** Post-MVP
+- **Status:** To do
+- **Objective:** configure a custom brand voice after the billing journey is
+  reliable.

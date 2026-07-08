@@ -1,12 +1,19 @@
 # Voice Support Bot (V2V)
 
-**Voice-to-voice** customer support agent for the Telecom/ISP domain, powered by RAG (Retrieval-Augmented Generation) over a knowledge base, accessible through a **web browser** and **traditional telephony** (Twilio).
+**Voice-to-voice** invoice explanation assistant for Telecom/ISP billing,
+powered by read-only BSS/PDF evidence, deterministic invoice comparison, and RAG
+over approved billing knowledge. It is accessible through a **web browser** and
+**traditional telephony** (Twilio).
 
-The bot listens to the customer's voice question, transcribes it, searches for
-the answer in its knowledge base, generates a concise response, and speaks it
-back to the customer — all streamed. The optimized V1 path targets a first
-audible sentence around 700 ms, with `time_to_first_audio` p95 below 800 ms as
-the current pilot validation criterion.
+The V1 value slice explains why one invoice or billing period changed compared
+with another. The bot listens to the customer's question, retrieves billing
+evidence, compares invoices before LLM wording, and speaks a concise answer. The
+optimized V1 path targets a first audible sentence around 700 ms, with
+`time_to_first_audio` p95 below 800 ms as the current pilot validation criterion.
+
+Canonical V1 scope and backlog:
+[`docs/product/v1-scope.md`](docs/product/v1-scope.md) and
+[`product-backlog/`](product-backlog/).
 
 ## Features
 
@@ -15,10 +22,12 @@ the current pilot validation criterion.
 - **Real-time streaming** — sentence-by-sentence response (text + audio), targeting a first audible sentence around 700 ms on the optimized path
 - **Text chat** — text fallback for testing or non-voice contexts
 - **Twilio telephony** — voice response on a traditional phone number
-- **Knowledge-base RAG** — factual answers with sourced citations
-- **Escalation detection** — automatic transfer to a human advisor (cancellation, complaint, GDPR)
-- **Guardrails** — off-topic detection (patterns) + RAG confidence score (configurable threshold), with a visual badge when confidence is low
-- **Admin dashboard** — KPIs (latency, resolution rate, escalations) + conversation history
+- **Billing/BSS evidence** — invoice deltas are explained from read-only BSS data and extracted invoice PDFs
+- **Deterministic comparison** — amounts and causes are calculated before LLM wording
+- **Knowledge-base RAG** — billing and tariff rules enrich explanations without replacing BSS evidence
+- **Escalation detection** — handoff on explicit advisor request or insufficient billing evidence
+- **Guardrails** — off-topic and low-confidence requests are redirected or escalated safely
+- **Admin/pilot review** — latency, unresolved questions, escalation reasons and conversation history
 - **Hybrid architecture** — Java for RAG/domain, Python for voice orchestration
 
 ## Technical Stack
@@ -442,7 +451,7 @@ curl -X POST http://localhost:8081/api/knowledge/ingest \
 ```bash
 curl -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "My router no longer connects, what should I do?"}'
+  -d '{"question": "Why is my June invoice higher than May?", "conversation_id": "billing-demo"}'
 ```
 
 ## API Reference
@@ -578,14 +587,13 @@ but the V1 telephony target goes through Pipecat.
 
 ## Escalation Detection
 
-The bot automatically transfers to a human when the customer:
-- Requests cancellation
-- Files a complaint or asks for a refund
-- Mentions a technician / on-site visit
-- Talks about personal data / GDPR
-- Reports account hacking
-- Expresses frustration ("unacceptable", "outrageous")
-- Explicitly asks for a "real advisor"
+For V1 billing explanations, escalation follows ADR-0019. The bot starts or
+offers human handoff when the customer explicitly asks for an advisor, or when it
+cannot explain the invoice delta safely because evidence is missing,
+inconsistent, partial, unusable, or below the accepted proof threshold.
+
+Broader support escalation triggers remain foundation behavior for future support
+journeys, but they are not the primary V1 acceptance path.
 
 ## Project Structure
 
@@ -678,15 +686,20 @@ cd voice-agent && python -m pytest tests/
 - [x] Barge-in — interrupt the bot by speaking
 - [x] Shared conversational memory (Redis) + persistent events (JPA)
 - [x] Multilingual support (FR + EN) with automatic Gradium voice selection
-- [ ] Enhanced admin dashboard (latency charts, hourly heatmap)
 - [x] Mistral API fallback when Ollama is too slow (configurable via `LLM_PROVIDER`)
 - [x] Multi-source KB foundation (pivot `SourceDocument` format, idempotent sync, Markdown connector, scheduled pull)
-- [ ] KB connectors for Confluence / PDF (Tika) / database — post-MVP roadmap
-- [ ] PDF ingestion (structured extraction) — post-MVP roadmap
 - [x] Guardrails: "off-topic" detection with confidence score
-- [ ] Observability: OpenTelemetry traces over the pipeline
-- [ ] Gradium voice cloning for custom brand voice
-- [ ] Multi-agent Pipecat (routing to specialists: billing, technical support, sales)
+- [x] Multi-agent routing (support / billing / sales) with session stickiness
+- [ ] Read-only BSS billing access for invoice explanation
+- [ ] Deterministic invoice comparison engine
+- [ ] Evidence-backed explanation engine
+- [ ] Invoice PDF extraction status handling (`parseable`, `partial`, `unusable`)
+- [ ] Contract-compatible BSS/PDF fixtures or `bss-mock` for V1 validation
+- [ ] Human escalation handoff context aligned with ADR-0019
+- [ ] Observability for the billing voice journey and ADR-0018 pilot criterion
+- [ ] Enhanced admin dashboard (post-MVP unless needed by pilot review)
+- [ ] KB connectors for Confluence / generic PDF / database — post-MVP roadmap
+- [ ] Gradium voice cloning for custom brand voice — post-MVP roadmap
 
 ## License
 

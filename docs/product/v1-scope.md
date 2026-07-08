@@ -184,8 +184,10 @@ Each cause of discrepancy must be linkable to:
 
 Access to the BSS involves sensitive data. V1 must provide for:
 
-- strong authentication;
-- role-based access control;
+- a documented customer identification and access-control model for each pilot
+  channel;
+- a target path toward strong authentication and role-based access control before
+  production exposure;
 - logging of consultations;
 - masking of unnecessary personal data;
 - no sensitive personal data in application logs;
@@ -226,15 +228,20 @@ V1 must therefore provide for:
   and backend scale-out;
 - persistent conversational memory to resume a session and provide useful
   context in case of transfer to a human agent;
-- semantic cache for frequent questions and recurring pricing explanations,
-  without bypassing BSS evidence verification;
+- realistic BSS/PDF fixtures and invoice extraction status handling so the team
+  can validate `parseable`, `partial`, and `unusable` cases before full BSS
+  sandbox coverage is stable;
 - span-based observability across the whole pipeline: STT, BSS retrieval,
   comparison, KB search, LLM first-token, TTS first-audio, and human agent
   transfer;
 - co-location in a private cloud of the critical components on the voice path
-  when the `time_to_first_audio` p95 below 800 ms pilot criterion must be met;
-- additional KB connectors, especially PDF, Confluence, or database connectors,
-  to enrich pricing rules and explanation content.
+  when the `time_to_first_audio` p95 below 800 ms pilot criterion must be met.
+
+Generic knowledge-base connectors such as Confluence, generic PDF ingestion, or
+database-backed KB sources are not V1 prerequisites. They remain post-MVP
+enrichment work unless a missing billing rule blocks the first invoice
+explanation slice. Invoice PDF extraction for billing evidence remains in V1 and
+is distinct from generic KB PDF ingestion.
 
 These requirements must remain linked to the backlog for splitting into epics
 and user stories. The V1 scope explains why they are necessary; the backlog
@@ -319,8 +326,9 @@ following epics:
 - Billing domain model: invoice, contract, offer, usage.
 - Invoice comparison engine.
 - Explanation engine with BSS evidence.
+- Invoice PDF extraction and BSS/PDF fixture validation.
 - Phone Voice2Voice journey.
 - Web Voice2Voice journey.
 - Web interface for summary and evidence.
 - Security, audit, and governance of BSS access.
-- LLM / STT / TTS abstractions and latency constraints.
+- LLM / STT / TTS abstractions, observability, and latency constraints.
