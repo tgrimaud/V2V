@@ -126,3 +126,31 @@ turning an aspirational target into an unmeasured contractual promise.
 - How long-running BSS evidence analysis is handled with a quick spoken
   acknowledgement.
 - What latency or evidence failures require degraded mode or escalation.
+
+---
+
+## OQ-006 - Genesys Handoff Integration Shape
+
+**Status:** Open  
+**Owner:** Product / Contact Center / Architecture / Security  
+**Impacts:** EPIC-006, EPIC-008, EPIC-009
+
+### Question
+
+Which Genesys mechanism and payload shape are required for V1 advisor handoff?
+
+### Why It Matters
+
+Genesys is the V1 escalation target, but the product must distinguish mandatory
+advisor handoff from optional full Audio Connector voice routing. The handoff
+contract determines what context can be sent to the advisor and what security
+constraints apply.
+
+### Needed Decision
+
+- Genesys handoff mechanism for the pilot.
+- Required and allowed handoff fields.
+- Customer/session identifiers allowed by the pilot trust model.
+- Queue or skill routing rules for billing advisor escalation.
+- Whether full Genesys Audio Connector routing is required for the pilot or only
+  a feasibility spike.

@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted; specialized by ADR-0020 for Genesys as the V1 contact-center handoff
+target.
 
 ## Context
 
@@ -82,4 +83,5 @@ The future `EscalationHandoff` payload must include:
 - `docs/architecture/adrs/ADR-0009-independent-channel-adapters-shared-java-backend.md`
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`
 - `docs/architecture/adrs/ADR-0014-domain-guardrails-before-and-after-rag.md`
+- `docs/architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md`
 - `docs/product/cahier-des-charges-fonctionnel.md`

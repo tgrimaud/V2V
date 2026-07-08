@@ -12,7 +12,7 @@ deltas with read-only BSS/PDF evidence through phone and web Voice2Voice journey
 | EPIC-003 Evidence-backed explanation | V1 core | ADR-0003, ADR-0005, ADR-0017 |
 | EPIC-004 Phone Voice2Voice | V1 core | ADR-0002, ADR-0011, ADR-0018 |
 | EPIC-005 Web Voice2Voice | V1 core | ADR-0002, ADR-0011, ADR-0018 |
-| EPIC-006 Human escalation | V1 core | ADR-0019 |
+| EPIC-006 Human escalation | V1 core | ADR-0019, ADR-0020 |
 | EPIC-007 Web synthesis and evidence | V1 enabler | ADR-0003, ADR-0017 |
 | EPIC-008 Trust, security and audit | V1 enabler | ADR-0003, ADR-0008, OQ-001 |
 | EPIC-009 Quality and performance measurement | V1 pilot gate | ADR-0010, ADR-0018 |
@@ -257,7 +257,10 @@ when the bot cannot answer safely.
 
 - Detect explicit advisor requests.
 - Detect insufficient evidence, unusable extraction or unresolved deltas.
-- Provide a useful summary for the human advisor.
+- Provide a useful summary for the human advisor through the Genesys handoff
+  path.
+- Keep full Genesys Audio Connector voice routing separate from the mandatory V1
+  escalation contract unless the pilot environment requires it.
 
 ### Business Rules
 
@@ -266,12 +269,14 @@ when the bot cannot answer safely.
 | BR-006-1 | Every explicit advisor request triggers the handoff path. |
 | BR-006-2 | The bot escalates when it lacks enough proof to explain the delta. |
 | BR-006-3 | The handoff context helps the customer avoid repeating the whole request. |
+| BR-006-4 | V1 escalation targets Genesys for advisor handoff; full Genesys voice routing is a separate pilot option. |
 
 ### User Stories
 
 - US-018 - Be transferred on explicit request.
 - US-019 - Be transferred when the bot lacks enough certainty.
 - US-020 - Provide the advisor with usable context.
+- US-033 - Hand off to Genesys with advisor context.
 
 ---
 

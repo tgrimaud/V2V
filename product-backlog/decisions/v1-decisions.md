@@ -186,3 +186,32 @@ domains as equal V1 value would dilute the billing/BSS objective.
 V1 validation must prove that billing intent reaches the billing explanation
 journey and that non-billing intents are handled as foundation/fallback behavior,
 not as the primary V1 success metric.
+
+---
+
+## DEC-009 - Genesys Handoff Is V1, Full Genesys Voice Routing Is Optional
+
+**Status:** Accepted via ADR-0019 and ADR-0020  
+**Date:** 2026-07-08
+
+### Decision
+
+V1 escalation targets Genesys for advisor handoff. The bot must prepare and send
+a Genesys-compatible handoff context when escalation is triggered.
+
+The full Genesys Audio Connector path, where Genesys is the entry telephony layer
+and routes the complete bidirectional bot conversation to Pipecat/Gradium, is not
+a mandatory V1 dependency unless the pilot environment requires it.
+
+### Rationale
+
+Genesys is the realistic contact-center endpoint for human escalation, so a V1
+handoff without Genesys would be incomplete. Making the entire bot voice path
+depend on Genesys would add integration and latency risk before the billing
+explanation value is proven.
+
+### Implication
+
+Backlog items must separate Genesys advisor handoff from full Genesys voice
+routing. The former is V1 scope; the latter is a feasibility spike or pilot
+option.

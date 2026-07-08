@@ -51,6 +51,7 @@
 | US-030 | Consult line-by-line invoice differences | V1 enabler | Draft | Medium |
 | US-031 | Validate billing and pricing KB content for V1 | V1 enabler | Draft | Medium |
 | US-032 | Measure invoice comparison response time | V1 pilot gate | Draft | Medium |
+| US-033 | Hand off to Genesys with advisor context | V1 core | Draft | High |
 
 ## Post-MVP / Roadmap
 
@@ -58,7 +59,7 @@
 |---|---|
 | Generic PDF / Confluence / database KB connectors | Useful for knowledge enrichment, but not required for the first billing V1 if Markdown pricing rules and invoice PDF extraction are available |
 | WhatsApp production channel | Future asynchronous adapter gated by channel contracts, quotas, observability and degraded modes |
-| Genesys production connector | Future contact-center integration; V1 needs the handoff contract, not the full platform connector |
+| Full Genesys Audio Connector voice path | Useful for contact-center-native bot routing, but V1 requires Genesys advisor handoff only unless the pilot environment mandates full Genesys voice entry |
 | GPU/self-hosting | Sovereignty or latency optimization option, not a V1 prerequisite |
 | Custom brand voice | Product polish after the billing journey is reliable |
 
@@ -70,12 +71,13 @@ Moved into the explicit V1 backlog:
 - realistic BSS/PDF fixture validation;
 - voice latency pilot measurement;
 - escalation handoff context and reason tracking;
+- Genesys advisor handoff as the V1 contact-center escalation target;
 - billing security, audit and evidence-limit disclosure.
 
 Moved out of the V1 prerequisite set:
 
 - generic KB connectors for Confluence, generic PDF ingestion and databases;
-- WhatsApp and Genesys production connectors;
+- WhatsApp production connector and the full Genesys Audio Connector voice path;
 - GPU/self-hosting;
 - custom brand voice;
 - advanced admin analytics beyond the minimum pilot review needs.
@@ -89,6 +91,7 @@ Moved out of the V1 prerequisite set:
 | OQ-003 | BSS data availability and granularity | BSS owner | Open |
 | OQ-004 | Invoice PDF extraction reliability and fixture coverage | Product / BSS / QA | Open |
 | OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | Open |
+| OQ-006 | Genesys handoff integration shape | Product / Contact Center / Architecture / Security | Open |
 
 ## Decisions
 
@@ -102,3 +105,4 @@ Moved out of the V1 prerequisite set:
 | DEC-006 | Human escalation is required | Accepted via ADR-0019 |
 | DEC-007 | Java owns business logic and Python owns the voice edge | Accepted via ADR-0001 and ADR-0011 |
 | DEC-008 | V1 routing prioritizes billing explanation while support/sales agents remain foundation capabilities | Accepted via ADR-0017 and ADR-0015 |
+| DEC-009 | Genesys handoff is in V1, full Genesys voice routing remains optional | Accepted via ADR-0019 and ADR-0020 |

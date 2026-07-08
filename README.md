@@ -25,7 +25,7 @@ Canonical V1 scope and backlog:
 - **Billing/BSS evidence** — invoice deltas are explained from read-only BSS data and extracted invoice PDFs
 - **Deterministic comparison** — amounts and causes are calculated before LLM wording
 - **Knowledge-base RAG** — billing and tariff rules enrich explanations without replacing BSS evidence
-- **Escalation detection** — handoff on explicit advisor request or insufficient billing evidence
+- **Genesys escalation handoff** — handoff on explicit advisor request or insufficient billing evidence
 - **Guardrails** — off-topic and low-confidence requests are redirected or escalated safely
 - **Admin/pilot review** — latency, unresolved questions, escalation reasons and conversation history
 - **Hybrid architecture** — Java for RAG/domain, Python for voice orchestration
@@ -588,12 +588,16 @@ but the V1 telephony target goes through Pipecat.
 ## Escalation Detection
 
 For V1 billing explanations, escalation follows ADR-0019. The bot starts or
-offers human handoff when the customer explicitly asks for an advisor, or when it
-cannot explain the invoice delta safely because evidence is missing,
+offers Genesys advisor handoff when the customer explicitly asks for an advisor,
+or when it cannot explain the invoice delta safely because evidence is missing,
 inconsistent, partial, unusable, or below the accepted proof threshold.
 
 Broader support escalation triggers remain foundation behavior for future support
 journeys, but they are not the primary V1 acceptance path.
+
+The mandatory V1 Genesys scope is the advisor handoff contract and context
+transfer. Routing the full bot conversation through Genesys Audio Connector is a
+separate pilot option or feasibility spike.
 
 ## Project Structure
 

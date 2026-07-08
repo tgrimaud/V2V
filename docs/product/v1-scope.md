@@ -20,6 +20,9 @@ The billing V1 scope is governed by:
 - [ADR-0005](../architecture/adrs/ADR-0005-invoice-pdf-extraction-before-llm-explanation.md):
   invoice PDF extraction before explanation when no validated structured line
   endpoint is available;
+- [ADR-0020](../architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md):
+  Genesys advisor handoff is V1 scope while full Genesys Audio Connector routing
+  remains optional unless the pilot requires it;
 - [Galaxion BSS integration plan](../integrations/galaxion/bss-integration-plan.md);
 - [Invoice extraction JSON contract](../integrations/galaxion/invoice-extraction-json.md).
 
@@ -147,9 +150,12 @@ Voice2Voice on phone and web voice channels.
 ### Escalation to a Human Agent
 
 Escalation follows
-[`ADR-0019`](../architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md).
+[`ADR-0019`](../architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md)
+and
+[`ADR-0020`](../architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md).
 
-The bot must be able to transfer the conversation to a human agent in two cases:
+The V1 target contact-center handoff is Genesys. The bot must be able to prepare
+and trigger a Genesys advisor handoff in two cases:
 
 - the customer explicitly asks to speak to an advisor;
 - the bot cannot answer with a sufficient level of certainty, for example
@@ -159,6 +165,11 @@ The bot must be able to transfer the conversation to a human agent in two cases:
 In this case, the bot must clearly state the limitation encountered, summarize
 the context already collected, and transmit useful elements to the human agent
 so the customer does not have to repeat the entire request.
+
+This requirement covers the Genesys escalation contract and advisor context. It
+does not make the full Genesys Audio Connector bot path mandatory for V1: routing
+the entire voice conversation through Genesys remains a pilot option or technical
+spike unless the customer environment requires it.
 
 ## Non-Functional Needs
 
@@ -228,6 +239,9 @@ V1 must therefore provide for:
   and backend scale-out;
 - persistent conversational memory to resume a session and provide useful
   context in case of transfer to a human agent;
+- a Genesys-compatible handoff contract for advisor escalation, including reason,
+  summary, evidence, missing evidence and customer/session identifiers permitted
+  by the pilot trust model;
 - realistic BSS/PDF fixtures and invoice extraction status handling so the team
   can validate `parseable`, `partial`, and `unusable` cases before full BSS
   sandbox coverage is stable;

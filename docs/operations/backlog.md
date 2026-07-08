@@ -92,11 +92,23 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 
 - **Classification:** V1 core
 - **Status:** To do
-- **Product links:** EPIC-006, ADR-0019
+- **Product links:** EPIC-006, ADR-0019, ADR-0020
 - **Objective:** escalate on explicit advisor request or insufficient evidence,
   and provide useful context for the advisor.
-- **Boundary:** the V1 needs a handoff contract and product behavior; a full
-  Genesys production connector remains post-MVP.
+- **Boundary:** the V1 target handoff is Genesys. Full Genesys voice routing is a
+  separate pilot option unless the operator requires it for the first pilot.
+
+### G1. Genesys Advisor Handoff Contract
+
+- **Classification:** V1 core
+- **Status:** To do
+- **Product links:** EPIC-006, US-020, US-033, ADR-0019, ADR-0020
+- **Objective:** define and validate the Genesys-compatible advisor handoff
+  payload: escalation reason, customer/session identifiers allowed by the pilot
+  trust model, conversation summary, compared periods, evidence, missing evidence
+  and unresolved points.
+- **Boundary:** this is the mandatory contact-center escalation path for V1; it
+  does not require routing the entire bot call through Genesys Audio Connector.
 
 ## V1 Enablers
 
@@ -138,8 +150,9 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 - **Objective:** shape the channel/backend envelope and `EscalationHandoff`
   context so phone, web voice and future channels do not duplicate business
   logic.
-- **Boundary:** implement enough for V1 escalation and traceability; WhatsApp and
-  Genesys production connectors remain post-MVP.
+- **Boundary:** implement enough for V1 escalation and traceability, including
+  Genesys handoff fields. WhatsApp and full Genesys Audio Connector routing remain
+  separate channel integrations.
 
 ### SEC1. Billing Data Security And Audit Review
 
@@ -254,13 +267,16 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 - **Objective:** progressively remove fallback bridge paths, unify voice channel
   handling and propagate richer real-time UI events.
 
-### CC1. WhatsApp And Genesys Production Integrations
+### CC1. WhatsApp And Full Genesys Audio Connector Integrations
 
 - **Classification:** Post-MVP
-- **Status:** To do after V1 validation
-- **Objective:** add asynchronous messaging and contact-center connectors.
+- **Status:** To evaluate after V1 validation, or during V1 only as a bounded
+  pilot spike
+- **Objective:** add asynchronous messaging and optionally route the full
+  bidirectional voice conversation through Genesys Audio Connector.
 - **Gate:** channel contracts, quotas, observability, idempotency, degraded modes
-  and ADR-0019 handoff readiness.
+  and measured latency for the Genesys -> Pipecat -> Gradium -> backend -> TTS
+  round trip.
 
 ### V2. Custom Brand Voice
 

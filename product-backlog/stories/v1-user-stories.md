@@ -578,6 +578,38 @@ Scenario: Advisor receives context
 
 ---
 
+## US-033 - Hand Off To Genesys With Advisor Context
+
+**Parent:** EPIC-006  
+**Classification:** V1 core  
+**Status:** Draft  
+**Priority:** High
+
+### User Story
+
+As a contact-center advisor, I want escalated billing conversations to arrive
+through Genesys with the bot context, so that I can continue the support journey
+without asking the customer to repeat everything.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Explicit advisor request reaches Genesys
+  Given the customer asks to speak with a human advisor
+  When the bot starts the handoff
+  Then Genesys receives a handoff request with the conversation summary, reason and permitted customer/session identifiers
+```
+
+```gherkin
+Scenario: Insufficient evidence reaches Genesys
+  Given the bot cannot explain the invoice delta with enough evidence
+  When the bot escalates
+  Then Genesys receives the known evidence, missing evidence and unresolved points
+  And the customer is told that the advisor will receive the available context
+```
+
+---
+
 ## US-021 - Consult The Global Delta
 
 **Parent:** EPIC-007  
