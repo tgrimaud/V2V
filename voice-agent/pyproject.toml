@@ -12,5 +12,25 @@ dependencies = [
     "python-dotenv",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "coverage",
+    "pytest",
+    "pytest-asyncio",
+]
+
 [project.scripts]
 voice-agent = "agent.bridge_server:run"
+
+[tool.coverage.run]
+source = ["agent"]
+omit = [
+    "agent/bot.py",
+    "agent/bridge_server.py",
+    "agent/main.py",
+    "agent/twilio_server.py",
+    "agent/ws_server.py",
+]
+
+[tool.coverage.report]
+show_missing = true
