@@ -18,24 +18,25 @@ The review covered:
 
 ## Executive Conclusion
 
-The documentation now has a useful structure: `docs/README.md` indexes the main
-areas, architecture decisions are collected under `docs/architecture/adrs/`, and
-the repository has specialized documentation skills.
+Remediation status: fixed for the reviewed scope. `docs/README.md` indexes the
+main areas, architecture decisions are collected under `docs/architecture/adrs/`,
+and the repository has specialized documentation skills.
 
-However, the corpus is not yet coherent. The main issue is not one isolated
-mistake but a set of historical layers that now overlap:
+The cleanup resolved the historical overlaps found during the review:
 
-- two competing product definitions for V1;
-- two ADR registries;
-- stale architecture sections that predate Pipecat as the V1 voice target;
-- stale persistence documentation that still describes Redis/JPA as future work;
-- stale streaming documentation that still mentions Reactor `Flux<String>`;
-- inconsistent API field names;
-- unresolved SLO language;
-- inconsistent documentation language policy.
+- product hierarchy now distinguishes the broad support assistant foundation
+  from the billing/BSS V1 value focus;
+- formal ADR files are the canonical decision registry;
+- Pipecat is documented as the V1 voice path, with the custom bridge as legacy
+  fallback/comparison;
+- Redis active sessions and PostgreSQL/JPA durable events are reflected in the
+  architecture;
+- streaming is documented through `TokenStream` and backend SSE;
+- request examples use `conversation_id` where the backend expects it;
+- voice latency and escalation are governed by formal ADRs;
+- documentation is English-only, except technical examples and domain data.
 
-The next work should be a focused documentation consistency cleanup, not ad hoc
-edits.
+Run another coherence review if the documentation changes materially again.
 
 ## Cleanup Checklist
 
@@ -331,7 +332,7 @@ positioning visible.
 
 ### 2. Architecture Documentation Findings
 
-#### 2.1 Two ADR registries exist
+#### 2.1 ADR registry conflict is resolved
 
 The formal ADR registry lives under:
 
@@ -341,30 +342,33 @@ docs/architecture/adrs/
 
 It defines ADR-0001 through ADR-0010.
 
-`docs/architecture/architecture.md` still contains inline ADR-001 through
-ADR-011. These are not the same decisions and do not share the same numbering.
-This creates concrete conflicts:
+Remediation status: fixed. `docs/architecture/architecture.md` no longer keeps
+inline ADRs as canonical decisions. It points to the formal ADR registry and
+lists the migration from former inline ADRs to formal ADR files.
+
+The original conflict was concrete:
 
 - formal ADR-0004 is BSS typed ports;
 - inline ADR-004 is in-memory event store;
 - formal ADR-0010 is industrialization gates;
 - inline ADR-010 is Pipecat target V1.
 
-The inline ADR block should either be removed, archived, or converted into formal
-ADRs.
+The inline block has been removed from the architecture spine and the active
+decisions are covered by formal ADRs.
 
-#### 2.2 `TokenStream` vs Reactor `Flux<String>`
+#### 2.2 `TokenStream` vs Reactor `Flux<String>` is aligned
 
 The code now uses a domain-level `TokenStream` abstraction for streaming tokens.
-The docs still contain stale Reactor references:
+Remediation status: fixed. Previous stale Reactor references were removed from
+current architecture and engineering guidance:
 
-- `architecture.md` says `LlmStreamingPort` uses `Flux<String>`;
-- `README.md` class diagram shows `Flux~String~`;
-- `development-guide.md` provider example returns `Flux<String>`;
-- the adversarial review explicitly flags this as a known drift.
+- `architecture.md` said `LlmStreamingPort` used `Flux<String>`;
+- `README.md` class diagram showed `Flux~String~`;
+- `development-guide.md` provider example returned `Flux<String>`;
+- the adversarial review explicitly flagged this as a known drift.
 
-The architecture docs should not describe Reactor as part of the domain contract
-if the accepted code direction is `TokenStream`.
+Reactor remains mentioned only in historical/rejected-option context, such as
+ADR-0013.
 
 #### 2.3 Redis/Postgres persistence drift
 
@@ -536,10 +540,11 @@ content.
 
 ### 5. Engineering And Developer Guidance Findings
 
-#### 5.1 Developer examples still use stale streaming types
+#### 5.1 Developer streaming examples are aligned
 
-The OpenAI example in `development-guide.md` uses `Flux<String>`. It should be
-updated to the current streaming abstraction if the code uses `TokenStream`.
+Remediation status: fixed. `development-guide.md` examples use the current
+domain streaming abstraction rather than exposing Reactor `Flux<String>` as a
+domain contract.
 
 #### 5.2 STT/TTS provider replacement references stale files
 

@@ -1,21 +1,22 @@
-# Voice Agent — Pipecat + Gradium
+# Voice Agent - Pipecat + Gradium
 
-Agent vocal temps réel pour le support télécom, utilisant :
-- **[Pipecat](https://pipecat.ai)** comme framework d'orchestration audio/IA
-- **[Gradium](https://gradium.ai)** pour le STT (Speech-to-Text) et TTS (Text-to-Speech)
-- Le **backend Java** (Spring Boot) pour le RAG (retrieval + LLM)
+Real-time voice agent for telecom support, using:
+
+- **[Pipecat](https://pipecat.ai)** as the audio/AI orchestration framework
+- **[Gradium](https://gradium.ai)** for STT (Speech-to-Text) and TTS (Text-to-Speech)
+- The **Java backend** (Spring Boot) for RAG (retrieval + LLM)
 
 ## Architecture
 
-La cible V1 est le bot Pipecat (`agent/bot.py`) avec Gradium pour STT/TTS :
-WebRTC côté web et Twilio Media Streams côté téléphonie. Le bridge WebSocket
-custom (`agent/bridge_server.py`) reste disponible comme chemin POC historique /
-fallback, mais ce n'est plus le lancement recommandé pour la V1.
+The V1 target is the Pipecat bot (`agent/bot.py`) with Gradium for STT/TTS:
+WebRTC on the web side and Twilio Media Streams for telephony. The custom
+WebSocket bridge (`agent/bridge_server.py`) remains available as a historical
+POC/fallback path, but it is no longer the recommended V1 launch path.
 
 ```
-Browser/Téléphone
+Browser/Phone
      │
-     ▼ WebRTC ou Twilio Media Streams
+     ▼ WebRTC or Twilio Media Streams
 ┌─────────────────────────────┐
 │      Pipecat Pipeline       │
 │  ┌───────┐  ┌───┐  ┌───┐   │
@@ -32,100 +33,105 @@ Browser/Téléphone
          └─────────────┘
 ```
 
-## Démarrage rapide
+## Quick Start
 
-### Prérequis
+### Prerequisites
 - Python 3.11+
-- Clé API Gradium (créer un compte sur https://gradium.ai)
-- Backend Java démarré sur le port 8081
+- Gradium API key (create an account at https://gradium.ai)
+- Java backend running on port 8081
 
 ### Installation
 
 ```bash
 cd voice-agent
 cp .env.example .env
-# Configurer GRADIUM_API_KEY dans .env
+# Configure GRADIUM_API_KEY in .env
 
 uv pip install -e .
 ```
 
-### Lancement recommandé — Pipecat
+### Recommended Launch - Pipecat
 
-**Mode WebRTC (web) :**
+**WebRTC mode (web):**
 ```bash
 python -m agent.bot -t webrtc
-# → UI prebuilt sur http://localhost:7860
+# Prebuilt UI on http://localhost:7860
 ```
 
-**Mode multi-transport (web + téléphonie) :**
+**Multi-transport mode (web + telephony):**
 ```bash
 python -m agent.bot
 ```
 
-**Mode Twilio seul :**
+**Twilio-only mode:**
 ```bash
 python -m agent.bot -t twilio -x <host-public>
 ```
 
-### Chemin legacy / fallback
+### Legacy / Fallback Path
 
-Le projet contient encore deux implémentations qui peuvent tourner en parallèle
-(backend Java partagé), mais leur statut n'est pas équivalent :
+The project still contains two implementations that can run in parallel against
+the shared Java backend, but their status is not equivalent:
 
-| | Legacy / fallback | Cible V1 |
+| | Legacy / fallback | V1 target |
 |---|---|---|
-| Entrée | `python -u -m agent.bridge_server` | `python -m agent.bot` |
-| Web | `ws://localhost:8765` + frontend React (`:5173`) | WebRTC + UI prebuilt sur `http://localhost:7860` |
-| Téléphonie | `ws://localhost:8766` (Twilio Media Streams) | `python -m agent.bot -t twilio -x <host-public>` |
+| Entry point | `python -u -m agent.bridge_server` | `python -m agent.bot` |
+| Web | `ws://localhost:8765` + React frontend (`:5173`) | WebRTC + prebuilt UI on `http://localhost:7860` |
+| Telephony | `ws://localhost:8766` (Twilio Media Streams) | `python -m agent.bot -t twilio -x <host-public>` |
 | STT | Gradium REST (batch) | Gradium streaming |
-| VAD | navigateur + heuristique RMS | Silero (serveur) |
+| VAD | browser + RMS heuristic | Silero (server-side) |
 
 ## Configuration
 
-| Variable | Défaut | Description |
+| Variable | Default | Description |
 |----------|--------|-------------|
-| `GRADIUM_API_KEY` | — | Clé API Gradium (obligatoire) |
-| `GRADIUM_VOICE_ID` | `b35yykvVppLXyw_l` | ID de la voix Gradium ([catalogue](https://docs.gradium.ai/guides/voices/all-voices)) |
-| `BACKEND_URL` | `http://localhost:8081` | URL du backend Java |
-| `VOICE_AGENT_HOST` | `0.0.0.0` | Host d'écoute du bridge legacy |
-| `VOICE_AGENT_PORT` | `8765` | Port WebSocket du bridge legacy navigateur |
-| `TWILIO_WS_PORT` | `8766` | Port WebSocket du bridge legacy Twilio |
+| `GRADIUM_API_KEY` | - | Gradium API key (required) |
+| `GRADIUM_VOICE_ID` | `b35yykvVppLXyw_l` | Gradium voice ID ([catalog](https://docs.gradium.ai/guides/voices/all-voices)) |
+| `BACKEND_URL` | `http://localhost:8081` | Java backend URL |
+| `VOICE_AGENT_HOST` | `0.0.0.0` | Legacy bridge bind host |
+| `VOICE_AGENT_PORT` | `8765` | Legacy browser WebSocket bridge port |
+| `TWILIO_WS_PORT` | `8766` | Legacy Twilio WebSocket bridge port |
 
-## Pipeline vocal
+## Voice Pipeline
 
-1. **Audio in** → Le navigateur envoie l'audio via WebRTC, Twilio via Media Streams
-2. **Pipecat + Gradium STT** → Transcription temps réel avec VAD serveur
-3. **RAG Processor** → Appel SSE au backend Java (`GET /api/conversation/ask-stream?question=...&conversation_id=...`)
-4. **Gradium TTS** → Synthèse vocale du texte de réponse dans le pipeline Pipecat
-5. **Audio out** → Renvoi du flux audio au client
+1. **Audio in** -> the browser sends audio over WebRTC, Twilio over Media Streams
+2. **Pipecat + Gradium STT** -> real-time transcription with server-side VAD
+3. **RAG Processor** -> SSE call to the Java backend (`GET /api/conversation/ask-stream?question=...&conversation_id=...`)
+4. **Gradium TTS** -> speech synthesis for the answer inside the Pipecat pipeline
+5. **Audio out** -> audio stream returned to the client
 
-## Formats audio supportés
+## Supported Audio Formats
 
 | Transport | Format | Sample rate |
 |-----------|--------|-------------|
-| Navigateur (Pipecat WebRTC) | PCM dans le pipeline | géré par Pipecat |
+| Browser (Pipecat WebRTC) | PCM inside the pipeline | managed by Pipecat |
 | Twilio (Media Streams) | μ-law | 8 kHz |
-| Navigateur legacy (WebSocket) | PCM 16-bit | 16 kHz |
+| Legacy browser (WebSocket) | PCM 16-bit | 16 kHz |
 
-## Notes techniques
+## Technical Notes
 
-### Voix Gradium
+### Gradium Voices
 
-Le `voice_id` doit être un identifiant valide du [catalogue Gradium](https://docs.gradium.ai/guides/voices/all-voices). La valeur `"default"` n'existe pas et provoque l'erreur `Embeddings not found`.
+The `voice_id` must be a valid identifier from the
+[Gradium catalog](https://docs.gradium.ai/guides/voices/all-voices). The value
+`"default"` does not exist and causes the `Embeddings not found` error.
 
-Voix françaises recommandées :
-| Nom | Voice ID | Genre |
+Recommended French voices:
+
+| Name | Voice ID | Gender |
 |-----|----------|-------|
-| Elise | `b35yykvVppLXyw_l` | Féminin |
-| Leo | `axlOaUiFyOZhy4nv` | Masculin |
+| Elise | `b35yykvVppLXyw_l` | Female |
+| Leo | `axlOaUiFyOZhy4nv` | Male |
 
-### Protocole TTS WebSocket
+### TTS WebSocket Protocol
 
-Le bridge server respecte le protocole Gradium TTS :
-1. Envoi du message `setup` (avec `voice_id` + `output_format`)
-2. **Attente du message `ready`** (obligatoire avant d'envoyer le texte)
-3. Envoi du texte + `end_of_stream`
-4. Réception des chunks audio base64
-5. Wrapping PCM → WAV (header 44 octets) avant envoi au navigateur
+The bridge server follows the Gradium TTS protocol:
 
-Le navigateur utilise `AudioContext.decodeAudioData()` qui nécessite un format auto-descriptif (WAV), pas du PCM brut.
+1. Send the `setup` message (with `voice_id` + `output_format`)
+2. **Wait for the `ready` message** (required before sending text)
+3. Send text + `end_of_stream`
+4. Receive base64 audio chunks
+5. Wrap PCM -> WAV (44-byte header) before sending it to the browser
+
+The browser uses `AudioContext.decodeAudioData()`, which requires a
+self-describing format (WAV), not raw PCM.
