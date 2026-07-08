@@ -1,285 +1,276 @@
-# Scope V1 - Assistant d'explication de facture operateur
+# V1 Scope - Operator Invoice Explanation Assistant
 
-## Contexte
+## Context
 
-L'application vise en priorite les utilisateurs finaux de l'operateur dans la
-comprehension des ecarts de facturation telecom.
+The application primarily targets the operator's end users and helps them
+understand discrepancies in telecom billing.
 
-Elle doit pouvoir etre activee par telephone ou via un chat vocal sur une page
-web. Le parcours Voice2Voice est obligatoire en V1 : l'utilisateur doit pouvoir
-poser sa question oralement et recevoir une reponse orale. Cela n'empeche pas
-de proposer aussi une sollicitation par ecrit lorsque le canal le permet.
+It must be usable by phone or through a voice chat on a web page. The
+Voice2Voice journey is mandatory in V1: the user must be able to ask their
+question orally and receive an oral answer. This does not prevent also offering
+written interaction when the channel allows it.
 
-La V1 aura acces en lecture aux donnees du BSS de l'operateur. Le BSS constitue
-la source de verite pour les factures, contrats, offres, options, remises,
-consommations, evenements de billing, regularisations, paiements et changements
-de situation client.
+V1 will have read access to the operator's BSS data. The BSS is the source of
+truth for invoices, contracts, offers, options, discounts, usage, billing events,
+adjustments, payments, and changes in customer status.
 
-## Objectif produit V1
+## V1 Product Objective
 
-Permettre a un utilisateur final d'interroger le bot, principalement par la
-voix, pour comprendre pourquoi une facture ou une periode de facturation differe
-d'une autre.
+Allow an end user to question the bot, primarily by voice, to understand why one
+invoice or billing period differs from another.
 
-Le bot doit s'appuyer sur l'identite et le contexte client fournis par le canal
-d'activation ou par le BSS, recuperer les donnees pertinentes, comparer les
-factures ou periodes concernees, puis restituer une explication fiable,
-detaillee et tracable des differences de prix.
+The bot must rely on the identity and customer context provided by the activation
+channel or by the BSS, retrieve the relevant data, compare the invoices or
+periods involved, then return a reliable, detailed, and traceable explanation of
+the price differences.
 
-Question cible :
+Target question:
 
-> Pourquoi la facture de juin est-elle plus chere que celle de mai ?
+> Why is the June invoice more expensive than the May invoice?
 
-Reponse attendue :
+Expected answer:
 
-> La facture augmente de 18,40 EUR. Cette hausse vient principalement de
-> l'expiration d'une remise de 10 EUR, d'un hors-forfait data de 6,90 EUR, et
-> d'un prorata de 1,50 EUR lie a l'activation d'une option le 14 juin.
+> The invoice increases by EUR 18.40. This increase mainly comes from the
+> expiration of a EUR 10 discount, EUR 6.90 of out-of-bundle data usage, and
+> EUR 1.50 of prorated billing related to the activation of an option on June 14.
 
-## Principe cle
+## Key Principle
 
-Le LLM ne doit pas deviner les causes.
+The LLM must not guess the causes.
 
-Le systeme doit d'abord calculer les ecarts de maniere deterministe a partir
-des donnees BSS, puis utiliser l'IA pour formuler une explication claire,
-pedagogique et contextualisee.
+The system must first calculate discrepancies deterministically from BSS data,
+then use AI to formulate a clear, educational, and contextualized explanation.
 
-La base de connaissance sert a expliquer les regles metier et tarifaires. Elle
-ne doit pas etre utilisee pour inventer des montants ou compenser l'absence de
-donnees BSS.
+The knowledge base is used to explain business and pricing rules. It must not be
+used to invent amounts or compensate for missing BSS data.
 
-## Perimetre fonctionnel V1
+## V1 Functional Scope
 
-### Acces aux donnees BSS
+### Access to BSS Data
 
-L'application doit pouvoir recuperer, pour un client donne :
+For a given customer, the application must be able to retrieve:
 
-- les factures disponibles ;
-- les lignes de facture detaillees ;
-- les contrats et abonnements actifs sur les periodes comparees ;
-- les offres, options et services factures ;
-- les remises commerciales et leur periode de validite ;
-- les consommations facturees ou hors forfait ;
-- les taxes, frais ponctuels, regularisations et proratas ;
-- les evenements de billing importants : changement d'offre, activation
-d'option, resiliation, remise expiree, geste commercial.
+- available invoices;
+- detailed invoice lines;
+- active contracts and subscriptions during the compared periods;
+- billed offers, options, and services;
+- commercial discounts and their validity periods;
+- billed or out-of-bundle usage;
+- taxes, one-off fees, adjustments, and prorations;
+- important billing events: offer change, option activation, cancellation,
+  expired discount, goodwill gesture.
 
-### Comparaison de factures
+### Invoice Comparison
 
-L'application doit comparer deux factures ou deux periodes et identifier :
+The application must compare two invoices or two periods and identify:
 
-- les lignes apparues ;
-- les lignes disparues ;
-- les lignes dont le montant a change ;
-- les variations de consommation ;
-- les remises expirees ou modifiees ;
-- les frais ponctuels ;
-- les regularisations ;
-- les changements d'offre ou d'option ;
-- les ecarts de taxes ou proratas.
+- lines that appeared;
+- lines that disappeared;
+- lines whose amount changed;
+- usage variations;
+- expired or modified discounts;
+- one-off fees;
+- adjustments;
+- offer or option changes;
+- tax or proration discrepancies.
 
-Le resultat attendu n'est pas seulement un diff technique. Il doit produire une
-analyse causale orientee metier.
+The expected result is not only a technical diff. It must produce a
+business-oriented causal analysis.
 
-### Explication des ecarts
+### Explanation of Discrepancies
 
-L'assistant doit transformer les ecarts detectes en explication comprehensible.
+The assistant must transform the detected discrepancies into an understandable
+explanation.
 
-L'explication doit :
+The explanation must:
 
-- commencer par le delta global ;
-- lister les principales causes par impact decroissant ;
-- distinguer les causes certaines des causes probables ;
-- citer les elements BSS utilises comme preuves ;
-- expliquer les regles tarifaires si necessaire ;
-- eviter toute conclusion non justifiee par les donnees disponibles.
+- start with the overall delta;
+- list the main causes by decreasing impact;
+- distinguish certain causes from probable causes;
+- cite the BSS elements used as evidence;
+- explain pricing rules if necessary;
+- avoid any conclusion not justified by the available data.
 
-### Interaction utilisateur
+### User Interaction
 
-En V1, l'utilisateur final doit pouvoir :
+In V1, the end user must be able to:
 
-- appeler le bot par telephone ;
-- utiliser un chat vocal depuis une page web ;
-- poser une question oralement sur une facture ou un ecart de prix ;
-- recevoir une reponse orale claire et explicable ;
-- utiliser l'ecrit comme canal complementaire lorsque l'interface le permet ;
-- consulter une synthese des ecarts sur la page web ;
-- consulter le detail ligne par ligne lorsque l'interface web est disponible ;
-- obtenir les preuves BSS associees a l'explication.
+- call the bot by phone;
+- use voice chat from a web page;
+- ask an oral question about an invoice or price discrepancy;
+- receive a clear and explainable oral answer;
+- use writing as a complementary channel when the interface allows it;
+- view a summary of discrepancies on the web page;
+- view line-by-line details when the web interface is available;
+- obtain the BSS evidence associated with the explanation.
 
-Le coeur de valeur V1 est l'explication de facture basee sur les donnees BSS,
-delivree en Voice2Voice sur les canaux telephone et web vocal.
+The core V1 value is invoice explanation based on BSS data, delivered in
+Voice2Voice on phone and web voice channels.
 
-### Escalade vers un agent humain
+### Escalation to a Human Agent
 
-Le bot doit pouvoir transferer la conversation vers un agent humain dans deux
-cas :
+The bot must be able to transfer the conversation to a human agent in two cases:
 
-- le client demande explicitement a parler a un conseiller ;
-- le bot ne peut pas repondre avec un niveau de certitude suffisant, par
-  exemple donnees BSS manquantes, incoherentes, ou absence de preuve permettant
-  d'expliquer l'ecart.
+- the customer explicitly asks to speak to an advisor;
+- the bot cannot answer with a sufficient level of certainty, for example
+  missing or inconsistent BSS data, or lack of evidence explaining the
+  discrepancy.
 
-Dans ce cas, le bot doit annoncer clairement la limite rencontree, resumer le
-contexte deja collecte et transmettre les elements utiles a l'agent humain pour
-eviter au client de repeter toute sa demande.
+In this case, the bot must clearly state the limitation encountered, summarize
+the context already collected, and transmit useful elements to the human agent
+so the customer does not have to repeat the entire request.
 
-## Besoins non fonctionnels
+## Non-Functional Needs
 
-### Fiabilite
+### Reliability
 
-Chaque explication doit etre rattachee a des donnees BSS precises.
+Each explanation must be tied to precise BSS data.
 
-Si une donnee manque, l'assistant doit le dire explicitement plutot que
-produire une hypothese non verifiable.
+If data is missing, the assistant must say so explicitly rather than producing
+an unverifiable hypothesis.
 
-### Tracabilite
+### Traceability
 
-Chaque cause d'ecart doit pouvoir etre reliee a :
+Each cause of discrepancy must be linkable to:
 
-- une ligne de facture ;
-- un evenement BSS ;
-- une regle tarifaire ;
-- une consommation ;
-- une remise ;
-- une modification contractuelle.
+- an invoice line;
+- a BSS event;
+- a pricing rule;
+- usage;
+- a discount;
+- a contractual modification.
 
-### Securite
+### Security
 
-L'acces au BSS implique des donnees sensibles. La V1 doit prevoir :
+Access to the BSS involves sensitive data. V1 must provide for:
 
-- authentification forte ;
-- controle d'acces par role ;
-- journalisation des consultations ;
-- masquage des donnees personnelles non necessaires ;
-- absence de donnees personnelles sensibles dans les logs applicatifs ;
-- acces BSS en lecture seule.
+- strong authentication;
+- role-based access control;
+- logging of consultations;
+- masking of unnecessary personal data;
+- no sensitive personal data in application logs;
+- read-only BSS access.
 
 ### Performance
 
-La comparaison doit etre suffisamment rapide pour un usage conversationnel par
-un utilisateur final.
+The comparison must be fast enough for conversational use by an end user.
 
-Objectif recommande : resultat de comparaison initial en moins de quelques
-secondes sur une facture standard.
+Recommended objective: initial comparison result in less than a few seconds on a
+standard invoice.
 
-La cible `first audio < 700 ms` est un critere obligatoire pour l'experience
-Voice2Voice. Elle ne doit toutefois pas conduire a produire une explication non
-fiable : si l'analyse metier necessite plus de temps, le bot doit pouvoir
-produire un accuse de reception oral rapide, puis livrer l'explication fiable
-quand les preuves BSS sont disponibles.
+The `first audio < 700 ms` target is a mandatory criterion for the Voice2Voice
+experience. However, it must not lead to producing an unreliable explanation: if
+the business analysis requires more time, the bot must be able to produce a fast
+oral acknowledgement, then deliver the reliable explanation when the BSS evidence
+is available.
 
-### Exigences techniques structurantes V1
+### Structuring V1 Technical Requirements
 
-Certains items du backlog deviennent des pre-requis directs du scope V1, car
-ils conditionnent l'experience Voice2Voice, l'omnicanal et l'exploitation en
-cloud prive.
+Some backlog items become direct prerequisites for the V1 scope because they
+condition the Voice2Voice experience, omnichannel journeys, and operation in a
+private cloud.
 
-La V1 doit donc prevoir :
+V1 must therefore provide for:
 
-- STT streaming reel et detection de fin de tour cote serveur pour eviter de
-  dependre uniquement du VAD navigateur, notamment sur le canal telephone ;
-- TTS streaming chunke et connexion TTS persistante pour demarrer la reponse
-  orale sans attendre la generation audio complete ;
-- etat conversationnel partage, par exemple Redis, pour permettre les parcours
-  omnicanaux et le scale-out du backend ;
-- memoire conversationnelle persistante pour reprendre une session et fournir
-  le contexte utile en cas de transfert vers un agent humain ;
-- cache semantique pour les questions frequentes et les explications tarifaires
-  recurrentes, sans contourner la verification des preuves BSS ;
-- observabilite par span sur tout le pipeline : STT, recuperation BSS,
-  comparaison, recherche KB, LLM first-token, TTS first-audio et transfert agent
-  humain ;
-- co-localisation en cloud prive des composants critiques du chemin vocal
-  lorsque la cible `first audio < 700 ms` doit etre tenue en production ;
-- connecteurs KB supplementaires, notamment PDF, Confluence ou base de donnees,
-  pour enrichir les regles tarifaires et les contenus d'explication.
+- real streaming STT and server-side turn-end detection to avoid depending only
+  on browser VAD, especially on the phone channel;
+- chunked streaming TTS and a persistent TTS connection to start the oral answer
+  without waiting for complete audio generation;
+- shared conversational state, for example Redis, to enable omnichannel journeys
+  and backend scale-out;
+- persistent conversational memory to resume a session and provide useful
+  context in case of transfer to a human agent;
+- semantic cache for frequent questions and recurring pricing explanations,
+  without bypassing BSS evidence verification;
+- span-based observability across the whole pipeline: STT, BSS retrieval,
+  comparison, KB search, LLM first-token, TTS first-audio, and human agent
+  transfer;
+- co-location in a private cloud of the critical components on the voice path
+  when the `first audio < 700 ms` target must be met in production;
+- additional KB connectors, especially PDF, Confluence, or database connectors,
+  to enrich pricing rules and explanation content.
 
-Ces exigences doivent rester reliees au backlog pour le decoupage en epics et
-user stories. Le scope V1 indique pourquoi elles sont necessaires ; le backlog
-porte le detail d'execution et les priorites.
+These requirements must remain linked to the backlog for splitting into epics
+and user stories. The V1 scope explains why they are necessary; the backlog
+carries the execution detail and priorities.
 
-### Agnosticite des fournisseurs IA et voix
+### AI and Voice Provider Agnosticism
 
-Le coeur produit doit rester agnostique des fournisseurs et modeles utilises
-pour le LLM, le STT et le TTS.
+The product core must remain agnostic to the providers and models used for the
+LLM, STT, and TTS.
 
-Les services metier ne doivent pas dependre directement d'un fournisseur
-particulier, ni d'un SDK specifique. Les capacites suivantes doivent etre
-exposees via des ports applicatifs :
+Business services must not depend directly on a specific provider or SDK. The
+following capabilities must be exposed through application ports:
 
-- generation ou reformulation par LLM ;
-- transcription speech-to-text ;
-- synthese text-to-speech ;
-- embeddings et recherche vectorielle si necessaire.
+- generation or reformulation by LLM;
+- speech-to-text transcription;
+- text-to-speech synthesis;
+- embeddings and vector search if necessary.
 
-Les implementations concretes peuvent varier selon l'environnement : solution
-cloud, solution self-hosted en cloud prive, modele local, ou fournisseur
-manage. Le changement de fournisseur ne doit pas remettre en cause le modele
-metier billing, le moteur de comparaison, ni le contrat fonctionnel du bot.
+Concrete implementations may vary by environment: cloud solution, self-hosted
+solution in a private cloud, local model, or managed provider. Changing provider
+must not call into question the billing business model, the comparison engine, or
+the bot's functional contract.
 
-Pour demarrer le POC/V1, les adapters vocaux de reference seront bases sur
-Gradium pour les capacites STT/TTS et sur Pipecat pour l'orchestration temps
-reel du pipeline vocal. Ces choix servent de point de depart operationnel et de
-base de benchmark, sans fermer la possibilite de tester ou remplacer ces
-solutions ensuite.
+To start the POC/V1, the reference voice adapters will be based on Gradium for
+STT/TTS capabilities and on Pipecat for real-time orchestration of the voice
+pipeline. These choices serve as an operational starting point and benchmark
+base, without closing the possibility of testing or replacing these solutions
+later.
 
-Cette agnosticite doit aussi permettre de tester facilement plusieurs solutions
-LLM, STT ou TTS pendant les phases de POC, benchmark et industrialisation. Le
-choix d'une implementation doit pouvoir se faire par configuration ou par
-remplacement d'adapter, sans modifier le coeur metier ni les parcours
-utilisateur.
+This agnosticism must also make it easy to test several LLM, STT, or TTS
+solutions during the POC, benchmark, and industrialization phases. Choosing an
+implementation must be possible by configuration or adapter replacement, without
+modifying the business core or user journeys.
 
-## Hors perimetre V1
+## Out of V1 Scope
 
-- Modifier une facture.
-- Corriger automatiquement une erreur de billing.
-- Declencher un geste commercial.
-- Emettre une nouvelle facture.
-- Faire du recouvrement.
-- Remplacer le systeme BSS.
-- Donner une reponse sans preuve lorsque les donnees sont absentes.
+- Modify an invoice.
+- Automatically correct a billing error.
+- Trigger a goodwill gesture.
+- Issue a new invoice.
+- Perform debt collection.
+- Replace the BSS system.
+- Give an answer without evidence when data is absent.
 
-## Criteres de succes V1
+## V1 Success Criteria
 
-La V1 sera consideree utile si elle permet de repondre correctement a ces cas :
+V1 will be considered useful if it can correctly handle these cases:
 
-- Appel telephone : l'utilisateur demande oralement pourquoi sa facture a
-  augmente et recoit une reponse orale.
-- Chat vocal web : l'utilisateur pose la meme question depuis une page web et
-  recoit une reponse orale, avec un resume affiche.
-- Pourquoi ma facture a augmente ce mois-ci ?
-- Quelle ligne explique la difference principale ?
-- Est-ce du a une remise expiree ?
-- Est-ce du a du hors forfait ?
-- Y a-t-il eu un changement d'offre ou d'option ?
-- Peux-tu me resumer l'explication pour un client ?
-- Peux-tu me montrer les preuves dans la facture ou le BSS ?
-- Je veux parler a un conseiller.
-- Le bot transfere vers un agent humain lorsqu'il ne peut pas expliquer l'ecart
-  avec assez de certitude.
+- Phone call: the user orally asks why their invoice increased and receives an
+  oral answer.
+- Web voice chat: the user asks the same question from a web page and receives
+  an oral answer, with a displayed summary.
+- Why did my invoice increase this month?
+- Which line explains the main difference?
+- Is it due to an expired discount?
+- Is it due to out-of-bundle usage?
+- Was there an offer or option change?
+- Can you summarize the explanation for a customer?
+- Can you show me the evidence in the invoice or the BSS?
+- I want to speak to an advisor.
+- The bot transfers to a human agent when it cannot explain the discrepancy with
+  enough certainty.
 
-## Formulation synthetique du besoin
+## Synthetic Statement of Need
 
-Construire un assistant vocal d'analyse de facturation operateur, cible
-utilisateurs finaux, accessible par telephone et par chat vocal web, connecte en
-lecture au BSS, capable de comparer deux factures ou periodes client,
-d'identifier les causes metier des ecarts de prix, puis de produire une
-explication orale claire, fiable et tracable, fondee sur les donnees BSS et
-enrichie par la base de connaissance tarifaire.
+Build a voice assistant for operator billing analysis, targeting end users,
+accessible by phone and by web voice chat, connected read-only to the BSS,
+capable of comparing two customer invoices or periods, identifying the business
+causes of price discrepancies, then producing a clear, reliable, and traceable
+oral explanation based on BSS data and enriched by the pricing knowledge base.
 
-## Decoupage pressenti
+## Expected Breakdown
 
-Une fois ce scope valide, le decoupage peut etre organise autour des epics
-suivantes :
+Once this scope is validated, the breakdown can be organized around the
+following epics:
 
-- Connecteur BSS lecture seule.
-- Modele domaine billing : facture, contrat, offre, consommation.
-- Moteur de comparaison de factures.
-- Moteur d'explication avec preuves BSS.
-- Parcours Voice2Voice telephone.
-- Parcours Voice2Voice web.
-- Interface web de synthese et preuves.
-- Securite, audit et gouvernance des acces BSS.
-- Abstractions LLM / STT / TTS et contraintes de latence.
-
+- Read-only BSS connector.
+- Billing domain model: invoice, contract, offer, usage.
+- Invoice comparison engine.
+- Explanation engine with BSS evidence.
+- Phone Voice2Voice journey.
+- Web Voice2Voice journey.
+- Web interface for summary and evidence.
+- Security, audit, and governance of BSS access.
+- LLM / STT / TTS abstractions and latency constraints.

@@ -1,19 +1,19 @@
-# Plan d'integration BSS V1
+# BSS V1 Integration Plan
 
-## Objectif
+## Objective
 
-Ce document prepare l'integration du Voice Support Bot avec le BSS operateur
-existant.
+This document prepares the integration of the Voice Support Bot with the
+operator's existing BSS.
 
-Le BSS cible est compose de plusieurs microservices. Pour avancer vite sans
-attendre tous les acces definitifs, la V1 doit commencer par un mock BSS
-contract-compatible : il expose les memes APIs utiles que les microservices BSS
-cibles, avec des fixtures realistes et anonymisees.
+The target BSS is composed of several microservices. To move quickly without
+waiting for all final accesses, V1 must start with a contract-compatible BSS
+mock: it exposes the same useful APIs as the target BSS microservices, with
+realistic anonymized fixtures.
 
-## Principe d'architecture
+## Architecture Principle
 
-Le backend Java ne doit pas consommer directement des fixtures internes
-specifiques au bot. Il doit consommer un contrat BSS stable via un adapter.
+The Java backend must not consume bot-specific internal fixtures directly. It
+must consume a stable BSS contract through an adapter.
 
 ```text
 Voice Support Backend
@@ -22,32 +22,32 @@ Voice Support Backend
         v
 BSS adapter
         |
-        +--> BSS mock local, API-compatible
+        +--> local BSS mock, API-compatible
         |
-        +--> BSS sandbox / reel, meme contrat utile
+        +--> BSS sandbox / real BSS, same useful contract
 ```
 
-Le mock doit etre remplacable par configuration : URL, authentification et
-profil d'environnement. Le domaine de comparaison facture ne doit pas changer
-quand on passe du mock au BSS reel.
+The mock must be replaceable by configuration: URL, authentication and
+environment profile. The invoice comparison domain must not change when moving
+from the mock to the real BSS.
 
-## Microservices BSS identifies
+## Identified BSS Microservices
 
-| Besoin V1 | Microservice source | Priorite | Notes |
-|-----------|---------------------|----------|-------|
-| Identifier / rechercher un client | `contacts-service` + `accounts-service` | Medium | Peut etre simplifie au debut si le canal fournit deja le client |
-| Lister les factures / periodes | `billing-api` | High | `billing-service` n'est plus utilise |
-| Recuperer une facture / document facture | `billing-api` | High | Utiliser `bill-run-documents/search` avec un ou plusieurs criteres |
-| Recuperer une facture detaillee structuree | PDF facture + `InvoicePdfExtractor` | High | Aucun endpoint structure identifie pour les lignes facture |
-| Recuperer les lignes de facture | PDF facture + `InvoicePdfExtractor` | High | Extraire et normaliser les lignes depuis le PDF |
-| Recuperer remises / options / contrat | `accounts-service`, `contracts-service`, `addons-service`, `discounts-service` | High | Necessaire pour expliquer expiration de remise, option, offre, abonnement |
-| Recuperer consommations hors forfait | `cdr-usage-consumption-service` ou `usages-service` | Medium | Necessaire pour expliquer les causes de consommation |
-| Recuperer evenements billing | `customer-history-service`, `events-store-service`, `change-offers-service`, `adjustments-service` | High | Activation option, changement offre, regularisation, prorata |
+| V1 Need | Source Microservice | Priority | Notes |
+|---------|---------------------|----------|-------|
+| Identify / search for a customer | `contacts-service` + `accounts-service` | Medium | Can be simplified at first if the channel already provides the customer |
+| List invoices / periods | `billing-api` | High | `billing-service` is no longer used |
+| Retrieve an invoice / invoice document | `billing-api` | High | Use `bill-run-documents/search` with one or more criteria |
+| Retrieve a detailed structured invoice | Invoice PDF + `InvoicePdfExtractor` | High | No structured endpoint identified for invoice lines |
+| Retrieve invoice lines | Invoice PDF + `InvoicePdfExtractor` | High | Extract and normalize lines from the PDF |
+| Retrieve discounts / options / contract | `accounts-service`, `contracts-service`, `addons-service`, `discounts-service` | High | Needed to explain discount expiration, option, offer, subscription |
+| Retrieve out-of-bundle usage | `cdr-usage-consumption-service` or `usages-service` | Medium | Needed to explain usage causes |
+| Retrieve billing events | `customer-history-service`, `events-store-service`, `change-offers-service`, `adjustments-service` | High | Option activation, offer change, adjustment, proration |
 
-## Catalogue Galaxion fourni
+## Provided Galaxion Catalog
 
-Le BSS cible s'appelle Galaxion. Les Swagger ci-dessous sont les points
-d'entree a analyser lorsque l'implementation du mock API-compatible demarre.
+The target BSS is called Galaxion. The Swagger entries below are the starting
+points to analyze when implementation of the API-compatible mock begins.
 
 | Microservice | Swagger |
 |--------------|---------|
@@ -96,179 +96,177 @@ d'entree a analyser lorsque l'implementation du mock API-compatible demarre.
 | `usages-service` | `https://usages-service.rke-itsf-devgalaxioncore-prd.itsf.io/swagger-ui/index.html` |
 | `users-service` | `https://users-service.rke-itsf-devgalaxioncore-prd.itsf.io/swagger-ui/index.html` |
 
-## Shortlist Swagger V1
+## V1 Swagger Shortlist
 
-Pour eviter de disperser l'analyse, les premiers Swagger a ouvrir sont :
+To avoid spreading the analysis too widely, the first Swagger entries to open
+are:
 
-| Ordre | Microservice | Pourquoi |
-|-------|--------------|----------|
-| 1 | `billing-api` | Source cible pour periodes, bill runs, recherche et telechargement de documents facture. Analyse initiale : [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
-| 2 | `accounts-service` | Relier client, compte, abonnement et contexte commercial |
-| 3 | `contracts-service` | Recuperer contrat, offre et abonnement actifs sur les periodes comparees |
-| 4 | `discounts-service` | Identifier remises, validite et expiration |
-| 5 | `addons-service` | Identifier options et services factures |
-| 6 | `cdr-usage-consumption-service` | Expliquer les hors-forfait et consommations detaillees |
-| 7 | `customer-history-service` | Retrouver les evenements metier utiles a l'explication |
-| 8 | `events-store-service` | Verifier s'il contient les evenements techniques/metier manquants |
-| 9 | `change-offers-service` | Expliquer les changements d'offre |
-| 10 | `adjustments-service` | Expliquer regularisations, ajustements et gestes |
-| 11 | `contacts-service` | Identifier ou confirmer le client si le canal ne suffit pas |
+| Order | Microservice | Why |
+|-------|--------------|-----|
+| 1 | `billing-api` | Target source for periods, bill runs, invoice document search and download. Initial analysis: [`galaxion-billing-contracts.md`](galaxion-billing-contracts.md) |
+| 2 | `accounts-service` | Link customer, account, subscription and commercial context |
+| 3 | `contracts-service` | Retrieve the active contract, offer and subscription for the compared periods |
+| 4 | `discounts-service` | Identify discounts, validity and expiration |
+| 5 | `addons-service` | Identify billed options and services |
+| 6 | `cdr-usage-consumption-service` | Explain out-of-bundle usage and detailed consumption |
+| 7 | `customer-history-service` | Retrieve business events useful for the explanation |
+| 8 | `events-store-service` | Check whether it contains missing technical/business events |
+| 9 | `change-offers-service` | Explain offer changes |
+| 10 | `adjustments-service` | Explain adjustments, corrections and gestures |
+| 11 | `contacts-service` | Identify or confirm the customer if the channel is not enough |
 
-## Ordre d'analyse des Swagger
+## Swagger Analysis Order
 
 ### 1. Billing
 
-Premier Swagger a analyser.
+First Swagger to analyze.
 
-Questions a resoudre :
+Questions to answer:
 
-- Comment lister les factures ou periodes pour un client ?
-- Comment identifier la derniere facture et la periode precedente ?
-- Comment recuperer un document facture via `bill-run-documents/search` ?
-- Comment recuperer le total facture, devise, dates de periode et statut ?
-- Comment extraire les lignes, taxes, frais ponctuels, regularisations et
-  proratas depuis le PDF facture ?
-- Quels codes erreur existent pour facture introuvable, client introuvable,
-  acces interdit et donnees indisponibles ?
+- How are invoices or periods listed for a customer?
+- How is the latest invoice and the previous period identified?
+- How is an invoice document retrieved through `bill-run-documents/search`?
+- How are the invoice total, currency, period dates and status retrieved?
+- How are lines, taxes, one-off fees, adjustments and proratas extracted from
+  the invoice PDF?
+- Which error codes exist for invoice not found, customer not found, forbidden
+  access and unavailable data?
 
-Endpoints attendus a reperer :
+Expected endpoints to locate:
 
-- list invoices by customer/account ;
-- search invoice document ;
-- download invoice document ;
-- extract invoice lines from PDF ;
-- get billing periods, si distinct des factures.
+- list invoices by customer/account;
+- search invoice document;
+- download invoice document;
+- extract invoice lines from PDF;
+- get billing periods, if distinct from invoices.
 
 ### 2. Account
 
-Deuxieme Swagger a analyser.
+Second Swagger to analyze.
 
-Questions a resoudre :
+Questions to answer:
 
-- Comment recuperer le contrat actif sur une periode donnee ?
-- Comment recuperer offre, options et services actifs ?
-- Comment recuperer les remises et leurs dates de validite ?
-- Comment recuperer les evenements de changement : activation option,
-  changement offre, resiliation, remise expiree, geste commercial ?
-- Les proratas et regularisations sont-ils portes par `account`, `billing`, ou
-  les deux ?
+- How is the active contract retrieved for a given period?
+- How are active offers, options and services retrieved?
+- How are discounts and their validity dates retrieved?
+- How are change events retrieved: option activation, offer change,
+  cancellation, expired discount, commercial gesture?
+- Are proratas and adjustments carried by `account`, `billing`, or both?
 
-Endpoints attendus a reperer :
+Expected endpoints to locate:
 
-- get account / subscription ;
-- get active offers and options ;
-- get discounts ;
+- get account / subscription;
+- get active offers and options;
+- get discounts;
 - get account events / lifecycle events.
 
 ### 3. CDR
 
-Troisieme Swagger a analyser.
+Third Swagger to analyze.
 
-Questions a resoudre :
+Questions to answer:
 
-- Comment recuperer les consommations sur une periode de facturation ?
-- Comment distinguer inclus, hors forfait, roaming, data, voix, SMS ?
-- Les montants hors forfait sont-ils presents dans CDR ou seulement dans
-  `billing` ?
-- Comment relier une consommation CDR a une ligne de facture ?
+- How is usage retrieved for a billing period?
+- How are included, out-of-bundle, roaming, data, voice and SMS usage
+  distinguished?
+- Are out-of-bundle amounts present in CDR or only in `billing`?
+- How is a CDR usage item linked to an invoice line?
 
-Endpoints attendus a reperer :
+Expected endpoints to locate:
 
-- get usage by customer/account and period ;
-- get out-of-bundle usage ;
+- get usage by customer/account and period;
+- get out-of-bundle usage;
 - get usage detail by type.
 
 ### 4. Contact
 
-Quatrieme Swagger a analyser.
+Fourth Swagger to analyze.
 
-Questions a resoudre :
+Questions to answer:
 
-- Comment rechercher ou confirmer un client depuis le canal telephone ou web ?
-- Quel identifiant permet de relier `contact` a `account` ?
-- Quels champs peuvent etre exposes oralement ou sur le web ?
-- Quels cas imposent une clarification ou une escalade ?
+- How is a customer searched or confirmed from the phone or web channel?
+- Which identifier links `contact` to `account`?
+- Which fields can be exposed orally or on the web?
+- Which cases require clarification or escalation?
 
-Endpoints attendus a reperer :
+Expected endpoints to locate:
 
-- search contact ;
-- get contact detail ;
+- search contact;
+- get contact detail;
 - get accounts for contact.
 
-## Contrat minimum du mock V1
+## Minimum V1 Mock Contract
 
-Le mock doit couvrir au moins quatre parcours.
+The mock must cover at least four journeys.
 
-### Parcours nominal
+### Nominal Journey
 
-- Client identifie.
-- Deux factures comparables.
-- Delta global reconcile avec des causes explicables.
-- Preuves disponibles pour chaque cause principale.
+- Customer identified.
+- Two comparable invoices.
+- Global delta reconciled with explainable causes.
+- Evidence available for each main cause.
 
-### Remise expiree
+### Expired Discount
 
-- Facture precedente avec remise active.
-- Facture courante sans remise.
-- Evenement ou periode de validite permettant de confirmer l'expiration.
+- Previous invoice with active discount.
+- Current invoice without the discount.
+- Event or validity period confirming the expiration.
 
-### Hors forfait consommation
+### Out-Of-Bundle Usage
 
-- Facture courante avec ligne hors forfait.
-- CDR montrant la consommation associee.
-- Cause reliee a la ligne facture et a la consommation.
+- Current invoice with an out-of-bundle line.
+- CDR showing the associated usage.
+- Cause linked to the invoice line and to the usage.
 
-### Prorata / option
+### Proration / Option
 
-- Activation d'option en cours de periode.
-- Ligne facture avec montant prorate.
-- Evenement account permettant de confirmer la date d'activation.
+- Option activated during the period.
+- Invoice line with prorated amount.
+- Account event confirming the activation date.
 
-### Donnees insuffisantes
+### Insufficient Data
 
-- Une facture ou une preuve manque.
-- Le bot doit expliquer la limite et ne pas inventer la cause.
+- An invoice or an evidence item is missing.
+- The bot must explain the limitation and must not invent the cause.
 
-### Extraction PDF non fiable
+### Unreliable PDF Extraction
 
-- Le PDF est telecharge mais certaines lignes ne sont pas parsees de maniere
-  fiable.
-- Le bot doit signaler que l'analyse est incomplete et ne pas presenter les
-  montants incertains comme confirmes.
+- The PDF is downloaded but some lines are not parsed reliably.
+- The bot must state that the analysis is incomplete and must not present
+  uncertain amounts as confirmed.
 
-## Fixtures recommandees
+## Recommended Fixtures
 
-| Fixture | Objectif |
-|---------|----------|
-| `customer-eir-001` | Cas nominal avec facture courante plus chere |
-| `customer-eir-002` | Remise expiree uniquement |
-| `customer-eir-003` | Hors forfait data avec preuve CDR |
-| `customer-eir-004` | Option activee en milieu de periode avec prorata |
-| `customer-eir-005` | Donnees BSS incompletes |
-| `customer-eir-006` | PDF facture avec extraction partielle ou ambigue |
+| Fixture | Objective |
+|---------|-----------|
+| `customer-eir-001` | Nominal case with a more expensive current invoice |
+| `customer-eir-002` | Expired discount only |
+| `customer-eir-003` | Data overage with CDR evidence |
+| `customer-eir-004` | Option activated mid-period with proration |
+| `customer-eir-005` | Incomplete BSS data |
+| `customer-eir-006` | Invoice PDF with partial or ambiguous extraction |
 
-Les donnees doivent etre anonymisees et rester realistes : montants en EUR,
-periodes mensuelles, offres telecom plausibles, dates coherentes et deltas qui
-se reconcilient avec les causes exposees.
+The data must be anonymized and remain realistic: EUR amounts, monthly periods,
+plausible telecom offers, consistent dates and deltas that reconcile with the
+stated causes.
 
-## Erreurs a reproduire
+## Errors To Reproduce
 
-Le mock doit reproduire les erreurs utiles au comportement produit :
+The mock must reproduce errors that are useful for product behavior:
 
-- client introuvable ;
-- compte introuvable ;
-- facture introuvable ;
-- periode non disponible ;
-- acces interdit ;
-- service BSS indisponible ;
-- timeout ;
-- donnees partielles ;
-- donnees incoherentes.
-- PDF facture introuvable ;
-- PDF facture non parseable.
+- customer not found;
+- account not found;
+- invoice not found;
+- period unavailable;
+- forbidden access;
+- BSS service unavailable;
+- timeout;
+- partial data;
+- inconsistent data.
+- invoice PDF not found;
+- invoice PDF not parseable.
 
-Chaque erreur doit avoir le meme format que le BSS cible lorsque ce format sera
-connu.
+Each error must use the same format as the target BSS once that format is known.
 
 ## Information To Request When Swaggers Are Available
 
@@ -278,52 +276,50 @@ PDF or security feedback loop.
 
 For each microservice, extract:
 
-- base path ;
-- endpoints utiles V1 ;
-- methode HTTP ;
-- parametres obligatoires ;
-- identifiants utilises (`contactId`, `accountId`, `customerId`, `invoiceId`,
-  etc.) ;
-- schema des reponses ;
-- schema des erreurs ;
-- authentification ;
-- headers requis : correlation id, tenant, channel, locale ;
-- pagination ;
-- conventions de date, devise et timezone.
-- format et type des documents facture retournes.
+- base path;
+- useful V1 endpoints;
+- HTTP method;
+- required parameters;
+- identifiers used (`contactId`, `accountId`, `customerId`, `invoiceId`, etc.);
+- response schema;
+- error schema;
+- authentication;
+- required headers: correlation id, tenant, channel, locale;
+- pagination;
+- date, currency and timezone conventions.
+- format and type of returned invoice documents.
 
-## Decisions ouvertes
+## Open Decisions
 
-- Les lignes facture viennent-elles bien de `billing` ?
-- Les proratas sont-ils explicites dans `billing` ou deduits via `account` ?
-- Les regularisations sont-elles des lignes facture, des evenements account, ou
-  les deux ?
-- Le backend doit-il appeler les microservices BSS directement, ou passer par une
-  facade BSS operateur existante ?
-- Le mock doit-il etre un service dedie dans `docker-compose` ou un profile du
-  backend Java ?
-- Quel outil d'extraction PDF donne la meilleure fiabilite sur les factures
-  Galaxion ?
-- Faut-il stocker les JSON extraits pour audit et regression tests ?
+- Do invoice lines really come from `billing`?
+- Are proratas explicit in `billing` or inferred through `account`?
+- Are adjustments invoice lines, account events, or both?
+- Should the backend call BSS microservices directly, or go through an existing
+  operator BSS facade?
+- Should the mock be a dedicated service in `docker-compose` or a Java backend
+  profile?
+- Which PDF extraction tool provides the best reliability on Galaxion invoices?
+- Should extracted JSON be stored for audit and regression tests?
 
-## Recommandation implementation
+## Implementation Recommendation
 
-Demarrer par un faux serveur BSS separe dans `docker-compose`, expose sur un port
-dedie, avec fixtures JSON versionnees.
+Start with a separate fake BSS server in `docker-compose`, exposed on a dedicated
+port, with versioned JSON fixtures.
 
-Avantages :
+Benefits:
 
-- le backend consomme de vraies APIs HTTP comme il le fera avec le BSS sandbox ;
-- les contrats peuvent etre testes par endpoints ;
-- les fixtures restent lisibles par Product, BSS et QA ;
-- le passage mock -> sandbox se fait par configuration d'URL et d'auth.
+- the backend consumes real HTTP APIs as it will with the BSS sandbox;
+- contracts can be tested by endpoint;
+- fixtures remain readable by Product, BSS and QA;
+- moving from mock to sandbox is done by URL and authentication configuration.
 
-Implementation recommandee :
+Recommended implementation:
 
-- `bss-mock/` pour le faux serveur et les fixtures ;
-- endpoints alignes sur les Swagger reels des que disponibles ;
-- fixtures PDF et JSON attendus d'extraction, alignes sur
-  [`invoice-extraction-json.md`](invoice-extraction-json.md) ;
-- tests de contrat sur les payloads utiles V1 ;
-- configuration backend `BSS_BASE_URL` ou equivalent ;
-- profil local `bss-mock` dans `docker-compose`.
+- `bss-mock/` for the fake server and fixtures;
+- endpoints aligned with the real Swagger contracts as soon as they are
+  available;
+- expected PDF and extraction JSON fixtures, aligned with
+  [`invoice-extraction-json.md`](invoice-extraction-json.md);
+- contract tests on useful V1 payloads;
+- backend configuration `BSS_BASE_URL` or equivalent;
+- local `bss-mock` profile in `docker-compose`.

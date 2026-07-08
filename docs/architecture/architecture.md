@@ -1,23 +1,26 @@
 # Architecture — Voice Support Bot
 
-## Vue d'ensemble
+## Overview
 
-Voice Support Bot est un agent vocal intelligent qui répond aux questions de support client dans le domaine Telecom/FAI. Il utilise le pattern **RAG** (Retrieval-Augmented Generation) pour fournir des réponses factuelles basées sur une base de connaissance interne.
+Voice Support Bot is an intelligent voice agent that answers customer support
+questions in the Telecom/ISP domain. It uses the **RAG**
+(Retrieval-Augmented Generation) pattern to provide factual answers based on an
+internal knowledge base.
 
-L'architecture est **hybride** :
-- Un **backend Java** (hexagonal) gère la logique métier, le RAG, et l'administration
-- Un **agent vocal Python Pipecat** orchestre le pipeline audio temps réel avec Gradium (STT/TTS)
-- Un canal **WebRTC Pipecat** sert le parcours web cible V1, avec Twilio Media Streams pour la téléphonie
-- Le **frontend React + bridge WebSocket custom** reste disponible comme POC historique / fallback, mais n'est plus le chemin cible V1
+The architecture is **hybrid**:
+- A **Java backend** (hexagonal) handles business logic, RAG, and administration
+- A **Python Pipecat voice agent** orchestrates the real-time audio pipeline with Gradium (STT/TTS)
+- A **Pipecat WebRTC** channel serves the target V1 web journey, with Twilio Media Streams for telephony
+- The **React frontend + custom WebSocket bridge** remains available as a historical POC / fallback, but is no longer the target V1 path
 
-La cible machines/VM pour un pilote operateur V1 est detaillee dans
-[`infra-v1.md`](infra-v1.md). Le plan d'integration BSS et du mock
-contract-compatible est detaille dans
+The machine/VM target for an operator V1 pilot is detailed in
+[`infra-v1.md`](infra-v1.md). The BSS integration plan and contract-compatible
+mock are detailed in
 [`bss-integration-plan.md`](../integrations/galaxion/bss-integration-plan.md).
-Les décisions structurantes sont suivies sous forme d'ADR dans
+Structuring decisions are tracked as ADRs in
 [`adrs/`](adrs/).
 
-## Diagramme d'architecture
+## Architecture Diagram
 
 ```mermaid
 graph TB
@@ -25,13 +28,13 @@ graph TB
     Browser["👤 Browser"]
     Twilio["👤 Twilio"]
 
-    %% ─── Notre code : Frontend / UI ───
+    %% ─── Our code: Frontend / UI ───
     subgraph frontend ["🟢 Web UI"]
         PipecatUI[Pipecat prebuilt UI WebRTC :7860]
         VoiceChat[React VoiceChat legacy :5173]
     end
 
-    %% ─── Notre code : Voice Agent ───
+    %% ─── Our code: Voice Agent ───
     subgraph voiceAgent ["🟢 Voice Agent — Python"]
         PipecatBot[agent/bot.py Pipecat pipeline]
         StreamingRAG[streaming_rag_processor.py]
@@ -39,13 +42,13 @@ graph TB
         BackendClient[backend_client.py]
     end
 
-    %% ─── Externe : Gradium (proche du voice agent qui l'appelle) ───
+    %% ─── External: Gradium (near the voice agent that calls it) ───
     subgraph gradium ["🔴 Gradium Cloud API"]
         GradiumSTT[STT — api.gradium.ai]
         GradiumTTS[TTS — wss://api.gradium.ai]
     end
 
-    %% ─── Notre code : Java Backend ───
+    %% ─── Our code: Java Backend ───
     subgraph backend ["🟢 Java Backend — Spring Boot"]
         subgraph adaptersIn [Adapters IN]
             ConvController[ConversationController]
@@ -56,7 +59,7 @@ graph TB
             IntentClass[IntentClassifier]
             AgentReg[AgentRegistry]
             EscDetector[EscalationDetector]
-            RAGPipeline["Pipeline RAG"]
+            RAGPipeline["RAG Pipeline"]
         end
         subgraph adaptersOut [Adapters OUT]
             MistralAdapter[MistralLlmAdapter]
@@ -65,29 +68,29 @@ graph TB
         end
     end
 
-    %% ─── Externes : LLM + DB (proches du backend qui les appelle) ───
+    %% ─── External: LLM + DB (near the backend that calls them) ───
     MistralAPI["🔴 Mistral AI Cloud"]
     Ollama["🔴 Ollama Local :11434"]
     PgVector["🔴 PostgreSQL + pgvector :5433"]
 
-    %% ─── Flux entrants ───
+    %% ─── Inbound flows ───
     Browser -->|"WebRTC :7860"| PipecatUI
     PipecatUI --> PipecatBot
     Twilio -->|"Media Streams"| PipecatBot
     Browser -.->|"legacy ws:8765"| VoiceChat
     VoiceChat -.->|"legacy PCM + JSON"| BridgeServer
 
-    %% ─── Voice Agent → Gradium (externe) ───
+    %% ─── Voice Agent → Gradium (external) ───
     PipecatBot -->|"GradiumSTTService streaming"| GradiumSTT
     BridgeServer -.->|"legacy HTTPS POST"| GradiumSTT
 
-    %% ─── Voice Agent → Backend (interne) ───
+    %% ─── Voice Agent → Backend (internal) ───
     PipecatBot --> StreamingRAG
     StreamingRAG --> BackendClient
     BridgeServer -.-> BackendClient
     BackendClient -->|"GET SSE /ask-stream"| StreamController
 
-    %% ─── Backend interne ───
+    %% ─── Internal backend ───
     StreamController --> Orchestrator
     Orchestrator --> IntentClass
     IntentClass --> AgentReg
@@ -95,185 +98,185 @@ graph TB
     Orchestrator --> RAGPipeline
     ConvController --> Orchestrator
 
-    %% ─── Pipeline RAG → Adapters ───
+    %% ─── RAG pipeline → Adapters ───
     RAGPipeline --> PgVecAdapter
     RAGPipeline --> MistralAdapter
     RAGPipeline --> OllamaAdapter
 
-    %% ─── Voice Agent → TTS (externe) ───
+    %% ─── Voice Agent → TTS (external) ───
     PipecatBot -->|"GradiumTTSService streaming"| GradiumTTS
     BridgeServer -.->|"legacy WSS"| GradiumTTS
 
-    %% ─── Backend → Services externes ───
+    %% ─── Backend → External services ───
     MistralAdapter -->|"generation HTTPS streaming"| MistralAPI
     OllamaAdapter -->|"generation HTTP streaming"| Ollama
     PgVecAdapter -->|"retrieval SQL + HNSW"| PgVector
 ```
 
-> **Légende** : 🟢 = notre code · 🔴 = service externe
+> **Legend**: 🟢 = our code · 🔴 = external service
 
-## Flux sortants (Outbound)
+## Outbound Flows
 
-Le système appelle les services externes suivants :
+The system calls the following external services:
 
-| Flux | Protocole | Source → Destination | Contenu |
+| Flow | Protocol | Source → Destination | Content |
 |------|-----------|---------------------|---------|
-| **LLM Generation** | HTTPS (streaming) | `MistralLlmAdapter` → Mistral API | Prompt + contexte RAG → tokens streamés |
-| **LLM Generation (alt)** | HTTP (streaming) | `OllamaLlmAdapter` → Ollama local :11434 | Prompt + contexte → tokens streamés |
-| **Vector Search** | SQL (TCP :5433) | `PgVectorStoreAdapter` → PostgreSQL/pgvector | Query embedding → top-K chunks HNSW |
-| **Embedding Generation** | HTTP | Spring AI → Ollama (nomic-embed-text) | Texte → vecteur 768 dimensions |
-| **STT Transcription** | Pipecat service / HTTPS | `agent/bot.py` → Gradium STT | Audio WebRTC/Twilio → transcription |
-| **TTS Synthesis** | Pipecat service / WSS | `agent/bot.py` → Gradium TTS | Texte → audio stream |
+| **LLM Generation** | HTTPS (streaming) | `MistralLlmAdapter` → Mistral API | Prompt + RAG context → streamed tokens |
+| **LLM Generation (alt)** | HTTP (streaming) | `OllamaLlmAdapter` → Ollama local :11434 | Prompt + context → streamed tokens |
+| **Vector Search** | SQL (TCP :5433) | `PgVectorStoreAdapter` → PostgreSQL/pgvector | Query embedding → top-K HNSW chunks |
+| **Embedding Generation** | HTTP | Spring AI → Ollama (nomic-embed-text) | Text → 768-dimensional vector |
+| **STT Transcription** | Pipecat service / HTTPS | `agent/bot.py` → Gradium STT | WebRTC/Twilio audio → transcription |
+| **TTS Synthesis** | Pipecat service / WSS | `agent/bot.py` → Gradium TTS | Text → audio stream |
 | **RAG Query (streaming)** | HTTP SSE | `streaming_rag_processor.py` → Backend :8081 `/api/conversation/ask-stream` | Question → SSE token stream |
-| **RAG Query (fallback legacy)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
-| **Greeting seed** | HTTP POST | `bot.py` → Backend :8081 `/api/conversation/seed` | Message d'accueil Pipecat enregistré dans l'historique pour éviter une re-salutation |
+| **RAG Query (legacy fallback)** | HTTP POST | `bridge_server.py` → Backend :8081 `/api/conversation/ask` | Question → JSON response |
+| **Greeting seed** | HTTP POST | `bot.py` → Backend :8081 `/api/conversation/seed` | Pipecat greeting stored in history to avoid greeting again |
 
-## Séparation des responsabilités
+## Responsibility Split
 
-| Composant | Langage | Responsabilité |
+| Component | Language | Responsibility |
 |-----------|---------|---------------|
-| **Pipecat Web UI** | TypeScript / prebuilt | Interface WebRTC cible V1 pour le parcours vocal web |
-| **Frontend React legacy** | TypeScript | Interface POC WebSocket, VAD navigateur, audio queue playback, streaming texte |
-| **Voice Agent Pipecat** | Python | Orchestration audio WebRTC/Twilio, STT/TTS via Gradium, VAD serveur, barge-in framework |
-| **Bridge custom legacy** | Python | Chemin POC/fallback WebSocket, STT/TTS Gradium, sentence splitting, SSE consumer |
-| **Gradium** | API cloud | STT (transcription) et TTS (synthèse vocale) |
-| **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), logique métier, escalade, admin |
-| **Mistral AI** | API cloud | LLM génération (provider par défaut, streaming) |
-| **Ollama** | Local | LLM inférence locale (alternative configurable) |
-| **PostgreSQL + pgvector** | — | Stockage vectoriel et recherche de similarité |
+| **Pipecat Web UI** | TypeScript / prebuilt | Target V1 WebRTC interface for the web voice journey |
+| **Frontend React legacy** | TypeScript | WebSocket POC interface, browser VAD, audio queue playback, text streaming |
+| **Voice Agent Pipecat** | Python | WebRTC/Twilio audio orchestration, STT/TTS via Gradium, server VAD, barge-in framework |
+| **Custom legacy bridge** | Python | WebSocket POC/fallback path, Gradium STT/TTS, sentence splitting, SSE consumer |
+| **Gradium** | Cloud API | STT (transcription) and TTS (speech synthesis) |
+| **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), business logic, escalation, admin |
+| **Mistral AI** | Cloud API | LLM generation (default provider, streaming) |
+| **Ollama** | Local | Local LLM inference (configurable alternative) |
+| **PostgreSQL + pgvector** | — | Vector storage and similarity search |
 
-## Couche domaine (Pure Java)
+## Domain Layer (Pure Java)
 
-Le domaine ne contient **aucune annotation Spring**. Il est testable avec de simples fakes.
+The domain contains **no Spring annotations**. It is testable with simple fakes.
 
-Le streaming LLM reste également dans le langage du domaine via `TokenStream`.
-Les adapters Spring AI/Reactor convertissent leurs flux techniques vers cette
-abstraction avant de revenir dans le domaine.
+LLM streaming also remains expressed in the domain language through
+`TokenStream`. Spring AI/Reactor adapters convert their technical streams to
+this abstraction before returning to the domain.
 
-### Modèles
+### Models
 
-| Classe | Rôle |
+| Class | Role |
 |--------|------|
-| `Conversation` | Session de dialogue multi-tour (historique user/assistant + agent courant) |
-| `Citation` | Référence à un passage de la base de connaissance (source, section, score) |
-| `ConversationResponse` | Réponse du bot (texte + citations) |
-| `ConversationEvent` | Événement de tracking (question, réponse, latence, escalade) |
-| `KnowledgeChunk` | Unité de connaissance indexée dans le vector store |
-| `GuardrailResult` | Résultat d'évaluation guardrail (PASS, OFF_TOPIC, LOW_CONFIDENCE) |
-| `AgentProfile` | Profil d'un agent spécialisé (id, nom, system prompt, domaine KB, mots-clés d'intent) |
-| `AgentRegistry` | Registre des agents disponibles avec lookup par id et fallback par défaut |
-| `SourceDocument` | Format **pivot** d'un document de source KB (sourceType, sourceId, title, url, content, domain, language, updatedAt, contentHash) — normalise toute source hétérogène avant ingestion |
-| `ContentHash` | Utilitaire SHA-256 du contenu normalisé (clé d'idempotence de la synchro) |
-| `SyncReport` | Résultat d'une synchro KB (processed, ingested, skipped, deleted) |
+| `Conversation` | Multi-turn dialog session (user/assistant history + current agent) |
+| `Citation` | Reference to a knowledge-base passage (source, section, score) |
+| `ConversationResponse` | Bot response (text + citations) |
+| `ConversationEvent` | Tracking event (question, answer, latency, escalation) |
+| `KnowledgeChunk` | Knowledge unit indexed in the vector store |
+| `GuardrailResult` | Guardrail evaluation result (PASS, OFF_TOPIC, LOW_CONFIDENCE) |
+| `AgentProfile` | Specialized agent profile (id, name, system prompt, KB domain, intent keywords) |
+| `AgentRegistry` | Registry of available agents with lookup by id and default fallback |
+| `SourceDocument` | **Pivot** format for a KB source document (sourceType, sourceId, title, url, content, domain, language, updatedAt, contentHash) — normalizes any heterogeneous source before ingestion |
+| `ContentHash` | SHA-256 utility for normalized content (sync idempotency key) |
+| `SyncReport` | Result of a KB sync (processed, ingested, skipped, deleted) |
 
 ### Services
 
-| Service | Responsabilité |
+| Service | Responsibility |
 |---------|---------------|
-| `ConversationOrchestrator` | Pipeline RAG unifié (sync + streaming) avec routing multi-agent : classification d'intent → recherche vectorielle filtrée par domaine → génération avec system prompt dynamique |
-| `ConversationService` | Pipeline RAG synchrone legacy (toujours fonctionnel mais remplacé par l'orchestrateur) |
-| `StreamingConversationService` | Pipeline RAG streaming legacy (remplacé par l'orchestrateur) |
-| `IntentClassifier` | Classifie la question de l'utilisateur pour router vers l'agent approprié (scoring par mots-clés avec session stickiness) |
-| `KnowledgeIngestionService` | Ingestion ponctuelle (upload `POST /ingest`) : délègue le découpage à `TextChunker` et indexe avec tag de domaine |
-| `KnowledgeSyncService` | Synchro **multi-sources** idempotente : parcourt les connecteurs, compare le `contentHash` au ledger (skip si inchangé), ré-ingère les documents modifiés (delete + re-chunk), supprime les documents disparus (deletion-diff) |
-| `TextChunker` | Découpage sémantique partagé (paragraphes, taille/chevauchement, extraction de section) — réutilisé par l'ingestion ponctuelle et la synchro |
-| `EscalationDetector` | Détecte les demandes nécessitant un transfert humain |
-| `GuardrailService` | Filtre pré/post-recherche : off-topic (patterns) + low-confidence (score seuil) |
-| `QueryReformulator` | Reformule les questions de suivi en incluant le contexte conversationnel |
+| `ConversationOrchestrator` | Unified RAG pipeline (sync + streaming) with multi-agent routing: intent classification → domain-filtered vector search → generation with dynamic system prompt |
+| `ConversationService` | Legacy synchronous RAG pipeline (still functional but replaced by the orchestrator) |
+| `StreamingConversationService` | Legacy streaming RAG pipeline (replaced by the orchestrator) |
+| `IntentClassifier` | Classifies the user's question to route it to the appropriate agent (keyword scoring with session stickiness) |
+| `KnowledgeIngestionService` | One-off ingestion (upload `POST /ingest`): delegates chunking to `TextChunker` and indexes with a domain tag |
+| `KnowledgeSyncService` | Idempotent **multi-source** sync: iterates through connectors, compares `contentHash` with the ledger (skip if unchanged), re-ingests modified documents (delete + re-chunk), removes disappeared documents (deletion diff) |
+| `TextChunker` | Shared semantic chunking (paragraphs, size/overlap, section extraction) — reused by one-off ingestion and sync |
+| `EscalationDetector` | Detects requests requiring human transfer |
+| `GuardrailService` | Pre/post-search filter: off-topic (patterns) + low-confidence (score threshold) |
+| `QueryReformulator` | Reformulates follow-up questions by including conversation context |
 
-### Ports IN (cas d'usage)
+### IN Ports (Use Cases)
 
-| Port | Implémenté par |
+| Port | Implemented by |
 |------|----------------|
 | `AskQuestionUseCase` | `ConversationOrchestrator` |
 | `IngestKnowledgeUseCase` | `KnowledgeIngestionService` |
 | `SyncKnowledgeSourceUseCase` | `KnowledgeSyncService` |
 
-### Ports OUT (dépendances inversées)
+### OUT Ports (Inverted Dependencies)
 
-| Port | Contrat | Adapters |
+| Port | Contract | Adapters |
 |------|---------|----------|
-| `LlmPort` | Générer une réponse complète (blocking `.call()`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `LlmStreamingPort` | Streamer les tokens de réponse (`TokenStream`) + variante avec system prompt dynamique | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `VectorSearchPort` | Chercher les chunks pertinents (global ou filtré par domaine) | `PgVectorStoreAdapter` |
-| `VectorStorePort` | Stocker un chunk (`store` legacy + `storeChunk` avec métadonnées enrichies depuis un `SourceDocument`) et supprimer par source (`deleteBySource`) | `PgVectorStoreAdapter` |
-| `KnowledgeSourceConnector` | Lister les `SourceDocument` d'une source (`sourceType()` + `fetchAll()`) — un connecteur par type de source | `MarkdownFolderConnector` (référence) ; Confluence/PDF/DB à venir |
-| `KnowledgeSourceStatePort` | Ledger de synchro : hash connu, upsert, liste des ids, suppression | `JpaKnowledgeSourceStateAdapter` (table `kb_source_state`) |
-| `ConversationEventStore` | Persister les événements de conversation | `JpaConversationEventStore` en runtime Docker ; `InMemoryConversationEventStore` pour local/dev/tests |
-| `ConversationStore` | Charger/sauver l'état d'une session (`load`/`save`) | `RedisConversationStore` en runtime Docker ; `InMemoryConversationStore` pour local/dev/tests |
+| `LlmPort` | Generate a complete response (blocking `.call()`) + variant with dynamic system prompt | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmStreamingPort` | Stream response tokens (`TokenStream`) + variant with dynamic system prompt | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `VectorSearchPort` | Search relevant chunks (global or domain-filtered) | `PgVectorStoreAdapter` |
+| `VectorStorePort` | Store a chunk (`store` legacy + `storeChunk` with metadata enriched from a `SourceDocument`) and delete by source (`deleteBySource`) | `PgVectorStoreAdapter` |
+| `KnowledgeSourceConnector` | List `SourceDocument` entries from a source (`sourceType()` + `fetchAll()`) — one connector per source type | `MarkdownFolderConnector` (reference); Confluence/PDF/DB coming later |
+| `KnowledgeSourceStatePort` | Sync ledger: known hash, upsert, id list, deletion | `JpaKnowledgeSourceStateAdapter` (`kb_source_state` table) |
+| `ConversationEventStore` | Persist conversation events | `JpaConversationEventStore` in Docker runtime; `InMemoryConversationEventStore` for local/dev/tests |
+| `ConversationStore` | Load/save session state (`load`/`save`) | `RedisConversationStore` in Docker runtime; `InMemoryConversationStore` for local/dev/tests |
 
-> **Note** : Chaque adapter LLM implémente **les deux ports** (`LlmPort` + `LlmStreamingPort`). Un seul bean Spring satisfait les deux interfaces.
-> Les ports `SpeechToTextPort` et `TextToSpeechPort` ne sont plus utilisés côté Java — STT/TTS sont gérés par l'agent Python via Gradium.
+> **Note**: Each LLM adapter implements **both ports** (`LlmPort` + `LlmStreamingPort`). A single Spring bean satisfies both interfaces.
+> The `SpeechToTextPort` and `TextToSpeechPort` ports are no longer used on the Java side — STT/TTS are handled by the Python agent via Gradium.
 
-## Pipeline de traitement
+## Processing Pipeline
 
-### Routing multi-agent
+### Multi-Agent Routing
 
 ```
-Question utilisateur
+User question
     │
     ▼
 IntentClassifier.classify(question, currentAgentId)
     │
-    ├─ Score mots-clés ≥ 1 → route vers l'agent avec le meilleur score
+    ├─ Keyword score ≥ 1 → route to the agent with the best score
     │
-    ├─ Score = 0 + agent courant en session → reste sur l'agent courant (stickiness)
+    ├─ Score = 0 + current agent in session → stay on current agent (stickiness)
     │
-    └─ Score = 0 + pas d'agent courant → fallback vers agent par défaut (support)
+    └─ Score = 0 + no current agent → fallback to default agent (support)
 ```
 
-**Agents disponibles :**
+**Available agents:**
 
-| Agent | Domaine KB | Mots-clés déclencheurs (extrait) |
+| Agent | KB domain | Trigger keywords (excerpt) |
 |-------|-----------|------|
-| **Support technique** | `support` | connexion, wifi, box, débit, panne, voyant, reset... |
-| **Facturation** | `billing` | facture, paiement, prélèvement, prix, abonnement, résilier... |
-| **Commercial** | `commercial` | souscrire, fibre, déménagement, portabilité, option, TV, parrainage... |
+| **Technical support** | `support` | connection, wifi, router, speed, outage, indicator light, reset... |
+| **Billing** | `billing` | invoice, payment, direct debit, price, subscription, cancellation... |
+| **Sales** | `commercial` | subscribe, fiber, moving, number portability, option, TV, referral... |
 
-### Mode texte (REST — synchrone)
+### Text Mode (REST — Synchronous)
 
 ```
 Client → POST /api/conversation/ask
          → ConversationOrchestrator.ask()
-           → EscalationDetector.shouldEscalate()  [court-circuit si oui]
-           → GuardrailService.checkBeforeSearch()  [greeting → réponse directe]
-                                                   [off-topic → court-circuit]
-           → IntentClassifier.classify()           [routing vers agent]
-           → QueryReformulator.reformulate()       [contexte conversationnel]
-           → VectorSearchPort.searchRelevant(domain) [retrieval filtré par domaine]
-           → GuardrailService.checkAfterSearch()   [low-confidence → court-circuit]
-           → LlmPort.generateAnswer(systemPrompt)  [generation avec prompt agent]
+           → EscalationDetector.shouldEscalate()  [short-circuit if yes]
+           → GuardrailService.checkBeforeSearch()  [greeting → direct response]
+                                                   [off-topic → short-circuit]
+           → IntentClassifier.classify()           [routing to agent]
+           → QueryReformulator.reformulate()       [conversation context]
+           → VectorSearchPort.searchRelevant(domain) [domain-filtered retrieval]
+           → GuardrailService.checkAfterSearch()   [low-confidence → short-circuit]
+           → LlmPort.generateAnswer(systemPrompt)  [generation with agent prompt]
            → ConversationEventStore.save()         [tracking]
          ← JSON { answer, citations, conversationId }
 ```
 
-### Mode vocal cible V1 (Pipecat WebRTC — pipeline optimisé)
+### Target V1 Voice Mode (Pipecat WebRTC — Optimized Pipeline)
 
 ```mermaid
 sequenceDiagram
     participant FE as Pipecat WebRTC UI
     participant BOT as Pipecat Bot
-    participant VAD as Silero VAD (serveur)
+    participant VAD as Silero VAD (server)
     participant STT as Gradium STT
     participant BE as Backend Java
     participant LLM as Mistral API
     participant TTS as Gradium TTS
 
-    Note over FE,BOT: Utilisateur rejoint la session WebRTC
-    FE->>BOT: Flux audio WebRTC
+    Note over FE,BOT: User joins the WebRTC session
+    FE->>BOT: WebRTC audio stream
 
-    BOT->>VAD: Endpointing et barge-in serveur
+    BOT->>VAD: Server endpointing and barge-in
     BOT->>STT: GradiumSTTService (streaming)
-    STT-->>BOT: Transcription
+    STT-->>BOT: Transcript
 
     BOT->>BE: GET /api/conversation/ask-stream?question=...
     Note over BE: Vector search (~200ms)
     BE->>LLM: ChatClient.stream()
     LLM-->>BE: token stream
 
-    loop Pour chaque phrase detectee
+    loop For each detected sentence
         BE-->>BOT: SSE event:chunk {"text":"token..."}
-        Note over BOT: StreamingRAGProcessor pousse un TextFrame par phrase
+        Note over BOT: StreamingRAGProcessor pushes one TextFrame per sentence
         BOT->>TTS: GradiumTTSService
         TTS-->>BOT: Audio chunks
         BOT-->>FE: Audio WebRTC
@@ -282,239 +285,267 @@ sequenceDiagram
     BE-->>BOT: SSE event:done
 
     Note over FE,BOT: --- Barge-in (interruption) ---
-    FE->>BOT: L'utilisateur parle pendant la réponse
-    BOT->>BOT: Pipecat interrompt la sortie audio et le pipeline courant
-    Note over FE: Nouveau cycle : audio -> STT -> RAG
+    FE->>BOT: User speaks during the response
+    BOT->>BOT: Pipecat interrupts audio output and the current pipeline
+    Note over FE: New cycle: audio -> STT -> RAG
 ```
 
-**Gain de latence perçue :** L'utilisateur entend la première phrase en **~700ms** au lieu de ~2.2s dans le mode séquentiel.
+**Perceived latency gain:** The user hears the first sentence in **~700ms**
+instead of ~2.2s in sequential mode.
 
-### Protocole legacy WebSocket (Frontend React ↔ Bridge)
+### Legacy WebSocket Protocol (React Frontend ↔ Bridge)
 
-Ce protocole reste documenté pour le POC historique et les tests de fallback. La
-cible V1 web est le transport WebRTC Pipecat.
+This protocol remains documented for the historical POC and fallback tests. The
+V1 web target is the Pipecat WebRTC transport.
 
-| Direction | Message | Format | Quand |
+| Direction | Message | Format | When |
 |-----------|---------|--------|-------|
-| Client → | Audio | Binary (PCM 16kHz mono) | Après détection fin de parole (VAD) |
-| Client → | Fin | Text `"END_OF_SPEECH"` | Après envoi du buffer audio |
-| Client → | Interruption | Text `"BARGE_IN"` | L'utilisateur parle pendant que le bot répond |
-| Client → | Langue | JSON `{"type":"set_language","language":"fr\|en"}` | Toggle langue |
-| → Client | Transcription | JSON `{"type":"transcription","text":"..."}` | Après STT |
-| → Client | Chunk texte | JSON `{"type":"answer_chunk","text":"..."}` | Chaque phrase (streaming) |
-| → Client | Audio phrase | Binary (WAV 16kHz mono) | Après TTS de chaque phrase |
-| → Client | Fin réponse | JSON `{"type":"answer_done","text":"..."}` | Fin génération complète |
-| → Client | Langue ack | JSON `{"type":"language_changed","language":"..."}` | Après set_language |
+| Client → | Audio | Binary (PCM 16kHz mono) | After end-of-speech detection (VAD) |
+| Client → | End | Text `"END_OF_SPEECH"` | After sending the audio buffer |
+| Client → | Interruption | Text `"BARGE_IN"` | User speaks while the bot is responding |
+| Client → | Language | JSON `{"type":"set_language","language":"fr\|en"}` | Language toggle |
+| → Client | Transcription | JSON `{"type":"transcription","text":"..."}` | After STT |
+| → Client | Text chunk | JSON `{"type":"answer_chunk","text":"..."}` | Each sentence (streaming) |
+| → Client | Sentence audio | Binary (WAV 16kHz mono) | After TTS for each sentence |
+| → Client | Response end | JSON `{"type":"answer_done","text":"..."}` | End of complete generation |
+| → Client | Language ack | JSON `{"type":"language_changed","language":"..."}` | After set_language |
 
-### Mode téléphonie cible V1 (Twilio Media Streams → Pipecat + Gradium)
+### Target V1 Telephony Mode (Twilio Media Streams → Pipecat + Gradium)
 
-La cible V1 sert la téléphonie via `agent/bot.py` et le transport Twilio créé par
-Pipecat (`create_transport`). WebRTC et Twilio partagent le même pipeline :
-transport input → VAD serveur → Gradium STT → RAG SSE → Gradium TTS → transport
-output.
+The V1 target serves telephony through `agent/bot.py` and the Twilio transport
+created by Pipecat (`create_transport`). WebRTC and Twilio share the same
+pipeline: transport input → server VAD → Gradium STT → RAG SSE → Gradium TTS →
+transport output.
 
 ```
-Appel téléphonique entrant
-  → Twilio → POST /api/twilio/voice (webhook sur backend Java)
+Inbound phone call
+  → Twilio → POST /api/twilio/voice (webhook on Java backend)
   ← TwiML <Response><Connect><Stream url="wss://.../ws/twilio"/></Connect></Response>
 
   → Twilio Media Streams → Pipecat Twilio transport
-  → Silero VAD serveur
+  → Silero server VAD
   → Gradium STT streaming → transcription
-  → GET /api/conversation/ask-stream (SSE) → réponse en streaming par phrase
+  → GET /api/conversation/ask-stream (SSE) → response streamed by sentence
   → Gradium TTS streaming
-  → Pipecat Twilio transport → audio diffusé à l'appelant
+  → Pipecat Twilio transport → audio streamed to the caller
 ```
 
-Les modules `telephony.py`, `audio_codec.py`, `turn_detector.py`,
-`stt_streaming.py` et `bridge_server.py` restent utiles pour le chemin legacy /
-fallback et les tests bas niveau, mais ils ne portent plus la cible V1.
+The `telephony.py`, `audio_codec.py`, `turn_detector.py`, `stt_streaming.py`,
+and `bridge_server.py` modules remain useful for the legacy/fallback path and
+low-level tests, but they no longer carry the V1 target.
 
-## Stratégie de chunking
+## Chunking Strategy
 
-Le `KnowledgeIngestionService` découpe les documents de manière sémantique :
+`KnowledgeIngestionService` chunks documents semantically:
 
-1. **Découpage par paragraphes** (`\n\n`) — respecte les frontières logiques
-2. **Taille cible : 500 caractères** — assez pour un contexte cohérent
-3. **Chevauchement : 50 caractères** — assure la continuité entre chunks
-4. **Extraction de section** — le heading Markdown `## ...` est propagé comme métadonnée
-5. **Tag de domaine** — chaque chunk est tagué avec le domaine de l'agent (`support`, `billing`, `commercial`)
+1. **Paragraph-based splitting** (`\n\n`) — respects logical boundaries
+2. **Target size: 500 characters** — enough for coherent context
+3. **Overlap: 50 characters** — ensures continuity between chunks
+4. **Section extraction** — the Markdown heading `## ...` is propagated as metadata
+5. **Domain tag** — each chunk is tagged with the agent domain (`support`, `billing`, `commercial`)
 
-Chaque chunk est ensuite :
-- Transformé en vecteur via `nomic-embed-text` (768 dimensions)
-- Stocké dans pgvector avec index HNSW pour recherche rapide
-- Annoté avec ses métadonnées (source, section, index, **domain**)
-- Filtrable par domaine lors de la recherche vectorielle (via `FilterExpression`)
+Each chunk is then:
+- Transformed into a vector through `nomic-embed-text` (768 dimensions)
+- Stored in pgvector with an HNSW index for fast search
+- Annotated with its metadata (source, section, index, **domain**)
+- Filterable by domain during vector search (through `FilterExpression`)
 
-## Deux modèles d'IA distincts : LLM (génération) vs Embedding (vectorisation)
+## Two Distinct AI Models: LLM (Generation) vs Embedding (Vectorization)
 
-Le système utilise **deux modèles d'IA séparés**, à ne pas confondre :
+The system uses **two separate AI models**, which should not be confused:
 
-| Rôle | Modèle (défaut) | Fournisseur | Quand |
+| Role | Model (default) | Provider | When |
 |------|-----------------|-------------|-------|
-| **LLM / chat** (rédige la réponse) | `mistral-small-latest` | **Mistral AI** (API cloud) | À chaque génération de réponse |
-| **Embedding** (texte → vecteur) | `nomic-embed-text` (768 dim) | **Ollama** (local) | À l'ingestion (chaque chunk) ET à chaque requête (la question) |
+| **LLM / chat** (writes the response) | `mistral-small-latest` | **Mistral AI** (cloud API) | On every response generation |
+| **Embedding** (text → vector) | `nomic-embed-text` (768 dim) | **Ollama** (local) | During ingestion (each chunk) AND on every request (the question) |
 
-> Le provider LLM est configurable (`voice-support.llm.provider` : `mistral-api` par défaut, `ollama` en alternative). L'embedding est aujourd'hui **toujours** servi par Ollama : `MistralAiEmbeddingAutoConfiguration` est exclu dans `VoiceSupportApplication`. Confier les embeddings à Mistral (`mistral-embed`, 1024 dim) impliquerait de changer `pgvector.dimensions` et de recréer la table `vector_store` + re-synchroniser.
+> The LLM provider is configurable (`voice-support.llm.provider`: `mistral-api` by default, `ollama` as an alternative). Embedding is currently **always** served by Ollama: `MistralAiEmbeddingAutoConfiguration` is excluded in `VoiceSupportApplication`. Moving embeddings to Mistral (`mistral-embed`, 1024 dim) would require changing `pgvector.dimensions`, recreating the `vector_store` table, and resynchronizing.
 
-## Base de connaissance multi-sources (synchronisation)
+## Multi-Source Knowledge Base (Synchronization)
 
-> Documentation dédiée : [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md)
-> (architecture détaillée + extension par connecteurs) et
-> [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md) (rédaction/publication de
-> contenu pour les contributeurs non-dev).
+> Dedicated documentation: [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md)
+> (detailed architecture + connector-based extension) and
+> [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md) (writing/publishing
+> content for non-dev contributors).
 
-Au-delà de l'upload ponctuel (`POST /api/knowledge/ingest`), la KB est alimentée par des **connecteurs de source** synchronisés vers un format **pivot** unique (`SourceDocument`). Cela permet d'ajouter des sources hétérogènes (Markdown, Confluence, PDF, base de données) sans toucher au cœur.
+Beyond one-off upload (`POST /api/knowledge/ingest`), the KB is fed by **source
+connectors** synchronized into a single **pivot** format (`SourceDocument`). This
+makes it possible to add heterogeneous sources (Markdown, Confluence, PDF,
+database) without touching the core.
 
 ```mermaid
 graph TB
-    subgraph sources ["Sources (un connecteur par type)"]
+    subgraph sources ["Sources (one connector per type)"]
         MD["MarkdownFolderConnector<br/>knowledge-base/*.md"]
-        FUT["Confluence / PDF / DB<br/>(à venir)"]
+        FUT["Confluence / PDF / DB<br/>(coming later)"]
     end
 
-    subgraph domain ["Domaine"]
+    subgraph domain ["Domain"]
         SYNC["KnowledgeSyncService"]
         CHUNK["TextChunker"]
     end
 
-    subgraph store ["PostgreSQL (une seule base)"]
-        LEDGER[("kb_source_state<br/>ledger de synchro")]
+    subgraph store ["PostgreSQL (single database)"]
+        LEDGER[("kb_source_state<br/>sync ledger")]
         VEC[("vector_store<br/>chunks + embeddings + metadata JSONB")]
     end
 
     OLLAMA["Ollama<br/>nomic-embed-text"]
-    SCHED["KnowledgeSyncScheduler<br/>cron (pull planifié)"]
+    SCHED["KnowledgeSyncScheduler<br/>cron (scheduled pull)"]
     REST["POST /api/knowledge/sync"]
 
     SCHED --> SYNC
     REST --> SYNC
     MD -->|"SourceDocument (pivot)"| SYNC
     FUT -.->|"SourceDocument (pivot)"| SYNC
-    SYNC -->|"hash connu ? upsert"| LEDGER
+    SYNC -->|"known hash? upsert"| LEDGER
     SYNC --> CHUNK
     CHUNK -->|"chunks"| VEC
     SYNC -->|"embedding"| OLLAMA
-    OLLAMA -->|"vecteurs 768d"| VEC
+    OLLAMA -->|"768d vectors"| VEC
 ```
 
-**Boucle de synchro (idempotente) par source :**
+**Sync loop (idempotent) per source:**
 
-1. Le connecteur retourne tous ses `SourceDocument` (`fetchAll()`), chacun portant un `contentHash` (SHA-256).
-2. Pour chaque document : si le hash est identique à celui du ledger → **skip** (aucun re-embed). Sinon → `deleteBySource` puis re-chunk + re-store, et mise à jour du ledger.
-3. **Deletion-diff** : tout `sourceId` présent dans le ledger mais absent de la source est supprimé du vector store et du ledger.
+1. The connector returns all its `SourceDocument` entries (`fetchAll()`), each carrying a `contentHash` (SHA-256).
+2. For each document: if the hash is identical to the ledger value → **skip** (no re-embed). Otherwise → `deleteBySource`, then re-chunk + re-store, and update the ledger.
+3. **Deletion diff**: any `sourceId` present in the ledger but absent from the source is removed from the vector store and the ledger.
 
-**Connecteur de référence — `MarkdownFolderConnector` :** lit `knowledge-base/*.md`, résout le `domain` depuis un **front-matter YAML** (`domain: billing`), `sourceId` = nom de fichier, `updatedAt` = date de modification du fichier. Il remplace le seeding `curl` manuel.
+**Reference connector — `MarkdownFolderConnector`:** reads `knowledge-base/*.md`,
+resolves `domain` from **YAML front matter** (`domain: billing`), `sourceId` =
+filename, `updatedAt` = file modification date. It replaces manual `curl`
+seeding.
 
-**Stockage :** tout vit dans **un seul Postgres** (image `pgvector/pgvector`). La table `vector_store` (gérée par Spring AI) stocke contenu + embeddings + métadonnées en **JSONB** (donc enrichir les métadonnées ne demande aucun `ALTER`). La table `kb_source_state` (JPA, Hibernate `ddl-auto: update`) ne stocke que la comptabilité de synchro (hash, compteurs), pas le contenu.
+**Storage:** everything lives in **a single Postgres** (image
+`pgvector/pgvector`). The `vector_store` table (managed by Spring AI) stores
+content + embeddings + metadata as **JSONB** (so enriching metadata requires no
+`ALTER`). The `kb_source_state` table (JPA, Hibernate `ddl-auto: update`) stores
+only sync accounting (hash, counters), not content.
 
-**Planification :** `KnowledgeSyncScheduler` exécute `syncAll()` via cron (`voice-support.knowledge.sync-cron`, défaut horaire). Mettre `KB_SYNC_CRON=-` désactive la synchro planifiée.
+**Scheduling:** `KnowledgeSyncScheduler` runs `syncAll()` via cron
+(`voice-support.knowledge.sync-cron`, hourly by default). Setting
+`KB_SYNC_CRON=-` disables scheduled sync.
 
-## Détection d'escalade
+## Escalation Detection
 
-L'`EscalationDetector` est un composant domaine pur qui court-circuite le pipeline RAG :
+`EscalationDetector` is a pure domain component that short-circuits the RAG pipeline:
 
 ```
-Question utilisateur
+User question
     │
     ▼
 EscalationDetector.shouldEscalate()
     │
-    ├─ OUI → message pré-défini + event escalated=true + STOP
+    ├─ YES → predefined message + event escalated=true + STOP
     │
-    └─ NON → pipeline RAG normal
+    └─ NO → normal RAG pipeline
 ```
 
-Mots-clés déclencheurs : résiliation, réclamation, remboursement, technicien, RGPD, piratage, frustration explicite.
+Trigger keywords: cancellation, complaint, refund, technician, GDPR, hacking,
+explicit frustration.
 
-L'escalade est **instantanée** (<1ms) car elle ne passe ni par le vector store ni par le LLM.
+Escalation is **instantaneous** (<1ms) because it goes through neither the vector
+store nor the LLM.
 
-## Gestion de la mémoire conversationnelle
+## Conversation Memory Management
 
-L'état de session est accédé via le port `ConversationStore` (`load(id)` / `save(id, conversation)`), ce qui rend l'`ConversationOrchestrator` **sans état JVM** : il ne conserve plus de map interne. L'historique des 6 derniers tours est injecté dans le prompt LLM pour assurer la cohérence multi-tour.
+Session state is accessed through the `ConversationStore` port (`load(id)` /
+`save(id, conversation)`), which makes `ConversationOrchestrator` **stateless at
+the JVM level**: it no longer keeps an internal map. The history of the last 6
+turns is injected into the LLM prompt to preserve multi-turn coherence.
 
-En local/dev/test, les adapters mémoire restent disponibles par défaut pour
-démarrer sans infrastructure. En runtime Docker, `CONVERSATION_STORE=redis` et
-`CONVERSATION_EVENT_STORE=jpa` activent respectivement `RedisConversationStore`
-pour les sessions actives et `JpaConversationEventStore` pour les événements
-durables. Le pattern explicite `load` → mutation → `save` reste compatible avec
-un store distribué, sans dépendre de l'identité de référence en mémoire.
+In local/dev/test, in-memory adapters remain available by default so the system
+can start without infrastructure. In Docker runtime, `CONVERSATION_STORE=redis`
+and `CONVERSATION_EVENT_STORE=jpa` respectively activate
+`RedisConversationStore` for active sessions and `JpaConversationEventStore` for
+durable events. The explicit `load` → mutation → `save` pattern remains
+compatible with a distributed store without depending on in-memory reference
+identity.
 
-## Budget latence
+## Latency Budget
 
-### Mode streaming (pipeline optimisé — production)
+### Streaming Mode (Optimized Pipeline — Production)
 
-| Étape | Temps | Composant | Impact perçu |
+| Step | Time | Component | Perceived impact |
 |-------|-------|-----------|-------------|
-| Gradium STT (REST batch) | ~200ms | Voice Agent | Bloquant |
-| Vector search (pgvector HNSW) | ~200ms | Java Backend | Bloquant |
-| LLM first token (Mistral API) | ~150ms | Java Backend → Mistral | Bloquant |
-| Sentence detection | ~100ms | Voice Agent (splitter) | Accumulation tokens |
-| TTS première phrase | ~200ms | Voice Agent → Gradium | |
-| **Première phrase audible** | **~700ms** | | |
-| LLM complète (total) | ~1200ms | Java Backend → Mistral | En parallèle avec TTS |
-| TTS toutes phrases | ~400ms | Voice Agent → Gradium | Séquentiel par phrase |
+| Gradium STT (REST batch) | ~200ms | Voice Agent | Blocking |
+| Vector search (pgvector HNSW) | ~200ms | Java Backend | Blocking |
+| LLM first token (Mistral API) | ~150ms | Java Backend → Mistral | Blocking |
+| Sentence detection | ~100ms | Voice Agent (splitter) | Token accumulation |
+| TTS first sentence | ~200ms | Voice Agent → Gradium | |
+| **First audible sentence** | **~700ms** | | |
+| Complete LLM response (total) | ~1200ms | Java Backend → Mistral | In parallel with TTS |
+| TTS all sentences | ~400ms | Voice Agent → Gradium | Sequential per sentence |
 
-### Mode synchrone (fallback / mode texte)
+### Synchronous Mode (Fallback / Text Mode)
 
-| Étape | Temps | Composant |
+| Step | Time | Component |
 |-------|-------|-----------|
 | Gradium STT | ~200ms | Voice Agent |
 | Vector search | ~200ms | Java Backend |
-| LLM complète (Mistral API) | ~1200ms | Java Backend |
-| Gradium TTS (texte complet) | ~300ms | Voice Agent |
+| Complete LLM response (Mistral API) | ~1200ms | Java Backend |
+| Gradium TTS (full text) | ~300ms | Voice Agent |
 | **Total** | **~1.9s** | |
 
 ## Configuration LLM
 
-Le provider LLM est configurable via `voice-support.llm.provider` :
+The LLM provider is configurable through `voice-support.llm.provider`:
 
-| Provider | Valeur | Streaming | Latence first token | Usage |
+| Provider | Value | Streaming | First-token latency | Usage |
 |----------|--------|-----------|--------------------|----|
-| **Mistral API** (défaut) | `mistral-api` | Oui (SSE) | ~150ms | Production |
-| Ollama local | `ollama` | Oui (SSE) | ~500ms | Développement offline |
+| **Mistral API** (default) | `mistral-api` | Yes (SSE) | ~150ms | Production |
+| Ollama local | `ollama` | Yes (SSE) | ~500ms | Offline development |
 
-Les deux adapters implémentent `LlmPort` (blocking) et `LlmStreamingPort`.
-Le domaine expose un `TokenStream`; les adapters peuvent utiliser Reactor ou
-l'API streaming du provider en interne, mais cette dépendance ne traverse pas le port.
+Both adapters implement `LlmPort` (blocking) and `LlmStreamingPort`. The domain
+exposes a `TokenStream`; adapters may use Reactor or the provider's streaming
+API internally, but that dependency does not cross the port.
 
-## Extensibilité
+## Extensibility
 
-### Remplacer le LLM
+### Replacing the LLM
 
-Pour ajouter un nouveau provider LLM (ex: OpenAI) :
+To add a new LLM provider (for example OpenAI):
 
-1. Créer `OpenAILlmAdapter implements LlmPort, LlmStreamingPort` dans `adapter/out/llm/`
-2. Ajouter un `@Bean` conditionnel dans `DomainServiceConfig` (ex: `@ConditionalOnProperty`)
-3. Ajouter la configuration dans `application.yml`
-4. Aucune modification du domaine requise
+1. Create `OpenAILlmAdapter implements LlmPort, LlmStreamingPort` in `adapter/out/llm/`
+2. Add a conditional `@Bean` in `DomainServiceConfig` (for example `@ConditionalOnProperty`)
+3. Add configuration in `application.yml`
+4. No domain change required
 
-### Remplacer Gradium (STT/TTS)
+### Replacing Gradium (STT/TTS)
 
-Modifier `voice-agent/agent/gradium_stt.py` et `gradium_tts.py` pour appeler un autre fournisseur. Le contrat interne (fonctions `transcribe_audio()` et `synthesize_speech()`) reste le même.
+Modify `voice-agent/agent/gradium_stt.py` and `gradium_tts.py` to call another
+provider. The internal contract (functions `transcribe_audio()` and
+`synthesize_speech()`) remains the same.
 
-### Ajouter un transport
+### Adding a Transport
 
-Le bridge server gère les clients navigateur (ws:8765, PCM 16kHz) et la téléphonie Twilio Media Streams (ws:8766, μ-law 8kHz) via deux serveurs WebSocket lancés ensemble dans `main()`. Les deux canaux partagent le même pipeline (turn-detector + STT streaming + RAG SSE + TTS) ; seuls le format audio (`pcm_16000` vs `ulaw_8000`) et le protocole d'enveloppe (binaire WAV vs frames média Twilio JSON) diffèrent. Pour ajouter un nouveau transport (ex: SIP natif, LiveKit), créer un handler WebSocket dédié réutilisant `create_stt_session(...)`, `TurnDetector`, et `synthesize_speech(...)` avec le bon `output_format`.
+The bridge server handles browser clients (ws:8765, PCM 16kHz) and Twilio Media
+Streams telephony (ws:8766, μ-law 8kHz) through two WebSocket servers launched
+together in `main()`. Both channels share the same pipeline (turn detector + STT
+streaming + RAG SSE + TTS); only the audio format (`pcm_16000` vs `ulaw_8000`)
+and envelope protocol (WAV binary vs Twilio JSON media frames) differ. To add a
+new transport (for example native SIP, LiveKit), create a dedicated WebSocket
+handler that reuses `create_stt_session(...)`, `TurnDetector`, and
+`synthesize_speech(...)` with the correct `output_format`.
 
-## Décisions d'architecture
+## Architecture Decisions
 
-Les décisions d'architecture canoniques sont les ADRs formels dans
-[`adrs/`](adrs/). Cette page ne maintient plus d'ADRs inline pour éviter les
-conflits de numérotation et les décisions contradictoires.
+The canonical architecture decisions are the formal ADRs in [`adrs/`](adrs/).
+This page no longer maintains inline ADRs to avoid numbering conflicts and
+contradictory decisions.
 
-Les anciens ADRs inline de cette page ont été migrés comme suit :
+The former inline ADRs from this page were migrated as follows:
 
-| Ancien inline | Statut dans le registre formel |
+| Former inline ADR | Status in the formal registry |
 |---|---|
-| ADR-001 Pipeline modulaire plutôt que Realtime API | Couvert par [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
-| ADR-002 Gradium pour STT/TTS via Pipecat | Couvert par [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
-| ADR-003 Architecture hybride Java + Python | Couvert par [ADR-0001](adrs/ADR-0001-java-backend-owns-conversation-domain.md), [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md), et [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
-| ADR-004 In-memory event store plutôt que JPA | Supersedé par [ADR-0008](adrs/ADR-0008-redis-active-sessions-postgres-durable-events.md) |
-| ADR-005 Streaming inter-étapes | Couvert par [ADR-0013](adrs/ADR-0013-tokenstream-and-backend-sse-streaming-contract.md) |
-| ADR-006 VAD navigateur legacy | Couvert comme chemin legacy par [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
-| ADR-007 Guardrails | Couvert par [ADR-0014](adrs/ADR-0014-domain-guardrails-before-and-after-rag.md) |
-| ADR-008 Multi-agent routing | Couvert par [ADR-0015](adrs/ADR-0015-keyword-routing-with-session-stickiness.md) |
-| ADR-009 Optimisation latence bridge custom | Couvert comme chemin legacy par [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
-| ADR-010 Cible V1 Pipecat | Couvert par [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
-| ADR-011 Ingestion KB multi-sources | Couvert par [ADR-0007](adrs/ADR-0007-source-document-knowledge-sync.md) |
+| ADR-001 Modular pipeline rather than Realtime API | Covered by [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
+| ADR-002 Gradium for STT/TTS via Pipecat | Covered by [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
+| ADR-003 Hybrid Java + Python architecture | Covered by [ADR-0001](adrs/ADR-0001-java-backend-owns-conversation-domain.md), [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md), and [ADR-0012](adrs/ADR-0012-modular-voice-pipeline-over-realtime-api.md) |
+| ADR-004 In-memory event store rather than JPA | Superseded by [ADR-0008](adrs/ADR-0008-redis-active-sessions-postgres-durable-events.md) |
+| ADR-005 Inter-step streaming | Covered by [ADR-0013](adrs/ADR-0013-tokenstream-and-backend-sse-streaming-contract.md) |
+| ADR-006 Legacy browser VAD | Covered as a legacy path by [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
+| ADR-007 Guardrails | Covered by [ADR-0014](adrs/ADR-0014-domain-guardrails-before-and-after-rag.md) |
+| ADR-008 Multi-agent routing | Covered by [ADR-0015](adrs/ADR-0015-keyword-routing-with-session-stickiness.md) |
+| ADR-009 Custom bridge latency optimization | Covered as a legacy path by [ADR-0016](adrs/ADR-0016-legacy-bridge-is-fallback-and-comparison-path.md) |
+| ADR-010 Pipecat V1 target | Covered by [ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md) |
+| ADR-011 Multi-source KB ingestion | Covered by [ADR-0007](adrs/ADR-0007-source-document-knowledge-sync.md) |

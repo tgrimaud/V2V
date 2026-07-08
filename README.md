@@ -1,43 +1,43 @@
 # Voice Support Bot (V2V)
 
-Agent support client **voice-to-voice** pour le domaine Telecom/FAI, alimenté par RAG (Retrieval-Augmented Generation) sur une base de connaissance, accessible via **navigateur web** et **téléphonie classique** (Twilio).
+**Voice-to-voice** customer support agent for the Telecom/ISP domain, powered by RAG (Retrieval-Augmented Generation) over a knowledge base, accessible through a **web browser** and **traditional telephony** (Twilio).
 
-Le bot écoute la question du client (voix), la transcrit, cherche la réponse dans sa base de connaissance, génère une réponse synthétique et la prononce au client — le tout en streaming avec la première phrase audible en ~700ms.
+The bot listens to the customer's voice question, transcribes it, searches for the answer in its knowledge base, generates a concise response, and speaks it back to the customer — all streamed, with the first audible sentence in ~700ms.
 
-## Fonctionnalités
+## Features
 
-- **Conversation vocale naturelle** — VAD serveur Pipecat/Silero détecte automatiquement début/fin de parole, sans clic
-- **Barge-in** — interrompre le bot en parlant coupe instantanément sa réponse
-- **Streaming temps réel** — réponse phrase par phrase (texte + audio) en ~700ms
-- **Chat texte** — fallback texte pour tester ou pour les contextes non-vocaux
-- **Téléphonie Twilio** — réponse vocale sur un numéro de téléphone classique
-- **RAG sur base de connaissance** — réponses factuelles avec citations sourcées
-- **Détection d'escalade** — transfert automatique vers un conseiller humain (résiliation, réclamation, RGPD)
-- **Guardrails** — détection hors-sujet (patterns) + score de confiance RAG (seuil configurable), badge visuel quand confiance faible
-- **Dashboard admin** — KPIs (latence, taux de résolution, escalades) + historique des conversations
-- **Architecture hybride** — Java pour le RAG/domain, Python pour l'orchestration vocale
+- **Natural voice conversation** — server-side Pipecat/Silero VAD automatically detects start/end of speech, with no click
+- **Barge-in** — interrupting the bot by speaking instantly cuts off its response
+- **Real-time streaming** — sentence-by-sentence response (text + audio) in ~700ms
+- **Text chat** — text fallback for testing or non-voice contexts
+- **Twilio telephony** — voice response on a traditional phone number
+- **Knowledge-base RAG** — factual answers with sourced citations
+- **Escalation detection** — automatic transfer to a human advisor (cancellation, complaint, GDPR)
+- **Guardrails** — off-topic detection (patterns) + RAG confidence score (configurable threshold), with a visual badge when confidence is low
+- **Admin dashboard** — KPIs (latency, resolution rate, escalations) + conversation history
+- **Hybrid architecture** — Java for RAG/domain, Python for voice orchestration
 
-## Stack technique
+## Technical Stack
 
-| Couche | Technologie | Rôle |
+| Layer | Technology | Role |
 |--------|------------|------|
-| Orchestration vocale | **[Pipecat](https://pipecat.ai)** 1.4 (Python) | Pipeline audio temps réel |
-| STT (Speech-to-Text) | **[Gradium](https://gradium.ai)** (API cloud, WebSocket) | Transcription ultra-low latency |
-| TTS (Text-to-Speech) | **[Gradium](https://gradium.ai)** (API cloud, WebSocket) | Synthèse vocale naturelle |
+| Voice orchestration | **[Pipecat](https://pipecat.ai)** 1.4 (Python) | Real-time audio pipeline |
+| STT (Speech-to-Text) | **[Gradium](https://gradium.ai)** (cloud API, WebSocket) | Ultra-low-latency transcription |
+| TTS (Text-to-Speech) | **[Gradium](https://gradium.ai)** (cloud API, WebSocket) | Natural voice synthesis |
 | Backend RAG | Java 21, Spring Boot 3.4, Spring AI 1.0 | Retrieval + LLM + domain logic |
-| LLM | **Mistral AI** (API, défaut) ou Ollama (local) | Génération de réponses |
-| Embeddings | nomic-embed-text (Ollama) | Vectorisation sémantique |
-| Vector Store | PostgreSQL 16 + pgvector (HNSW) | Recherche de similarité |
-| Téléphonie | Twilio Media Streams → Pipecat | Appels téléphoniques |
-| Frontend | React 19, TypeScript, Vite 6, TailwindCSS 4 | Interface web |
-| VAD | Silero via Pipecat | Détection vocale serveur pour WebRTC et téléphonie |
+| LLM | **Mistral AI** (API, default) or Ollama (local) | Answer generation |
+| Embeddings | nomic-embed-text (Ollama) | Semantic vectorization |
+| Vector Store | PostgreSQL 16 + pgvector (HNSW) | Similarity search |
+| Telephony | Twilio Media Streams -> Pipecat | Phone calls |
+| Frontend | React 19, TypeScript, Vite 6, TailwindCSS 4 | Web interface |
+| VAD | Silero via Pipecat | Server-side voice detection for WebRTC and telephony |
 
 ## Architecture
 
-### Diagramme de dépendances (Hexagonal)
+### Dependency Diagram (Hexagonal)
 
-> STT/TTS ne sont **pas** dans le backend Java : ils sont assurés par l'agent
-> vocal Python (Gradium). Le backend expose uniquement le RAG/domain via HTTP.
+> STT/TTS are **not** in the Java backend: they are handled by the Python voice
+> agent (Gradium). The backend exposes only RAG/domain capabilities over HTTP.
 
 ```mermaid
 classDiagram
@@ -249,7 +249,7 @@ classDiagram
     SchedulingConfig ..> KnowledgeSyncScheduler
 ```
 
-### Flux principal (séquence)
+### Main Flow (sequence)
 
 ```mermaid
 sequenceDiagram
@@ -276,12 +276,12 @@ sequenceDiagram
     VA-->>B: JSON {answer} + WAV binary
 ```
 
-### Vue simplifiée (ASCII)
+### Simplified View (ASCII)
 
 ```
-Browser/Téléphone
+Browser/Phone
      │
-     ▼ WebSocket (audio PCM 16kHz ou μ-law 8kHz)
+     ▼ WebSocket (PCM 16kHz or μ-law 8kHz audio)
 ┌─────────────────────────────────┐
 │     Voice Agent (Python)        │
 │  ┌─────────┐  ┌────┐  ┌──────┐ │
@@ -302,81 +302,81 @@ Browser/Téléphone
 
 | Document | Public | Contenu |
 |----------|--------|---------|
-| [`docs/architecture/architecture.md`](docs/architecture/architecture.md) | Dev / archi | Architecture complète, pipeline RAG, guardrails, multi-agent, ADRs |
-| [`docs/engineering/development-guide.md`](docs/engineering/development-guide.md) | Dev | Conventions, ajout de providers/agents, commandes utiles, troubleshooting |
-| [`docs/knowledge-base/knowledge-base-technical.md`](docs/knowledge-base/knowledge-base-technical.md) | Dev / archi | Fonctionnement et architecture de la base de connaissance (ingestion, synchro, vector store, extension par connecteurs) |
-| [`docs/knowledge-base/knowledge-base-guide.md`](docs/knowledge-base/knowledge-base-guide.md) | Contributeurs (non-dev) | Comment rédiger, ajouter et publier du contenu dans la base de connaissance |
-| [`docs/architecture/diagrams/`](docs/architecture/diagrams/) | Tous | Versions **draw.io** éditables des diagrammes d'architecture (overview, hexagonal, séquence vocale) |
-| [`docs/knowledge-base/diagrams/`](docs/knowledge-base/diagrams/) | Tous | Version **draw.io** éditable du diagramme de base de connaissance |
+| [`docs/architecture/architecture.md`](docs/architecture/architecture.md) | Dev / architecture | Full architecture, RAG pipeline, guardrails, multi-agent, ADRs |
+| [`docs/engineering/development-guide.md`](docs/engineering/development-guide.md) | Dev | Conventions, adding providers/agents, useful commands, troubleshooting |
+| [`docs/knowledge-base/knowledge-base-technical.md`](docs/knowledge-base/knowledge-base-technical.md) | Dev / architecture | Knowledge-base behavior and architecture (ingestion, sync, vector store, connector-based extension) |
+| [`docs/knowledge-base/knowledge-base-guide.md`](docs/knowledge-base/knowledge-base-guide.md) | Contributors (non-dev) | How to write, add, and publish knowledge-base content |
+| [`docs/architecture/diagrams/`](docs/architecture/diagrams/) | Everyone | Editable **draw.io** versions of architecture diagrams (overview, hexagonal, voice sequence) |
+| [`docs/knowledge-base/diagrams/`](docs/knowledge-base/diagrams/) | Everyone | Editable **draw.io** version of the knowledge-base diagram |
 
-## Démarrage rapide
+## Quick Start
 
-### Prérequis
+### Prerequisites
 
 - Java 21+
-- Python 3.11+ (pour l'agent vocal)
+- Python 3.11+ (for the voice agent)
 - Node.js 20+
 - Docker & Docker Compose
-- Ollama installé localement
-- **Clé API Gradium** (créer un compte sur https://gradium.ai)
+- Ollama installed locally
+- **Gradium API key** (create an account at https://gradium.ai)
 
-### 1. Démarrer l'infrastructure
+### 1. Start the Infrastructure
 
 ```bash
 docker compose up -d
 ```
 
-Lance PostgreSQL 16 + pgvector sur le port **5433**.
+Starts PostgreSQL 16 + pgvector on port **5433**.
 
-### 2. Installer les modèles Ollama
+### 2. Install Ollama Models
 
 ```bash
 ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
-### 3. Configurer les variables d'environnement
+### 3. Configure Environment Variables
 
 ```bash
 cp .env.example .env
-# Configurer GRADIUM_API_KEY
+# Configure GRADIUM_API_KEY
 
 cd voice-agent && cp .env.example .env
-# Configurer GRADIUM_API_KEY + GRADIUM_VOICE_ID
+# Configure GRADIUM_API_KEY + GRADIUM_VOICE_ID
 ```
 
-### 4. Lancer la stack locale (recommandé)
+### 4. Start the Local Stack (recommended)
 
 ```bash
 docker compose up --build
 ```
 
-La stack lance :
+The stack starts:
 - Postgres + pgvector (`localhost:5433`)
 - Redis (`localhost:6379`)
-- backend Java (`http://localhost:8081`)
+- Java backend (`http://localhost:8081`)
 - frontend React (`http://localhost:5173`)
 - voice-agent (`ws://localhost:8765`, `ws://localhost:8766`)
 - Pipecat WebRTC UI (`http://localhost:7860`)
 
-En Docker Compose, le backend utilise `CONVERSATION_STORE=redis` pour les
-sessions actives et `CONVERSATION_EVENT_STORE=jpa` pour les événements admin. Le
-service `pipecat-agent` lance le chemin voix cible WebRTC ; `voice-agent` garde
-le bridge WebSocket legacy en fallback. Le frontend React expose les deux modes :
-`Solution A · WebSocket` et `Solution B · WebRTC`.
+In Docker Compose, the backend uses `CONVERSATION_STORE=redis` for active
+sessions and `CONVERSATION_EVENT_STORE=jpa` for admin events. The
+`pipecat-agent` service starts the target WebRTC voice path; `voice-agent` keeps
+the legacy WebSocket bridge as a fallback. The React frontend exposes both modes:
+`Solution A · WebSocket` and `Solution B · WebRTC`.
 
-### 4bis. Lancer le backend Java manuellement
+### 4bis. Start the Java Backend Manually
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-Le backend démarre sur http://localhost:8081. En mode manuel, le stockage
-conversationnel reste en mémoire par défaut ; exporter `CONVERSATION_STORE=redis`
-et `CONVERSATION_EVENT_STORE=jpa` pour utiliser Redis/Postgres.
+The backend starts on http://localhost:8081. In manual mode, conversation storage
+stays in memory by default; export `CONVERSATION_STORE=redis` and
+`CONVERSATION_EVENT_STORE=jpa` to use Redis/Postgres.
 
-### 5. Lancer l'agent vocal cible V1 (Pipecat + Gradium, mode manuel)
+### 5. Start the V1 Target Voice Agent (Pipecat + Gradium, manual mode)
 
 ```bash
 cd voice-agent
@@ -385,16 +385,16 @@ pip install -e .
 python -m agent.bot -t webrtc
 ```
 
-Le bot Pipecat expose l'UI WebRTC prebuilt sur `http://localhost:7860`.
+The Pipecat bot exposes the prebuilt WebRTC UI at `http://localhost:7860`.
 
-Le bridge custom historique reste disponible pour le frontend React POC :
+The historical custom bridge remains available for the React frontend POC:
 
 ```bash
 python -u -m agent.bridge_server
 # ws://localhost:8765
 ```
 
-### 6. Lancer le frontend
+### 6. Start the Frontend
 
 ```bash
 cd frontend
@@ -404,18 +404,18 @@ cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js public/
 npm run dev
 ```
 
-L'application est accessible sur http://localhost:5173.
+The application is available at http://localhost:5173.
 
-### 7. Ingérer la base de connaissance
+### 7. Ingest the Knowledge Base
 
-Méthode recommandée — **synchronisation multi-sources** (lit `knowledge-base/*.md`, le `domain` venant du front-matter YAML de chaque fichier) :
+Recommended method — **multi-source synchronization** (reads `knowledge-base/*.md`, with `domain` coming from each file's YAML front-matter):
 
 ```bash
 curl -X POST http://localhost:8081/api/knowledge/sync
 # -> { "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }
 ```
 
-La synchro est idempotente (relancer = `skipped` si rien n'a changé) et tourne aussi via un scheduler cron (`voice-support.knowledge.sync-cron`). Upload ponctuel d'un fichier (toujours disponible) :
+Sync is idempotent (running again = `skipped` if nothing changed) and also runs through a cron scheduler (`voice-support.knowledge.sync-cron`). One-shot file upload (still available):
 
 ```bash
 curl -X POST http://localhost:8081/api/knowledge/ingest \
@@ -424,17 +424,17 @@ curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "domain=support"
 ```
 
-### 8. Tester en mode texte
+### 8. Test in Text Mode
 
 ```bash
 curl -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Ma box ne se connecte plus, que faire ?"}'
+  -d '{"question": "My router no longer connects, what should I do?"}'
 ```
 
 ## API Reference
 
-### Conversation (texte)
+### Conversation (text)
 
 ```
 POST /api/conversation/ask
@@ -449,7 +449,7 @@ Response: {
 }
 ```
 
-### Conversation (streaming SSE — utilisé par le mode vocal)
+### Conversation (SSE streaming — used by voice mode)
 
 ```
 GET /api/conversation/ask-stream?question=...&conversation_id=...
@@ -458,7 +458,7 @@ Accept: text/event-stream
 Events: start (agent), chunk (token), done (answer + citations), error
 ```
 
-### Conversation (seed — amorçage de l'historique)
+### Conversation (seed — history initialization)
 
 ```
 POST /api/conversation/seed
@@ -468,51 +468,54 @@ Body: { "message": "...", "conversation_id": "..." }
 Response: 204 No Content
 ```
 
-Enregistre un message **assistant** dans l'historique d'une conversation. Utilisé
-par le bot Pipecat au moment de la connexion : le message d'accueil est joué côté
-client par le TTS et n'atteint donc pas le backend ; sans cet amorçage, le LLM
-considère le premier message utilisateur comme le début de conversation et
-**re-salue**. Le seed corrige ce comportement.
+Stores an **assistant** message in a conversation's history. Used by the Pipecat
+bot at connection time: the greeting is played client-side by TTS and therefore
+does not reach the backend; without this initialization, the LLM treats the first
+user message as the beginning of the conversation and **greets again**. The seed
+fixes this behavior.
 
-### Ingestion de connaissance
+### Knowledge Ingestion
 
 ```
 POST /api/knowledge/ingest
 Content-Type: multipart/form-data
 
 Params:
-  file (MultipartFile) — fichier Markdown ou texte à ingérer
-  source (string, optional) — nom de la source
-  domain (string, optional) — tag de domaine (support|billing|commercial)
+  file (MultipartFile) — Markdown or text file to ingest
+  source (string, optional) — source name
+  domain (string, optional) — domain tag (support|billing|commercial)
 
 Response: { "status": "ingested", "source": "...", "domain": "...", "chunks_created": 17 }
 ```
 
-### Synchronisation multi-sources
+### Multi-Source Synchronization
 
 ```
-POST /api/knowledge/sync               — synchronise toutes les sources
-POST /api/knowledge/sync/{sourceType}  — synchronise une source (ex: markdown)
+POST /api/knowledge/sync               — synchronizes all sources
+POST /api/knowledge/sync/{sourceType}  — synchronizes one source (e.g. markdown)
 
 Response: { "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }
 ```
 
-Connecteurs branchés via le port `KnowledgeSourceConnector` (référence : `MarkdownFolderConnector` lisant `knowledge-base/*.md` avec front-matter YAML `domain:`). Idempotent via `content_hash` (table `kb_source_state`) ; pull planifié via cron.
+Connectors are plugged through the `KnowledgeSourceConnector` port (reference:
+`MarkdownFolderConnector` reading `knowledge-base/*.md` with YAML front-matter
+`domain:`). Idempotent via `content_hash` (`kb_source_state` table); scheduled
+pull via cron.
 
 ### Admin Dashboard
 
 ```
-GET /api/admin/stats          — KPIs (total conversations, latence, escalation rate)
-GET /api/admin/events?limit=N — dernières conversations
-GET /api/admin/top-questions  — top 10 questions les plus fréquentes
+GET /api/admin/stats          — KPIs (total conversations, latency, escalation rate)
+GET /api/admin/events?limit=N — latest conversations
+GET /api/admin/top-questions  — top 10 most frequent questions
 ```
 
 ### Voice agent
 
 ```
-http://localhost:7860 — UI WebRTC Pipecat cible V1
-ws://localhost:8765   — WebSocket legacy navigateur (bridge custom)
-ws://localhost:8766   — WebSocket legacy Twilio Media Streams (bridge custom)
+http://localhost:7860 — target V1 Pipecat WebRTC UI
+ws://localhost:8765   — legacy browser WebSocket (custom bridge)
+ws://localhost:8766   — legacy Twilio Media Streams WebSocket (custom bridge)
 ```
 
 ### Health
@@ -521,138 +524,138 @@ ws://localhost:8766   — WebSocket legacy Twilio Media Streams (bridge custom)
 GET /api/health → { "status": "up", "service": "voice-support-bot" }
 ```
 
-## Pipeline vocal
+## Voice Pipeline
 
 ```
 ┌──────────┐    ┌─────────┐    ┌─────────────────┐    ┌─────────┐    ┌──────────┐
 │  Audio   │───▶│ Gradium │───▶│  Java Backend   │───▶│ Gradium │───▶│  Audio   │
-│  (micro) │    │  STT    │    │ (RAG + Ollama)  │    │  TTS    │    │  (HP)    │
+│  (mic)   │    │  STT    │    │ (RAG + Ollama)  │    │  TTS    │    │(speaker) │
 └──────────┘    └─────────┘    └─────────────────┘    └─────────┘    └──────────┘
                     ~200ms           ~1500ms               ~300ms
                                                                 Total: ~2s
 ```
 
-## Téléphonie (Twilio)
+## Telephony (Twilio)
 
-1. Créer un compte Twilio et acheter un numéro FR
-2. Exposer le backend avec un tunnel : `ngrok http 8081`
-3. Configurer le webhook Twilio : `POST https://<ngrok-url>/api/twilio/voice`
-4. Appeler le numéro → le bot décroche, salue, et écoute
+1. Create a Twilio account and buy a French number
+2. Expose the backend through a tunnel: `ngrok http 8081`
+3. Configure the Twilio webhook: `POST https://<ngrok-url>/api/twilio/voice`
+4. Call the number -> the bot answers, greets, and listens
 
-Le flux audio Twilio est en **mulaw 8kHz**, supporté nativement par Gradium.
+The Twilio audio stream is **mulaw 8kHz**, natively supported by Gradium.
 
-## Détection d'escalade
+## Escalation Detection
 
-Le bot transfère automatiquement vers un humain quand le client :
-- Demande une résiliation
-- Fait une réclamation ou demande un remboursement
-- Mentionne un technicien / déplacement
-- Parle de données personnelles / RGPD
-- Signale un piratage de compte
-- Exprime de la frustration ("inacceptable", "scandaleux")
-- Demande explicitement un "vrai conseiller"
+The bot automatically transfers to a human when the customer:
+- Requests cancellation
+- Files a complaint or asks for a refund
+- Mentions a technician / on-site visit
+- Talks about personal data / GDPR
+- Reports account hacking
+- Expresses frustration ("unacceptable", "outrageous")
+- Explicitly asks for a "real advisor"
 
-## Structure du projet
+## Project Structure
 
 ```
 voice-support-bot/
 ├── backend/                                # Java backend (RAG + LLM + domain)
 │   └── src/main/java/com/voicesupport/
-│       ├── domain/                         # Logique métier pure (aucune dépendance Spring)
+│       ├── domain/                         # Pure business logic (no Spring dependency)
 │       │   ├── model/                      #   Conversation, Citation, SourceDocument, SyncReport, ContentHash
 │       │   ├── port/in/                    #   AskQuestionUseCase, IngestKnowledgeUseCase, SyncKnowledgeSourceUseCase
 │       │   ├── port/out/                   #   LlmPort, VectorSearchPort/StorePort, KnowledgeSourceConnector/StatePort
 │       │   └── service/                    #   ConversationService, KnowledgeSyncService, TextChunker, EscalationDetector
-│       └── infrastructure/                 # Implémentations techniques
-│           ├── adapter/in/rest/            #   Controllers REST (dont KnowledgeController: /ingest + /sync)
-│           ├── adapter/out/source/         #   MarkdownFolderConnector (connecteurs KB)
+│       └── infrastructure/                 # Technical implementations
+│           ├── adapter/in/rest/            #   REST controllers (including KnowledgeController: /ingest + /sync)
+│           ├── adapter/out/source/         #   MarkdownFolderConnector (KB connectors)
 │           ├── adapter/out/                #   Ollama, pgvector, persistence (ledger kb_source_state)
-│           ├── scheduler/                  #   KnowledgeSyncScheduler (pull planifié cron)
+│           ├── scheduler/                  #   KnowledgeSyncScheduler (scheduled cron pull)
 │           └── config/                     #   DomainServiceConfig, SchedulingConfig
-├── voice-agent/                            # Python Pipecat agent (orchestration vocale)
+├── voice-agent/                            # Python Pipecat agent (voice orchestration)
 │   ├── agent/
-│   │   ├── bot.py                         #   Pipeline Pipecat cible V1
-│   │   ├── streaming_rag_processor.py     #   Pipecat processor: texte STT → backend SSE → TTS
-│   │   ├── bridge_server.py               #   Bridge WebSocket legacy / fallback
-│   │   ├── ws_server.py                   #   Serveur WebSocket legacy web
-│   │   ├── twilio_server.py               #   Serveur Twilio legacy / comparaison
-│   │   ├── rag_processor.py               #   Processeur legacy du bridge custom
-│   │   └── backend_client.py              #   Client HTTP vers le backend Java
-│   ├── pyproject.toml                      #   Dépendances (pipecat-ai[gradium])
+│   │   ├── bot.py                         #   Target V1 Pipecat pipeline
+│   │   ├── streaming_rag_processor.py     #   Pipecat processor: STT text -> backend SSE -> TTS
+│   │   ├── bridge_server.py               #   Legacy / fallback WebSocket bridge
+│   │   ├── ws_server.py                   #   Legacy web WebSocket server
+│   │   ├── twilio_server.py               #   Legacy / comparison Twilio server
+│   │   ├── rag_processor.py               #   Legacy custom bridge processor
+│   │   └── backend_client.py              #   HTTP client to the Java backend
+│   ├── pyproject.toml                      #   Dependencies (pipecat-ai[gradium])
 │   └── Dockerfile
 ├── frontend/                               # React 19 + TailwindCSS
 │   ├── public/                            #   Assets VAD (silero_vad_v5.onnx, worklet)
 │   └── src/features/voice-chat/           #   VoiceChat, useVAD, useAudioQueue, useVoiceWebSocket
-├── knowledge-base/                         # Documents FAQ Telecom à ingérer
-├── docs/                                   # Architecture + guide développement
+├── knowledge-base/                         # Telecom FAQ documents to ingest
+├── docs/                                   # Architecture + development guide
 ├── docker-compose.yml                      # PostgreSQL + pgvector + voice-agent
 └── .env.example
 ```
 
 ## Configuration
 
-### Agent vocal (`voice-agent/.env`)
+### Voice Agent (`voice-agent/.env`)
 
-| Variable | Description | Défaut |
+| Variable | Description | Default |
 |----------|-------------|--------|
-| `GRADIUM_API_KEY` | Clé API Gradium (obligatoire) | — |
-| `GRADIUM_VOICE_ID` | ID de la voix Gradium (voir catalogue) | `b35yykvVppLXyw_l` (Elise, FR) |
-| `BACKEND_URL` | URL du backend Java | `http://localhost:8081` |
-| `VOICE_AGENT_PORT` | Port WebSocket navigateur | `8765` |
-| `TWILIO_WS_PORT` | Port WebSocket Twilio | `8766` |
+| `GRADIUM_API_KEY` | Gradium API key (required) | — |
+| `GRADIUM_VOICE_ID` | Gradium voice ID (see catalog) | `b35yykvVppLXyw_l` (Elise, FR) |
+| `BACKEND_URL` | Java backend URL | `http://localhost:8081` |
+| `VOICE_AGENT_PORT` | Browser WebSocket port | `8765` |
+| `TWILIO_WS_PORT` | Twilio WebSocket port | `8766` |
 
-### Backend Java (`backend/.env` ou variables d'environnement)
+### Java Backend (`backend/.env` or environment variables)
 
-| Variable | Description | Défaut |
+| Variable | Description | Default |
 |----------|-------------|--------|
-| `LLM_PROVIDER` | Provider LLM (`mistral-api` ou `ollama`) | `mistral-api` |
-| `MISTRAL_API_KEY` | Clé API Mistral (obligatoire si provider=mistral-api) | — |
-| `MISTRAL_MODEL` | Modèle Mistral | `mistral-small-latest` |
-| `OLLAMA_BASE_URL` | URL d'Ollama (si provider=ollama) | `http://localhost:11434` |
-| `OLLAMA_MODEL` | Modèle LLM Ollama | `llama3.1:8b` |
-| `OLLAMA_EMBEDDING_MODEL` | Modèle d'embeddings | `nomic-embed-text` |
-| `GUARDRAIL_CONFIDENCE_THRESHOLD` | Seuil de confiance RAG (0.0 à 1.0) | `0.65` |
-| `REDIS_HOST` | Hôte Redis pour les sessions actives | `localhost` |
+| `LLM_PROVIDER` | LLM provider (`mistral-api` or `ollama`) | `mistral-api` |
+| `MISTRAL_API_KEY` | Mistral API key (required if provider=mistral-api) | — |
+| `MISTRAL_MODEL` | Mistral model | `mistral-small-latest` |
+| `OLLAMA_BASE_URL` | Ollama URL (if provider=ollama) | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Ollama LLM model | `llama3.1:8b` |
+| `OLLAMA_EMBEDDING_MODEL` | Embedding model | `nomic-embed-text` |
+| `GUARDRAIL_CONFIDENCE_THRESHOLD` | RAG confidence threshold (0.0 to 1.0) | `0.65` |
+| `REDIS_HOST` | Redis host for active sessions | `localhost` |
 | `REDIS_PORT` | Port Redis | `6379` |
-| `CONVERSATION_STORE` | Stockage sessions actives (`memory` ou `redis`) | `memory` |
-| `CONVERSATION_EVENT_STORE` | Stockage événements/admin (`memory` ou `jpa`) | `memory` |
-| `CONVERSATION_TTL_SECONDS` | TTL des sessions Redis | `86400` |
+| `CONVERSATION_STORE` | Active session storage (`memory` or `redis`) | `memory` |
+| `CONVERSATION_EVENT_STORE` | Event/admin storage (`memory` or `jpa`) | `memory` |
+| `CONVERSATION_TTL_SECONDS` | Redis session TTL | `86400` |
 
 ## Tests
 
 ```bash
-# Backend — tests unitaires du domaine (fakes manuels, pas de Mockito)
+# Backend — domain unit tests (manual fakes, no Mockito)
 cd backend && mvn test
 
-# Frontend — tests unitaires (Vitest)
+# Frontend — unit tests (Vitest)
 cd frontend && npx vitest run
 
-# Frontend — vérification TypeScript
+# Frontend — TypeScript check
 cd frontend && npx tsc --noEmit
 
-# Voice agent — tests Python
+# Voice agent — Python tests
 cd voice-agent && python -m pytest tests/
 ```
 
 ## Roadmap
 
-> Suivi détaillé des items ouverts (priorité, domaine, pistes) : [`docs/operations/backlog.md`](docs/operations/backlog.md).
+> Detailed tracking of open items (priority, domain, leads): [`docs/operations/backlog.md`](docs/operations/backlog.md).
 
-- [x] Streaming inter-étapes (TTS phrase par phrase pendant la génération LLM)
-- [x] VAD serveur Pipecat/Silero — conversation naturelle sans clic stop
-- [x] Barge-in — interrompre le bot en parlant
-- [x] Mémoire conversationnelle partagée (Redis) + événements persistants (JPA)
-- [x] Multi-langues (FR + EN) avec sélection automatique de voix Gradium
-- [ ] Dashboard admin enrichi (graphiques latence, heatmap horaire)
-- [x] Fallback Mistral API quand Ollama est trop lent (configurable via `LLM_PROVIDER`)
-- [x] Socle KB multi-sources (format pivot `SourceDocument`, synchro idempotente, connecteur Markdown, pull planifié)
-- [ ] Connecteurs KB Confluence / PDF (Tika) / base de données
-- [ ] Ingestion PDF (extraction structurée)
-- [x] Guardrails : détection "hors sujet" avec score de confiance
-- [ ] Observabilité : traces OpenTelemetry sur le pipeline
-- [ ] Voice cloning Gradium pour voix de marque personnalisée
-- [ ] Multi-agent Pipecat (routage vers spécialistes : facturation, technique, commercial)
+- [x] Inter-step streaming (sentence-by-sentence TTS during LLM generation)
+- [x] Pipecat/Silero server-side VAD — natural conversation without a stop click
+- [x] Barge-in — interrupt the bot by speaking
+- [x] Shared conversational memory (Redis) + persistent events (JPA)
+- [x] Multilingual support (FR + EN) with automatic Gradium voice selection
+- [ ] Enhanced admin dashboard (latency charts, hourly heatmap)
+- [x] Mistral API fallback when Ollama is too slow (configurable via `LLM_PROVIDER`)
+- [x] Multi-source KB foundation (pivot `SourceDocument` format, idempotent sync, Markdown connector, scheduled pull)
+- [ ] KB connectors for Confluence / PDF (Tika) / database
+- [ ] PDF ingestion (structured extraction)
+- [x] Guardrails: "off-topic" detection with confidence score
+- [ ] Observability: OpenTelemetry traces over the pipeline
+- [ ] Gradium voice cloning for custom brand voice
+- [ ] Multi-agent Pipecat (routing to specialists: billing, technical support, sales)
 
-## Licence
+## License
 
-Projet privé — usage interne.
+Private project — internal use.

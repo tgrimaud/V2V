@@ -2,16 +2,16 @@
 
 ## Repo & git
 
-- `voice-support-bot` est un **repo git séparé** (branche par défaut `main`), imbriqué dans le workspace `BMad` (qui est un autre repo). Committer/pusher le travail du bot **dans ce repo**, pas dans `BMad`.
-- **Une branche par sprint/epic** (`feat/<nom>`). Ne pas committer directement sur `main`. Merge après validation.
-- **Committer après chaque tâche** ; ne pas laisser de code non commité.
+- `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
+- **One branch per sprint/epic** (`feat/<name>`). Do not commit directly on `main`. Merge after validation.
+- **Commit after each task**; do not leave code uncommitted.
 
 ## Before you edit
 
-1. Backend Java : suivre la skill `java-backend-developer` + `code-guidelines` (méthodes ≤ 20 lignes, classes ≤ 200 lignes, pas de Javadoc sur ports).
-2. Domaine pur (aucune annotation Spring) ; brancher les services via `@Bean` dans `DomainServiceConfig`.
-3. Tests : fakes manuels, GIVEN/WHEN/THEN, **pas de Mockito**.
-4. Voice agent : la cible V1 est `agent/bot.py` (Pipecat + Gradium, WebRTC/Twilio). Le bridge custom `agent/bridge_server.py` est legacy/fallback.
+1. Java backend: follow the `java-backend-developer` skill + `code-guidelines` (methods <= 20 lines, classes <= 200 lines, no Javadoc on ports).
+2. Pure domain (no Spring annotations); wire services through `@Bean` in `DomainServiceConfig`.
+3. Tests: manual fakes, GIVEN/WHEN/THEN, **no Mockito**.
+4. Voice agent: the V1 target is `agent/bot.py` (Pipecat + Gradium, WebRTC/Twilio). The custom bridge `agent/bridge_server.py` is legacy/fallback.
 5. Documentation files under `docs/` must be written in English.
 6. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
 7. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
@@ -20,37 +20,37 @@
 
 ## Common mistakes to avoid
 
-- Confondre **LLM** et **embedding** : ce sont 2 modèles distincts. Le chat est sur Mistral (API), l'embedding sur Ollama (`nomic-embed-text`, 768 dim). "Passer sur Mistral" ne change PAS l'embedding (auto-config embedding Mistral exclue).
-- Faire un `ALTER TABLE vector_store` pour ajouter des métadonnées : inutile, elles sont en **JSONB**. En revanche, **changer le modèle d'embedding** (donc la dimension) impose de recréer la table + re-synchroniser.
-- Oublier que les lignes seedées via l'ancien `curl /ingest` n'ont pas de `source_id` → `deleteBySource` ne les nettoie pas. Vider `vector_store` une fois avant la première synchro.
-- Ajouter une méthode à un port out (`VectorStorePort`, etc.) sans mettre à jour **tous** les implémenteurs, y compris les **fakes de test**.
-- Retourner un type vectoriel `mistral-embed` (1024) sans aligner `pgvector.dimensions` — mismatch silencieux à l'insertion/recherche.
-- Ajouter une dépendance pour parser le YAML du front-matter : SnakeYAML est déjà là (transitif Spring Boot).
-- Mettre des annotations Spring dans le domaine, ou injecter un connecteur en oubliant le `@Bean` (il ne sera pas dans `List<KnowledgeSourceConnector>`).
-- Croire que `mvn test` a besoin d'une DB/Ollama : il n'y a pas de `@SpringBootTest`, les tests sont des unités de domaine avec fakes.
-- Mettre les learnings du bot dans le `CLAUDE.md` racine de `BMad` : il concerne un autre projet (cursor-usage-dashboard). Les fichiers de connaissance du bot vivent dans `voice-support-bot/`.
-- Repartir de zero pour la V1 billing : conserver le socle voix/RAG/orchestrateur du POC, mais reconstruire le coeur metier autour du BSS et de la comparaison de factures.
-- Utiliser un MCP generique comme acces BSS principal en runtime client : preferer un port metier typé lecture seule (`BssBillingPort`) avec adapters BSS ; reserver MCP a l'exploration et aux outils internes.
-- Coupler le coeur produit a un SDK LLM/STT/TTS precis : exposer ces capacites via ports/adapters configurables pour benchmarker et changer facilement de fournisseur.
-- Presenter `bridge_server.py` comme la cible V1 voix : faux. La cible V1 demarre sur Gradium + Pipecat (`agent/bot.py`) ; le bridge custom reste un POC historique / fallback.
+- Confusing **LLM** and **embedding**: they are 2 distinct models. Chat uses Mistral (API), embedding uses Ollama (`nomic-embed-text`, 768 dim). "Switching to Mistral" does NOT change embeddings (Mistral embedding auto-config is excluded).
+- Running `ALTER TABLE vector_store` to add metadata: unnecessary, metadata is stored as **JSONB**. However, **changing the embedding model** (and therefore the dimension) requires recreating the table + re-syncing.
+- Forgetting that rows seeded through the old `curl /ingest` have no `source_id` -> `deleteBySource` does not clean them up. Empty `vector_store` once before the first sync.
+- Adding a method to an outbound port (`VectorStorePort`, etc.) without updating **all** implementers, including **test fakes**.
+- Returning a `mistral-embed` vector type (1024) without aligning `pgvector.dimensions` — silent mismatch on insert/search.
+- Adding a dependency to parse YAML front-matter: SnakeYAML is already present (Spring Boot transitive dependency).
+- Putting Spring annotations in the domain, or injecting a connector while forgetting the `@Bean` (it will not be in `List<KnowledgeSourceConnector>`).
+- Believing `mvn test` needs a DB/Ollama: there is no `@SpringBootTest`; tests are domain units with fakes.
+- Putting bot learnings in the root `BMad` `CLAUDE.md`: it belongs to another project (`cursor-usage-dashboard`). Bot knowledge files live in `voice-support-bot/`.
+- Starting Billing V1 from scratch: keep the POC voice/RAG/orchestrator foundation, but rebuild the business core around the BSS and invoice comparison.
+- Using a generic MCP as the main BSS access path in customer runtime: prefer a typed read-only business port (`BssBillingPort`) with BSS adapters; reserve MCP for exploration and internal tools.
+- Coupling the product core to a specific LLM/STT/TTS SDK: expose these capabilities through configurable ports/adapters so providers can be benchmarked and swapped easily.
+- Presenting `bridge_server.py` as the V1 voice target: false. The V1 target starts on Gradium + Pipecat (`agent/bot.py`); the custom bridge remains a historical POC / fallback.
 - Writing new `docs/` content in French: documentation must be in English, even when the working conversation is in French.
-- Fermer le produit a la facturation uniquement : V1 = explication de facture, mais l'architecture doit rester extensible a d'autres domaines support operateur.
-- Creer un repo separe pour le backlog produit quand l'utilisateur veut surtout le conserver avec le projet : par defaut, stocker les artefacts dans `product-backlog/` du repo `voice-support-bot` sauf demande explicite d'un depot Git externe.
-- Rediger EPICs/US produit sans le skill `product-business` : ce skill garde les stories au niveau besoin, valeur, regles metier et acceptance observable, sans details d'API ou implementation.
-- Prendre `billing-service` comme source Galaxion pour les factures : il n'est plus utilise. Pour la V1, cibler `billing-api` uniquement.
-- Chercher un endpoint Galaxion de lignes facture structurees sans preuve : aucun n'a ete identifie. Recuperer le PDF via `bill-run-documents` et passer par un `InvoicePdfExtractor` deterministe.
-- Faire lire le PDF facture directement au LLM pour calculer les montants : interdit. Extraire d'abord un JSON structure, verifier la reconciliation, puis seulement formuler l'explication.
-- Placer les labels Mermaid `retrieval` / `generation` sur des handoffs internes ambigus : les labels doivent vivre sur l'arête qui represente l'interaction reelle, typiquement adapter -> PgVector ou adapter -> LLM externe.
-- Creer/editer un Draw.io XML avec des connexions importantes non ancrees : utiliser des anchors explicites `exitX/exitY` et `entryX/entryY`, surtout avec swimlanes et edges labelises.
-- Generer une presentation en patchant `Presentation.odp` sans validation visuelle : le XML peut contenir le texte tout en restant vide a l'ouverture. Si LibreOffice/soffice n'est pas disponible, generer un `.pptx` avec formes texte standard.
-- Trop remplir les cadres du template de presentation : utiliser un layout large, une idee par slide et deux bullets courts maximum pour garder une presentation lisible.
-- Presenter la vision omnicanale comme industrialisee parce que le diagramme est propre : faux. Tant que contrats canal/backend, contrat d'escalade, SLOs, observabilite, rate limiting par canal et modes degrades ne sont pas definis/testes, c'est un MVP solide avec vision saine, pas une plateforme production.
-- Ajouter WhatsApp, Genesys ou un nouveau canal avant de formaliser le contrat commun (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) — cela duplique la logique et rend les canaux couples.
-- Prendre une decision d'architecture sans ADR : chaque decision structurante doit etre documentee sous `docs/architecture/adrs/` avec contexte, decision, consequences et alternatives.
+- Closing the product around billing only: V1 = invoice explanation, but the architecture must remain extensible to other operator support domains.
+- Creating a separate repository for the product backlog when the user mainly wants to keep it with the project: by default, store artifacts in `product-backlog/` in the `voice-support-bot` repo unless an external git repository is explicitly requested.
+- Writing product EPICs/user stories without the `product-business` skill: this skill keeps stories at the level of need, value, business rules, and observable acceptance, without API or implementation details.
+- Taking `billing-service` as the Galaxion source for invoices: it is no longer used. For V1, target only `billing-api`.
+- Looking for a structured Galaxion invoice-line endpoint without proof: none has been identified. Retrieve the PDF through `bill-run-documents` and use a deterministic `InvoicePdfExtractor`.
+- Letting the LLM read the invoice PDF directly to calculate amounts: forbidden. First extract structured JSON, verify reconciliation, then formulate the explanation.
+- Placing Mermaid `retrieval` / `generation` labels on ambiguous internal handoffs: labels must live on the edge representing the real interaction, typically adapter -> PgVector or adapter -> external LLM.
+- Creating/editing Draw.io XML with important unanchored connections: use explicit `exitX/exitY` and `entryX/entryY` anchors, especially with swimlanes and labeled edges.
+- Generating a presentation by patching `Presentation.odp` without visual validation: the XML can contain text while still opening blank. If LibreOffice/soffice is unavailable, generate a `.pptx` with standard text shapes.
+- Overfilling presentation template frames: use a large layout, one idea per slide, and two short bullets maximum to keep presentations readable.
+- Presenting the omnichannel vision as industrialized because the diagram is clean: false. Until channel/backend contracts, an escalation contract, SLOs, observability, per-channel rate limiting, and degraded modes are defined/tested, this is a solid MVP with a healthy vision, not a production platform.
+- Adding WhatsApp, Genesys, or a new channel before formalizing the shared contract (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) — that duplicates logic and couples channels.
+- Making an architecture decision without an ADR: every structural decision must be documented under `docs/architecture/adrs/` with context, decision, consequences, and alternatives.
 
-## Checklist après changement substantiel
+## Checklist After Substantive Changes
 
-- [ ] `mvn test` vert dans `backend/`.
-- [ ] Si contrat REST modifié : mettre à jour `docs/` (architecture.md, README, api).
-- [ ] Si nouveau bean/port : câblage dans `DomainServiceConfig`.
-- [ ] Mettre à jour `docs/` en même temps que le code (pas en lot séparé).
+- [ ] `mvn test` passes in `backend/`.
+- [ ] If a REST contract changed: update `docs/` (architecture.md, README, API).
+- [ ] If there is a new bean/port: wire it in `DomainServiceConfig`.
+- [ ] Update `docs/` together with code (not as a separate batch).

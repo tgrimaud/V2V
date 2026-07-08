@@ -1,156 +1,156 @@
-# Infrastructure V1 - Cible machines/VM
+# Infrastructure V1 - Machine/VM Target
 
-## Objectif
+## Objective
 
-Ce document decrit une cible d'infrastructure V1 pour faire tourner le Voice
-Support Bot chez un operateur telecom, par exemple Eir en Irlande.
+This document describes a V1 infrastructure target for running the Voice Support
+Bot at a telecom operator, for example Eir in Ireland.
 
-La cible vise un pilote operateur realiste : trafic limite mais services
-deployes proprement, haute disponibilite minimale, donnees client protegees et
-capacite d'evoluer vers une plateforme de production.
+The target is a realistic operator pilot: limited traffic, but properly deployed
+services, minimal high availability, protected customer data, and the ability to
+evolve toward a production platform.
 
-## Hypotheses V1
+## V1 Assumptions
 
-- Region cloud EU, idealement Irlande (`eu-west-1` ou equivalent).
-- IA STT/TTS/LLM consommee via providers manages au demarrage.
-- BSS accessible en lecture seule via lien prive, VPN ou endpoint dedie.
-- Frontend servi par CDN ou object storage, sans VM dediee.
-- Kubernetes est recommande pour la V1 operateur, mais le sizing ci-dessous
-  reste lisible en "equivalent VM".
-- La cible initiale couvre un pilote de quelques dizaines d'appels simultanes,
-  pas un deploiement national a pleine charge.
+- EU cloud region, ideally Ireland (`eu-west-1` or equivalent).
+- STT/TTS/LLM AI consumed through managed providers at launch.
+- BSS accessible in read-only mode through a private link, VPN, or dedicated endpoint.
+- Frontend served by CDN or object storage, with no dedicated VM.
+- Kubernetes is recommended for the operator V1, but the sizing below remains
+  readable as a "VM equivalent".
+- The initial target covers a pilot with a few dozen simultaneous calls, not a
+  full-load national deployment.
 
-## Environnement pilote minimal
+## Minimal Pilot Environment
 
-Cette option convient pour une demonstration operateur ou un pilote controle.
+This option is suitable for an operator demonstration or controlled pilot.
 
-| Role | Nombre | Taille indicative | Remarques |
+| Role | Count | Indicative size | Notes |
 |------|--------|-------------------|-----------|
-| Load balancer / ingress | 1 service manage | N/A | TLS, routage HTTPS/WSS, health checks |
-| Backend Java | 2 VM ou pods | 2-4 vCPU, 4-8 Go RAM | API conversation, RAG, orchestration metier |
-| Voice bridge Python | 2 VM ou pods | 2-4 vCPU, 4-8 Go RAM | WebSocket audio, STT/TTS, telephonie |
-| PostgreSQL + pgvector | 1 instance managee | 4 vCPU, 16 Go RAM, SSD | KB, embeddings, etat technique |
-| Redis | 1 instance managee | 2 vCPU, 4-8 Go RAM | Sessions, etat conversationnel partage, cache |
-| Observabilite | Managee ou 1 VM | 2-4 vCPU, 8 Go RAM | Logs, traces, dashboards |
-| Bastion / VPN admin | 1 petite VM | 1-2 vCPU, 1-4 Go RAM | Acces admin controle, optionnel si SSO/VPN manage |
+| Load balancer / ingress | 1 managed service | N/A | TLS, HTTPS/WSS routing, health checks |
+| Backend Java | 2 VMs or pods | 2-4 vCPU, 4-8 GB RAM | Conversation API, RAG, business orchestration |
+| Voice bridge Python | 2 VMs or pods | 2-4 vCPU, 4-8 GB RAM | WebSocket audio, STT/TTS, telephony |
+| PostgreSQL + pgvector | 1 managed instance | 4 vCPU, 16 GB RAM, SSD | KB, embeddings, technical state |
+| Redis | 1 managed instance | 2 vCPU, 4-8 GB RAM | Sessions, shared conversation state, cache |
+| Observability | Managed or 1 VM | 2-4 vCPU, 8 GB RAM | Logs, traces, dashboards |
+| Bastion / admin VPN | 1 small VM | 1-2 vCPU, 1-4 GB RAM | Controlled admin access, optional if managed SSO/VPN is available |
 
-Cette cible represente environ 6 a 8 VM equivalentes si tout est self-managed,
-ou 4 VM applicatives si base de donnees, Redis et observabilite sont manages.
+This target represents approximately 6 to 8 equivalent VMs if everything is
+self-managed, or 4 application VMs if the database, Redis, and observability are
+managed.
 
-## Cible V1 operateur recommandee
+## Recommended Operator V1 Target
 
-Cette option est la cible conseillee pour une V1 exploitable avec un operateur.
+This option is the recommended target for an operator-ready V1.
 
-| Pool / Service | Nombre | Taille indicative | Usage |
+| Pool / Service | Count | Indicative size | Usage |
 |----------------|--------|-------------------|-------|
-| Kubernetes worker pool general | 3 VM | 4-8 vCPU, 16-32 Go RAM | Backend Java, jobs KB, petits services |
-| Kubernetes worker pool voice | 2-3 VM | 4-8 vCPU, 16 Go RAM | Voice bridge, WebSocket audio, telephonie |
-| PostgreSQL + pgvector HA | 2 instances managees | 4-8 vCPU, 16-32 Go RAM, SSD | Donnees KB, vector store, etat persistant |
-| Redis HA | 2 instances managees | 2-4 vCPU, 8-16 Go RAM | Sessions, cache, etat partage faible latence |
-| Observabilite | Service manage ou 2 VM | 4-8 vCPU, 16-32 Go RAM | OpenTelemetry, logs, metriques, alerting |
-| Bastion / VPN admin | 1 petite VM | 1-2 vCPU, 1-4 Go RAM | Acces restreint au reseau prive |
+| General Kubernetes worker pool | 3 VMs | 4-8 vCPU, 16-32 GB RAM | Backend Java, KB jobs, small services |
+| Voice Kubernetes worker pool | 2-3 VMs | 4-8 vCPU, 16 GB RAM | Voice bridge, WebSocket audio, telephony |
+| PostgreSQL + pgvector HA | 2 managed instances | 4-8 vCPU, 16-32 GB RAM, SSD | KB data, vector store, persistent state |
+| Redis HA | 2 managed instances | 2-4 vCPU, 8-16 GB RAM | Sessions, cache, low-latency shared state |
+| Observability | Managed service or 2 VMs | 4-8 vCPU, 16-32 GB RAM | OpenTelemetry, logs, metrics, alerting |
+| Bastion / admin VPN | 1 small VM | 1-2 vCPU, 1-4 GB RAM | Restricted access to the private network |
 
-Cette cible represente environ 8 a 12 VM equivalentes selon le niveau de
-services manages retenu.
+This target represents approximately 8 to 12 equivalent VMs depending on the
+level of managed services selected.
 
-## Repartition des workloads
+## Workload Distribution
 
 ### Backend Java
 
 - Minimum 2 replicas.
-- CPU dimensionne pour le RAG, les appels BSS et le streaming SSE.
-- Stateless autant que possible.
-- Etat conversationnel partage dans Redis ou persiste en base selon le besoin.
+- CPU sized for RAG, BSS calls, and SSE streaming.
+- Stateless as much as possible.
+- Conversation state shared in Redis or persisted in the database as needed.
 
 ### Voice bridge Python
 
-- Pool separe du backend pour scaler selon les appels simultanes.
+- Separate pool from the backend to scale according to simultaneous calls.
 - Minimum 2 replicas.
-- Sensible a la latence reseau vers STT/TTS et backend.
-- Doit etre co-localise dans la meme region que le backend.
-- Prevoir session draining avant redemarrage pour ne pas couper les appels actifs.
+- Sensitive to network latency toward STT/TTS and the backend.
+- Must be co-located in the same region as the backend.
+- Plan session draining before restarts to avoid cutting off active calls.
 
 ### PostgreSQL + pgvector
 
-- Preferer un service manage HA.
-- Stocke les embeddings, l'etat de synchronisation KB et les donnees techniques.
-- Disque SSD obligatoire.
-- Sauvegardes automatiques et restauration testee.
+- Prefer a managed HA service.
+- Stores embeddings, KB synchronization state, and technical data.
+- SSD storage required.
+- Automated backups and tested restore.
 
 ### Redis
 
-- Preferer un service manage HA.
-- Utilise pour l'etat conversationnel partage, les sessions et les caches courts.
-- Necessaire des que plusieurs instances backend ou voice bridge tournent en
-  parallele.
+- Prefer a managed HA service.
+- Used for shared conversation state, sessions, and short-lived caches.
+- Required as soon as multiple backend or voice bridge instances run in parallel.
 
 ### Frontend
 
-- Pas de VM dediee recommandee.
-- Servir via object storage + CDN ou service static hosting.
-- WAF, TLS, CSP et cache controle au niveau edge.
+- No dedicated VM recommended.
+- Serve through object storage + CDN or a static hosting service.
+- WAF, TLS, CSP, and cache control at the edge.
 
-## Option IA self-hosted
+## Self-Hosted AI Option
 
-La V1 peut demarrer avec IA managee. Si l'operateur impose une contrainte forte
-de souverainete ou de non-sortie des donnees, ajouter un pool GPU.
+The V1 can start with managed AI. If the operator imposes a strong sovereignty
+or data residency constraint, add a GPU pool.
 
-| Role IA | Nombre | Taille indicative | Remarques |
+| AI role | Count | Indicative size | Notes |
 |---------|--------|-------------------|-----------|
-| LLM inference | 1-2 GPU VM | NVIDIA L4/A10 minimum selon modele | vLLM ou runtime equivalent |
-| Embeddings | 1 VM CPU ou GPU legere | 4-8 vCPU, 16 Go RAM | Peut etre separe du LLM |
-| STT/TTS self-hosted | 1-2 GPU VM | L4/A10 minimum | A dimensionner apres benchmark audio |
+| LLM inference | 1-2 GPU VMs | NVIDIA L4/A10 minimum depending on model | vLLM or equivalent runtime |
+| Embeddings | 1 CPU VM or lightweight GPU VM | 4-8 vCPU, 16 GB RAM | Can be separated from the LLM |
+| Self-hosted STT/TTS | 1-2 GPU VMs | L4/A10 minimum | Size after audio benchmarking |
 
-Cette option doit etre traitee comme une evolution d'architecture, pas comme un
-pre-requis du pilote, sauf contrainte contractuelle.
+This option should be treated as an architecture evolution, not as a pilot
+prerequisite, unless required by contract.
 
-## Zones reseau recommandees
+## Recommended Network Zones
 
-- Subnet public : load balancer, ingress public, eventuel bastion.
-- Subnet applicatif prive : backend Java, voice bridge, jobs.
-- Subnet donnees prive : Postgres, Redis, stockage interne.
-- Sorties internet controlees : STT/TTS/LLM manages, mises a jour, observabilite.
-- Lien prive BSS : VPN, peering, private endpoint ou interconnexion dediee.
+- Public subnet: load balancer, public ingress, optional bastion.
+- Private application subnet: backend Java, voice bridge, jobs.
+- Private data subnet: Postgres, Redis, internal storage.
+- Controlled internet egress: managed STT/TTS/LLM, updates, observability.
+- Private BSS link: VPN, peering, private endpoint, or dedicated interconnect.
 
-## Sizing par charge vocale
+## Sizing by Voice Load
 
-Les valeurs ci-dessous sont des points de depart a valider par test de charge.
+The values below are starting points to validate through load testing.
 
-| Appels simultanes | Backend Java | Voice bridge | Donnees |
+| Simultaneous calls | Backend Java | Voice bridge | Data |
 |-------------------|--------------|--------------|---------|
-| 5-10 | 2 replicas, 2 vCPU chacun | 2 replicas, 2 vCPU chacun | Postgres 4 vCPU, Redis 2 vCPU |
-| 20-50 | 3-4 replicas, 2-4 vCPU chacun | 3-5 replicas, 4 vCPU chacun | Postgres 4-8 vCPU, Redis 2-4 vCPU |
-| 50-100 | 5+ replicas, 4 vCPU chacun | 6+ replicas, 4-8 vCPU chacun | Postgres 8+ vCPU, Redis HA 4 vCPU |
+| 5-10 | 2 replicas, 2 vCPU each | 2 replicas, 2 vCPU each | Postgres 4 vCPU, Redis 2 vCPU |
+| 20-50 | 3-4 replicas, 2-4 vCPU each | 3-5 replicas, 4 vCPU each | Postgres 4-8 vCPU, Redis 2-4 vCPU |
+| 50-100 | 5+ replicas, 4 vCPU each | 6+ replicas, 4-8 vCPU each | Postgres 8+ vCPU, Redis HA 4 vCPU |
 
-Le voice bridge doit etre scale sur les appels actifs et la latence audio. Le
-backend doit etre scale sur le nombre de conversations, la latence BSS et le
-temps de generation LLM.
+The voice bridge must be scaled based on active calls and audio latency. The
+backend must be scaled based on conversation count, BSS latency, and LLM
+generation time.
 
-## Observabilite minimale
+## Minimal Observability
 
-Chaque conversation doit permettre de mesurer :
+Each conversation must make it possible to measure:
 
-- temps jusqu'a premiere transcription STT ;
-- temps de recuperation BSS ;
-- temps de recherche vectorielle ;
-- temps jusqu'au premier token LLM ;
-- temps jusqu'au premier audio TTS ;
-- nombre et raison des escalades ;
-- erreurs provider STT/TTS/LLM ;
-- erreurs BSS ou donnees insuffisantes.
+- time to first STT transcription;
+- BSS retrieval time;
+- vector search time;
+- time to first LLM token;
+- time to first TTS audio;
+- escalation count and reasons;
+- STT/TTS/LLM provider errors;
+- BSS errors or insufficient data.
 
-## Recommandation de demarrage
+## Startup Recommendation
 
-Pour un pilote operateur, demarrer avec :
+For an operator pilot, start with:
 
-- 3 VM Kubernetes generales ;
-- 2 VM Kubernetes dediees voice bridge ;
-- PostgreSQL + pgvector manage HA ;
-- Redis manage HA ;
-- frontend sur CDN ;
-- observabilite managee ;
-- IA managee, avec chemin d'evolution documente vers un pool GPU.
+- 3 general Kubernetes VMs;
+- 2 dedicated voice bridge Kubernetes VMs;
+- managed HA PostgreSQL + pgvector;
+- managed HA Redis;
+- frontend on CDN;
+- managed observability;
+- managed AI, with a documented evolution path toward a GPU pool.
 
-Cette cible evite de surdimensionner le pilote tout en preparant les points
-critiques d'une production operateur : scalabilite, haute disponibilite,
-separation des roles, securite reseau et observabilite.
+This target avoids oversizing the pilot while preparing the critical points of
+operator production: scalability, high availability, separation of roles,
+network security, and observability.

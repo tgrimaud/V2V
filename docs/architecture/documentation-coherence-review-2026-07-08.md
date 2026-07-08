@@ -152,8 +152,8 @@ edits.
       remains historical archive only.
 - [ ] Move historical `billing-service` analysis to an archive section or file if
       it keeps causing confusion.
-- [ ] Resolve the open question "Les lignes facture viennent-elles bien de
-      billing ?" so it does not reopen the accepted PDF-first path.
+- [ ] Resolve the open question "Do invoice lines actually come from billing?"
+      so it does not reopen the accepted PDF-first path.
 - [ ] Make PDF extraction part of the product V1 scope, not only integration docs.
 - [ ] Add `parseable`, `partial`, and `unusable` extraction statuses to product
       acceptance criteria or link to `invoice-extraction-json.md`.
@@ -198,18 +198,21 @@ edits.
 
 ### Documentation Language And Style
 
-- [ ] Decide whether `docs/` must be entirely English.
-- [ ] If English remains mandatory, translate the French documentation in a
+- [x] Decide whether `docs/` must be entirely English.
+- [x] If English remains mandatory, translate the French documentation in a
       controlled pass.
-- [ ] If French is acceptable for product/business docs, update
+- [x] If French is acceptable for product/business docs, update
       `CLAUDE.md`, `AGENTS.md`, and `technical-writer` accordingly.
-- [ ] Standardize accent usage in French files if they remain French.
-- [ ] Avoid mixing English and French headings inside the same document unless
+      Not applicable: English-only remains the accepted rule.
+- [x] Standardize accent usage in French files if they remain French.
+      Not applicable: French prose was translated. Remaining French terms are
+      technical examples, filenames, or domain keywords.
+- [x] Avoid mixing English and French headings inside the same document unless
       quoting source material.
 
 ### Indexes And Cross-Links
 
-- [ ] Add this review document to `docs/README.md`.
+- [x] Add this review document to `docs/README.md`.
 - [ ] Add cross-links from product docs to ADRs and Galaxion docs.
 - [ ] Add cross-links from ADRs to the product docs they affect.
 - [ ] Add cross-links from `architecture.md` to ADR-0002, ADR-0008, ADR-0009,
@@ -566,6 +569,12 @@ bridge bug history makes this important: the wrong field can silently split
 conversation history.
 
 ### 6. Documentation Language And Style Findings
+
+Status after cleanup: English-only remains the documentation rule. The French
+and mixed-language documentation was translated in a controlled pass across
+product, architecture, engineering, operations, integration, README, `CLAUDE.md`,
+and `AGENTS.md`. Remaining French strings are limited to technical examples,
+filenames, or domain keywords intentionally kept as data.
 
 #### 6.1 Current rule says English-only docs
 

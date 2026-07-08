@@ -1,31 +1,31 @@
 # Repository context for Claude (and similar assistants)
 
-**Voice Support Bot** — agent vocal V2V (voice-to-voice) RAG pour le support Telecom/FAI.
+**Voice Support Bot** — V2V (voice-to-voice) RAG voice agent for Telecom/ISP support.
 
-> Ce repo (`voice-support-bot`) est un **repo git séparé** (branche par défaut `main`), imbriqué dans le workspace `BMad`. Les commits du bot vont ici, pas dans le repo `BMad`.
+> This repository (`voice-support-bot`) is a **separate git repository** (default branch `main`) nested in the `BMad` workspace. Bot commits belong here, not in the `BMad` repository.
 
 ## Application layout
 
 | Part | Path | Stack |
 |------|------|-------|
 | Backend | `backend/` | Java 21, Spring Boot 3.4.3, Spring AI 1.0.0, Maven, hexagonal |
-| Voice agent | `voice-agent/` | Python, Pipecat WebRTC/Twilio + Gradium STT/TTS (bridge WebSocket custom en legacy/fallback) |
+| Voice agent | `voice-agent/` | Python, Pipecat WebRTC/Twilio + Gradium STT/TTS (custom WebSocket bridge as legacy/fallback) |
 | Frontend | `frontend/` | React 19, TypeScript, Vite, TailwindCSS 4 |
 
 ## Product scope V1
 
-- V1 cible les **utilisateurs finaux** et se concentre sur l'explication des ecarts de facture operateur.
-- Le bot doit rester un **assistant vocal de support operateur extensible** : billing en V1, puis technique, commercial, reclamation, retention ou selfcare plus tard.
-- Le parcours **Voice2Voice est obligatoire** : activation par telephone ou chat vocal web, avec ecrit seulement comme canal complementaire.
-- La source de verite billing est le **BSS en lecture seule**. Le LLM formule une explication traçable apres calcul deterministe des ecarts ; il ne doit pas deviner les montants.
-- Le coeur produit doit rester agnostique des fournisseurs **LLM / STT / TTS** via ports/adapters configurables pour tester facilement plusieurs solutions.
-- La cible V1 voix demarre avec **Gradium + Pipecat** (`voice-agent/agent/bot.py`) : WebRTC pour le web et Twilio Media Streams pour la telephonie. `bridge_server.py` reste un POC historique / fallback, pas le chemin cible.
-- Le backlog produit V1 vit dans `product-backlog/` (EPICs, user stories, decisions, open questions) pour rester versionne avec le repo applicatif avant migration Jira.
-- Revue adversariale omnicanale (2026-07-08) : score global **2.8/5** — bon socle MVP, mais pas encore plateforme industrialisee sans contrats canal/backend, contrat d'escalade, SLOs mesurables, observabilite par etape/canal et modes degrades testes.
-- Utiliser le skill local `.cursor/skills/product-business/` pour produire ou relire PRD, EPICs, US, business rules et acceptance criteria au niveau produit.
-- Utiliser le skill local `.cursor/skills/adversarial-architecture-review/` pour challenger les choix d'architecture, NFR/SLA, modularite, remplaçabilite des providers externes et readiness Genesys/WhatsApp/omnicanal.
-- Utiliser le skill local `.cursor/skills/software-architect/` pour toute decision structurante et creer/mettre a jour l'ADR correspondant dans `docs/architecture/adrs/`.
-- Le schema cible editable est `docs/architecture/diagrams/target-v1-solution.drawio`.
+- V1 targets **end users** and focuses on explaining operator invoice discrepancies.
+- The bot must remain an **extensible operator support voice assistant**: billing in V1, then technical support, sales, complaints, retention, or self-care later.
+- The **Voice2Voice journey is mandatory**: activation by phone or web voice chat, with text only as a complementary channel.
+- The billing source of truth is the **read-only BSS**. The LLM formulates a traceable explanation after deterministic discrepancy calculations; it must not guess amounts.
+- The product core must remain agnostic to **LLM / STT / TTS** providers through configurable ports/adapters so several solutions can be benchmarked easily.
+- The V1 voice target starts with **Gradium + Pipecat** (`voice-agent/agent/bot.py`): WebRTC for web and Twilio Media Streams for telephony. `bridge_server.py` remains a historical POC / fallback, not the target path.
+- The V1 product backlog lives in `product-backlog/` (EPICs, user stories, decisions, open questions) so it stays versioned with the application repository before a Jira migration.
+- Omnichannel adversarial review (2026-07-08): overall score **2.8/5** — a solid MVP foundation, but not yet an industrialized platform without channel/backend contracts, an escalation contract, measurable SLOs, per-step/channel observability, and tested degraded modes.
+- Use the local `.cursor/skills/product-business/` skill to produce or review PRDs, EPICs, user stories, business rules, and product-level acceptance criteria.
+- Use the local `.cursor/skills/adversarial-architecture-review/` skill to challenge architecture choices, NFR/SLA, modularity, external-provider replaceability, and Genesys/WhatsApp/omnichannel readiness.
+- Use the local `.cursor/skills/software-architect/` skill for every structural decision and create/update the corresponding ADR in `docs/architecture/adrs/`.
+- The editable target diagram is `docs/architecture/diagrams/target-v1-solution.drawio`.
 - Documentation under `docs/` must be written in English.
 - Use `.cursor/skills/technical-writer/SKILL.md` before creating, editing,
   translating or reviewing technical documentation.
@@ -34,32 +34,32 @@
 - Use `.cursor/skills/presentation-maker/SKILL.md` before creating or refining
   high-level technical/strategy presentations from `~/Downloads/Presentation.odp`.
 
-## Deux modèles d'IA distincts (NE PAS confondre)
+## Two distinct AI models (DO NOT confuse)
 
-- **LLM / chat** = **Mistral AI** (API cloud, `mistral-small-latest`) — rédige la réponse. Provider configurable via `voice-support.llm.provider` (`mistral-api` défaut, `ollama` alt). Construit manuellement dans `DomainServiceConfig` (les auto-configs chat sont exclues dans `VoiceSupportApplication`).
-- **Embedding** = **Ollama** local (`nomic-embed-text`, **768 dim**) — vectorise chunks + requêtes. `MistralAiEmbeddingAutoConfiguration` est **exclu** → l'embedding est toujours Ollama. Décision actée : on **reste sur Ollama** pour les embeddings (local/gratuit).
+- **LLM / chat** = **Mistral AI** (cloud API, `mistral-small-latest`) — writes the response. Provider configurable via `voice-support.llm.provider` (`mistral-api` default, `ollama` alternative). Built manually in `DomainServiceConfig` (chat auto-configurations are excluded in `VoiceSupportApplication`).
+- **Embedding** = local **Ollama** (`nomic-embed-text`, **768 dim**) — vectorizes chunks and queries. `MistralAiEmbeddingAutoConfiguration` is **excluded** -> embeddings are always Ollama. Recorded decision: **stay on Ollama** for embeddings (local/free).
 
 ## Architecture (backend)
 
-- Hexagonal : domaine pur (aucune annotation Spring), services exposés en `@Bean` dans `infrastructure/config/DomainServiceConfig`. Ports `domain/port/in` (use cases) et `domain/port/out` (dépendances).
-- Tests : JUnit 5, **fakes manuels (pas de Mockito)**. Pas de `@SpringBootTest` aujourd'hui → `mvn test` ne nécessite ni DB ni Ollama.
-- Stockage : **une seule base Postgres** (image `pgvector/pgvector`, port 5433). `vector_store` (Spring AI, métadonnées **JSONB**) + `kb_source_state` (ledger JPA, `ddl-auto: update`).
-- Acces BSS : privilegier un port metier typé (`BssBillingPort`) avec adapters REST/SOAP/SQL/snapshot selon le SI. Ne pas mettre un MCP generique dans le chemin critique client ; le MCP peut servir a l'exploration ou aux outils internes.
+- Hexagonal: pure domain (no Spring annotations), services exposed as `@Bean`s in `infrastructure/config/DomainServiceConfig`. Ports are `domain/port/in` (use cases) and `domain/port/out` (dependencies).
+- Tests: JUnit 5, **manual fakes (no Mockito)**. No `@SpringBootTest` today -> `mvn test` requires neither DB nor Ollama.
+- Storage: **one Postgres database** (`pgvector/pgvector` image, port 5433). `vector_store` (Spring AI, **JSONB** metadata) + `kb_source_state` (JPA ledger, `ddl-auto: update`).
+- BSS access: prefer a typed business port (`BssBillingPort`) with REST/SOAP/SQL/snapshot adapters depending on the information system. Do not put a generic MCP in the customer runtime critical path; MCP can be used for exploration or internal tools.
 
 ### KB multi-sources (socle Lot 0)
 
-- Format **pivot** `SourceDocument` (sourceType, sourceId, title, url, content, domain, language, updatedAt, contentHash).
-- Port `KnowledgeSourceConnector` (1 par type de source) ; référence : `MarkdownFolderConnector` (lit `knowledge-base/*.md`, `domain` via **front-matter YAML**, SnakeYAML transitif via Spring Boot).
-- `KnowledgeSyncService` : synchro **idempotente** (skip si `content_hash` identique, upsert sinon, deletion-diff via ledger). `TextChunker` partagé avec l'ingestion ponctuelle.
-- `KnowledgeSyncScheduler` (cron `voice-support.knowledge.sync-cron`, défaut horaire, `-` pour désactiver) + endpoints `POST /api/knowledge/sync[/{sourceType}]`. L'upload ponctuel `POST /api/knowledge/ingest` reste dispo.
+- **Pivot** format `SourceDocument` (sourceType, sourceId, title, url, content, domain, language, updatedAt, contentHash).
+- `KnowledgeSourceConnector` port (one per source type); reference implementation: `MarkdownFolderConnector` (reads `knowledge-base/*.md`, `domain` via **YAML front-matter**, SnakeYAML is transitive via Spring Boot).
+- `KnowledgeSyncService`: **idempotent** sync (skip if `content_hash` is identical, upsert otherwise, deletion-diff via ledger). `TextChunker` is shared with one-shot ingestion.
+- `KnowledgeSyncScheduler` (cron `voice-support.knowledge.sync-cron`, hourly default, `-` to disable) + endpoints `POST /api/knowledge/sync[/{sourceType}]`. One-shot upload `POST /api/knowledge/ingest` remains available.
 
 ## API gotchas
 
-- Endpoints KB : `POST /api/knowledge/ingest` (upload ponctuel) et `POST /api/knowledge/sync` / `/sync/{sourceType}` (synchro connecteurs).
-- Conversation streaming : `GET /api/conversation/ask-stream` (SSE) ; sync : `POST /api/conversation/ask`.
-- Le `domain` (support|billing|commercial) tague chaque chunk ; la recherche filtre `domain == X OR general`. Les front-matter markdown doivent matcher les domaines historiques (telecom→support, billing→billing, commercial→commercial) pour un comportement identique.
-- Galaxion Billing V1 : utiliser `billing-api`, pas `billing-service` (plus utilise). La recuperation de facture passe par `GET /bill-run-documents/search` puis `GET /bill-run-documents/{document_id}/download`.
-- Aucun endpoint Galaxion identifie ne fournit les lignes facture structurees pour la V1 ; le detail facture doit venir du PDF via un `InvoicePdfExtractor` deterministe avant comparaison.
+- KB endpoints: `POST /api/knowledge/ingest` (one-shot upload) and `POST /api/knowledge/sync` / `/sync/{sourceType}` (connector sync).
+- Conversation streaming: `GET /api/conversation/ask-stream` (SSE); sync: `POST /api/conversation/ask`.
+- The `domain` (support|billing|commercial) tags each chunk; search filters `domain == X OR general`. Markdown front-matter must match the historical domains (telecom -> support, billing -> billing, commercial -> commercial) to preserve behavior.
+- Galaxion Billing V1: use `billing-api`, not `billing-service` (no longer used). Invoice retrieval goes through `GET /bill-run-documents/search`, then `GET /bill-run-documents/{document_id}/download`.
+- No identified Galaxion endpoint provides structured invoice lines for V1; invoice detail must come from the PDF through a deterministic `InvoicePdfExtractor` before comparison.
 
 ## Testing commands
 
@@ -73,18 +73,18 @@ cd voice-agent && python -m pytest tests/
 
 | Issue | Resolution |
 |-------|------------|
-| Croire que "passer sur Mistral" suffit pour tout — l'embedding restait sur Ollama | Chat et embedding sont **2 modèles séparés**. Le chat est déjà Mistral ; seul l'embedding est Ollama (`nomic-embed-text`). |
-| Vouloir `ALTER` la table `vector_store` pour enrichir les métadonnées | Inutile : Spring AI stocke les métadonnées en **JSONB**. Seule la **dimension** du vecteur est figée à la création (768). |
-| Passer l'embedding à `mistral-embed` sans rien d'autre | `mistral-embed` = **1024 dim** ≠ 768 → il faut changer `spring.ai.vectorstore.pgvector.dimensions` ET **recréer** `vector_store` (DROP) + re-synchroniser. |
-| Doublons après migration vers la synchro | Les lignes seedées via l'ancien `curl /ingest` n'ont pas de `source_id` → `deleteBySource` ne les voit pas. Faire `DELETE FROM vector_store;` une fois, puis `POST /api/knowledge/sync`. |
-| `vectorStore.delete(...)` par source | Utiliser `VectorStore.delete(Filter.Expression)` ; construire via `FilterExpressionBuilder.and(eq("source_type",..), eq("source_id",..)).build()`. |
-| Ajouter une méthode à `VectorStorePort` casse les fakes de test | Mettre à jour tous les implémenteurs : `PgVectorStoreAdapter` ET les fakes manuels (ex. `FakeVectorStorePort` dans `KnowledgeIngestionServiceTest`). |
-| Parser un front-matter YAML en Java | `org.yaml.snakeyaml.Yaml` est dispo **transitivement** via Spring Boot — pas de dépendance à ajouter. |
-| Ajouter une nouvelle source KB | Implémenter un `KnowledgeSourceConnector` + le déclarer en `@Bean` ; `KnowledgeSyncService` injecte `List<KnowledgeSourceConnector>` → la nouvelle source est prise automatiquement (scheduler inclus). |
-| draw.io via MCP | `open_drawio_xml` ouvre l'éditeur (navigateur) ; sauvegarder aussi le `.drawio` (XML) dans `docs/` pour le versionner. |
+| Believing that "switching to Mistral" is enough for everything — embedding was still on Ollama | Chat and embedding are **2 separate models**. Chat is already Mistral; only embedding is Ollama (`nomic-embed-text`). |
+| Wanting to `ALTER` the `vector_store` table to enrich metadata | Unnecessary: Spring AI stores metadata as **JSONB**. Only the vector **dimension** is fixed at creation time (768). |
+| Switching embeddings to `mistral-embed` and nothing else | `mistral-embed` = **1024 dim** != 768 -> `spring.ai.vectorstore.pgvector.dimensions` must change AND `vector_store` must be **recreated** (DROP) + everything must be re-synced. |
+| Duplicates after migrating to sync | Rows seeded through the old `curl /ingest` have no `source_id` -> `deleteBySource` cannot see them. Run `DELETE FROM vector_store;` once, then `POST /api/knowledge/sync`. |
+| Deleting by source with `vectorStore.delete(...)` | Use `VectorStore.delete(Filter.Expression)`; build with `FilterExpressionBuilder.and(eq("source_type",..), eq("source_id",..)).build()`. |
+| Adding a method to `VectorStorePort` breaks test fakes | Update all implementers: `PgVectorStoreAdapter` AND manual fakes (e.g. `FakeVectorStorePort` in `KnowledgeIngestionServiceTest`). |
+| Parsing YAML front-matter in Java | `org.yaml.snakeyaml.Yaml` is available **transitively** via Spring Boot — no dependency to add. |
+| Adding a new KB source | Implement a `KnowledgeSourceConnector` + declare it as a `@Bean`; `KnowledgeSyncService` injects `List<KnowledgeSourceConnector>` -> the new source is picked up automatically (scheduler included). |
+| draw.io via MCP | `open_drawio_xml` opens the editor (browser); also save the `.drawio` (XML) under `docs/` so it is versioned. |
 | Mermaid labels on wrong arrows | Put labels such as `retrieval` and `generation` on the edge where the real interaction happens, typically adapter -> PgVector or adapter -> external LLM, not on ambiguous internal backend handoffs. |
 | Draw.io detached arrows | Use explicit `exitX/exitY` and `entryX/entryY` anchors for important labeled edges, especially inside or across swimlanes. |
-| Supposer que `billing-service` est la source facture Galaxion | `billing-service` n'est plus utilise ; cibler `billing-api` uniquement pour Billing. |
-| Utiliser `invoices/composed` comme detail facture client | Ce n'est pas le chemin retenu V1. Recuperer le PDF via `bill-run-documents` puis extraire un JSON facture structure avant le moteur de comparaison. |
+| Assuming `billing-service` is the Galaxion invoice source | `billing-service` is no longer used; target only `billing-api` for Billing. |
+| Using `invoices/composed` as customer invoice detail | This is not the selected V1 path. Retrieve the PDF via `bill-run-documents`, then extract structured invoice JSON before the comparison engine. |
 | ODP template slides stayed visually blank despite text in `content.xml` | Do not keep patching ODP placeholders blindly. Generate a PPTX with standard PowerPoint text shapes (e.g. via `python-pptx` in a temp venv) when no LibreOffice renderer is available. |
 | Presentation content overflowed template frames | For `Presentation.odp`, prefer simple large layouts, one idea per slide, and two short bullets max; do not fill every placeholder just because it exists. |

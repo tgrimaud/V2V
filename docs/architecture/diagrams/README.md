@@ -8,9 +8,9 @@ extension in VS Code / Cursor.
 | File | Type | Source diagram |
 |------|------|----------------|
 | [`application-components.drawio`](./application-components.drawio) | Application components | High-level application and external-service view |
-| [`architecture-overview.drawio`](./architecture-overview.drawio) | Component / deployment | `docs/architecture/architecture.md` § Diagramme d'architecture |
-| [`hexagonal-architecture.drawio`](./hexagonal-architecture.drawio) | Class / ports & adapters | `README.md` § Diagramme de dépendances (Hexagonal) |
-| [`voice-streaming-sequence.drawio`](./voice-streaming-sequence.drawio) | Sequence | `docs/architecture/architecture.md` § Mode vocal (SSE streaming) |
+| [`architecture-overview.drawio`](./architecture-overview.drawio) | Component / deployment | `docs/architecture/architecture.md` § Architecture Diagram |
+| [`hexagonal-architecture.drawio`](./hexagonal-architecture.drawio) | Class / ports & adapters | `README.md` § Dependency Diagram (Hexagonal) |
+| [`voice-streaming-sequence.drawio`](./voice-streaming-sequence.drawio) | Sequence | `docs/architecture/architecture.md` § Voice Mode (SSE streaming) |
 
 Knowledge base diagrams live in `docs/knowledge-base/diagrams/`.
 

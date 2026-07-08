@@ -1,369 +1,369 @@
-# Cahier des charges fonctionnel — Voice Support Bot
+# Functional Specification — Voice Support Bot
 
-## 1. Contexte et objectifs
+## 1. Context and Objectives
 
-Voice Support Bot est un assistant conversationnel voice-to-voice destiné au support client d'un opérateur Telecom/FAI. Il permet à un client de poser une question oralement ou par écrit, d'obtenir une réponse guidée par une base de connaissance interne, et d'être orienté vers un conseiller humain lorsque la demande dépasse le périmètre automatisable.
+Voice Support Bot is a voice-to-voice conversational assistant for the customer support of a Telecom/ISP operator. It allows a customer to ask a question orally or in writing, receive an answer guided by an internal knowledge base, and be routed to a human advisor when the request exceeds the automatable scope.
 
-L'objectif principal est de réduire la charge du support de premier niveau tout en maintenant une expérience client naturelle, rapide et fiable. Le système doit répondre aux questions fréquentes, guider les utilisateurs dans les démarches simples et qualifier les demandes qui nécessitent une intervention humaine.
+The main objective is to reduce the load on first-level support while maintaining a natural, fast, and reliable customer experience. The system must answer frequent questions, guide users through simple procedures, and qualify requests that require human intervention.
 
-La stratégie projet consiste à démarrer avec la stack actuelle, maîtrisée et rapide à faire évoluer, tout en gardant une architecture compatible avec une industrialisation via une plateforme de centre de contact comme Genesys Cloud CX. Cette option doit pouvoir être activée si un client demande une solution omnicanale complète, une gestion avancée des conseillers ou une intégration centre de contact déjà en place.
+The project strategy is to start with the current stack, which is mastered and quick to evolve, while keeping an architecture compatible with industrialization through a contact-center platform such as Genesys Cloud CX. This option must be activatable if a customer requests a complete omnichannel solution, advanced advisor management, or integration with an existing contact center.
 
-## 2. Périmètre du projet
+## 2. Project Scope
 
-Le projet couvre les parcours suivants :
+The project covers the following journeys:
 
-- conversation vocale web en temps réel via Pipecat/WebRTC ;
-- conversation texte en fallback ou en mode test ;
-- appel téléphonique via Twilio Media Streams ;
-- canaux conversationnels omnicanaux à terme, notamment WhatsApp ;
-- réponses fondées sur une base de connaissance Telecom/FAI ;
-- routage vers des agents spécialisés : support technique, facturation, commercial ;
-- détection d'escalade vers un conseiller humain ;
-- capacité d'intégration future avec une plateforme de centre de contact comme Genesys Cloud CX ;
-- consultation d'indicateurs et d'historique via un dashboard admin ;
-- gestion et synchronisation de la base de connaissance.
+- real-time web voice conversation via Pipecat/WebRTC;
+- text conversation as fallback or test mode;
+- phone call via Twilio Media Streams;
+- omnichannel conversational channels over time, especially WhatsApp;
+- answers based on a Telecom/ISP knowledge base;
+- routing to specialized agents: technical support, billing, sales;
+- detection of escalation to a human advisor;
+- future integration capability with a contact-center platform such as Genesys Cloud CX;
+- consultation of indicators and history through an admin dashboard;
+- management and synchronization of the knowledge base.
 
-Sont exclus du périmètre fonctionnel initial :
+The following are excluded from the initial functional scope:
 
-- traitement complet d'actes de gestion complexes dans les systèmes BSS réels ;
-- paiement, remboursement ou modification contractuelle automatique ;
-- self-hosting complet des modèles STT/TTS/LLM ;
-- supervision avancée de production avec alerting complet ;
-- connecteurs documentaires avancés hors base Markdown, sauf extension future ;
-- remplacement complet de la stack actuelle par une solution centre de contact dès le MVP.
+- full handling of complex management actions in real BSS systems;
+- payment, refund, or automatic contractual modification;
+- complete self-hosting of STT/TTS/LLM models;
+- advanced production supervision with full alerting;
+- advanced document connectors beyond the Markdown base, except as a future extension;
+- complete replacement of the current stack by a contact-center solution from the MVP onward.
 
-## 3. Parties prenantes
+## 3. Stakeholders
 
-Les principales parties prenantes sont :
+The main stakeholders are:
 
-- client final : utilisateur cherchant une réponse ou une assistance rapide ;
-- conseiller support : reprend les demandes escaladées ou non résolues ;
-- responsable support : suit les indicateurs de qualité et d'escalade ;
-- contributeur métier : maintient la base de connaissance ;
-- administrateur technique : configure les services, les clés API et les environnements.
+- end customer: user looking for an answer or quick assistance;
+- support advisor: takes over escalated or unresolved requests;
+- support manager: tracks quality and escalation indicators;
+- business contributor: maintains the knowledge base;
+- technical administrator: configures services, API keys, and environments.
 
-## 4. Utilisateurs et besoins
+## 4. Users and Needs
 
-### Client final
+### End Customer
 
-Le client souhaite expliquer naturellement son problème, sans devoir naviguer dans un menu complexe. Il attend une réponse claire, rapide et adaptée à son contexte : panne de box, problème Wi-Fi, facture anormale, offre commerciale, demande de résiliation ou besoin d'un conseiller.
+The customer wants to explain their problem naturally, without having to navigate a complex menu. They expect a clear, fast answer adapted to their context: box outage, Wi-Fi problem, abnormal invoice, commercial offer, cancellation request, or need for an advisor.
 
-### Conseiller support
+### Support Advisor
 
-Le conseiller doit recevoir des demandes déjà qualifiées lorsque le bot ne peut pas résoudre le problème. L'historique de conversation doit aider à comprendre rapidement le motif, les réponses déjà données et le niveau de frustration éventuel.
+The advisor must receive already qualified requests when the bot cannot solve the problem. The conversation history must help them quickly understand the reason, the answers already given, and the possible level of frustration.
 
-### Responsable support
+### Support Manager
 
-Le responsable support doit suivre le volume de conversations, les temps de réponse, les sujets fréquents, les escalades et les limites de la base de connaissance.
+The support manager must track conversation volume, response times, frequent topics, escalations, and the limits of the knowledge base.
 
-### Contributeur métier
+### Business Contributor
 
-Le contributeur métier doit pouvoir enrichir ou corriger les réponses du bot via des documents de connaissance structurés, sans modifier le code applicatif.
+The business contributor must be able to enrich or correct the bot's answers through structured knowledge documents, without modifying application code.
 
-## 5. Parcours fonctionnels
+## 5. Functional Journeys
 
-### 5.1 Conversation vocale web
+### 5.1 Web Voice Conversation
 
-1. Le client ouvre l'interface web vocale.
-2. Le bot joue un message d'accueil.
-3. Le client parle naturellement.
-4. Le système détecte le début et la fin de parole.
-5. La parole est transcrite en texte.
-6. La question est envoyée au backend conversationnel.
-7. Le backend identifie l'agent spécialisé, recherche les passages pertinents et génère une réponse.
-8. La réponse est streamée phrase par phrase.
-9. Le bot prononce la réponse.
-10. Le client peut interrompre le bot en parlant.
+1. The customer opens the web voice interface.
+2. The bot plays a welcome message.
+3. The customer speaks naturally.
+4. The system detects the start and end of speech.
+5. Speech is transcribed to text.
+6. The question is sent to the conversational backend.
+7. The backend identifies the specialized agent, searches for relevant passages, and generates an answer.
+8. The answer is streamed sentence by sentence.
+9. The bot speaks the answer.
+10. The customer can interrupt the bot by speaking.
 
-### 5.2 Conversation texte
+### 5.2 Text Conversation
 
-1. Le client saisit une question dans l'interface.
-2. Le backend traite la demande comme une conversation classique.
-3. La réponse textuelle est affichée avec, lorsque disponible, les citations de la base de connaissance.
-4. Le client peut poursuivre la conversation dans le même contexte.
+1. The customer enters a question in the interface.
+2. The backend handles the request as a standard conversation.
+3. The text answer is displayed with, when available, citations from the knowledge base.
+4. The customer can continue the conversation in the same context.
 
-### 5.3 Appel téléphonique
+### 5.3 Phone Call
 
-1. Le client appelle un numéro configuré via Twilio.
-2. Le bot décroche et salue le client.
-3. L'audio de l'appel est transmis au pipeline vocal.
-4. Le système transcrit, traite et synthétise la réponse.
-5. Le client entend la réponse dans l'appel.
-6. En cas d'escalade, le système doit pouvoir préparer le transfert ou signaler la nécessité d'un conseiller.
+1. The customer calls a number configured through Twilio.
+2. The bot answers and greets the customer.
+3. The call audio is transmitted to the voice pipeline.
+4. The system transcribes, processes, and synthesizes the answer.
+5. The customer hears the answer in the call.
+6. In case of escalation, the system must be able to prepare the transfer or signal the need for an advisor.
 
-### 5.4 Escalade vers un humain
+### 5.4 Escalation to a Human
 
-Le bot doit déclencher une escalade lorsqu'il détecte :
+The bot must trigger an escalation when it detects:
 
-- demande explicite de parler à un conseiller ;
-- résiliation ;
-- réclamation, remboursement ou litige ;
-- problème lié aux données personnelles ou au RGPD ;
-- piratage ou suspicion de compromission ;
-- demande de technicien ou d'intervention terrain ;
-- forte frustration ou insatisfaction.
+- explicit request to speak to an advisor;
+- cancellation;
+- complaint, refund, or dispute;
+- issue related to personal data or GDPR;
+- hacking or suspected compromise;
+- request for a technician or field intervention;
+- strong frustration or dissatisfaction.
 
-Le bot doit répondre avec un message clair indiquant que la demande nécessite un conseiller humain.
+The bot must answer with a clear message indicating that the request requires a human advisor.
 
-À court terme, l'escalade peut être simulée ou traitée par les mécanismes internes du projet. En phase d'industrialisation, cette escalade doit pouvoir être transmise à une plateforme de centre de contact comme Genesys Cloud CX, avec le contexte utile : canal, conversation, motif, agent spécialisé, résumé et niveau d'urgence.
+In the short term, escalation can be simulated or handled by the project's internal mechanisms. During industrialization, this escalation must be transmissible to a contact-center platform such as Genesys Cloud CX, with useful context: channel, conversation, reason, specialized agent, summary, and urgency level.
 
-### 5.5 Canal WhatsApp et messageries
+### 5.5 WhatsApp and Messaging Channels
 
-1. Le client contacte l'assistant via WhatsApp ou un canal de messagerie équivalent.
-2. Le message texte est transmis au même backend conversationnel que les parcours web et téléphonie.
-3. Le système répond dans le fil de discussion avec une réponse courte, claire et adaptée au format messagerie.
-4. Les citations, liens ou étapes de résolution peuvent être résumés ou transformés en actions simples.
-5. En cas d'escalade, le bot indique qu'un conseiller humain doit reprendre la conversation.
+1. The customer contacts the assistant via WhatsApp or an equivalent messaging channel.
+2. The text message is transmitted to the same conversational backend as the web and telephony journeys.
+3. The system answers in the discussion thread with a short, clear answer adapted to the messaging format.
+4. Citations, links, or resolution steps can be summarized or transformed into simple actions.
+5. In case of escalation, the bot indicates that a human advisor must take over the conversation.
 
-Ce canal est prévu comme extension omnicanale : il doit réutiliser la même logique métier, la même base de connaissance et les mêmes règles d'escalade que les autres canaux.
+This channel is planned as an omnichannel extension: it must reuse the same business logic, the same knowledge base, and the same escalation rules as the other channels.
 
-### 5.6 Gestion de la base de connaissance
+### 5.6 Knowledge Base Management
 
-1. Un contributeur ajoute ou modifie un document de connaissance.
-2. Le document est associé à un domaine : support, billing, commercial ou general.
-3. Une synchronisation ingère les contenus nouveaux ou modifiés.
-4. Les anciennes versions sont remplacées de manière idempotente.
-5. Les futures réponses du bot s'appuient sur la version à jour.
+1. A contributor adds or modifies a knowledge document.
+2. The document is associated with a domain: support, billing, commercial, or general.
+3. A synchronization ingests new or modified content.
+4. Old versions are replaced idempotently.
+5. Future bot answers rely on the up-to-date version.
 
-## 6. Exigences fonctionnelles
+## 6. Functional Requirements
 
-### F1. Compréhension et traitement conversationnel
+### F1. Conversational Understanding and Processing
 
-- Le système doit accepter des questions en français, à l'oral ou à l'écrit.
-- Le système doit conserver le contexte d'une conversation multi-tour.
-- Le système doit reformuler ou comprendre les questions de suivi lorsque le contexte est suffisant.
-- Le système doit éviter de répéter le message d'accueil après le premier tour de conversation.
+- The system must accept questions in French, orally or in writing.
+- The system must preserve the context of a multi-turn conversation.
+- The system must reformulate or understand follow-up questions when the context is sufficient.
+- The system must avoid repeating the welcome message after the first conversation turn.
 
-### F2. Réponse basée sur connaissance
+### F2. Knowledge-Based Answer
 
-- Le système doit rechercher les passages pertinents dans la base de connaissance.
-- Le système doit répondre à partir des informations disponibles dans cette base.
-- Le système doit indiquer une absence de certitude lorsqu'aucun passage fiable n'est trouvé.
-- Le système doit pouvoir fournir des citations ou références aux passages utilisés.
+- The system must search for relevant passages in the knowledge base.
+- The system must answer from the information available in this base.
+- The system must indicate lack of certainty when no reliable passage is found.
+- The system must be able to provide citations or references to the passages used.
 
-### F3. Routage multi-agent
+### F3. Multi-Agent Routing
 
-- Le système doit orienter chaque question vers un profil spécialisé.
-- Les profils initiaux sont :
-  - Support Technique ;
-  - Facturation ;
-  - Commercial.
-- Le système doit conserver une cohérence d'agent dans une même session lorsque la conversation reste sur le même sujet.
-- L'interface doit pouvoir afficher le nom de l'agent qui répond.
+- The system must route each question to a specialized profile.
+- The initial profiles are:
+  - Technical Support;
+  - Billing;
+  - Sales.
+- The system must maintain agent consistency within the same session when the conversation remains on the same topic.
+- The interface must be able to display the name of the responding agent.
 
-### F4. Interaction vocale
+### F4. Voice Interaction
 
-- Le système doit détecter automatiquement les prises de parole.
-- Le client ne doit pas avoir à cliquer pour signaler la fin de sa phrase dans le parcours cible.
-- Le système doit supporter le barge-in : si le client parle pendant la réponse, la lecture doit s'interrompre.
-- Le système doit synthétiser la réponse en voix naturelle.
+- The system must automatically detect speech turns.
+- The customer must not have to click to signal the end of their sentence in the target journey.
+- The system must support barge-in: if the customer speaks during the answer, playback must stop.
+- The system must synthesize the answer in a natural voice.
 
-### F5. Streaming et réactivité
+### F5. Streaming and Responsiveness
 
-- Le système doit commencer à produire la réponse avant la fin complète de la génération lorsque le mode streaming est disponible.
-- Les réponses vocales doivent être émises phrase par phrase pour limiter l'attente.
-- Le système doit exposer les états utiles à l'interface : écoute, réflexion, réponse en cours, erreur.
+- The system must start producing the answer before complete generation ends when streaming mode is available.
+- Voice answers must be emitted sentence by sentence to limit waiting time.
+- The system must expose useful states to the interface: listening, thinking, answering, error.
 
-### F6. Téléphonie
+### F6. Telephony
 
-- Le système doit pouvoir recevoir un flux audio téléphonique via Twilio.
-- Le système doit gérer le format audio téléphonique attendu.
-- Le parcours téléphonique doit réutiliser la même logique métier que le parcours web.
+- The system must be able to receive a telephone audio stream through Twilio.
+- The system must handle the expected telephone audio format.
+- The telephone journey must reuse the same business logic as the web journey.
 
-### F6bis. Messageries conversationnelles
+### F6bis. Conversational Messaging
 
-- Le système doit pouvoir être étendu à un canal WhatsApp ou messagerie équivalent.
-- Le canal messagerie doit réutiliser le backend conversationnel existant.
-- Les réponses doivent être adaptées au format texte court et asynchrone.
-- Le système doit conserver l'identifiant de conversation propre au canal pour maintenir le contexte.
-- Les règles de guardrails, routage multi-agent et escalade doivent être identiques aux autres canaux.
+- The system must be extensible to a WhatsApp channel or equivalent messaging channel.
+- The messaging channel must reuse the existing conversational backend.
+- Answers must be adapted to the short and asynchronous text format.
+- The system must retain the channel-specific conversation identifier to maintain context.
+- Guardrail, multi-agent routing, and escalation rules must be identical to the other channels.
 
 ### F7. Guardrails
 
-- Le système doit refuser ou rediriger les demandes hors sujet.
-- Le système doit détecter les réponses à faible confiance.
-- Le système ne doit pas inventer une réponse lorsque la base de connaissance est insuffisante.
-- Le système doit proposer une escalade lorsque l'automatisation n'est pas appropriée.
+- The system must reject or redirect off-topic requests.
+- The system must detect low-confidence answers.
+- The system must not invent an answer when the knowledge base is insufficient.
+- The system must propose escalation when automation is not appropriate.
 
-### F8. Administration et pilotage
+### F8. Administration and Monitoring
 
-- Le système doit exposer des indicateurs de conversation.
-- Le système doit permettre de consulter les derniers événements.
-- Le système doit identifier les questions les plus fréquentes.
-- Le système doit permettre d'analyser les cas d'escalade et les limites de la base de connaissance.
+- The system must expose conversation indicators.
+- The system must allow consultation of recent events.
+- The system must identify the most frequent questions.
+- The system must allow analysis of escalation cases and knowledge base limits.
 
-### F9. Persistance conversationnelle
+### F9. Conversational Persistence
 
-- Les sessions actives doivent pouvoir être partagées entre instances via Redis.
-- Les événements de conversation doivent pouvoir être persistés pour analyse et administration.
-- La durée de conservation des sessions actives doit être configurable.
+- Active sessions must be shareable between instances via Redis.
+- Conversation events must be persistable for analysis and administration.
+- The retention period for active sessions must be configurable.
 
-### F10. Préparation centre de contact
+### F10. Contact-Center Preparation
 
-- Le système doit permettre de démarrer sans dépendance obligatoire à une solution centre de contact externe.
-- Le système doit garder la logique métier, le RAG, les guardrails et le routage multi-agent dans le backend existant.
-- Le système doit prévoir une intégration future avec Genesys Cloud CX ou une solution équivalente.
-- L'intégration centre de contact doit porter principalement sur les canaux, les files d'attente, le transfert vers conseiller, l'agent desktop et la supervision.
-- Lors d'une escalade, le système doit pouvoir transmettre un contexte exploitable par un conseiller humain.
-- Le choix d'utiliser Genesys Cloud CX ne doit pas obliger à réécrire le moteur conversationnel.
+- The system must allow startup without a mandatory dependency on an external contact-center solution.
+- The system must keep business logic, RAG, guardrails, and multi-agent routing in the existing backend.
+- The system must provide for future integration with Genesys Cloud CX or an equivalent solution.
+- Contact-center integration must primarily cover channels, queues, transfer to advisor, agent desktop, and supervision.
+- During escalation, the system must be able to transmit context usable by a human advisor.
+- The choice to use Genesys Cloud CX must not require rewriting the conversational engine.
 
-## 7. Exigences non fonctionnelles
+## 7. Non-Functional Requirements
 
 ### Performance
 
-- Le parcours vocal cible doit viser une première réponse audible inférieure à une seconde dans un environnement préchauffé.
-- Les réponses texte doivent être streamées lorsque possible.
-- Les composants critiques doivent limiter les appels inutiles aux services externes.
+- The target voice journey must aim for a first audible answer under one second in a pre-warmed environment.
+- Text answers must be streamed when possible.
+- Critical components must limit unnecessary calls to external services.
 
-### Disponibilité
+### Availability
 
-- Le système doit pouvoir démarrer localement via Docker Compose.
-- Le backend doit rester stateless autant que possible, avec état partagé via Redis.
-- Les services externes doivent être configurables par variables d'environnement.
+- The system must be able to start locally via Docker Compose.
+- The backend must remain as stateless as possible, with shared state via Redis.
+- External services must be configurable through environment variables.
 
-### Sécurité et confidentialité
+### Security and Privacy
 
-- Les clés API ne doivent pas être codées en dur.
-- Les données de conversation doivent être traitées comme potentiellement sensibles.
-- Les erreurs exposées à l'utilisateur doivent rester compréhensibles sans divulguer de détails techniques internes.
+- API keys must not be hardcoded.
+- Conversation data must be treated as potentially sensitive.
+- Errors exposed to the user must remain understandable without disclosing internal technical details.
 
-### Maintenabilité
+### Maintainability
 
-- La logique métier doit rester côté backend Java.
-- L'orchestration audio doit rester côté agent vocal Python.
-- Les documents de connaissance doivent être maintenables par des profils non développeurs.
-- Les tests automatisés doivent couvrir les comportements critiques.
-- L'architecture doit isoler les canaux de contact afin de pouvoir ajouter Genesys Cloud CX sans dupliquer les règles métier.
+- Business logic must remain on the Java backend side.
+- Audio orchestration must remain on the Python voice-agent side.
+- Knowledge documents must be maintainable by non-developer profiles.
+- Automated tests must cover critical behavior.
+- The architecture must isolate contact channels so Genesys Cloud CX can be added without duplicating business rules.
 
-### Observabilité
+### Observability
 
-- Le système doit suivre les latences principales du pipeline : STT, recherche, LLM, TTS, temps avant premier audio.
-- Les événements d'escalade et d'erreur doivent être exploitables par l'administration.
+- The system must track the main pipeline latencies: STT, search, LLM, TTS, time before first audio.
+- Escalation and error events must be usable by administration.
 
-## 8. Données manipulées
+## 8. Data Handled
 
-Les principales données fonctionnelles sont :
+The main functional data are:
 
-- question utilisateur ;
-- transcription vocale ;
-- message entrant depuis un canal de messagerie ;
-- réponse générée ;
-- citations de connaissance ;
-- identifiant de conversation ;
-- identifiant de canal conversationnel ;
-- identifiant de session ou de conversation côté centre de contact, si applicable ;
-- agent courant ;
-- événements de conversation ;
-- métriques de latence ;
-- statut d'escalade ;
-- documents de base de connaissance.
+- user question;
+- voice transcription;
+- incoming message from a messaging channel;
+- generated answer;
+- knowledge citations;
+- conversation identifier;
+- conversational channel identifier;
+- session or conversation identifier on the contact-center side, if applicable;
+- current agent;
+- conversation events;
+- latency metrics;
+- escalation status;
+- knowledge base documents.
 
-## 9. Critères d'acceptation MVP
+## 9. MVP Acceptance Criteria
 
-Le MVP est considéré comme fonctionnel si :
+The MVP is considered functional if:
 
-- un client peut poser une question vocale depuis le navigateur ;
-- le bot répond oralement avec une réponse issue de la base de connaissance ;
-- le client peut interrompre le bot en parlant ;
-- une question de facturation est routée vers l'agent Facturation ;
-- une question commerciale est routée vers l'agent Commercial ;
-- une question technique est routée vers l'agent Support ;
-- une demande de conseiller humain déclenche une escalade ;
-- le parcours texte fonctionne en fallback ;
-- un appel Twilio peut être reçu et traité sur le même moteur conversationnel ;
-- le design fonctionnel prévoit l'ajout d'un canal WhatsApp sans duplication de logique métier ;
-- le design fonctionnel prévoit une intégration future Genesys Cloud CX sans remplacement du backend conversationnel ;
-- la base de connaissance peut être synchronisée après modification ;
-- les événements et indicateurs de conversation sont consultables côté admin ;
-- la stack complète peut être lancée localement via Docker Compose.
+- a customer can ask a voice question from the browser;
+- the bot answers orally with an answer from the knowledge base;
+- the customer can interrupt the bot by speaking;
+- a billing question is routed to the Billing agent;
+- a sales question is routed to the Sales agent;
+- a technical question is routed to the Support agent;
+- a request for a human advisor triggers escalation;
+- the text journey works as a fallback;
+- a Twilio call can be received and handled by the same conversational engine;
+- the functional design provides for adding a WhatsApp channel without duplicating business logic;
+- the functional design provides for future Genesys Cloud CX integration without replacing the conversational backend;
+- the knowledge base can be synchronized after modification;
+- conversation events and indicators are consultable on the admin side;
+- the complete stack can be launched locally via Docker Compose.
 
-## 10. Roadmap fonctionnelle
+## 10. Functional Roadmap
 
-### Court terme
+### Short Term
 
-- Stabiliser le parcours Pipecat/WebRTC comme chemin vocal principal.
-- Conserver le bridge WebSocket legacy uniquement comme fallback.
-- Améliorer le dashboard admin avec des visualisations de latence et d'usage.
-- Renforcer la couverture de tests des modules backend et voice-agent.
-- Définir le contrat minimal d'escalade vers un centre de contact : résumé, motif, canal, priorité, historique utile.
+- Stabilize the Pipecat/WebRTC journey as the main voice path.
+- Keep the legacy WebSocket bridge only as a fallback.
+- Improve the admin dashboard with latency and usage visualizations.
+- Strengthen test coverage for backend and voice-agent modules.
+- Define the minimal escalation contract toward a contact center: summary, reason, channel, priority, useful history.
 
-### Moyen terme
+### Medium Term
 
-- Ajouter des connecteurs de base de connaissance : PDF, Confluence, base de données.
-- Ajouter un canal WhatsApp en s'appuyant sur le même backend conversationnel.
-- Préparer un connecteur d'intégration Genesys Cloud CX ou équivalent pour l'escalade et l'omnicanal.
-- Améliorer la mesure du time-to-first-audio et la traçabilité bout en bout.
-- Enrichir les événements remontés à l'interface : agent courant, citations, confiance, escalade.
-- Étendre les règles métier d'escalade et les réponses guidées.
+- Add knowledge base connectors: PDF, Confluence, database.
+- Add a WhatsApp channel using the same conversational backend.
+- Prepare a Genesys Cloud CX or equivalent integration connector for escalation and omnichannel.
+- Improve time-to-first-audio measurement and end-to-end traceability.
+- Enrich events reported to the interface: current agent, citations, confidence, escalation.
+- Extend business escalation rules and guided answers.
 
-### Long terme
+### Long Term
 
-- Déployer en cloud privé ou environnement opérateur.
-- Industrialiser avec une plateforme de centre de contact si le contexte client le justifie.
-- Étudier le self-hosting de certains modèles pour réduire la latence et renforcer la souveraineté.
-- Ajouter une voix de marque personnalisée.
-- Connecter progressivement le bot aux systèmes métiers, sous contrôle humain.
+- Deploy in a private cloud or operator environment.
+- Industrialize with a contact-center platform if the customer context justifies it.
+- Study self-hosting of some models to reduce latency and strengthen sovereignty.
+- Add a custom brand voice.
+- Gradually connect the bot to business systems, under human control.
 
-### Axe de réflexion — Entrées omnicanales indépendantes
+### Reflection Area — Independent Omnichannel Inputs
 
-Une piste structurante pour l'évolution du produit est de séparer les points
-d'entrée par canal tout en conservant un backend Java commun pour le métier. Le
-système pourrait ainsi disposer d'adaptateurs dédiés pour WebRTC/Pipecat,
-Twilio, WhatsApp, web chat ou Genesys Cloud CX, chacun responsable de son
-protocole, de son cycle de vie et de ses contraintes d'expérience utilisateur.
+A structuring path for product evolution is to separate entry points by channel
+while keeping a common Java backend for the business layer. The system could
+therefore have dedicated adapters for WebRTC/Pipecat, Twilio, WhatsApp, web chat,
+or Genesys Cloud CX, each responsible for its protocol, lifecycle, and user
+experience constraints.
 
-Tous ces adaptateurs canal appelleraient le même backend conversationnel pour le
-RAG, la base de connaissance, les guardrails, le routage multi-agent, les règles
-d'escalade, la mémoire conversationnelle et la persistance des événements.
+All these channel adapters would call the same conversational backend for RAG,
+the knowledge base, guardrails, multi-agent routing, escalation rules,
+conversational memory, and event persistence.
 
-Cette approche permettrait :
+This approach would allow:
 
-- d'éviter qu'un incident sur un canal impacte tous les autres ;
-- de déployer, tester et faire évoluer chaque canal indépendamment ;
-- de garder une cohérence métier sur l'ensemble des parcours ;
-- de brancher plus rapidement un nouveau canal sans dupliquer le moteur conversationnel ;
-- de préparer une industrialisation progressive avec ou sans plateforme centre de contact.
+- preventing an incident on one channel from affecting all the others;
+- deploying, testing, and evolving each channel independently;
+- keeping business consistency across all journeys;
+- connecting a new channel faster without duplicating the conversational engine;
+- preparing gradual industrialization with or without a contact-center platform.
 
-Le point d'attention principal est de définir des contrats d'intégration stables
-entre les adaptateurs canal et le backend Java : formats d'échange, identifiants
-de conversation, timeouts, gestion des erreurs, rate limiting par canal et
-transmission du contexte en cas d'escalade humaine.
+The main point of attention is to define stable integration contracts between
+channel adapters and the Java backend: exchange formats, conversation
+identifiers, timeouts, error handling, rate limiting by channel, and context
+transmission in case of human escalation.
 
-### Diagramme de vision — Socle métier commun et canaux indépendants
+### Vision Diagram — Common Business Foundation and Independent Channels
 
 ```mermaid
 flowchart LR
     %% Clients
-    ClientWeb["Client web voix"]
-    ClientTel["Client téléphone"]
-    ClientMsg["Client messagerie"]
-    Conseiller["Conseiller humain"]
+    ClientWeb["Web voice customer"]
+    ClientTel["Phone customer"]
+    ClientMsg["Messaging customer"]
+    Conseiller["Human advisor"]
 
     %% Channel adapters
-    subgraph Canaux["Points d'entrée indépendants par canal"]
-        WebRTC["Adaptateur WebRTC / Pipecat"]
-        Twilio["Adaptateur téléphonie / Twilio"]
-        WhatsApp["Adaptateur WhatsApp"]
-        WebChat["Adaptateur web chat"]
-        Genesys["Genesys Cloud CX optionnel"]
+    subgraph Canaux["Independent entry points by channel"]
+        WebRTC["WebRTC / Pipecat adapter"]
+        Twilio["Telephony / Twilio adapter"]
+        WhatsApp["WhatsApp adapter"]
+        WebChat["Web chat adapter"]
+        Genesys["Optional Genesys Cloud CX"]
     end
 
     %% Shared backend
-    subgraph Backend["Backend Java commun - socle métier"]
+    subgraph Backend["Common Java backend - business foundation"]
         Conversation["Conversation API"]
-        Routing["Routage multi-agent"]
+        Routing["Multi-agent routing"]
         Guardrails["Guardrails"]
-        Escalade["Règles d'escalade"]
-        RAG["RAG + base de connaissance"]
-        Memoire["Mémoire + événements"]
+        Escalade["Escalation rules"]
+        RAG["RAG + knowledge base"]
+        Memoire["Memory + events"]
     end
 
     %% Data and providers
-    subgraph Donnees["Données et services partagés"]
-        KB["Base de connaissance"]
-        Redis["Redis sessions actives"]
-        Postgres["PostgreSQL événements / pgvector"]
-        LLM["LLM Mistral / Ollama"]
+    subgraph Donnees["Shared data and services"]
+        KB["Knowledge base"]
+        Redis["Redis active sessions"]
+        Postgres["PostgreSQL events / pgvector"]
+        LLM["Mistral / Ollama LLM"]
     end
 
     ClientWeb --> WebRTC
@@ -402,6 +402,6 @@ flowchart LR
     class ClientWeb,ClientTel,ClientMsg,Conseiller user
 ```
 
-Ce schéma illustre la séparation recherchée : chaque canal peut évoluer,
-tomber en erreur ou être remplacé indépendamment, tandis que les décisions
-métier restent centralisées et cohérentes dans le backend Java.
+This diagram illustrates the intended separation: each channel can evolve, fail,
+or be replaced independently, while business decisions remain centralized and
+consistent in the Java backend.

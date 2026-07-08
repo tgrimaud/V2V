@@ -1,34 +1,34 @@
-# Guide de développement
+# Development Guide
 
-## Conventions du projet
+## Project Conventions
 
 ### Architecture
 
-- **Domaine pur** : aucune annotation Spring, aucune dépendance externe dans `domain/`
-- **Ports IN** : interfaces des cas d'usage (ce que le système offre)
-- **Ports OUT** : interfaces des dépendances (ce dont le système a besoin)
-- **Adapters** : implémentations techniques des ports
-- **Configuration** : le câblage Spring est dans `infrastructure/config/` — les beans du domaine sont enregistrés via `@Bean`, jamais via `@Service`
+- **Pure domain**: no Spring annotations, no external dependencies in `domain/`
+- **IN ports**: use-case interfaces (what the system offers)
+- **OUT ports**: dependency interfaces (what the system needs)
+- **Adapters**: technical implementations of ports
+- **Configuration**: Spring wiring lives in `infrastructure/config/` — domain beans are registered through `@Bean`, never through `@Service`
 
 ### Tests
 
-- **Pas de Mockito** : les tests utilisent des fakes manuels (inner classes `static`)
-- **Nommage** : `shouldVerbeQuelqueChose` (ex: `shouldReturnAnswerWithCitations`)
-- **Structure** : GIVEN / WHEN / THEN (implicite dans la structure du test)
+- **No Mockito**: tests use manual fakes (`static` inner classes)
+- **Naming**: `shouldVerbSomething` (e.g. `shouldReturnAnswerWithCitations`)
+- **Structure**: GIVEN / WHEN / THEN (implicit in the test structure)
 
-### Style de code
+### Code Style
 
-- Méthodes : max 20 lignes
-- Classes : max 200 lignes
-- Nesting : max 3 niveaux
-- Pas de Javadoc sur les ports et modèles (convention projet)
-- Pas de commentaires évidents
+- Methods: max 20 lines
+- Classes: max 200 lines
+- Nesting: max 3 levels
+- No Javadoc on ports and models (project convention)
+- No obvious comments
 
-## Ajouter un nouveau provider
+## Add a New Provider
 
-### Exemple : ajouter OpenAI comme LLM alternatif
+### Example: add OpenAI as an alternative LLM
 
-1. Créer l'adapter (doit implémenter les deux ports) :
+1. Create the adapter (it must implement both ports):
 
 ```java
 // infrastructure/adapter/out/llm/OpenAILlmAdapter.java
@@ -47,7 +47,7 @@ public class OpenAILlmAdapter implements LlmPort, LlmStreamingPort {
 }
 ```
 
-2. Ajouter le bean conditionnel (un seul bean satisfait les deux interfaces) :
+2. Add the conditional bean (one bean satisfies both interfaces):
 
 ```java
 // infrastructure/config/DomainServiceConfig.java
@@ -58,19 +58,19 @@ public OpenAILlmAdapter openAiLlmAdapter(ChatClient chatClient) {
 }
 ```
 
-3. Ajouter la propriété dans `application.yml` :
+3. Add the property in `application.yml`:
 
 ```yaml
 voice-support:
   llm:
-    provider: openai  # ou mistral-api (défaut) ou ollama
+    provider: openai  # or mistral-api (default) or ollama
 ```
 
-### Changer le provider STT/TTS (agent vocal)
+### Change the STT/TTS Provider (voice agent)
 
-Le STT et TTS sont gérés par l'agent Pipecat (Python). Pour changer de fournisseur :
+STT and TTS are handled by the Pipecat agent (Python). To change provider:
 
-1. Modifier `voice-agent/pyproject.toml` — changer l'extra Pipecat :
+1. Modify `voice-agent/pyproject.toml` — change the Pipecat extra:
 
 ```toml
 dependencies = [
@@ -78,7 +78,7 @@ dependencies = [
 ]
 ```
 
-2. Modifier le pipeline cible `voice-agent/agent/bot.py` — instancier le bon service Pipecat :
+2. Modify the target pipeline `voice-agent/agent/bot.py` — instantiate the right Pipecat service:
 
 ```python
 from pipecat.services.deepgram import DeepgramSTTService
@@ -88,18 +88,18 @@ stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
 tts = CartesiaTTSService(api_key=os.getenv("CARTESIA_API_KEY"), voice_id="...")
 ```
 
-Aucune modification du backend Java n'est nécessaire — le processeur RAG Pipecat
-continue d'appeler la même API conversationnelle backend. Si le bridge WebSocket
-legacy reste utilisé pour comparaison, documenter séparément son adapter STT/TTS
-au lieu d'en faire le chemin cible.
+No Java backend change is required — the Pipecat RAG processor keeps calling the
+same backend conversation API. If the legacy WebSocket bridge remains used for
+comparison, document its STT/TTS adapter separately instead of making it the
+target path.
 
-## Ajouter un nouvel agent spécialisé
+## Add a New Specialist Agent
 
-Le système multi-agent est extensible. Pour ajouter un nouvel agent (ex: agent SAV retours) :
+The multi-agent system is extensible. To add a new agent (e.g. after-sales returns):
 
-1. **Créer la KB** dans `knowledge-base/sav-faq.md`
+1. **Create the KB** in `knowledge-base/sav-faq.md`
 
-2. **Ajouter le profil** dans `AgentProfile.java` :
+2. **Add the profile** in `AgentProfile.java`:
 
 ```java
 public static AgentProfile sav() {
@@ -107,8 +107,8 @@ public static AgentProfile sav() {
             "sav",
             "Agent SAV",
             """
-            Tu es un agent SAV spécialisé dans les retours et échanges...
-            Contexte de la base de connaissance :
+            You are an after-sales support agent specialized in returns and exchanges...
+            Knowledge base context:
             {context}
             """,
             "sav",
@@ -118,7 +118,7 @@ public static AgentProfile sav() {
 }
 ```
 
-3. **Enregistrer** dans `DomainServiceConfig.agentRegistry()` :
+3. **Register it** in `DomainServiceConfig.agentRegistry()`:
 
 ```java
 @Bean
@@ -131,7 +131,7 @@ public AgentRegistry agentRegistry() {
 }
 ```
 
-4. **Ingérer la KB** avec le tag domaine :
+4. **Ingest the KB** with the domain tag:
 
 ```bash
 curl -X POST http://localhost:8081/api/knowledge/ingest \
@@ -140,38 +140,38 @@ curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "domain=sav"
 ```
 
-Aucune modification de l'orchestrateur, du classifier ou des adapters n'est nécessaire.
+No change to the orchestrator, classifier, or adapters is required.
 
-## Ajouter un document à la base de connaissance
+## Add a Document to the Knowledge Base
 
-> Voir aussi : [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md) (architecture
-> KB + ajout d'un connecteur) et [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md)
-> (guide de rédaction pour contributeurs).
+> See also: [`knowledge-base-technical.md`](../knowledge-base/knowledge-base-technical.md) (KB
+> architecture + adding a connector) and [`knowledge-base-guide.md`](../knowledge-base/knowledge-base-guide.md)
+> (content writing guide for contributors).
 
-1. Créer un fichier Markdown dans `knowledge-base/` :
+1. Create a Markdown file in `knowledge-base/`:
 
 ```markdown
-# Nouveau sujet
+# New Topic
 
 ## Section 1
 
-Contenu structuré avec des paragraphes séparés par des lignes vides.
+Structured content with paragraphs separated by blank lines.
 
 ## Section 2
 
-Chaque paragraphe devient un chunk potentiel.
+Each paragraph becomes a potential chunk.
 ```
 
-2. Ingérer via l'API avec le tag de domaine (obligatoire pour le routing multi-agent) :
+2. Ingest through the API with the domain tag (required for multi-agent routing):
 
 ```bash
-# Support technique
+# Technical support
 curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "file=@knowledge-base/telecom-faq.md" \
   -F "source=telecom-faq.md" \
   -F "domain=support"
 
-# Facturation
+# Billing
 curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "file=@knowledge-base/billing-faq.md" \
   -F "source=billing-faq.md" \
@@ -184,17 +184,17 @@ curl -X POST http://localhost:8081/api/knowledge/ingest \
   -F "domain=commercial"
 ```
 
-Le paramètre `domain` tag chaque chunk pour que la recherche vectorielle soit filtrée par agent.
-Sans `domain`, les chunks sont stockés sans filtre (rétrocompatible mais non recommandé).
+The `domain` parameter tags each chunk so vector search can be filtered by agent.
+Without `domain`, chunks are stored without a filter (backward-compatible but not recommended).
 
-Le chunking respecte les frontières de paragraphes et propage les headings comme métadonnées de section.
+Chunking respects paragraph boundaries and propagates headings as section metadata.
 
-### Synchronisation multi-sources (recommandé)
+### Multi-Source Synchronization (recommended)
 
-Le `curl ... /ingest` reste disponible pour un upload ponctuel, mais la KB est
-désormais alimentée par des **connecteurs de source** synchronisés. Le connecteur
-de référence `MarkdownFolderConnector` lit `knowledge-base/*.md` et résout le
-`domain` depuis un **front-matter YAML** en tête de chaque fichier :
+The `curl ... /ingest` path remains available for one-shot uploads, but the KB is
+now fed by synchronized **source connectors**. The reference connector
+`MarkdownFolderConnector` reads `knowledge-base/*.md` and resolves `domain` from
+the **YAML front-matter** at the top of each file:
 
 ```markdown
 ---
@@ -202,178 +202,180 @@ domain: billing
 language: fr
 ---
 
-# Base de connaissance — Facturation et Abonnements
+# Knowledge Base — Billing and Subscriptions
 ...
 ```
 
-Déclencher une synchro manuellement :
+Trigger a sync manually:
 
 ```bash
-# Toutes les sources
+# All sources
 curl -X POST http://localhost:8081/api/knowledge/sync
 
-# Une seule source (par type de connecteur)
+# One source only (by connector type)
 curl -X POST http://localhost:8081/api/knowledge/sync/markdown
 ```
 
-La réponse est un rapport : `{ "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }`.
-La synchro est **idempotente** : un document inchangé (même `content_hash`) est
-ignoré (`skipped`), un document modifié est ré-ingéré (`deleted` puis re-chunké),
-et un document disparu de la source est supprimé du vector store. L'état de
-synchro est conservé dans la table `kb_source_state`.
+The response is a report: `{ "processed": 3, "ingested": 3, "skipped": 0, "deleted": 0 }`.
+Sync is **idempotent**: an unchanged document (same `content_hash`) is ignored
+(`skipped`), a modified document is re-ingested (`deleted`, then re-chunked), and
+a document that disappeared from the source is removed from the vector store. Sync
+state is stored in the `kb_source_state` table.
 
-Une synchro **planifiée** tourne via cron (`voice-support.knowledge.sync-cron`,
-défaut horaire `0 0 * * * *`). Mettre `KB_SYNC_CRON=-` pour la désactiver en dev.
+A **scheduled** sync runs via cron (`voice-support.knowledge.sync-cron`, hourly
+default `0 0 * * * *`). Set `KB_SYNC_CRON=-` to disable it in development.
 
-Migration depuis l'ancien seeding `curl /ingest` : les lignes pré-existantes n'ont
-pas de `source_id`, donc pour éviter les doublons, vider une fois la table avant la
-première synchro : `DELETE FROM vector_store;` puis `POST /api/knowledge/sync`.
+Migration from the old `curl /ingest` seeding: pre-existing rows have no
+`source_id`, so to avoid duplicates, empty the table once before the first sync:
+`DELETE FROM vector_store;`, then `POST /api/knowledge/sync`.
 
-## Résolution de problèmes courants
+## Common Troubleshooting
 
-| Problème | Cause | Solution |
+| Problem | Cause | Solution |
 |----------|-------|----------|
-| `Unknown type vector` | Extension pgvector pas activée | `docker exec <container> psql -U voicesupport -d voicesupport -c "CREATE EXTENSION vector;"` |
-| `relation "vector_store" does not exist` | Schema pas initialisé | Ajouter `initialize-schema: true` dans la config pgvector |
-| `model 'llama3.1' not found` | Mauvais tag de modèle | Utiliser `llama3.1:8b` (vérifier avec `ollama list`) |
-| Port 8081 occupé | Autre instance tourne | `kill $(lsof -ti:8081)` |
-| Port 7860 occupé | Agent Pipecat déjà lancé | `kill $(lsof -ti:7860)` |
-| Port 8765/8766 occupé | Bridge custom legacy déjà lancé | `kill $(lsof -ti:8765)` |
-| Ingestion lente | Ollama génère les embeddings | Normal au premier appel (~1s/chunk), ensuite caché |
-| UI Pipecat indisponible | Runner non démarré | `cd voice-agent && python -m agent.bot -t webrtc`, puis ouvrir `http://localhost:7860` |
-| Frontend React legacy ne se connecte pas au voice agent | URL incorrecte | Vérifier `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
-| `GRADIUM_API_KEY not set` | Variable manquante | `cp voice-agent/.env.example voice-agent/.env` et configurer |
-| `Embeddings not found for default` | `GRADIUM_VOICE_ID` invalide | Utiliser un vrai ID du [catalogue](https://docs.gradium.ai/guides/voices/all-voices) (ex: `b35yykvVppLXyw_l` pour Elise FR) |
-| Audio TTS non joué dans le navigateur | PCM brut non décodable par `decodeAudioData` | Le bridge doit wrapper le PCM dans un header WAV (44 octets) avant envoi |
-| Agent Pipecat ne démarre pas | Dépendances manquantes | `cd voice-agent && uv pip install -e .` |
-| VAD charge `silero_vad_legacy.onnx` | Mauvais modèle par défaut | Ajouter `model: 'v5'` dans les options `MicVAD.new()` |
-| VAD `Can't create a session` | Fichier ONNX manquant dans `public/` | Copier `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` et `vad.worklet.bundle.min.js` dans `frontend/public/` |
-| VAD ne détecte pas la parole | `startOnLoad: true` + double-mount React | Ajouter `startOnLoad: false` et appeler `vad.start()` manuellement |
-| Barge-in ne coupe pas le bot | Mauvais chemin vocal lancé | Utiliser Pipecat (`python -m agent.bot -t webrtc`) pour la cible V1, ou redémarrer le bridge legacy |
-| `401 Unauthorized` de Mistral | Clé API non chargée | Lancer le backend avec `export $(cat backend/.env \| xargs) && mvn spring-boot:run` ou sourcer le `.env` avant |
-| Bot répond hors-sujet sur "Bonjour" | Guardrails non actifs | Vérifier que `GuardrailService` est dans `DomainServiceConfig` et redémarrer le backend |
-| Le bot re-salue au 1er message Pipecat | Le message d'accueil joué par le TTS n'est pas dans l'historique backend | `bot.py` doit appeler `POST /api/conversation/seed` au `on_client_connected` ; redémarrer l'agent vocal après mise à jour |
-| Routing multi-agent ne fonctionne pas | KB non taguée | Ré-ingérer avec le paramètre `domain=support\|billing\|commercial` |
-| Réponses génériques malgré routing | Chunks sans domaine en BDD | Vider la table et ré-ingérer : `DELETE FROM vector_store;` puis re-curl ingest |
+| `Unknown type vector` | pgvector extension not enabled | `docker exec <container> psql -U voicesupport -d voicesupport -c "CREATE EXTENSION vector;"` |
+| `relation "vector_store" does not exist` | Schema not initialized | Add `initialize-schema: true` in the pgvector config |
+| `model 'llama3.1' not found` | Wrong model tag | Use `llama3.1:8b` (check with `ollama list`) |
+| Port 8081 busy | Another instance is running | `kill $(lsof -ti:8081)` |
+| Port 7860 busy | Pipecat agent already running | `kill $(lsof -ti:7860)` |
+| Port 8765/8766 busy | Legacy custom bridge already running | `kill $(lsof -ti:8765)` |
+| Slow ingestion | Ollama generates embeddings | Normal on first call (~1s/chunk), then cached |
+| Pipecat UI unavailable | Runner not started | `cd voice-agent && python -m agent.bot -t webrtc`, then open `http://localhost:7860` |
+| Legacy React frontend does not connect to the voice agent | Wrong URL | Check `VITE_VOICE_AGENT_URL=ws://localhost:8765` |
+| `GRADIUM_API_KEY not set` | Missing variable | `cp voice-agent/.env.example voice-agent/.env` and configure it |
+| `Embeddings not found for default` | Invalid `GRADIUM_VOICE_ID` | Use a real ID from the [catalog](https://docs.gradium.ai/guides/voices/all-voices) (e.g. `b35yykvVppLXyw_l` for Elise FR) |
+| TTS audio not played in the browser | Raw PCM cannot be decoded by `decodeAudioData` | The bridge must wrap PCM in a WAV header (44 bytes) before sending |
+| Pipecat agent does not start | Missing dependencies | `cd voice-agent && uv pip install -e .` |
+| VAD loads `silero_vad_legacy.onnx` | Wrong default model | Add `model: 'v5'` in `MicVAD.new()` options |
+| VAD `Can't create a session` | Missing ONNX file in `public/` | Copy `node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx` and `vad.worklet.bundle.min.js` into `frontend/public/` |
+| VAD does not detect speech | `startOnLoad: true` + React double mount | Add `startOnLoad: false` and call `vad.start()` manually |
+| Barge-in does not cut off the bot | Wrong voice path launched | Use Pipecat (`python -m agent.bot -t webrtc`) for the V1 target, or restart the legacy bridge |
+| `401 Unauthorized` from Mistral | API key not loaded | Start the backend with `export $(cat backend/.env \| xargs) && mvn spring-boot:run` or source `.env` first |
+| Bot answers off-topic on "Bonjour" | Guardrails not active | Check that `GuardrailService` is in `DomainServiceConfig` and restart the backend |
+| Bot repeats the greeting on the 1st Pipecat message | The greeting played by TTS is not in backend history | `bot.py` must call `POST /api/conversation/seed` on `on_client_connected`; restart the voice agent after updating |
+| Multi-agent routing does not work | KB not tagged | Re-ingest with the `domain=support\|billing\|commercial` parameter |
+| Generic answers despite routing | Chunks without a domain in DB | Empty the table and re-ingest: `DELETE FROM vector_store;`, then re-run curl ingest |
 
-## Commandes utiles
+## Useful Commands
 
 ```bash
-# Vérifier l'état des services
+# Check service status
 curl http://localhost:8081/api/health
 docker compose ps
 
-# Installer les assets VAD après npm install
+# Install VAD assets after npm install
 cp node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx frontend/public/
 cp node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js frontend/public/
 
-# Lancer le backend Java (charger le .env pour la clé Mistral)
+# Start the Java backend (load .env for the Mistral key)
 cd backend && export $(cat .env | xargs) && mvn spring-boot:run
 
-# Lancer l'agent vocal cible V1 (Pipecat + Gradium)
-# Web (WebRTC) + UI prebuilt sur http://localhost:7860
+# Start the V1 target voice agent (Pipecat + Gradium)
+# Web (WebRTC) + prebuilt UI at http://localhost:7860
 cd voice-agent && python -m agent.bot -t webrtc
-# Tous transports (web + telephonie) :
+# All transports (web + telephony):
 cd voice-agent && python -m agent.bot
-# Telephonie Pipecat (necessite un proxy public, ex: ngrok) :
-cd voice-agent && python -m agent.bot -t twilio -x <votre-host-public>
+# Pipecat telephony (requires a public proxy, e.g. ngrok):
+cd voice-agent && python -m agent.bot -t twilio -x <your-public-host>
 
-# Lancer le bridge custom legacy/fallback (React :5173, ws:8765/8766)
+# Start the legacy/fallback custom bridge (React :5173, ws:8765/8766)
 cd voice-agent && python -u -m agent.bridge_server
 
-# Tester le streaming SSE (réponse token par token)
-curl -N "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=test"
+# Test SSE streaming (token-by-token response)
+curl -N "http://localhost:8081/api/conversation/ask-stream?question=Hello&conversation_id=test"
 
-# Amorcer l'historique avec le message d'accueil (utilisé par le bot Pipecat)
-# pour éviter que le LLM ne re-salue au 1er message utilisateur
+# Seed history with the greeting (used by the Pipecat bot)
+# to prevent the LLM from greeting again on the 1st user message
 curl -X POST http://localhost:8081/api/conversation/seed \
   -H "Content-Type: application/json" \
-  -d '{"message": "Bonjour ! Je suis votre assistant virtuel.", "conversation_id": "test"}'
+  -d '{"message": "Hello! I am your virtual assistant.", "conversation_id": "test"}'
 
-# Tester le RAG (mode synchrone)
+# Test RAG (synchronous mode)
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Ma box ne marche plus", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "My router no longer works", "conversationId": "test"}' | python3 -m json.tool
 
-# Mesurer le time-to-first-byte (latence streaming)
+# Measure time-to-first-byte (streaming latency)
 curl -w "\nTTFB: %{time_starttransfer}s\nTotal: %{time_total}s\n" -s -o /dev/null \
-  "http://localhost:8081/api/conversation/ask-stream?question=Bonjour&conversation_id=perf"
+  "http://localhost:8081/api/conversation/ask-stream?question=Hello&conversation_id=perf"
 
-# Voir les chunks indexés
+# View indexed chunks
 docker exec voice-support-bot-postgres-1 psql -U voicesupport -d voicesupport \
   -c "SELECT id, substring(content, 1, 80) FROM vector_store LIMIT 10;"
 
-# Vider la base de connaissance (réingestion)
+# Empty the knowledge base (re-ingestion)
 docker exec voice-support-bot-postgres-1 psql -U voicesupport -d voicesupport \
   -c "DELETE FROM vector_store;"
 
-# Voir les stats admin
+# View admin stats
 curl -s http://localhost:8081/api/admin/stats | python3 -m json.tool
 
-# Tester l'escalade
+# Test escalation
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Je veux résilier"}' | python3 -m json.tool
+  -d '{"question": "I want to cancel"}' | python3 -m json.tool
 
-# Tester les guardrails — salutation (pas de RAG)
+# Test guardrails — greeting (no RAG)
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Bonjour", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "Hello", "conversationId": "test"}' | python3 -m json.tool
 
-# Tester les guardrails — off-topic
+# Test guardrails — off-topic
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Quel temps fait-il dehors ?", "conversationId": "test"}' | python3 -m json.tool
+  -d '{"question": "What is the weather outside?", "conversationId": "test"}' | python3 -m json.tool
 
-# Tester le routing multi-agent — facturation
+# Test multi-agent routing — billing
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Comment consulter ma facture ?", "conversation_id": "test-billing"}' | python3 -m json.tool
+  -d '{"question": "How can I view my invoice?", "conversation_id": "test-billing"}' | python3 -m json.tool
 
-# Tester le routing multi-agent — commercial
+# Test multi-agent routing — commercial
 curl -s -X POST http://localhost:8081/api/conversation/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Je déménage, comment transférer mon abonnement ?", "conversation_id": "test-commercial"}' | python3 -m json.tool
+  -d '{"question": "I am moving, how can I transfer my subscription?", "conversation_id": "test-commercial"}' | python3 -m json.tool
 
-# Ingérer les 3 KB avec domaines (après un reset)
+# Ingest the 3 KBs with domains (after a reset)
 curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/telecom-faq.md" -F "source=telecom-faq.md" -F "domain=support"
 curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/billing-faq.md" -F "source=billing-faq.md" -F "domain=billing"
 curl -X POST http://localhost:8081/api/knowledge/ingest -F "file=@knowledge-base/commercial-faq.md" -F "source=commercial-faq.md" -F "domain=commercial"
 
-# Arrêter tout
+# Stop everything
 docker compose down
 kill $(lsof -ti:8081) 2>/dev/null
 kill $(lsof -ti:8765) 2>/dev/null
 ```
 
-## Mesure de latence (baseline)
+## Latency Measurement (baseline)
 
-Le chemin critique est instrumenté avec des logs structurés préfixés `[LATENCY]`, sans dépendance supplémentaire. Chaque étape émet une ligne `[LATENCY] step=<nom> ms=<valeur> [extra...]` :
+The critical path is instrumented with structured logs prefixed by `[LATENCY]`,
+without any additional dependency. Each step emits a
+`[LATENCY] step=<name> ms=<value> [extra...]` line:
 
-| Étape (`step`) | Émis par | Fichier |
+| Step (`step`) | Emitted by | File |
 |----------------|----------|---------|
 | `stt` | Voice agent | `voice-agent/agent/gradium_stt.py` |
 | `vector_search` | Backend | `PgVectorStoreAdapter` |
 | `llm_first_token` / `llm_total` | Backend | `MistralLlmAdapter` / `OllamaLlmAdapter` |
 | `tts` | Voice agent | `voice-agent/agent/gradium_tts.py` |
-| `time_to_first_audio` | Voice agent | `bridge_server.py` legacy ou Pipecat metrics selon le chemin testé |
-| `turn_total` | Voice agent | `bridge_server.py` legacy ou Pipecat metrics selon le chemin testé |
+| `time_to_first_audio` | Voice agent | legacy `bridge_server.py` or Pipecat metrics depending on the tested path |
+| `turn_total` | Voice agent | legacy `bridge_server.py` or Pipecat metrics depending on the tested path |
 
-**SLO de référence** : `time_to_first_audio` p95 < 800 ms.
+**Reference SLO**: `time_to_first_audio` p95 < 800 ms.
 
-### Capturer et agréger une baseline
+### Capture and Aggregate a Baseline
 
 ```bash
-# 1. Capturer les logs des services pendant une session Pipecat
+# 1. Capture service logs during a Pipecat session
 cd backend && export $(cat .env | xargs) && mvn spring-boot:run 2>&1 | tee /tmp/backend.log
 cd voice-agent && python -m agent.bot -t webrtc 2>&1 | tee /tmp/pipecat.log
 
-# 2. Mener quelques échanges vocaux représentatifs (10-20 tours)
+# 2. Run a few representative voice exchanges (10-20 turns)
 
-# 3. Agréger en p50/p95 par étape
+# 3. Aggregate p50/p95 by step
 python voice-agent/tools/latency_report.py /tmp/backend.log /tmp/pipecat.log
 ```
 
-Le rapport affiche `n / p50 / p95 / min / max / mean` par étape et marque
-`OK`/`FAIL` sur le SLO `time_to_first_audio`. Le bridge legacy peut être lancé à
-part pour comparaison, mais la baseline V1 doit partir de Pipecat.
+The report shows `n / p50 / p95 / min / max / mean` by step and marks the
+`time_to_first_audio` SLO as `OK`/`FAIL`. The legacy bridge can be launched
+separately for comparison, but the V1 baseline must start from Pipecat.

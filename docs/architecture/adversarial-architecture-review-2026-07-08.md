@@ -1,143 +1,142 @@
-# Revue adversariale d'architecture — Vision omnicanale
+# Adversarial Architecture Review — Omnichannel Vision
 
-Date : 2026-07-08
+Date: 2026-07-08
 
 ## Verdict
 
-La direction générale est saine : canaux indépendants, backend Java commun pour
-le métier, Genesys Cloud CX et WhatsApp positionnés comme adaptateurs et non
-comme moteurs métier.
+The overall direction is sound: independent channels, a shared Java backend for
+business logic, and Genesys Cloud CX and WhatsApp positioned as adapters rather
+than business engines.
 
-En revanche, la solution ne doit pas encore être présentée comme une plateforme
-omnicanale industrialisée. À ce stade, elle correspond plutôt à un **POC solide
-avec une vision d'industrialisation cohérente**. Les points faibles concernent
-surtout les NFR/SLA, les modes dégradés, l'observabilité et les contrats
-d'intégration entre canaux et backend.
+However, the solution should not yet be presented as an industrialized
+omnichannel platform. At this stage, it is closer to a **solid POC with a
+coherent industrialization vision**. The weak points are mainly NFRs/SLAs,
+degraded modes, observability, and integration contracts between channels and
+the backend.
 
 ## Scorecard
 
 | Dimension | Score /5 | Rationale |
 |---|---:|---|
-| NFR / SLA fitness | 2 | La cible de latence existe, mais les prérequis STT streaming, TTS chunké, cache sémantique et observabilité restent au backlog. |
-| SLA failure modes | 2 | Des timeouts existent, mais il manque retry, circuit breaker, rate limiting et modes dégradés explicites par canal. |
-| Modularity and boundaries | 3.5 | Le backend Java est bien structuré autour de ports/adapters ; côté voice-agent, Gradium/Twilio restent encore très présents directement dans les pipelines. |
-| External dependency replaceability | 2.5 | LLM et persistence sont relativement remplaçables. STT/TTS, Twilio, Genesys et WhatsApp doivent encore être formalisés comme adapters/ports. |
-| Evolvability and industrialization | 3 | La vision omnicanale est correcte, mais il manque des contrats stables et des preuves d'isolation opérationnelle. |
-| Overall | 2.8 | Bon socle MVP, pas encore une cible production robuste. |
+| NFR / SLA fitness | 2 | The latency target exists, but prerequisites such as STT streaming, chunked TTS, semantic cache, and observability remain in the backlog. |
+| SLA failure modes | 2 | Timeouts exist, but retry, circuit breaker, rate limiting, and explicit degraded modes per channel are missing. |
+| Modularity and boundaries | 3.5 | The Java backend is well structured around ports/adapters; on the voice-agent side, Gradium/Twilio are still very present directly in the pipelines. |
+| External dependency replaceability | 2.5 | LLM and persistence are relatively replaceable. STT/TTS, Twilio, Genesys, and WhatsApp still need to be formalized as adapters/ports. |
+| Evolvability and industrialization | 3 | The omnichannel vision is correct, but stable contracts and evidence of operational isolation are missing. |
+| Overall | 2.8 | Good MVP foundation, not yet a robust production target. |
 
 ## Critical Risks
 
-- **Backend Java comme point de concentration** : tous les canaux convergent vers
-  le même moteur conversationnel. C'est souhaitable pour la cohérence métier,
-  mais dangereux sans rate limiting, timeouts, métriques et quotas par canal.
-- **Couplage Gradium côté voice-agent** : `GradiumSTTService` et
-  `GradiumTTSService` sont instanciés directement dans les pipelines Python.
-  Remplacer Gradium demandera plus qu'un simple nouvel adapter.
-- **Genesys/WhatsApp encore conceptuels** : ils sont correctement positionnés
-  dans la vision, mais il n'existe pas encore de contrat d'intégration, payload
-  d'escalade, mapping de conversation, idempotence ou stratégie d'erreur.
-- **SLOs non vérifiables** : la documentation annonce des cibles de latence, mais
-  l'observabilité par étape et les budgets mesurés restent à faire.
-- **Risque de dérive documentaire** : certaines docs d'architecture peuvent être
-  en retard sur le code, par exemple autour de `TokenStream` vs Reactor. Les
-  décisions d'industrialisation doivent s'appuyer sur le code et les tests, pas
-  seulement sur les diagrammes.
+- **Java backend as a concentration point**: all channels converge toward the
+  same conversation engine. This is desirable for business consistency, but
+  dangerous without rate limiting, timeouts, metrics, and quotas per channel.
+- **Gradium coupling in the voice-agent**: `GradiumSTTService` and
+  `GradiumTTSService` are instantiated directly in the Python pipelines.
+  Replacing Gradium will require more than a simple new adapter.
+- **Genesys/WhatsApp still conceptual**: they are correctly positioned in the
+  vision, but there is no integration contract, escalation payload,
+  conversation mapping, idempotency, or error strategy yet.
+- **Non-verifiable SLOs**: the documentation states latency targets, but
+  per-step observability and measured budgets remain to be implemented.
+- **Documentation drift risk**: some architecture docs may lag behind the code,
+  for example around `TokenStream` vs Reactor. Industrialization decisions must
+  rely on code and tests, not only diagrams.
 
 ## Hard Questions
 
-- Quel SLO officiel doit être tenu : first audio p95 inférieur à 700 ms, 800 ms
-  ou 1 seconde ?
-- Que se passe-t-il si Gradium STT est lent mais les canaux texte fonctionnent ?
-- Que se passe-t-il si Genesys Cloud CX est indisponible au moment d'une
-  escalade ?
-- Un canal peut-il être désactivé, redémarré ou déployé sans redéployer le
-  backend Java ?
-- Quel contrat unique les canaux doivent-ils appeler : `ask`, `ask-stream`, ou
-  une future API de conversation orientée canal ?
-- Comment éviter qu'un flood WhatsApp dégrade la voix temps réel ?
+- Which official SLO must be met: first audio p95 below 700 ms, 800 ms, or
+  1 second?
+- What happens if Gradium STT is slow but text channels are working?
+- What happens if Genesys Cloud CX is unavailable at the moment of escalation?
+- Can a channel be disabled, restarted, or deployed without redeploying the
+  Java backend?
+- Which single contract should channels call: `ask`, `ask-stream`, or a future
+  channel-oriented conversation API?
+- How do we prevent a WhatsApp flood from degrading real-time voice?
 
 ## Architecture Challenges
 
-### Backend Java commun
+### Shared Java Backend
 
-Le choix est bon, car il centralise le RAG, les guardrails, le routage
-multi-agent, l'escalade et la persistance. Mais il faut maintenant le traiter
-comme un **produit interne consommé par plusieurs canaux**, avec contrats,
-versioning, timeouts, quotas et observabilité.
+The choice is good because it centralizes RAG, guardrails, multi-agent routing,
+escalation, and persistence. But it must now be treated as an **internal product
+consumed by multiple channels**, with contracts, versioning, timeouts, quotas,
+and observability.
 
-### Canaux indépendants
+### Independent Channels
 
-La vision est correcte, mais elle doit être traduite en objets et contrats
-stables : `channel`, `conversation_id`, `external_session_id`, `message_id`,
+The vision is correct, but it must be translated into stable objects and
+contracts: `channel`, `conversation_id`, `external_session_id`, `message_id`,
 `idempotency_key`, `reply_mode`, `escalation_context`.
 
-### Pipecat comme cible voix
+### Pipecat as the Voice Target
 
-Pipecat est un choix crédible pour le temps réel vocal. En revanche, le projet
-doit décider explicitement si le bridge legacy reste un fallback maintenu ou un
-chemin à supprimer. Garder deux chemins voix complets augmente le coût de test
-et le risque de divergence.
+Pipecat is a credible choice for real-time voice. However, the project must
+explicitly decide whether the legacy bridge remains a maintained fallback or a
+path to remove. Keeping two complete voice paths increases testing cost and the
+risk of divergence.
 
 ### Genesys Cloud CX
 
-Genesys doit rester une couche centre de contact : canaux, files d'attente,
-agent desktop, supervision et handoff humain. Il ne doit pas devenir propriétaire
-du RAG, des règles métier, de l'escalade ou de la mémoire conversationnelle.
+Genesys must remain a contact-center layer: channels, queues, agent desktop,
+supervision, and human handoff. It must not own RAG, business rules, escalation,
+or conversation memory.
 
 ## External Dependency Review
 
 | Dependency | Current role | Replaceability | Concern | Recommendation |
 |---|---|---|---|---|
-| Gradium STT/TTS | Transcription et synthèse vocale | Hard | Couplage direct dans les pipelines Python. | Introduire une abstraction provider STT/TTS côté voice-agent. |
-| Twilio | Téléphonie / Media Streams | Moderate | Le protocole est partiellement isolé mais reste lié au flux téléphonie. | Garder Twilio comme adapter canal et définir un contrat téléphonie interne. |
-| Genesys Cloud CX | Future couche centre de contact | Unknown | Pas encore de connecteur ni payload d'escalade. | Définir un contrat `EscalationHandoff`. |
-| WhatsApp | Futur canal messagerie | Unknown | Pas encore d'adapter ni contrat async. | Créer un contrat messaging avec idempotence. |
-| Mistral / Ollama | Génération LLM | Good | Ports backend existants. | Ajouter tests de fallback, timeout et erreurs provider. |
-| PostgreSQL / pgvector | Vector store et événements | Moderate | pgvector reste structurant dans l'implémentation. | Conserver `VectorSearchPort` et documenter une migration possible. |
-| Redis | Sessions actives | Good | Adapter existant, mais mode panne à formaliser. | Ajouter stratégie panne Redis, TTL métier et fallback contrôlé. |
+| Gradium STT/TTS | Transcription and speech synthesis | Hard | Direct coupling in the Python pipelines. | Introduce an STT/TTS provider abstraction on the voice-agent side. |
+| Twilio | Telephony / Media Streams | Moderate | The protocol is partially isolated but remains tied to the telephony flow. | Keep Twilio as a channel adapter and define an internal telephony contract. |
+| Genesys Cloud CX | Future contact-center layer | Unknown | No connector or escalation payload yet. | Define an `EscalationHandoff` contract. |
+| WhatsApp | Future messaging channel | Unknown | No adapter or async contract yet. | Create a messaging contract with idempotency. |
+| Mistral / Ollama | LLM generation | Good | Backend ports exist. | Add fallback, timeout, and provider error tests. |
+| PostgreSQL / pgvector | Vector store and events | Moderate | pgvector remains structural in the implementation. | Keep `VectorSearchPort` and document a possible migration. |
+| Redis | Active sessions | Good | Adapter exists, but failure mode must be formalized. | Add Redis failure strategy, business TTL, and controlled fallback. |
 
 ## NFR / SLA Gaps
 
-- SLOs non stabilisés : p95/p99, time-to-first-audio, time-to-first-token, taux
-  d'erreur, temps d'escalade.
-- Pas de budget clair par étape : STT, RAG, vector search, LLM, TTS, réseau.
-- Pas de stratégie documentée de circuit breaker ou retry par provider.
-- Pas de rate limiting par canal.
-- Pas de politique de priorité entre canaux temps réel et canaux asynchrones.
-- Pas de contrat d'escalade humain exploitable par Genesys ou équivalent.
-- Observabilité OpenTelemetry et dashboard latence encore au backlog.
+- SLOs are not stabilized: p95/p99, time-to-first-audio,
+  time-to-first-token, error rate, escalation time.
+- No clear per-step budget: STT, RAG, vector search, LLM, TTS, network.
+- No documented circuit breaker or retry strategy per provider.
+- No rate limiting per channel.
+- No priority policy between real-time channels and asynchronous channels.
+- No human escalation contract usable by Genesys or an equivalent platform.
+- OpenTelemetry observability and latency dashboard still in the backlog.
 
 ## Recommended Changes
 
 ### 1. Must fix before production
 
-- Définir les SLOs mesurables : first audio p95, timeout STT/TTS/LLM, taux
-  d'erreur, temps d'escalade.
-- Instrumenter les métriques par étape et par canal.
-- Définir le contrat d'escalade humain compatible Genesys ou équivalent.
-- Ajouter timeouts, quotas et rate limiting par canal.
+- Define measurable SLOs: first audio p95, STT/TTS/LLM timeouts, error rate,
+  escalation time.
+- Instrument metrics per step and per channel.
+- Define the human escalation contract compatible with Genesys or an equivalent
+  platform.
+- Add timeouts, quotas, and rate limiting per channel.
 
 ### 2. Should fix before pilot
 
-- Introduire une abstraction STT/TTS côté Python.
-- Définir une API canal stable pour WhatsApp, web chat et téléphonie.
-- Formaliser les champs `channel`, `external_session_id`, `message_id` et
-  `idempotency_key`.
-- Ajouter des tests de défaillance : provider STT/TTS indisponible, backend lent,
-  Redis indisponible, double message, escalade impossible.
+- Introduce an STT/TTS abstraction on the Python side.
+- Define a stable channel API for WhatsApp, web chat, and telephony.
+- Formalize the `channel`, `external_session_id`, `message_id`, and
+  `idempotency_key` fields.
+- Add failure tests: unavailable STT/TTS provider, slow backend, unavailable
+  Redis, duplicate message, impossible escalation.
 
 ### 3. Can defer safely
 
-- Connecteur Genesys Cloud CX réel.
-- Canal WhatsApp réel.
-- Self-hosting STT/TTS/LLM.
-- Dashboard admin avancé.
+- Real Genesys Cloud CX connector.
+- Real WhatsApp channel.
+- STT/TTS/LLM self-hosting.
+- Advanced admin dashboard.
 
-## Décision à retenir
+## Decision to Retain
 
-La cible à privilégier est : **points d'entrée indépendants par canal + backend
-Java commun pour le métier**.
+The target to prioritize is: **independent entry points per channel + shared
+Java backend for business logic**.
 
-Cette cible maximise l'évolutivité et limite les impacts croisés, mais elle ne
-devient robuste qu'à partir du moment où les contrats canal/backend, les SLOs et
-les modes dégradés sont explicitement définis et testés.
+This target maximizes evolvability and limits cross-impact, but it only becomes
+robust once channel/backend contracts, SLOs, and degraded modes are explicitly
+defined and tested.
