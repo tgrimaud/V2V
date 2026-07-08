@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="Application components" id="application-components">
+    <mxGraphModel dx="3334" dy="1492" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1000" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontStyle=1;align=center;" value="Voice Support Bot - Application Components" vertex="1">
+          <mxGeometry height="40" width="700" x="540" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="Solid = target V1&#xa;Dashed = future / legacy&#xa;Green = our applications&#xa;Grey = data / runtime state&#xa;Red = external service" vertex="1">
+          <mxGeometry height="120" width="260" x="40" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="voice_lane" parent="1" style="swimlane;startSize=30;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" value="Voice path - every voice channel goes through Pipecat" vertex="1">
+          <mxGeometry height="280" width="1010" x="-249" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="web_voice_user" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" value="Web Voice User" vertex="1">
+          <mxGeometry height="55" width="155" x="25" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="phone_user" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" value="Phone User" vertex="1">
+          <mxGeometry height="55" width="155" x="25" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="whatsapp_call_user" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;dashed=1;" value="WhatsApp Call User" vertex="1">
+          <mxGeometry height="55" width="155" x="25" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="web_frontend_voice" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Web Frontend&#xa;WebRTC" vertex="1">
+          <mxGeometry height="65" width="165" x="269" y="53" as="geometry" />
+        </mxCell>
+        <mxCell id="twilio" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="Twilio&#xa;Media Streams" vertex="1">
+          <mxGeometry height="65" width="165" x="262" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="whatsapp_voice_provider" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" value="WhatsApp Provider&#xa;voice call" vertex="1">
+          <mxGeometry height="65" width="165" x="264" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="voice_proxy" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Voice Channel Proxies&#xa;normalize audio sessions" vertex="1">
+          <mxGeometry height="75" width="190" x="529" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="pipecat" parent="voice_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Pipecat Voice Agent&#xa;VAD / barge-in / STT / TTS" vertex="1">
+          <mxGeometry height="75" width="210" x="778" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="text_lane" parent="1" style="swimlane;startSize=30;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" value="Text path - text channels call the Java backend directly" vertex="1">
+          <mxGeometry height="220" width="1010" x="-251" y="512" as="geometry" />
+        </mxCell>
+        <mxCell id="web_text_user" parent="text_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf2ff;strokeColor=#6c8ebf;" value="Web Chat User" vertex="1">
+          <mxGeometry height="55" width="155" x="25" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="whatsapp_text_user" parent="text_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf2ff;strokeColor=#6c8ebf;dashed=1;" value="WhatsApp Text User" vertex="1">
+          <mxGeometry height="55" width="155" x="25" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="web_frontend_text" parent="text_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Web Frontend&#xa;text chat" vertex="1">
+          <mxGeometry height="65" width="165" x="336" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="whatsapp_text_provider" parent="text_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" value="WhatsApp Provider&#xa;text messages" vertex="1">
+          <mxGeometry height="65" width="165" x="331" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="text_adapter" parent="text_lane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Text Channel Adapters&#xa;normalize messages" vertex="1">
+          <mxGeometry height="75" width="190" x="663" y="91" as="geometry" />
+        </mxCell>
+        <mxCell id="data_container" parent="1" style="swimlane;startSize=30;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" value="Data And Runtime State" vertex="1">
+          <mxGeometry height="178" width="447" x="803" y="715" as="geometry" />
+        </mxCell>
+        <mxCell id="postgres" parent="data_container" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" value="PostgreSQL + pgvector&#xa;KB, vectors, events" vertex="1">
+          <mxGeometry height="80" width="150" x="254" y="57" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" parent="data_container" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" value="Redis&#xa;active sessions" vertex="1">
+          <mxGeometry height="75" width="150" x="31" y="66" as="geometry" />
+        </mxCell>
+        <mxCell id="external_container" parent="1" style="swimlane;startSize=30;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="External Services" vertex="1">
+          <mxGeometry height="610" width="190" x="1556" y="146" as="geometry" />
+        </mxCell>
+        <mxCell id="gradium" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="Gradium&#xa;STT / TTS" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mistral" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="Mistral AI&#xa;chat LLM" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ollama" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="Ollama&#xa;embeddings" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="galaxion" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" value="Galaxion BSS&#xa;read-only APIs" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="genesys" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;dashed=1;" value="Genesys Cloud CX&#xa;future handoff" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="human_agent" parent="external_container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" value="Human Agent" vertex="1">
+          <mxGeometry height="55" width="140" x="25" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_web_voice_frontend" edge="1" parent="1" source="web_voice_user" style="endArrow=classic;strokeColor=#9673a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="web_frontend_voice" value="web voice">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_web_frontend_voice_proxy" edge="1" parent="1" source="web_frontend_voice" style="endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="voice_proxy" value="voice proxy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_phone_twilio" edge="1" parent="1" source="phone_user" style="endArrow=classic;strokeColor=#9673a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="twilio" value="PSTN">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_twilio_voice_proxy" edge="1" parent="1" source="twilio" style="endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="voice_proxy" value="voice proxy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_whatsapp_call_provider" edge="1" parent="1" source="whatsapp_call_user" style="endArrow=classic;strokeColor=#9673a6;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="whatsapp_voice_provider" value="voice call">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_whatsapp_voice_proxy" edge="1" parent="1" source="whatsapp_voice_provider" style="endArrow=classic;strokeColor=#b85450;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="voice_proxy" value="voice proxy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_voice_proxy_pipecat" edge="1" parent="1" source="voice_proxy" style="endArrow=classic;strokeColor=#82b366;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="pipecat" value="audio stream">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_pipecat_backend" edge="1" parent="1" source="pipecat" style="endArrow=classic;strokeColor=#82b366;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="java_backend_text" value="">
+          <mxGeometry relative="1" x="-1" y="-150" as="geometry">
+            <mxPoint x="-117" y="-56" as="offset" />
+            <Array as="points">
+              <mxPoint x="781" y="351" />
+              <mxPoint x="781" y="448" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_pipecat_gradium" edge="1" parent="1" source="pipecat" style="endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="gradium" value="STT / TTS">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="813" y="332" />
+              <mxPoint x="813" y="224" />
+              <mxPoint x="1160" y="224" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_web_text_frontend" edge="1" parent="1" source="web_text_user" style="endArrow=classic;strokeColor=#6c8ebf;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="web_frontend_text" value="web chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_web_frontend_text_adapter" edge="1" parent="1" source="web_frontend_text" style="endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="text_adapter" value="text adapter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_whatsapp_text_provider" edge="1" parent="1" source="whatsapp_text_user" style="endArrow=classic;strokeColor=#6c8ebf;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="whatsapp_text_provider" value="text message">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_whatsapp_text_adapter" edge="1" parent="1" source="whatsapp_text_provider" style="endArrow=classic;strokeColor=#b85450;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="text_adapter" value="text adapter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_backend_postgres_text" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#666666;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryPerimeter=0;" target="postgres" value="SQL / vectors">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_backend_redis_text" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="redis" value="sessions">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="816" y="983" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_backend_mistral" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#b85450;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="mistral" value="LLM">
+          <mxGeometry relative="1" x="0.0006" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_backend_ollama" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#b85450;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;" target="ollama" value="embeddings">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="998" y="383" />
+              <mxPoint x="1385" y="383" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_backend_galaxion" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="galaxion" value="read-only BSS">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_backend_genesys" edge="1" parent="1" source="java_backend_text" style="endArrow=classic;strokeColor=#b85450;dashed=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;" target="genesys" value="future handoff">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="926" y="604" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_genesys_agent" edge="1" parent="1" source="genesys" style="endArrow=classic;strokeColor=#9673a6;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;libavoidRouting=1;orthogonalLoop=1;jettySize=auto;html=1;" target="human_agent" value="handoff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="_lebamtZ15Cb8KPKea3N-2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;innerLoopWaypoints=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1582" y="-80.5" as="sourcePoint" />
+            <mxPoint x="1582" y="-61.75" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="java_backend_text" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" value="Java Backend&#xa;conversation engine" vertex="1">
+          <mxGeometry height="75" width="180" x="818" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_text_adapter_backend" edge="1" parent="1" source="text_adapter" style="endArrow=classic;strokeColor=#82b366;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="java_backend_text" value="conversation API">
+          <mxGeometry relative="1" x="0.8191" y="14" as="geometry">
+            <mxPoint x="-14" y="11" as="offset" />
+            <Array as="points">
+              <mxPoint x="781" y="641" />
+              <mxPoint x="781" y="448" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
