@@ -158,6 +158,14 @@ The developer corrects issues and resubmits until the adversarial reviewer is at
 least **90% satisfied** or the remaining concerns are explicitly accepted by
 Product/Architecture as known residual risk.
 
+Every **non-blocking** finding (accepted residual risk, deferred improvement or
+gated follow-up) MUST be appended to `product-backlog/review-findings.md` before
+the branch is declared merge-ready. Blocking findings are fixed before merge and
+are not logged there. Each non-blocking finding is either given a follow-up
+ticket in `product-backlog/tasks/` when the fix is actionable now, or linked to
+the dependency that gates it. This keeps residual risk visible instead of living
+only in a review comment or chat.
+
 ### 5. QA Execution
 
 QA runs the relevant tests after adversarial review is satisfied:
@@ -203,6 +211,8 @@ A story can move to done only when:
 - implementation is complete for the selected scope;
 - developer tests pass;
 - adversarial review is at least 90% satisfied;
+- non-blocking review findings are logged in `product-backlog/review-findings.md`
+  with a follow-up ticket or a gating dependency;
 - QA acceptance tests pass;
 - OpenTelemetry coverage exists for all runtime behavior touched by the story,
   or the story is explicitly marked as not runtime-affecting;
@@ -223,6 +233,7 @@ A story can move to done only when:
 | Python Behave tests | Voice runtime/channel behavior exists |
 | Chrome DevTools MCP notes | Web UI behavior exists |
 | Adversarial review report | Always before QA acceptance |
+| Non-blocking findings logged in `review-findings.md` | Whenever adversarial review raises accepted/deferred/gated findings |
 | QA functional and latency report | Always before completion |
 | Bug ticket | Every QA defect or defect-like requested fix |
 | OpenTelemetry evidence | Story touches runtime behavior |
@@ -262,6 +273,8 @@ Select US
 
 - Where should adversarial review scores be stored per story: commit comment,
   PR comment, `docs/operations/qa-reports/`, or a future issue tracker?
+  (Non-blocking findings now have a home: `product-backlog/review-findings.md`.
+  The numeric score storage is still open.)
 - Should QA reports live in the repository, in CI artifacts, or in the future
   project management tool?
 - Should the 90% adversarial threshold be measured as a numeric score, a checklist
