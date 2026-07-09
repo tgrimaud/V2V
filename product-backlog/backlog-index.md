@@ -45,7 +45,7 @@
 | US-024 | Protect personal data exposed to the customer | V1 enabler | Ready for review | High |
 | US-025 | Audit sensitive consultations | V1 enabler | Ready for review | High |
 | US-026 | Disclose analysis limits | V1 core | Ready for review | High |
-| US-027 | Measure key voice journey timings | V1 pilot gate | Ready for review | High |
+| US-027 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Ready for review | High |
 | US-028 | Track escalations and their reasons | V1 pilot gate | Ready for review | Medium |
 | US-029 | Track unresolved questions | V1 pilot gate | Ready for review | Medium |
 | US-030 | Consult line-by-line invoice differences | V1 enabler | Draft | Medium |
@@ -70,8 +70,15 @@ Moved into the explicit V1 backlog:
 - invoice PDF extraction status handling;
 - realistic BSS/PDF fixture validation;
 - voice latency pilot measurement;
+- OpenTelemetry-style correlation across Genesys, voice runtime, backend, BSS/PDF,
+  LLM, TTS and handoff spans;
+- per-slice latency measurement for channel ingress, end-of-turn, STT, backend,
+  evidence retrieval, comparison, RAG, LLM, TTS, channel egress and Genesys
+  handoff;
 - escalation handoff context and reason tracking;
 - Genesys advisor handoff as the V1 contact-center escalation target;
+- Genesys as the contact-center system of record while the backend owns
+  conversation intelligence and escalation content;
 - billing security, audit and evidence-limit disclosure.
 
 Moved out of the V1 prerequisite set:
@@ -106,3 +113,4 @@ Moved out of the V1 prerequisite set:
 | DEC-007 | Java owns business logic and Python owns the voice edge | Accepted via ADR-0001 and ADR-0011 |
 | DEC-008 | V1 routing prioritizes billing explanation while support/sales agents remain foundation capabilities | Accepted via ADR-0017 and ADR-0015 |
 | DEC-009 | Genesys handoff is in V1, full Genesys voice routing remains optional | Accepted via ADR-0019 and ADR-0020 |
+| DEC-010 | Pilot observability requires per-step latency traces before any production SLO claim | Accepted via ADR-0010 and ADR-0018 |

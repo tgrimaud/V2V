@@ -47,6 +47,15 @@
 - Presenting the omnichannel vision as industrialized because the diagram is clean: false. Until channel/backend contracts, an escalation contract, SLOs, observability, per-channel rate limiting, and degraded modes are defined/tested, this is a solid MVP with a healthy vision, not a production platform.
 - Adding WhatsApp, Genesys, or a new channel before formalizing the shared contract (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) — that duplicates logic and couples channels.
 - Making an architecture decision without an ADR: every structural decision must be documented under `docs/architecture/adrs/` with context, decision, consequences, and alternatives.
+- Letting Genesys own RAG, billing reasoning, guardrails, escalation policy, or
+  conversation memory: wrong boundary. Genesys owns contact-center operations;
+  the backend owns conversation intelligence and handoff content.
+- Claiming a voice SLO from a single end-to-end timing: first decompose latency
+  into channel ingress, end-of-turn, STT, backend, BSS/PDF, comparison, RAG, LLM,
+  TTS, channel egress and Genesys handoff.
+- Adding Genesys voice routing without testing barge-in and interruption across
+  the media layer and voice runtime: cancellation behavior is a cross-component
+  integration concern, not a backend-only feature.
 
 ## Checklist After Substantive Changes
 

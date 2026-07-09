@@ -15,7 +15,7 @@ deltas with read-only BSS/PDF evidence through phone and web Voice2Voice journey
 | EPIC-006 Human escalation | V1 core | ADR-0019, ADR-0020 |
 | EPIC-007 Web synthesis and evidence | V1 enabler | ADR-0003, ADR-0017 |
 | EPIC-008 Trust, security and audit | V1 enabler | ADR-0003, ADR-0008, OQ-001 |
-| EPIC-009 Quality and performance measurement | V1 pilot gate | ADR-0010, ADR-0018 |
+| EPIC-009 Quality and performance measurement | V1 pilot gate | ADR-0010, ADR-0018, OQ-005, OQ-006 |
 | EPIC-010 BSS/PDF evidence fixture path | V1 enabler | ADR-0004, ADR-0005, Galaxion docs |
 
 ---
@@ -34,6 +34,8 @@ context before explaining a price difference.
 ### Scope
 
 - Identify the customer from the activation channel or pilot-provided context.
+- Reuse Genesys IVR, ANI or contact-center lookup context when Genesys is the
+  phone entry point.
 - Retrieve invoices, periods and useful billing context from the BSS source of
   truth.
 - Detect cases where identity, invoice access or billing data is insufficient.
@@ -189,9 +191,11 @@ spoken explanation or escalation path.
 ### Scope
 
 - Start a phone voice conversation.
+- Support Twilio/Pipecat as the V1 implementation path while keeping Genesys
+  voice entry as a pilot option when the customer environment requires it.
 - Understand a billing explanation request.
 - Respond orally with acceptable perceived latency.
-- Handle clarification, acknowledgement and escalation.
+- Handle clarification, acknowledgement, barge-in and escalation.
 
 ### Business Rules
 
@@ -259,6 +263,8 @@ when the bot cannot answer safely.
 - Detect insufficient evidence, unusable extraction or unresolved deltas.
 - Provide a useful summary for the human advisor through the Genesys handoff
   path.
+- Attach the permitted backend handoff context to the Genesys interaction before
+  advisor transfer when Genesys is used.
 - Keep full Genesys Audio Connector voice routing separate from the mandatory V1
   escalation contract unless the pilot environment requires it.
 
@@ -270,6 +276,7 @@ when the bot cannot answer safely.
 | BR-006-2 | The bot escalates when it lacks enough proof to explain the delta. |
 | BR-006-3 | The handoff context helps the customer avoid repeating the whole request. |
 | BR-006-4 | V1 escalation targets Genesys for advisor handoff; full Genesys voice routing is a separate pilot option. |
+| BR-006-5 | Genesys remains the contact-center system of record; the backend remains the owner of escalation policy and handoff content. |
 
 ### User Stories
 
@@ -346,9 +353,16 @@ where conversations fail or escalate.
 
 ### Scope
 
-- Measure voice timing points, including first acknowledgement and first audio.
+- Measure voice timing points by pipeline slice: channel ingress, end-of-turn,
+  STT, backend first token or action, BSS/PDF evidence, comparison, RAG, LLM,
+  TTS first audio, channel egress and Genesys handoff.
 - Measure invoice comparison response time for conversational use.
 - Track escalations and unresolved questions.
+- Correlate Genesys, voice runtime, backend, BSS/PDF, LLM, TTS and handoff events
+  with a shared correlation id.
+- Support OpenTelemetry-style span collection and dashboards for p50, p95 and
+  p99 by channel and provider configuration.
+- Combine Genesys contact-center metrics with AI-layer metrics for pilot review.
 - Support the ADR-0018 pilot criterion before any production SLO claim.
 
 ### User Stories

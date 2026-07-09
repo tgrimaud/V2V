@@ -114,3 +114,25 @@
 - `.cursor/skills/adversarial-architecture-review/SKILL.md` — skill local de revue adversariale architecture/NFR/SLA.
 - `CLAUDE.md` — apprentissage sur le score 2.8/5 et l'usage du skill.
 - `AGENTS.md` — pieges a eviter autour de l'industrialisation omnicanale sans contrats/SLOs.
+
+## 2026-07-09 — Genesys target architecture and latency observability alignment
+
+**Summary:**
+
+- Clarified the target Genesys Cloud CX pattern: Genesys remains the
+  contact-center system of record, while the Java backend owns conversation
+  intelligence, RAG, billing reasoning, guardrails, escalation policy and handoff
+  content.
+- Aligned V1 scope, ADR-0020, backlog epics, user stories, open questions and
+  decisions with Genesys handoff, optional full Genesys voice routing, barge-in
+  and advisor context transfer.
+- Added pilot observability requirements: shared correlation id,
+  OpenTelemetry-style spans, per-step latency measurement, Genesys Analytics plus
+  AI-layer metrics, and p50/p95/p99 reporting before any production SLO claim.
+
+### Files changed
+- `docs/architecture/architecture.md` — target Genesys contact-center pattern.
+- `docs/architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md` — Genesys system-of-record decision and consequences.
+- `docs/product/v1-scope.md` — Genesys V1 scope and latency test matrix.
+- `product-backlog/` — epics, stories, decisions, open questions and index aligned with the target architecture.
+- `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — shared knowledge updated.

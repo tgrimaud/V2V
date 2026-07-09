@@ -17,7 +17,7 @@ concerns, so that the invoice explanation uses only my own billing context.
 ```gherkin
 Scenario: Customer identity is reliable enough
   Given a customer starts a billing explanation conversation
-  When the channel or pilot context identifies the customer with enough confidence
+  When the channel, Genesys IVR/ANI context, pilot context or BSS context identifies the customer with enough confidence
   Then the bot continues the invoice explanation journey for that customer
   And the bot does not ask the customer to repeat known information
 ```
@@ -388,6 +388,14 @@ Scenario: Phone Voice2Voice journey
   And provides a spoken billing explanation or an escalation path
 ```
 
+```gherkin
+Scenario: Genesys phone entry remains a pilot option
+  Given the pilot environment requires calls to enter through Genesys
+  When the call is routed to the bot journey
+  Then Genesys remains the contact-center system of record
+  And the voice runtime handles the AI audio conversation through the agreed media integration
+```
+
 ---
 
 ## US-013 - Receive A Quick Spoken Acknowledgement During Long Analysis
@@ -598,6 +606,7 @@ Scenario: Explicit advisor request reaches Genesys
   Given the customer asks to speak with a human advisor
   When the bot starts the handoff
   Then Genesys receives a handoff request with the conversation summary, reason and permitted customer/session identifiers
+  And the handoff is attached to the existing interaction before advisor transfer when a Genesys interaction already exists
 ```
 
 ```gherkin
@@ -606,6 +615,13 @@ Scenario: Insufficient evidence reaches Genesys
   When the bot escalates
   Then Genesys receives the known evidence, missing evidence and unresolved points
   And the customer is told that the advisor will receive the available context
+```
+
+```gherkin
+Scenario: Genesys handoff outcome is observable
+  Given a conversation is escalated to Genesys
+  When the handoff completes or fails
+  Then the handoff outcome, target queue, latency and error reason are available for pilot review
 ```
 
 ---
@@ -770,7 +786,23 @@ we can verify whether the experience is acceptable.
 Scenario: Voice journey timing is measurable
   Given a customer completes a voice billing explanation journey
   When the journey is reviewed
-  Then key timing points such as first acknowledgement and first meaningful answer can be assessed
+  Then channel ingress, end-of-turn, STT, backend first token or action, TTS first audio and channel egress timings can be assessed separately
+  And the journey exposes p50, p95 and p99 measurements for the reviewed sample
+```
+
+```gherkin
+Scenario: Distributed trace links the voice journey
+  Given a customer completes a voice billing explanation journey
+  When the journey is reviewed
+  Then Genesys, voice runtime, backend, BSS/PDF, LLM, TTS and handoff events share a correlation id when those components participate
+  And the trace shows which slice contributed most to the observed latency
+```
+
+```gherkin
+Scenario: Barge-in behavior is measurable
+  Given the assistant is playing audio
+  When the customer interrupts
+  Then playback cancellation, in-flight TTS cancellation and backend turn handling are observable as explicit timing and outcome events
 ```
 
 ---
@@ -794,6 +826,7 @@ Scenario: Handoff reason is known
   Given a conversation is escalated
   When the escalation is reviewed
   Then the reason is available as explicit customer request, insufficient evidence, missing data, inconsistent data or another product-visible category
+  And Genesys contact-center metrics can be correlated with AI-layer escalation metrics when Genesys handled the interaction
 ```
 
 ---
@@ -905,7 +938,7 @@ evidence quality.
 Scenario: Comparison duration is measurable
   Given a customer asks for an invoice explanation
   When the system retrieves evidence and compares invoices
-  Then the comparison duration can be reviewed separately from voice latency
+  Then BSS/PDF evidence retrieval and deterministic comparison durations can be reviewed separately from voice latency
 ```
 
 ```gherkin

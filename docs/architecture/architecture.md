@@ -11,6 +11,9 @@ The architecture is **hybrid**:
 - A **Java backend** (hexagonal) handles business logic, RAG, and administration
 - A **Python Pipecat voice agent** orchestrates the real-time audio pipeline with Gradium (STT/TTS)
 - A **Pipecat WebRTC** channel serves the target V1 web journey, with Twilio Media Streams for telephony
+- **Genesys Cloud CX** is the target contact-center system of record for call
+  ingestion, compliance recording, queueing, supervision, reporting, and human
+  advisor handoff
 - The **React frontend + custom WebSocket bridge** remains available as a historical POC / fallback, but is no longer the target V1 path
 
 The machine/VM target for an operator V1 pilot is detailed in
@@ -34,7 +37,9 @@ for voice/text channel routing,
 [ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) for
 latency targets, and
 [ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md) for escalation
-handoff.
+handoff, and
+[ADR-0020](adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md)
+for the Genesys handoff and full voice-routing boundary.
 
 ## Architecture Diagram
 
@@ -186,13 +191,13 @@ adapters must normalize an envelope containing:
 
 | Field | Purpose |
 |---|---|
-| `channel` | Source channel such as `web_voice`, `phone`, `web_chat`, `whatsapp_text`, `whatsapp_voice`, or `contact_center_chat` |
+| `channel` | Source channel such as `web_voice`, `phone`, `web_chat`, `whatsapp_text`, `whatsapp_voice`, `contact_center_chat`, or `genesys_voice` |
 | `conversation_id` | Internal backend conversation id |
-| `external_session_id` | Channel/provider session id, e.g. Twilio call SID, WhatsApp thread id, or contact-center conversation id |
+| `external_session_id` | Channel/provider session id, e.g. Twilio call SID, WhatsApp thread id, or Genesys conversation id |
 | `message_id` | Channel/provider inbound message or event id |
 | `idempotency_key` | Duplicate protection for retries and asynchronous delivery |
 | `reply_mode` | Expected response mode: `sync`, `stream`, `async`, or `handoff` |
-| `customer_reference` | Optional safe customer/account reference resolved by the channel adapter |
+| `customer_reference` | Optional safe customer/account reference resolved by the channel adapter, Genesys IVR/ANI lookup, or the BSS trust model |
 | `escalation_context` | Optional handoff context following [ADR-0019](adrs/ADR-0019-escalation-rules-and-handoff-contract.md) |
 
 Current `ask` and `ask-stream` calls may keep accepting `question` and
@@ -210,7 +215,36 @@ logic or hiding idempotency and escalation behavior inside channel code.
 | Web chat text | MVP/direct text path | Calls the Java backend directly |
 | WhatsApp text | Future async channel adapter | Calls the Java backend with the channel envelope; not production before contract, SLO, quotas, and observability are ready |
 | WhatsApp voice/call | Future voice channel adapter | Goes through a WhatsApp voice proxy to Pipecat |
-| Genesys Cloud CX | Future contact-center and escalation layer | Owns queues, agent desktop, supervision, and human handoff only; does not own RAG, billing reasoning, guardrails, or memory |
+| Genesys Cloud CX | Target contact-center system of record | Owns call ingestion, IVR/ANI context, compliance recording, routing, queues, agent desktop, supervision, reporting, and human handoff; does not own RAG, billing reasoning, guardrails, or memory |
+
+### Target Genesys Contact-Center Pattern
+
+The target enterprise call path keeps Genesys Cloud CX as the system of record
+for the contact-center interaction. Genesys ingests the call, applies the
+operator's IVR and identification rules, records and supervises the interaction,
+then routes eligible calls to a virtual-agent queue or flow.
+
+For a full voice-routing pilot, Genesys streams audio to the voice runtime
+through AudioHook or the selected Genesys media integration. The voice runtime
+handles STT/TTS or speech-to-speech, barge-in, and low-latency audio orchestration,
+then calls the Java backend through the normalized channel envelope. The Java
+backend remains the owner of conversation policy, RAG, billing evidence retrieval,
+guardrails, multi-agent routing, escalation decisions, and audit events.
+
+When escalation is required, the backend prepares a versioned
+`EscalationHandoff` and a Genesys adapter attaches the permitted context to the
+Genesys interaction before transferring it to the normal advisor queue. The
+handoff context must include the escalation reason, transcript summary, detected
+intent, customer/session identifiers allowed by the trust model, evidence already
+collected, unresolved points, and recommended next advisor action. The advisor
+must receive enough context to continue the conversation without asking the
+customer to restart from zero.
+
+Authentication and customer identification should happen before or as the AI
+conversation starts. The target path reuses Genesys IVR, ANI, or existing
+contact-center lookup data when available instead of duplicating identity logic
+inside the voice runtime. The backend may still enforce its own BSS access rules
+from the identity confidence and customer reference it receives.
 
 ## Domain Layer (Pure Java)
 

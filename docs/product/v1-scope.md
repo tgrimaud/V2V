@@ -171,6 +171,26 @@ does not make the full Genesys Audio Connector bot path mandatory for V1: routin
 the entire voice conversation through Genesys remains a pilot option or technical
 spike unless the customer environment requires it.
 
+The target contact-center pattern keeps Genesys Cloud CX as the system of record
+for the call interaction. Genesys owns call ingestion, IVR/ANI-based context,
+compliance recording, routing, queueing, supervision, agent desktop, and
+contact-center reporting. The bot platform owns the AI conversation workflow,
+RAG, guardrails, billing evidence retrieval, deterministic comparison, escalation
+decision, and conversation memory.
+
+If the pilot uses full Genesys voice routing, Genesys should route the call to a
+virtual-agent flow or queue and stream audio to the voice runtime through
+AudioHook or the selected Genesys media integration. The voice runtime handles
+STT/TTS or speech-to-speech and barge-in, then calls the Java backend through the
+normalized channel contract. If escalation is needed, the backend produces the
+handoff context and the Genesys adapter attaches it to the existing interaction
+before transfer to the normal advisor queue.
+
+Customer identification should reuse Genesys IVR, ANI, or existing
+contact-center lookup context when available. The AI layer must not duplicate
+Genesys identity workflows, but the backend must still enforce its BSS access
+rules from the received identity confidence and customer reference.
+
 ## Non-Functional Needs
 
 ### Reliability
@@ -222,6 +242,39 @@ The latency target must not lead to producing an unreliable explanation: if the
 business analysis requires more time, the bot must be able to produce a fast oral
 acknowledgement, then deliver the reliable explanation when the BSS evidence is
 available.
+
+Latency validation must be decomposed by brick before end-to-end acceptance. Each
+brick should be measurable in isolation with a controlled fixture, then measured
+again inside the complete voice journey using the same correlation id.
+
+Recommended latency slices:
+
+| Slice | Start | Stop | Primary test |
+|---|---|---|---|
+| Channel ingress | First customer audio frame accepted by channel | First audio frame received by voice runtime | WebRTC/Twilio/Genesys adapter integration test |
+| Turn detection | User stops speaking | End-of-turn event accepted by voice runtime | Voice runtime test with recorded audio fixtures |
+| STT | Audio chunk or utterance submitted to STT | Final transcript available | Provider adapter benchmark with short/long/noisy fixtures |
+| Backend orchestration | Transcript submitted to backend | First backend token or first structured action | Backend integration test with fake LLM/BSS ports |
+| BSS/PDF evidence | Evidence request started | Evidence object or extraction status available | Adapter/fixture test with nominal, partial, and unavailable cases |
+| Deterministic comparison | Evidence object accepted | Invoice delta analysis available | Pure domain benchmark with fixed invoice fixtures |
+| RAG/vector search | Retrieval query started | Top documents available | Vector adapter benchmark with warm and cold index |
+| LLM wording | Prompt submitted | First token and final answer available | LLM adapter benchmark with streamed timing markers |
+| TTS | Text chunk submitted | First playable audio frame available | TTS adapter benchmark with persistent and cold connections |
+| Channel egress | First audio frame emitted by voice runtime | First audio frame playable by the customer channel | WebRTC/Twilio/Genesys adapter integration test |
+| Genesys handoff | Escalation decision accepted | Interaction transferred or queued with context attached | Genesys sandbox/fake adapter contract test |
+
+End-to-end reports must publish p50, p95, p99, min, max, mean, sample size,
+channel, environment, provider configuration, warm/cold state, cache state, and
+whether connections were already established. Genesys Analytics should be used
+for contact-center KPIs such as queue time, transfer rate, handle time, and
+abandonment. The AI layer should report containment, resolution without transfer,
+evidence coverage, sentiment or satisfaction proxy, escalation reason, and all
+per-step latency spans.
+
+Barge-in and interruption handling must be tested as a cross-component behavior:
+the channel media layer and the voice runtime must agree when user speech stops
+assistant playback, cancels in-flight TTS, and decides whether the backend turn
+should continue or be interrupted.
 
 ### Structuring V1 Technical Requirements
 
@@ -344,5 +397,8 @@ following epics:
 - Phone Voice2Voice journey.
 - Web Voice2Voice journey.
 - Web interface for summary and evidence.
+- Genesys advisor handoff and contact-center context transfer.
 - Security, audit, and governance of BSS access.
-- LLM / STT / TTS abstractions, observability, and latency constraints.
+- LLM / STT / TTS abstractions.
+- OpenTelemetry-style observability, per-step latency measurement, and pilot
+  performance reporting.

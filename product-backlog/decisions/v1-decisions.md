@@ -203,6 +203,12 @@ The full Genesys Audio Connector path, where Genesys is the entry telephony laye
 and routes the complete bidirectional bot conversation to Pipecat/Gradium, is not
 a mandatory V1 dependency unless the pilot environment requires it.
 
+Genesys remains the system of record for the contact-center interaction:
+ingestion, IVR/ANI context, recording, routing, queueing, supervision, agent
+desktop and contact-center analytics. The backend remains the owner of AI
+conversation workflow, billing reasoning, RAG, guardrails, escalation policy and
+handoff content.
+
 ### Rationale
 
 Genesys is the realistic contact-center endpoint for human escalation, so a V1
@@ -215,3 +221,34 @@ explanation value is proven.
 Backlog items must separate Genesys advisor handoff from full Genesys voice
 routing. The former is V1 scope; the latter is a feasibility spike or pilot
 option.
+
+---
+
+## DEC-010 - Pilot Observability Requires Per-Step Latency Traces
+
+**Status:** Accepted via ADR-0010 and ADR-0018
+**Date:** 2026-07-09
+
+### Decision
+
+Pilot acceptance requires measuring the voice journey by pipeline slice before
+claiming production readiness or production SLOs.
+
+The minimum measured slices are channel ingress, end-of-turn, STT, backend first
+token or action, BSS/PDF evidence retrieval, deterministic comparison, RAG/vector
+search, LLM first token and completion, TTS first audio, channel egress and
+Genesys handoff when applicable.
+
+### Rationale
+
+An end-to-end average only says that a conversation is slow. It does not show
+whether the bottleneck is Genesys, the voice runtime, STT, backend orchestration,
+BSS/PDF evidence, RAG, LLM, TTS or handoff.
+
+### Implication
+
+V1 pilot reports must use a shared correlation id and OpenTelemetry-style spans
+across participating components. Reports must publish p50, p95, p99, sample
+size, channel, provider configuration, warm/cold state and cache/connection
+state. Genesys Analytics metrics and AI-layer metrics must be combined for pilot
+review when Genesys participates in the interaction.

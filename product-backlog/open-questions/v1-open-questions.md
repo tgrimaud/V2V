@@ -123,9 +123,18 @@ turning an aspirational target into an unmeasured contractual promise.
 
 - Measurement environment and sample size.
 - Which journeys count toward the pilot metric.
+- Which latency slices must be reported separately: channel ingress,
+  end-of-turn, STT, backend first token, BSS/PDF evidence, comparison, RAG,
+  LLM, TTS first audio, channel egress, and Genesys handoff.
+- Which tests use controlled fixtures, fake providers, sandbox providers, or
+  real provider calls.
+- Warm and cold conditions: cache state, pre-opened TTS connection, pre-warmed
+  LLM, preloaded vector index, and co-location assumptions.
 - How long-running BSS evidence analysis is handled with a quick spoken
   acknowledgement.
 - What latency or evidence failures require degraded mode or escalation.
+- How barge-in is measured and which component is authoritative for cancelling
+  playback or interrupting an in-flight turn.
 
 ---
 
@@ -154,3 +163,12 @@ constraints apply.
 - Queue or skill routing rules for billing advisor escalation.
 - Whether full Genesys Audio Connector routing is required for the pilot or only
   a feasibility spike.
+- Whether Genesys is the phone entry point for pilot calls or only the advisor
+  handoff target.
+- If full Genesys voice routing is used, which media integration is selected
+  (AudioHook, Audio Connector, SIP, or another approved pattern).
+- Which Genesys attributes, task variables, or Open API objects carry transcript
+  summary, detected intent, escalation reason, BSS evidence, and unresolved
+  points to the advisor desktop.
+- Which Genesys Analytics metrics and AI-layer metrics are combined in the pilot
+  KPI dashboard.

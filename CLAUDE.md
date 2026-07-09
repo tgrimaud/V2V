@@ -20,8 +20,17 @@
 - The billing source of truth is the **read-only BSS**. The LLM formulates a traceable explanation after deterministic discrepancy calculations; it must not guess amounts.
 - The product core must remain agnostic to **LLM / STT / TTS** providers through configurable ports/adapters so several solutions can be benchmarked easily.
 - The V1 voice target starts with **Gradium + Pipecat** (`voice-agent/agent/bot.py`): WebRTC for web and Twilio Media Streams for telephony. `bridge_server.py` remains a historical POC / fallback, not the target path.
+- Target Genesys pattern: **Genesys Cloud CX is the contact-center system of
+  record** (call ingestion, IVR/ANI, recording, routing, queues, supervision,
+  reporting, advisor desktop); the Java backend remains the owner of AI
+  conversation workflow, RAG, billing reasoning, guardrails, escalation policy,
+  handoff content and conversation memory.
 - The V1 product backlog lives in `product-backlog/` (EPICs, user stories, decisions, open questions) so it stays versioned with the application repository before a Jira migration.
 - Omnichannel adversarial review (2026-07-08): overall score **2.8/5** — a solid MVP foundation, but not yet an industrialized platform without channel/backend contracts, an escalation contract, measurable SLOs, per-step/channel observability, and tested degraded modes.
+- Pilot observability must use a shared correlation id and OpenTelemetry-style
+  spans across Genesys, voice runtime, backend, BSS/PDF evidence, comparison,
+  RAG, LLM, TTS and handoff. Report p50/p95/p99 by channel/provider before any
+  production SLO claim.
 - Use the local `.cursor/skills/product-business/` skill to produce or review PRDs, EPICs, user stories, business rules, and product-level acceptance criteria.
 - Use the local `.cursor/skills/adversarial-architecture-review/` skill to challenge architecture choices, NFR/SLA, modularity, external-provider replaceability, and Genesys/WhatsApp/omnichannel readiness.
 - Use the local `.cursor/skills/software-architect/` skill for every structural decision and create/update the corresponding ADR in `docs/architecture/adrs/`.
@@ -88,3 +97,5 @@ cd voice-agent && python -m pytest tests/
 | Using `invoices/composed` as customer invoice detail | This is not the selected V1 path. Retrieve the PDF via `bill-run-documents`, then extract structured invoice JSON before the comparison engine. |
 | ODP template slides stayed visually blank despite text in `content.xml` | Do not keep patching ODP placeholders blindly. Generate a PPTX with standard PowerPoint text shapes (e.g. via `python-pptx` in a temp venv) when no LibreOffice renderer is available. |
 | Presentation content overflowed template frames | For `Presentation.odp`, prefer simple large layouts, one idea per slide, and two short bullets max; do not fill every placeholder just because it exists. |
+| Treating Genesys as the AI brain | Keep Genesys as contact-center SoR only; RAG, billing rules, guardrails, memory and escalation content stay in the backend. |
+| Validating only end-to-end voice latency | Measure each slice separately: channel ingress, end-of-turn, STT, backend, BSS/PDF, comparison, RAG, LLM, TTS, channel egress and Genesys handoff. |
