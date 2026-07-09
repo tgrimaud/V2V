@@ -71,7 +71,7 @@ against the new empty-codebase plan.
 
 | Key | Title | Classification | Status | Priority |
 |-----|-------|---|--------|----------|
-| TASK-STT-001 | Create the voice runtime STT validation scaffold | V1 enabler | Draft | High |
+| TASK-STT-001 | Create the voice runtime STT validation scaffold | V1 enabler | Done | High |
 | TASK-STT-002 | Validate STT transcription quality with audio fixtures | V1 pilot gate | Draft | High |
 | TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | V1 pilot gate | Draft | High |
 | TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | V1 pilot gate | Draft | High |

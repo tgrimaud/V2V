@@ -11,7 +11,7 @@ testable from an empty implementation baseline.
 **Parent:** EPIC-006, EPIC-010  
 **Related stories:** US-019, US-036  
 **Classification:** V1 enabler  
-**Status:** Draft  
+**Status:** Done
 **Priority:** High  
 **Branch:** `task/TASK-STT-001-stt-validation-scaffold`
 
@@ -50,6 +50,13 @@ Scenario: STT provider remains replaceable
 - QA can run a repeatable fixture-based validation.
 - OpenTelemetry traces, metrics and structured logs identify the STT validation
   attempt, provider, outcome and duration.
+
+### Review Evidence
+
+- `voice-agent/stt_validation/`
+- `voice-agent/tests/test_stt_validation_runner.py`
+- `voice-agent/README.md`
+- Validated by the user on 2026-07-09.
 
 ---
 
