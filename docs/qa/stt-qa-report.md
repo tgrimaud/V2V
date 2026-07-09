@@ -99,7 +99,11 @@ STT is declared ready.
   STT capability pilot-ready** until a real provider is connected and the manifest is
   re-run.
 - **Required fixes before pilot:**
-  1. Select and connect a real STT provider adapter (resolves RF-003, RF-002).
+  1. ~~Select and connect a real STT provider adapter~~ **Provider selected
+     (Gradium, DEC-005) and a fresh `GradiumSttProvider` is implemented behind the
+     `SttProvider` protocol (TASK-STT-008).** Still pending: a live run with a real
+     `GRADIUM_API_KEY` + real audio to record real quality/latency, which keeps
+     RF-003 open until executed.
   2. Grow the fixture set to statistically meaningful sample sizes (TASK-STT-007).
   3. Optionally harden sanitization for non-path sensitive tokens (TASK-STT-005).
 
@@ -111,4 +115,8 @@ python3 -m venv .venv && ./.venv/bin/pip install behave
 ./.venv/bin/behave features/stt_validation.feature
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 -m stt_validation.quality_cli fixtures/manifest.json
+
+# real Gradium engine (TASK-STT-008) — needs a valid key and real audio:
+export GRADIUM_API_KEY=...
+python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
 ```

@@ -1,7 +1,9 @@
 """STT validation scaffold for controlled audio fixtures."""
 
+from .gradium_provider import GradiumResponse, GradiumSttError, GradiumSttProvider
 from .models import SttOutcome, TranscriptResult
-from .providers import FixtureSttProvider
+from .provider_factory import PROVIDER_NAMES, build_provider
+from .providers import FixtureSttProvider, SttProvider
 from .quality import (
     FixtureAssessment,
     FixtureCategory,
@@ -14,16 +16,22 @@ from .runner import SttValidationRunner
 from .telemetry import LatencyReport, TelemetryRecorder
 
 __all__ = [
+    "PROVIDER_NAMES",
     "FixtureAssessment",
     "FixtureCategory",
     "FixtureQualityReport",
     "FixtureSpec",
     "FixtureSttProvider",
+    "GradiumResponse",
+    "GradiumSttError",
+    "GradiumSttProvider",
     "LatencyReport",
     "SttOutcome",
+    "SttProvider",
     "SttValidationRunner",
     "TelemetryRecorder",
     "TranscriptResult",
+    "build_provider",
     "evaluate_fixture_set",
     "word_error_rate",
 ]

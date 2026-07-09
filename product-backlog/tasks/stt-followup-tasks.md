@@ -124,7 +124,7 @@ Scenario: Category quality is reported over multiple samples
 **Related stories:** US-019, US-036
 **Related decision:** DEC-005 (Gradium + Pipecat reference voice path; ADR-0002)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** In progress (implementation + offline tests done; live run pending Gradium credentials)
 **Priority:** High
 **Branch:** `task/TASK-STT-008-gradium-stt-provider`
 
@@ -185,10 +185,37 @@ Scenario: Gradium failure stays observable and sanitized
 - Behave scenarios pass against the configured provider.
 - Confirmation that no secret is present in logs or telemetry.
 
+### Delivery Evidence (implementation slice)
+
+- `voice-agent/stt_validation/gradium_provider.py`: fresh `GradiumSttProvider`
+  implementing `SttProvider`, injectable HTTP transport (stdlib `urllib` default,
+  no new dependency), stable error mapping (auth/credits/timeout/unreachable/
+  no-speech), API key never placed in an exception, log or telemetry attribute.
+- `voice-agent/stt_validation/provider_factory.py` + `--provider {fixture,gradium}`
+  on both CLIs: runtime provider selection with zero harness changes.
+- `voice-agent/tests/test_gradium_provider.py`: 11 tests (success, auth, credits,
+  no-speech, missing key, timeout→`stt_timeout`, no-key-in-telemetry, factory,
+  PCM/u-law content-type) with a fake transport — no network. Full suite 28 tests
+  passing; 5 Behave scenarios still green.
+- No legacy code reused (`agent/gradium_stt.py` not restored).
+- **Live smoke test (2026-07-09)** against `api.gradium.ai` with the real key:
+  auth and connectivity confirmed (no 401). It surfaced a real bug — Gradium
+  rejects the urllib default `application/x-www-form-urlencoded` and also
+  `application/octet-stream`; the accepted Content-Type is `audio/pcm` for PCM
+  (`audio/basic` for u-law). Fixed and locked with a regression test. A silence
+  PCM buffer returns HTTP 200 with an empty transcript, correctly mapped to
+  `failed` / "no speech" (no invented transcript).
+
+### Remaining Before Done
+
+- Run `--provider gradium` with a real `GRADIUM_API_KEY` and real audio fixtures,
+  then record real quality/latency numbers in the QA docs. This step needs
+  credentials and is not runnable in this environment.
+
 ### Notes
 
-- Resolving this ticket updates RF-003 from ticketed to closed and re-scopes the
-  go/no-go recommendation in `docs/qa/stt-qa-report.md` from "labo slice" to
-  "real STT engine".
+- The implementation slice makes RF-003 actionable but does **not** close it: the
+  quality numbers stay fixture-based until the live run is executed. Keep RF-003
+  ticketed until the real numbers are recorded.
 - RF-002 (channel ingress span is a scaffold analog) stays gated by US-019/US-036,
   which introduce the real channel ingress path.

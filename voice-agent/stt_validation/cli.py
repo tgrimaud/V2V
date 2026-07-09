@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from .models import SttOutcome
-from .providers import FixtureSttProvider
+from .provider_factory import FIXTURE, PROVIDER_NAMES, build_provider
 from .runner import SttValidationRunner
 from .telemetry import LatencyReport, TelemetryRecorder
 
@@ -11,7 +11,7 @@ from .telemetry import LatencyReport, TelemetryRecorder
 def main() -> int:
     args = _parse_args()
     telemetry = TelemetryRecorder()
-    runner = SttValidationRunner(FixtureSttProvider(), telemetry)
+    runner = SttValidationRunner(build_provider(args.provider), telemetry)
 
     results = [runner.validate(path, _correlation_id(args, index)) for index, path in enumerate(args.audio_path)]
     stt_samples = [result.stt_request_ms for result in results]
@@ -40,6 +40,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate one or more STT audio fixtures")
     parser.add_argument("audio_path", type=Path, nargs="+")
     parser.add_argument("--correlation-id", default=None)
+    parser.add_argument("--provider", choices=PROVIDER_NAMES, default=FIXTURE)
     return parser.parse_args()
 
 

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from .manifest import load_manifest
-from .providers import FixtureSttProvider
+from .provider_factory import FIXTURE, PROVIDER_NAMES, build_provider
 from .quality import evaluate_fixture_set
 from .runner import SttValidationRunner
 from .telemetry import TelemetryRecorder
@@ -12,7 +12,7 @@ from .telemetry import TelemetryRecorder
 def main() -> int:
     args = _parse_args()
     manifest = load_manifest(args.manifest)
-    runner = SttValidationRunner(FixtureSttProvider(), TelemetryRecorder())
+    runner = SttValidationRunner(build_provider(args.provider), TelemetryRecorder())
     report = evaluate_fixture_set(
         runner,
         manifest.specs,
@@ -26,6 +26,7 @@ def main() -> int:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate STT transcription quality across a fixture manifest")
     parser.add_argument("manifest", type=Path)
+    parser.add_argument("--provider", choices=PROVIDER_NAMES, default=FIXTURE)
     return parser.parse_args()
 
 

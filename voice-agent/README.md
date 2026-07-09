@@ -87,3 +87,34 @@ python3 -m venv .venv && ./.venv/bin/pip install behave
 coverage reporting, safe silence handling, percentile-ready STT latency and
 sanitized failure. The consolidated QA functional + latency report and the
 go/no-go recommendation live in `docs/qa/stt-qa-report.md`.
+
+## STT provider selection (TASK-STT-008)
+
+The runtime STT provider is selectable so QA can run the same harness offline or
+against the real engine:
+
+- `fixture` (default) — deterministic `.txt` sidecar, no network, no secret;
+- `gradium` — real Gradium ASR (DEC-005), built from `GRADIUM_API_KEY`
+  (`GRADIUM_LANGUAGE`, `GRADIUM_INPUT_FORMAT` optional).
+
+```bash
+# offline (default)
+python3 -m stt_validation.quality_cli fixtures/manifest.json
+
+# real Gradium engine (needs a valid key and real audio fixtures)
+export GRADIUM_API_KEY=...      # never commit this
+python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
+python3 -m stt_validation.cli clip.wav --provider gradium --correlation-id run
+```
+
+`GradiumSttProvider` is a **fresh implementation** behind the `SttProvider`
+protocol (the legacy `agent/gradium_stt.py` is not reused). Its HTTP transport is
+injectable, so unit tests exercise success, auth, credit, timeout and no-speech
+paths without any network call, and assert the API key never reaches an
+exception, log or telemetry attribute. The API key never appears in code, logs or
+telemetry.
+
+Gradium ASR validates the request `Content-Type` against an allowlist. The
+provider sends `audio/pcm` for PCM input and `audio/basic` for u-law telephony
+(verified live). Sending the urllib default `application/x-www-form-urlencoded`
+or `application/octet-stream` returns `HTTP 500 unsupported content type`.
