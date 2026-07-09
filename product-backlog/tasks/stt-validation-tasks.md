@@ -188,7 +188,7 @@ Scenario: STT failure is observable without leaking sensitive data
 **Parent:** EPIC-010  
 **Related stories:** US-019, US-036  
 **Classification:** V1 pilot gate  
-**Status:** Draft  
+**Status:** Done  
 **Priority:** High  
 **Branch:** `task/TASK-STT-004-stt-qa-report`
 
@@ -228,3 +228,14 @@ Scenario: STT defects become explicit bug tickets
 - Gherkin scenarios.
 - QA report.
 - Bug tickets for defects found during STT validation.
+
+### Delivery Evidence
+
+- Gherkin + Behave automation: `voice-agent/features/stt_validation.feature`,
+  `voice-agent/features/steps/stt_steps.py`, `voice-agent/features/environment.py`
+  (5 scenarios / 22 steps passing, reusing the real `stt_validation` harness).
+- QA functional + latency report with go/no-go: `docs/qa/stt-qa-report.md`.
+- Bug-ticket process documented; no blocking defect for the current fixture set,
+  so no `BUG-XXX` ticket was required this run.
+- Recommendation: GO to close the STT-validation labo slice; NO-GO to declare the
+  product STT capability pilot-ready until a real provider is connected (RF-003).

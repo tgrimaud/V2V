@@ -72,9 +72,9 @@ against the new empty-codebase plan.
 | Key | Title | Classification | Status | Priority |
 |-----|-------|---|--------|----------|
 | TASK-STT-001 | Create the voice runtime STT validation scaffold | V1 enabler | Done | High |
-| TASK-STT-002 | Validate STT transcription quality with audio fixtures | V1 pilot gate | Draft | High |
-| TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | V1 pilot gate | Draft | High |
-| TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | V1 pilot gate | Draft | High |
+| TASK-STT-002 | Validate STT transcription quality with audio fixtures | V1 pilot gate | Done | High |
+| TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | V1 pilot gate | Done | High |
+| TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | V1 pilot gate | Done | High |
 | TASK-STT-005 | Redact bare sensitive identifiers in failure sanitization | V1 pilot gate | Draft | Medium |
 | TASK-STT-006 | Add a dedicated UNAVAILABLE STT outcome | V1 pilot gate | Draft | Low |
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category | V1 pilot gate | Draft | Medium |

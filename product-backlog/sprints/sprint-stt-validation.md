@@ -37,7 +37,7 @@ go/no-go decisions.
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
-| TASK-STT-004 | Not started | Pending QA preparation |
+| TASK-STT-004 | Done | `docs/qa/stt-qa-report.md`; Behave `features/stt_validation.feature` (5 scenarios); go/no-go recommendation |
 
 ## Optional Stretch Ticket
 

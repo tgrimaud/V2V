@@ -71,3 +71,19 @@ It computes a word error rate (WER) against each fixture's ground-truth
 threshold (default `0.8`), reports `missing_categories` explicitly, and enforces
 that unusable audio (e.g. silence) produces **no invented transcript**. The QA
 inventory and results live in `docs/qa/stt-transcription-quality.md`.
+
+## QA acceptance scenarios (TASK-STT-004)
+
+Product-observable acceptance is expressed as Gherkin and automated with
+**Behave** (the free Python BDD framework). The scenarios reuse the same
+`stt_validation` harness, so they validate the real code path, not a mock:
+
+```bash
+python3 -m venv .venv && ./.venv/bin/pip install behave
+./.venv/bin/behave features/stt_validation.feature
+```
+
+`features/stt_validation.feature` covers transcript quality per category, explicit
+coverage reporting, safe silence handling, percentile-ready STT latency and
+sanitized failure. The consolidated QA functional + latency report and the
+go/no-go recommendation live in `docs/qa/stt-qa-report.md`.
