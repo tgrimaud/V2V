@@ -1,0 +1,41 @@
+{
+  "quality_threshold": 0.8,
+  "categories": ["short", "long", "noisy", "silence", "accented"],
+  "fixtures": [
+    {
+      "name": "short-greeting",
+      "category": "short",
+      "audio": "short/greeting.wav",
+      "reference": "Bonjour",
+      "expect_usable": true
+    },
+    {
+      "name": "long-billing-question",
+      "category": "long",
+      "audio": "long/billing-question.wav",
+      "reference": "Pourquoi ma facture de telephone est plus elevee que le mois dernier",
+      "expect_usable": true
+    },
+    {
+      "name": "noisy-billing-question",
+      "category": "noisy",
+      "audio": "noisy/noisy-question.wav",
+      "reference": "je voudrais comprendre le montant de ma derniere facture mensuelle",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-billing-question",
+      "category": "accented",
+      "audio": "accented/accented-question.wav",
+      "reference": "est-ce que je peux payer ma facture en plusieurs fois",
+      "expect_usable": true
+    },
+    {
+      "name": "silence-clip",
+      "category": "silence",
+      "audio": "silence/silence.wav",
+      "reference": null,
+      "expect_usable": false
+    }
+  ]
+}

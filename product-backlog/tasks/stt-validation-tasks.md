@@ -65,7 +65,7 @@ Scenario: STT provider remains replaceable
 **Parent:** EPIC-006, EPIC-010  
 **Related stories:** US-019, US-036  
 **Classification:** V1 pilot gate  
-**Status:** Draft  
+**Status:** Done  
 **Priority:** High  
 **Branch:** `task/TASK-STT-002-stt-quality-fixtures`
 
@@ -107,6 +107,19 @@ Scenario: Silence or unusable audio is handled safely
 - QA fixture inventory.
 - Transcript results for each available fixture.
 - Defect tickets for failed categories that block STT readiness.
+
+### Delivery Evidence
+
+- Quality harness: `voice-agent/stt_validation/quality.py` (WER, quality gate,
+  missing-category reporting, silence/no-invented-transcript handling).
+- Fixture set + manifest: `voice-agent/fixtures/` (short, long, noisy, silence,
+  accented) run via `python3 -m stt_validation.quality_cli fixtures/manifest.json`.
+- QA inventory + results: `docs/qa/stt-transcription-quality.md`
+  (`ready: true`, no missing/failed categories).
+- Tests: `voice-agent/tests/test_quality.py`, `tests/test_manifest.py`
+  (17 tests passing overall).
+- No blocking defects for the current fixture set; bug-ticket process documented
+  for future failures.
 
 ---
 

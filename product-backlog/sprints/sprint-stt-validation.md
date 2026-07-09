@@ -35,7 +35,7 @@ go/no-go decisions.
 | US-019 | Not started | STT scaffold available; pending web voice journey work |
 | US-036 | Not started | Pending STT instrumentation path |
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
-| TASK-STT-002 | Not started | STT scaffold available |
+| TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
 | TASK-STT-004 | Not started | Pending QA preparation |
 

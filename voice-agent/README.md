@@ -55,3 +55,19 @@ runtime dependency yet:
 
 Evidence samples and acceptance-criteria coverage are documented in
 `docs/observability/stt-validation-telemetry.md`.
+
+## Transcription quality (TASK-STT-002)
+
+`stt_validation/quality.py` evaluates transcript quality across a categorized
+fixture set (`short`, `long`, `noisy`, `silence`, `accented`) described by a
+JSON manifest:
+
+```bash
+python3 -m stt_validation.quality_cli fixtures/manifest.json
+```
+
+It computes a word error rate (WER) against each fixture's ground-truth
+`reference`, derives a `quality_score` (`1 - WER`), gates on a configurable
+threshold (default `0.8`), reports `missing_categories` explicitly, and enforces
+that unusable audio (e.g. silence) produces **no invented transcript**. The QA
+inventory and results live in `docs/qa/stt-transcription-quality.md`.
