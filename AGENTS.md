@@ -3,7 +3,11 @@
 ## Repo & git
 
 - `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
-- **One branch per sprint/epic** (`feat/<name>`). Do not commit directly on `main`. Merge after validation.
+- **One branch per development ticket**. Use `us/US-XXX-short-name` for user
+  stories, `fix/BUG-XXX-short-name` for bugs and `task/TASK-XXX-short-name` for
+  technical tasks. Do not commit directly on `main`.
+- The user is the final validator. Do not merge any branch unless the user
+  explicitly asks for the merge.
 - **Commit after each task**; do not leave code uncommitted.
 - On `feat/restart-from-scratch`, the previous implementation directories
   (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
@@ -13,18 +17,55 @@
 
 1. On the restart branch, create new implementation scaffolds only when the
    corresponding backlog story is selected.
-2. Java backend: follow the `java-backend-developer` skill + `code-guidelines`
+2. No development starts without a ticket. If the user asks for a change without
+   an existing ticket, create the ticket first, then create or switch to the
+   dedicated ticket branch.
+3. Java backend: follow the `java-backend-developer` skill + `code-guidelines`
    (methods <= 20 lines, classes <= 200 lines, no Javadoc on ports).
-3. Pure domain (no Spring annotations); wire services through `@Bean` in
+4. Pure domain (no Spring annotations); wire services through `@Bean` in
    infrastructure configuration.
-4. Tests: manual fakes, GIVEN/WHEN/THEN, **no Mockito**.
-5. Voice runtime: preserve the target architecture direction (Pipecat + provider
+5. Tests: manual fakes, GIVEN/WHEN/THEN, **no Mockito**.
+6. Voice runtime: preserve the target architecture direction (Pipecat + provider
    adapters), but rebuild the runtime from scratch on this branch.
-6. Documentation files under `docs/` must be written in English.
-7. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
-8. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
-9. Presentation work : use `.cursor/skills/presentation-maker/SKILL.md` to create high-level technical/strategy decks from `~/Downloads/Presentation.odp`.
-10. Architecture decisions : use `.cursor/skills/software-architect/SKILL.md` and create or update an ADR under `docs/architecture/adrs/`.
+7. Documentation files under `docs/` must be written in English.
+8. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
+9. Skill work : use `.cursor/skills/skill-creator/SKILL.md` before creating,
+   modifying, evaluating or packaging local agent skills.
+10. QA / test strategy work : use `.cursor/skills/qa-functional-latency/SKILL.md`
+   before writing Gherkin scenarios, Java Cucumber tests, Python Behave tests,
+   pilot readiness reports, UI validation plans or latency reports by brick.
+11. Adversarial code review : use `.cursor/skills/adversarial-code-review/SKILL.md`
+   before QA acceptance of a user story. The implementation must reach at least
+   90% satisfaction unless Product or Architecture explicitly accepts the
+   residual risk.
+12. OpenTelemetry is mandatory for runtime work: every development touching
+   runtime behavior must add or update traces, metrics and structured logs needed
+   for monitoring, latency analysis and troubleshooting, or explicitly mark the
+   story as not runtime-affecting.
+13. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
+14. Presentation work : use `.cursor/skills/presentation-maker/SKILL.md` to create high-level technical/strategy decks from `~/Downloads/Presentation.odp`.
+15. Architecture decisions : use `.cursor/skills/software-architect/SKILL.md` and create or update an ADR under `docs/architecture/adrs/`.
+
+## User Story Delivery Workflow
+
+- Follow `docs/operations/development-workflow.md` for every V1 user story.
+- Create or confirm the ticket before implementation; no ticket means no
+  development.
+- Work on a dedicated branch named after the ticket.
+- Assign implementation to the relevant frontend and/or backend developer skill.
+- Start QA in parallel with development; QA writes Gherkin intent, fixtures,
+  Cucumber/Behave tests and latency expectations while development happens.
+- Run `adversarial-code-review` before QA acceptance. The developer must fix
+  findings until the adversarial reviewer is at least 90% satisfied, unless
+  Product or Architecture explicitly accepts the residual risk.
+- After adversarial review passes, QA runs functional and latency validation.
+  Any QA bug must become an explicit bug ticket using
+  `product-backlog/templates/bug-ticket-template.md`, then restarts the loop:
+  developer fix -> adversarial review -> QA retest.
+- A story is not done until implementation, developer tests, adversarial review,
+  OpenTelemetry coverage, QA tests and required latency reporting are complete.
+- Passing all gates makes a branch merge-ready only. Merge only when the user
+  explicitly asks.
 
 ## Common mistakes to avoid
 
@@ -67,6 +108,16 @@
 - Treating missing implementation directories on `feat/restart-from-scratch` as
   an accident: they were removed intentionally so the project can restart from
   the backlog and architecture baseline.
+- Writing QA tests without checking product intent first: use
+  `qa-functional-latency`, and escalate functional ambiguity to
+  `product-business` instead of inventing expected behavior.
+- Shipping runtime behavior without OpenTelemetry traces, metrics and structured
+  logs: every runtime story must expose the correlation id, latency slice timing,
+  outcome status and sanitized error context needed for monitoring and QA.
+- Starting development without a ticket: if the user asks for an unticketed
+  change, create the user story, bug or task ticket first.
+- Merging because tests or QA passed: the user is the final validator; no branch
+  is merged unless the user explicitly requests it.
 
 ## Checklist After Substantive Changes
 
@@ -74,4 +125,6 @@
 - [ ] On documentation-only changes, run `git diff --check`.
 - [ ] If a REST contract changed: update `docs/` (architecture.md, README, API).
 - [ ] If there is a new bean/port: wire it in `DomainServiceConfig`.
+- [ ] If runtime behavior changed: add/update OpenTelemetry traces, metrics and
+      structured logs, or document why the story is not runtime-affecting.
 - [ ] Update `docs/` together with code (not as a separate batch).

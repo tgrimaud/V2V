@@ -28,6 +28,7 @@ are governed by ADR-0018 and ADR-0019.
 | Product epics and stories | `product-backlog/` | Business-level backlog, acceptance criteria and open questions |
 | Technical / operations backlog | `docs/operations/backlog.md` | Engineering work, pilot gates and post-MVP roadmap |
 | BSS contract planning | `docs/integrations/galaxion/` | Evidence sources, mock fixtures and missing external inputs |
+| Ticket templates | `product-backlog/templates/` | Default templates for bug tickets and future delivery tickets |
 
 ## Product / Business Principles
 
@@ -57,6 +58,7 @@ epics/v1-epics.md
 stories/v1-user-stories.md
 decisions/v1-decisions.md
 open-questions/v1-open-questions.md
+templates/bug-ticket-template.md
 ```
 
 ## States
@@ -70,3 +72,16 @@ open-questions/v1-open-questions.md
 
 Every story must reference its parent epic and include product-language
 acceptance criteria.
+
+## Ticket Discipline
+
+- No development starts without a ticket. If a requested change has no existing
+  ticket, create the user story, bug or technical task first.
+- Each ticket is implemented on its own branch named after the ticket:
+  `us/US-XXX-short-name`, `fix/BUG-XXX-short-name` or
+  `task/TASK-XXX-short-name`.
+- QA defects must be written as explicit bug tickets using
+  `templates/bug-ticket-template.md`.
+- Passing development, adversarial review and QA gates makes a branch
+  merge-ready only. The user remains the final validator and must explicitly ask
+  for any merge.

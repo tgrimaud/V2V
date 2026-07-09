@@ -1,0 +1,23 @@
+{
+  "skill_name": "qa-functional-latency",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create the QA strategy for V1 invoice explanation from the current product backlog, including Java Cucumber tests, Python Behave tests, and latency reporting by component.",
+      "expected_output": "A QA strategy that reads the product backlog, separates functional areas, selects Java/Cucumber and Python/Behave appropriately, defines latency slices, and includes a report structure.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Write executable Gherkin scenarios for partial invoice extraction, unusable invoice extraction, explicit Genesys handoff, and barge-in latency measurement.",
+      "expected_output": "Product-readable Gherkin scenarios with clear Given/When/Then steps, evidence handling, escalation behavior, and latency observability expectations.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Review a completed pilot test run and produce a QA report with observed p50/p95/p99 latency for STT, backend, BSS/PDF, comparison, LLM, TTS, channel egress, and Genesys handoff.",
+      "expected_output": "A structured QA report with executive summary, functional results, latency table, component findings, defects, open questions, and go/no-go recommendation.",
+      "files": []
+    }
+  ]
+}

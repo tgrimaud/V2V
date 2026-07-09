@@ -1,0 +1,23 @@
+{
+  "skill_name": "adversarial-code-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review a backend implementation of invoice comparison for US-011 and US-012. It calculates deltas but has no tests for partial extraction and no OpenTelemetry spans, metrics, or structured logs. Produce an adversarial code review with a score and QA gate decision.",
+      "expected_output": "A strict review that blocks QA or scores below 90 because partial extraction coverage and required OpenTelemetry instrumentation are missing, with concrete developer actions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Review a Genesys handoff implementation for US-026. It transfers to the queue but sends the full transcript and does not emit OpenTelemetry traces, metrics, or structured logs for handoff latency and outcome. Produce the adversarial review.",
+      "expected_output": "A review that flags privacy risk and missing OpenTelemetry latency/outcome instrumentation as blocking or major issues, assigns a score below 90, and lists required fixes.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Review a frontend web synthesis implementation for US-028 to US-031. It displays total delta and causes, has component tests, but does not show unresolved evidence limits. Produce the adversarial review.",
+      "expected_output": "A review that checks story coverage, flags missing evidence-limit display, evaluates tests, and provides a score and QA gate status.",
+      "files": []
+    }
+  ]
+}

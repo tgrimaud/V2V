@@ -28,4 +28,5 @@
 - Invoice PDF extraction JSON: [`integrations/galaxion/invoice-extraction-json.md`](integrations/galaxion/invoice-extraction-json.md)
 - Knowledge base guide: [`knowledge-base/knowledge-base-guide.md`](knowledge-base/knowledge-base-guide.md)
 - Development guide: [`engineering/development-guide.md`](engineering/development-guide.md)
+- Development workflow: [`operations/development-workflow.md`](operations/development-workflow.md)
 - Operational backlog: [`operations/backlog.md`](operations/backlog.md)

@@ -10,6 +10,12 @@
 > product scope, architecture decisions, backlog, BSS docs and knowledge-base
 > content.
 
+> Delivery rule: no development starts without a ticket. Each user story, bug or
+> technical task uses its own branch named after the ticket
+> (`us/US-XXX-short-name`, `fix/BUG-XXX-short-name`,
+> `task/TASK-XXX-short-name`). The user is the final validator; do not merge any
+> branch unless the user explicitly asks for the merge.
+
 ## Application layout
 
 | Part | Path | Stack |
@@ -40,10 +46,15 @@ The former executable layout (`backend/`, `voice-agent/`, `frontend/`,
   handoff content and conversation memory.
 - The V1 product backlog lives in `product-backlog/` (EPICs, user stories, decisions, open questions) so it stays versioned with the application repository before a Jira migration.
 - Omnichannel adversarial review (2026-07-08): overall score **2.8/5** — a solid MVP foundation, but not yet an industrialized platform without channel/backend contracts, an escalation contract, measurable SLOs, per-step/channel observability, and tested degraded modes.
-- Pilot observability must use a shared correlation id and OpenTelemetry-style
-  spans across Genesys, voice runtime, backend, BSS/PDF evidence, comparison,
-  RAG, LLM, TTS and handoff. Report p50/p95/p99 by channel/provider before any
-  production SLO claim.
+- Pilot observability must use a shared correlation id and OpenTelemetry traces,
+  metrics and structured logs across Genesys, voice runtime, backend, BSS/PDF
+  evidence, comparison, RAG, LLM, TTS and handoff. Report p50/p95/p99 by
+  channel/provider before any production SLO claim.
+- Every development that touches runtime behavior must add or update the
+  OpenTelemetry instrumentation needed for monitoring, QA latency analysis and
+  troubleshooting. Missing required traces, metrics or structured logs blocks
+  adversarial review and QA acceptance unless the story is explicitly marked as
+  not runtime-affecting.
 - Use the local `.cursor/skills/product-business/` skill to produce or review PRDs, EPICs, user stories, business rules, and product-level acceptance criteria.
 - Use the local `.cursor/skills/adversarial-architecture-review/` skill to challenge architecture choices, NFR/SLA, modularity, external-provider replaceability, and Genesys/WhatsApp/omnichannel readiness.
 - Use the local `.cursor/skills/software-architect/` skill for every structural decision and create/update the corresponding ADR in `docs/architecture/adrs/`.
@@ -51,10 +62,27 @@ The former executable layout (`backend/`, `voice-agent/`, `frontend/`,
 - Documentation under `docs/` must be written in English.
 - Use `.cursor/skills/technical-writer/SKILL.md` before creating, editing,
   translating or reviewing technical documentation.
+- Use `.cursor/skills/skill-creator/SKILL.md` before creating, modifying,
+  evaluating or packaging local agent skills.
+- Use `.cursor/skills/qa-functional-latency/SKILL.md` before creating QA
+  strategy, Gherkin acceptance tests, Java Cucumber tests, Python Behave tests,
+  UI validation plans, pilot readiness reports or latency reports by pipeline
+  slice.
+- Use `.cursor/skills/adversarial-code-review/SKILL.md` for story-level code
+  review before QA acceptance. The developer fixes findings until the review is
+  at least 90% satisfied or residual risk is explicitly accepted.
 - Use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or
   reviewing Mermaid/Draw.io diagrams.
 - Use `.cursor/skills/presentation-maker/SKILL.md` before creating or refining
   high-level technical/strategy presentations from `~/Downloads/Presentation.odp`.
+- User story delivery follows `docs/operations/development-workflow.md`:
+  create or confirm the ticket, create a dedicated branch named after the ticket,
+  assign frontend/backend implementation, start QA in parallel, run adversarial
+  review until at least 90% satisfied, then QA executes functional and latency
+  validation. QA bugs must become explicit bug tickets using
+  `product-backlog/templates/bug-ticket-template.md`, then restart the developer
+  -> adversarial review -> QA loop. Passing all gates makes a branch
+  merge-ready only; merge requires the user's explicit request.
 
 ## Two distinct AI models (DO NOT confuse)
 
