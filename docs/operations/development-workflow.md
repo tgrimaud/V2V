@@ -221,6 +221,27 @@ A story can move to done only when:
 - documentation and backlog status are updated;
 - the user has explicitly validated the branch before any merge.
 
+### 8. Documentation Update If Needed
+
+As the final step of every ticket, review whether the change requires a
+documentation update and apply it before the branch is declared merge-ready.
+
+Check, at minimum:
+
+- `docs/` (architecture, ADRs, observability, QA, operations) when behavior,
+  boundaries, contracts, latency slices or observability changed;
+- `voice-agent/README.md`, `backend` or `frontend` READMEs when run/build/usage
+  instructions changed;
+- `product-backlog/` status, sprint doc, `review-findings.md` and decision log
+  when ticket status, findings or decisions changed;
+- `CLAUDE.md` / `AGENTS.md` context when the repository map, stack, conventions
+  or gotchas changed;
+- `.env.example` when a new configuration variable was introduced.
+
+If no documentation change is required, state that explicitly in the ticket or
+review evidence ("documentation not affected"). Silent drift between code and
+docs is treated as an incomplete ticket.
+
 ## Required Artifacts Per Story
 
 | Artifact | Required When |
@@ -238,6 +259,7 @@ A story can move to done only when:
 | Bug ticket | Every QA defect or defect-like requested fix |
 | OpenTelemetry evidence | Story touches runtime behavior |
 | Latency table | Story touches voice, backend orchestration, BSS/PDF, comparison, LLM, TTS, channel or Genesys handoff |
+| Documentation update (or explicit "not affected") | Always, as the final step of every ticket |
 
 ## Escalation Rules
 
@@ -265,6 +287,7 @@ Select US
   -> QA executes functional + latency tests
       -> if bugs: QA creates bug ticket, developer fixes on bug branch,
          adversarial review repeats, QA retests
+  -> Update documentation if needed (or state "documentation not affected")
   -> Branch is merge-ready when gates pass
   -> Merge only when the user explicitly asks
 ```
