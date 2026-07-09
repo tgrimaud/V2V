@@ -1,57 +1,83 @@
 # Backlog Index
 
+## Restart Baseline
+
+This branch restarts implementation from scratch. The previous implementation is
+kept on `main` as backup/reference. All V1 backlog items below are therefore
+reset to `Draft` until Product, Architecture, Security and Delivery review them
+against the new empty-codebase plan.
+
 ## V1 Epics
 
 | Key | Title | Classification | Status | Priority |
 |-----|-------|---|--------|----------|
-| EPIC-001 | Identify the customer and retrieve billing context | V1 core | Ready for review | High |
-| EPIC-002 | Compare two invoices or billing periods | V1 core | Ready for delivery split | High |
-| EPIC-003 | Explain invoice deltas with evidence | V1 core | Ready for review | High |
-| EPIC-004 | Deliver the phone Voice2Voice journey | V1 core | Ready for review | High |
-| EPIC-005 | Deliver the web Voice2Voice journey | V1 core | Ready for review | High |
-| EPIC-006 | Escalate to a human advisor | V1 core | Ready for review | High |
-| EPIC-007 | Provide web synthesis and evidence | V1 enabler | Ready for review | Medium |
-| EPIC-008 | Guarantee trust, security and auditability | V1 enabler | Ready for review | High |
-| EPIC-009 | Measure conversational quality and V1 performance | V1 pilot gate | Ready for review | High |
-| EPIC-010 | Validate the BSS/PDF evidence fixture path | V1 enabler | Draft | High |
+| EPIC-001 | Product and architecture baseline | V1 foundation | Draft | High |
+| EPIC-002 | Customer identity and billing evidence access | V1 core | Draft | High |
+| EPIC-003 | BSS/PDF fixture and extraction path | V1 enabler | Draft | High |
+| EPIC-004 | Deterministic invoice comparison | V1 core | Draft | High |
+| EPIC-005 | Evidence-backed explanation engine | V1 core | Draft | High |
+| EPIC-006 | Voice2Voice journey foundation | V1 core | Draft | High |
+| EPIC-007 | Genesys advisor handoff | V1 core | Draft | High |
+| EPIC-008 | Web synthesis and evidence view | V1 enabler | Draft | Medium |
+| EPIC-009 | Trust, security and auditability | V1 enabler | Draft | High |
+| EPIC-010 | Observability, latency and pilot validation | V1 pilot gate | Draft | High |
 
 ## V1 Delivery Backlog
 
 | Key | Title | Classification | Status | Priority |
 |-----|-------|---|--------|----------|
-| US-001 | Identify the customer at the start of the exchange | V1 core | Ready for review | High |
-| US-002 | Retrieve available invoices and billing periods | V1 core | Ready for review | High |
-| US-003 | Detect insufficient BSS evidence | V1 core | Ready for review | High |
-| US-004 | Select two invoices or billing periods to compare | V1 core | Ready for delivery split | High |
-| US-005 | Identify changed invoice lines and amounts | V1 core | Ready for delivery split | High |
-| US-006 | Identify the main business causes | V1 core | Ready for delivery split | High |
-| US-007 | Receive a synthesis of increase or decrease causes | V1 core | Ready for review | High |
-| US-008 | Obtain evidence for each cause | V1 core | Ready for review | High |
-| US-009 | Explain the billing rule behind a delta | V1 core | Ready for review | Medium |
-| US-010 | Handle invoice extraction status | V1 enabler | Draft | High |
-| US-011 | Use realistic BSS/PDF fixtures for V1 validation | V1 enabler | Draft | High |
-| US-012 | Call the bot for a spoken invoice explanation | V1 core | Ready for review | High |
-| US-013 | Receive a quick spoken acknowledgement during long analysis | V1 core | Ready for review | Medium |
-| US-014 | Ask orally for transfer to an advisor | V1 core | Ready for review | High |
-| US-015 | Ask from a web voice chat | V1 core | Ready for review | High |
-| US-016 | Read the synthesis on the web page | V1 enabler | Ready for review | Medium |
-| US-017 | Use text to complement a voice question | V1 enabler | Ready for review | Low |
-| US-018 | Be transferred on explicit request | V1 core | Ready for review | High |
-| US-019 | Be transferred when the bot lacks enough certainty | V1 core | Ready for review | High |
-| US-020 | Provide the advisor with usable context | V1 core | Ready for review | High |
-| US-021 | Consult the global delta | V1 enabler | Ready for review | Medium |
-| US-022 | Consult cause details | V1 enabler | Ready for review | Medium |
-| US-023 | See evidence and analysis limits | V1 enabler | Ready for review | Medium |
-| US-024 | Protect personal data exposed to the customer | V1 enabler | Ready for review | High |
-| US-025 | Audit sensitive consultations | V1 enabler | Ready for review | High |
-| US-026 | Disclose analysis limits | V1 core | Ready for review | High |
-| US-027 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Ready for review | High |
-| US-028 | Track escalations and their reasons | V1 pilot gate | Ready for review | Medium |
-| US-029 | Track unresolved questions | V1 pilot gate | Ready for review | Medium |
-| US-030 | Consult line-by-line invoice differences | V1 enabler | Draft | Medium |
-| US-031 | Validate billing and pricing KB content for V1 | V1 enabler | Draft | Medium |
-| US-032 | Measure invoice comparison response time | V1 pilot gate | Draft | Medium |
-| US-033 | Hand off to Genesys with advisor context | V1 core | Draft | High |
+| US-001 | Reconfirm the V1 restart baseline | V1 foundation | Draft | High |
+| US-002 | Define the delivery sequence for the empty codebase | V1 foundation | Draft | High |
+| US-003 | Confirm the channel and identity boundary | V1 foundation | Draft | High |
+| US-004 | Identify the customer at the start of the exchange | V1 core | Draft | High |
+| US-005 | Retrieve available invoices and billing periods | V1 core | Draft | High |
+| US-006 | Detect insufficient BSS evidence | V1 core | Draft | High |
+| US-007 | Use realistic BSS/PDF fixtures for V1 validation | V1 enabler | Draft | High |
+| US-008 | Handle invoice extraction status | V1 enabler | Draft | High |
+| US-009 | Validate billing and pricing knowledge for V1 | V1 enabler | Draft | Medium |
+| US-010 | Select two invoices or billing periods to compare | V1 core | Draft | High |
+| US-011 | Identify changed invoice lines and amounts | V1 core | Draft | High |
+| US-012 | Identify the main business causes | V1 core | Draft | High |
+| US-013 | Expose unresolved or unreconciled amounts | V1 core | Draft | High |
+| US-014 | Receive a synthesis of increase or decrease causes | V1 core | Draft | High |
+| US-015 | Obtain evidence for each cause | V1 core | Draft | High |
+| US-016 | Explain the billing rule behind a delta | V1 core | Draft | Medium |
+| US-017 | Disclose when no reliable explanation can be produced | V1 core | Draft | High |
+| US-018 | Call the bot for a spoken invoice explanation | V1 core | Draft | High |
+| US-019 | Ask from a web voice chat | V1 core | Draft | High |
+| US-020 | Receive a quick spoken acknowledgement during long analysis | V1 core | Draft | Medium |
+| US-021 | Interrupt the bot during a spoken answer | V1 core | Draft | Medium |
+| US-022 | Use text to complement a voice question | V1 enabler | Draft | Low |
+| US-023 | Be transferred on explicit request | V1 core | Draft | High |
+| US-024 | Be transferred when the bot lacks enough certainty | V1 core | Draft | High |
+| US-025 | Provide the advisor with usable context | V1 core | Draft | High |
+| US-026 | Hand off to Genesys with advisor context | V1 core | Draft | High |
+| US-027 | Validate whether full Genesys voice routing is required for the pilot | V1 pilot gate | Draft | Medium |
+| US-028 | Read the synthesis on the web page | V1 enabler | Draft | Medium |
+| US-029 | Consult the global delta | V1 enabler | Draft | Medium |
+| US-030 | Consult cause details | V1 enabler | Draft | Medium |
+| US-031 | See evidence and analysis limits | V1 enabler | Draft | Medium |
+| US-032 | Consult line-by-line invoice differences | V1 enabler | Draft | Medium |
+| US-033 | Protect personal data exposed to the customer | V1 enabler | Draft | High |
+| US-034 | Audit sensitive consultations | V1 enabler | Draft | High |
+| US-035 | Disclose analysis limits | V1 core | Draft | High |
+| US-036 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Draft | High |
+| US-037 | Measure invoice comparison response time | V1 pilot gate | Draft | Medium |
+| US-038 | Track escalations and their reasons | V1 pilot gate | Draft | Medium |
+| US-039 | Track unresolved questions | V1 pilot gate | Draft | Medium |
+| US-040 | Produce the pilot readiness report | V1 pilot gate | Draft | High |
+
+## Restart Delivery Notes
+
+The recommended first implementation sequence is:
+
+1. EPIC-001 to freeze the restart baseline and delivery slicing.
+2. EPIC-002 and EPIC-003 to secure identity, evidence access and fixtures.
+3. EPIC-004 and EPIC-005 to prove billing value before voice polish.
+4. EPIC-006 and EPIC-007 to expose the value through Voice2Voice and Genesys
+   advisor handoff.
+5. EPIC-008, EPIC-009 and EPIC-010 to validate the web evidence view, trust
+   controls and pilot observability.
 
 ## Post-MVP / Roadmap
 
@@ -59,35 +85,9 @@
 |---|---|
 | Generic PDF / Confluence / database KB connectors | Useful for knowledge enrichment, but not required for the first billing V1 if Markdown pricing rules and invoice PDF extraction are available |
 | WhatsApp production channel | Future asynchronous adapter gated by channel contracts, quotas, observability and degraded modes |
-| Full Genesys Audio Connector voice path | Useful for contact-center-native bot routing, but V1 requires Genesys advisor handoff only unless the pilot environment mandates full Genesys voice entry |
+| Full Genesys voice routing | Useful for contact-center-native bot routing, but V1 requires Genesys advisor handoff only unless the pilot mandates Genesys voice entry |
 | GPU/self-hosting | Sovereignty or latency optimization option, not a V1 prerequisite |
 | Custom brand voice | Product polish after the billing journey is reliable |
-
-## Alignment Notes
-
-Moved into the explicit V1 backlog:
-
-- invoice PDF extraction status handling;
-- realistic BSS/PDF fixture validation;
-- voice latency pilot measurement;
-- OpenTelemetry-style correlation across Genesys, voice runtime, backend, BSS/PDF,
-  LLM, TTS and handoff spans;
-- per-slice latency measurement for channel ingress, end-of-turn, STT, backend,
-  evidence retrieval, comparison, RAG, LLM, TTS, channel egress and Genesys
-  handoff;
-- escalation handoff context and reason tracking;
-- Genesys advisor handoff as the V1 contact-center escalation target;
-- Genesys as the contact-center system of record while the backend owns
-  conversation intelligence and escalation content;
-- billing security, audit and evidence-limit disclosure.
-
-Moved out of the V1 prerequisite set:
-
-- generic KB connectors for Confluence, generic PDF ingestion and databases;
-- WhatsApp production connector and the full Genesys Audio Connector voice path;
-- GPU/self-hosting;
-- custom brand voice;
-- advanced admin analytics beyond the minimum pilot review needs.
 
 ## Open Questions
 
@@ -108,9 +108,9 @@ Moved out of the V1 prerequisite set:
 | DEC-002 | BSS evidence is the source of truth and the LLM only words the explanation | Accepted via ADR-0003 |
 | DEC-003 | Invoice PDFs are a V1 evidence source until structured lines are validated | Accepted via ADR-0005 |
 | DEC-004 | Voice2Voice is mandatory in V1 | Accepted in `v1-scope.md` |
-| DEC-005 | Gradium and Pipecat are the reference starting point | Accepted via ADR-0002 |
+| DEC-005 | Voice provider choices remain replaceable behind adapters | Accepted via ADR-0002 |
 | DEC-006 | Human escalation is required | Accepted via ADR-0019 |
-| DEC-007 | Java owns business logic and Python owns the voice edge | Accepted via ADR-0001 and ADR-0011 |
+| DEC-007 | Backend owns conversation intelligence; voice runtime owns media orchestration | Accepted via ADR-0001 and ADR-0011 |
 | DEC-008 | V1 routing prioritizes billing explanation while support/sales agents remain foundation capabilities | Accepted via ADR-0017 and ADR-0015 |
 | DEC-009 | Genesys handoff is in V1, full Genesys voice routing remains optional | Accepted via ADR-0019 and ADR-0020 |
 | DEC-010 | Pilot observability requires per-step latency traces before any production SLO claim | Accepted via ADR-0010 and ADR-0018 |

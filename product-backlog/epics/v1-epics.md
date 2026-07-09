@@ -1,72 +1,100 @@
-# V1 Epics - Invoice Explanation Voice Assistant
+# V1 Epics - From-Scratch Restart
+
+## Restart Context
+
+This branch restarts implementation from scratch. The previous implementation
+remains preserved on `main` as a backup and reference, but the V1 backlog below
+is written as if no delivery code exists yet.
+
+The product outcome remains unchanged: explain operator invoice deltas with
+read-only BSS/PDF evidence, deterministic comparison before LLM wording,
+Voice2Voice access, Genesys advisor handoff, and measurable pilot latency.
 
 ## Epic Map
 
-The V1 backlog is organized around the canonical product outcome: explain invoice
-deltas with read-only BSS/PDF evidence through phone and web Voice2Voice journeys.
-
-| Epic | Classification | Governing references |
-|---|---|---|
-| EPIC-001 Customer and billing context | V1 core | ADR-0003, ADR-0004, OQ-001, OQ-003 |
-| EPIC-002 Invoice comparison | V1 core | ADR-0003, ADR-0005 |
-| EPIC-003 Evidence-backed explanation | V1 core | ADR-0003, ADR-0005, ADR-0017 |
-| EPIC-004 Phone Voice2Voice | V1 core | ADR-0002, ADR-0011, ADR-0018 |
-| EPIC-005 Web Voice2Voice | V1 core | ADR-0002, ADR-0011, ADR-0018 |
-| EPIC-006 Human escalation | V1 core | ADR-0019, ADR-0020 |
-| EPIC-007 Web synthesis and evidence | V1 enabler | ADR-0003, ADR-0017 |
-| EPIC-008 Trust, security and audit | V1 enabler | ADR-0003, ADR-0008, OQ-001 |
-| EPIC-009 Quality and performance measurement | V1 pilot gate | ADR-0010, ADR-0018, OQ-005, OQ-006 |
-| EPIC-010 BSS/PDF evidence fixture path | V1 enabler | ADR-0004, ADR-0005, Galaxion docs |
+| Epic | Classification | Status | Governing references |
+|---|---|---|---|
+| EPIC-001 Product and architecture baseline | V1 foundation | Draft | ADR-0017, ADR-0020, OQ-001, OQ-006 |
+| EPIC-002 Customer identity and billing evidence access | V1 core | Draft | ADR-0003, ADR-0004, OQ-001, OQ-003 |
+| EPIC-003 BSS/PDF fixture and extraction path | V1 enabler | Draft | ADR-0005, OQ-004, Galaxion docs |
+| EPIC-004 Deterministic invoice comparison | V1 core | Draft | ADR-0003, ADR-0005 |
+| EPIC-005 Evidence-backed explanation engine | V1 core | Draft | ADR-0003, ADR-0017 |
+| EPIC-006 Voice2Voice journey foundation | V1 core | Draft | ADR-0002, ADR-0011, ADR-0018 |
+| EPIC-007 Genesys advisor handoff | V1 core | Draft | ADR-0019, ADR-0020, OQ-006 |
+| EPIC-008 Web synthesis and evidence view | V1 enabler | Draft | ADR-0003, ADR-0017 |
+| EPIC-009 Trust, security and auditability | V1 enabler | Draft | ADR-0003, ADR-0008, OQ-001 |
+| EPIC-010 Observability, latency and pilot validation | V1 pilot gate | Draft | ADR-0010, ADR-0018, OQ-005, OQ-006 |
 
 ---
 
-## EPIC-001 - Identify The Customer And Retrieve Billing Context
+## EPIC-001 - Product And Architecture Baseline
 
-**Status:** Ready for review  
-**Priority:** High  
-**Classification:** V1 core
+**Status:** Draft
+**Priority:** High
+**Classification:** V1 foundation
 
 ### Goal
 
-The bot knows which customer account the request concerns and has enough billing
-context before explaining a price difference.
+The team starts from a shared V1 target, delivery sequence, architectural
+boundaries and open-question register before writing new code.
 
 ### Scope
 
-- Identify the customer from the activation channel or pilot-provided context.
-- Reuse Genesys IVR, ANI or contact-center lookup context when Genesys is the
-  phone entry point.
-- Retrieve invoices, periods and useful billing context from the BSS source of
-  truth.
-- Detect cases where identity, invoice access or billing data is insufficient.
-
-### V1 Delivery Slice
-
-- Accept a trusted customer context supplied by the channel, pilot fixture or BSS.
-- Retrieve at least two comparable billing periods for an identified customer.
-- Block or escalate the explanation when identity, periods or minimum evidence
-  are not reliable.
-
-### Out Of Scope
-
-- Full customer enrollment.
-- Final target strong-authentication design beyond the pilot trust model.
-- Any BSS write action or invoice correction.
+- Reconfirm the V1 value slice: invoice delta explanation for operator end users.
+- Preserve the boundary that billing logic, RAG, guardrails and escalation policy
+  belong to the backend, while the voice runtime owns real-time media.
+- Preserve the Genesys target pattern: Genesys is the contact-center system of
+  record; the bot backend owns conversation intelligence and handoff content.
+- Define delivery slices small enough to build and validate from an empty codebase.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-001-1 | The bot explains invoices only for a customer identified with enough confidence. |
-| BR-001-2 | If the customer or period cannot be determined, the bot asks for clarification or escalates. |
-| BR-001-3 | Read-only BSS evidence is the source of truth for invoices and customer billing context. |
-| BR-001-4 | The pilot must still define minimum identity and access controls before exposing invoice data. |
+| BR-001-1 | No implementation story starts until its product-visible acceptance criteria are explicit. |
+| BR-001-2 | The previous implementation may inform decisions, but it is not treated as reusable code on this branch. |
+| BR-001-3 | Any missing product, BSS, security or Genesys input is recorded as an open question. |
 
 ### User Stories
 
-- US-001 - Identify the customer at the start of the exchange.
-- US-002 - Retrieve available invoices and billing periods.
-- US-003 - Detect insufficient BSS evidence.
+- US-001 - Reconfirm the V1 restart baseline.
+- US-002 - Define the delivery sequence for the empty codebase.
+- US-003 - Confirm the channel and identity boundary.
+
+---
+
+## EPIC-002 - Customer Identity And Billing Evidence Access
+
+**Status:** Draft
+**Priority:** High
+**Classification:** V1 core
+
+### Goal
+
+The bot can determine which customer account is in scope and retrieve enough
+billing evidence to decide whether an invoice explanation is allowed.
+
+### Scope
+
+- Establish the customer identity and confidence level for each pilot channel.
+- Reuse Genesys IVR, ANI or contact-center lookup context when Genesys is the
+  phone entry point.
+- Retrieve invoices, periods and billing context from the BSS source of truth.
+- Detect missing, insufficient or unauthorized evidence before any explanation.
+
+### Business Rules
+
+| ID | Rule |
+|----|------|
+| BR-002-1 | The bot explains invoices only for a customer identified with enough confidence. |
+| BR-002-2 | BSS access is read-only in V1. |
+| BR-002-3 | If identity or evidence is insufficient, the bot asks for clarification or escalates. |
+
+### User Stories
+
+- US-004 - Identify the customer at the start of the exchange.
+- US-005 - Retrieve available invoices and billing periods.
+- US-006 - Detect insufficient BSS evidence.
 
 ### Open Questions
 
@@ -75,101 +103,114 @@ context before explaining a price difference.
 
 ---
 
-## EPIC-002 - Compare Two Invoices Or Billing Periods
+## EPIC-003 - BSS/PDF Fixture And Extraction Path
 
-**Status:** Ready for delivery split  
-**Priority:** High  
-**Classification:** V1 core
+**Status:** Draft
+**Priority:** High
+**Classification:** V1 enabler
 
 ### Goal
 
-The system identifies price deltas between two invoices or periods and produces a
-deterministic business-cause analysis before any LLM wording.
+The team can validate billing behavior with realistic fixtures before full BSS
+sandbox access and structured invoice-line endpoints are stable.
 
 ### Scope
 
-- Compare lines that appeared, disappeared or changed.
-- Identify usage variation, discounts, prorations, options, taxes, one-off fees
-  and adjustments when evidence supports them.
-- Calculate the global delta and cause-level deltas using integer cents.
-- Expose unreconciled amounts instead of hiding them.
-
-### V1 Delivery Slice
-
-- Compare two explicitly selected periods, or the latest period with the previous
-  comparable period.
-- Group differences into V1 business categories: expired discount, option or
-  service, out-of-bundle usage, proration, one-off fee, adjustment, tax, other.
-- Mark the analysis incomplete when confirmed causes do not reconcile the total
-  delta sufficiently.
-
-### Out Of Scope
-
-- Predicting the next invoice.
-- Commercial negotiation or automatic goodwill gestures.
-- Complex multi-customer or multi-contract analysis beyond the provided context.
+- Define realistic fixture journeys: nominal, discount expiry, overage,
+  proration, insufficient data and unreliable extraction.
+- Extract invoice PDFs into deterministic structured evidence when no validated
+  structured line endpoint exists.
+- Represent extraction status as `parseable`, `partial` or `unusable`.
+- Keep fixture evidence readable by Product, Billing, QA and Engineering.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-002-1 | The global delta must be explained by traceable causes or declared incomplete. |
-| BR-002-2 | Causes are ordered by decreasing impact when amounts are available. |
-| BR-002-3 | The LLM never calculates invoice amounts; it words deterministic results. |
+| BR-003-1 | The LLM never reads an invoice PDF to calculate amounts. |
+| BR-003-2 | Partial or unusable extraction never leads to confirmed unsupported amounts. |
+| BR-003-3 | Fixtures must demonstrate either reliable explanation or safe limitation/escalation. |
 
 ### User Stories
 
-- US-004 - Select two invoices or billing periods to compare.
-- US-005 - Identify changed invoice lines and amounts.
-- US-006 - Identify the main business causes.
+- US-007 - Use realistic BSS/PDF fixtures for V1 validation.
+- US-008 - Handle invoice extraction status.
+- US-009 - Validate billing and pricing knowledge for V1.
+
+### Open Questions
+
+- OQ-004 - Invoice PDF extraction reliability and fixture coverage.
 
 ---
 
-## EPIC-003 - Explain Invoice Deltas With Evidence
+## EPIC-004 - Deterministic Invoice Comparison
 
-**Status:** Ready for review  
-**Priority:** High  
+**Status:** Draft
+**Priority:** High
 **Classification:** V1 core
 
 ### Goal
 
-The customer receives a clear explanation backed by BSS/PDF evidence and enriched
-by approved billing or tariff rules when available.
+The system identifies invoice deltas and business causes deterministically before
+any LLM wording.
 
 ### Scope
 
-- Produce a concise spoken synthesis.
-- Cite or summarize the evidence used for each confirmed cause.
-- Explain relevant pricing rules from the knowledge base.
-- Distinguish confirmed, probable and missing evidence.
-- Escalate or stay cautious when proof is insufficient.
-
-### V1 Delivery Slice
-
-- Start every explanation with the total delta and direction of change.
-- Present causes by decreasing impact with confirmed amounts.
-- Link every confirmed cause to at least one evidence item.
-- Use the KB for rule explanation only, never to invent a cause or amount.
-
-### Out Of Scope
-
-- Binding legal answers.
-- Commercial resolution guarantees.
-- Explaining rules absent from both the KB and BSS evidence.
+- Select two invoices or billing periods to compare.
+- Identify lines that appeared, disappeared or changed.
+- Identify business causes such as discount expiry, usage overage, option change,
+  proration, one-off fee, adjustment, tax or unexplained amount.
+- Expose unreconciled amounts instead of hiding them.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-003-1 | Every explanation is tied to evidence or explicitly states what is missing. |
-| BR-003-2 | The KB explains rules but never replaces BSS facts. |
-| BR-003-3 | The bot refuses to conclude when available proof is insufficient. |
+| BR-004-1 | Amounts and causes are calculated before LLM wording. |
+| BR-004-2 | The global delta must be explained by traceable causes or declared incomplete. |
+| BR-004-3 | Causes are ordered by decreasing impact when amounts are available. |
 
 ### User Stories
 
-- US-007 - Receive a synthesis of increase or decrease causes.
-- US-008 - Obtain evidence for each cause.
-- US-009 - Explain the billing rule behind a delta.
+- US-010 - Select two invoices or billing periods to compare.
+- US-011 - Identify changed invoice lines and amounts.
+- US-012 - Identify the main business causes.
+- US-013 - Expose unresolved or unreconciled amounts.
+
+---
+
+## EPIC-005 - Evidence-Backed Explanation Engine
+
+**Status:** Draft
+**Priority:** High
+**Classification:** V1 core
+
+### Goal
+
+The customer receives a clear oral explanation backed by billing evidence and
+approved billing knowledge.
+
+### Scope
+
+- Produce a concise synthesis that starts with the total delta.
+- Link every confirmed cause to evidence.
+- Explain relevant billing rules from the knowledge base.
+- Refuse to conclude when available proof is insufficient.
+
+### Business Rules
+
+| ID | Rule |
+|----|------|
+| BR-005-1 | Every explanation is tied to evidence or explicitly states what is missing. |
+| BR-005-2 | The knowledge base explains rules but never replaces BSS facts. |
+| BR-005-3 | The bot must not invent causes, amounts or certainty. |
+
+### User Stories
+
+- US-014 - Receive a synthesis of increase or decrease causes.
+- US-015 - Obtain evidence for each cause.
+- US-016 - Explain the billing rule behind a delta.
+- US-017 - Disclose when no reliable explanation can be produced.
 
 ### Open Questions
 
@@ -177,147 +218,116 @@ by approved billing or tariff rules when available.
 
 ---
 
-## EPIC-004 - Deliver The Phone Voice2Voice Journey
+## EPIC-006 - Voice2Voice Journey Foundation
 
-**Status:** Ready for review  
-**Priority:** High  
+**Status:** Draft
+**Priority:** High
 **Classification:** V1 core
 
 ### Goal
 
-A customer can call the bot, ask a billing question orally and receive a reliable
-spoken explanation or escalation path.
+A customer can ask a billing question orally and receive a spoken acknowledgement,
+answer or escalation path with acceptable perceived latency.
 
 ### Scope
 
-- Start a phone voice conversation.
-- Support Twilio/Pipecat as the V1 implementation path while keeping Genesys
-  voice entry as a pilot option when the customer environment requires it.
-- Understand a billing explanation request.
-- Respond orally with acceptable perceived latency.
-- Handle clarification, acknowledgement, barge-in and escalation.
+- Deliver phone Voice2Voice and web Voice2Voice journeys.
+- Provide a quick spoken acknowledgement when evidence analysis takes time.
+- Handle turn detection and barge-in as product-visible voice behavior.
+- Keep the voice provider replaceable behind the target architecture.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-004-1 | The phone channel supports end-to-end voice interaction. |
-| BR-004-2 | If evidence analysis takes time, the bot acknowledges the request before delivering the final explanation. |
-| BR-004-3 | The customer can request a human advisor at any time. |
+| BR-006-1 | Voice2Voice is mandatory in V1. |
+| BR-006-2 | Speed must not override billing correctness. |
+| BR-006-3 | The customer can ask for a human advisor at any time. |
 
 ### User Stories
 
-- US-012 - Call the bot for a spoken invoice explanation.
-- US-013 - Receive a quick spoken acknowledgement during long analysis.
-- US-014 - Ask orally for transfer to an advisor.
+- US-018 - Call the bot for a spoken invoice explanation.
+- US-019 - Ask from a web voice chat.
+- US-020 - Receive a quick spoken acknowledgement during long analysis.
+- US-021 - Interrupt the bot during a spoken answer.
+- US-022 - Use text to complement a voice question.
 
 ---
 
-## EPIC-005 - Deliver The Web Voice2Voice Journey
+## EPIC-007 - Genesys Advisor Handoff
 
-**Status:** Ready for review  
-**Priority:** High  
+**Status:** Draft
+**Priority:** High
 **Classification:** V1 core
 
 ### Goal
 
-A customer can use a web page to speak with the bot, receive a spoken answer and
-see useful visual synthesis when available.
-
-### Scope
-
-- Start a web voice conversation.
-- Display synthesis and evidence when available.
-- Allow text as a complementary input without replacing Voice2Voice.
-
-### Business Rules
-
-| ID | Rule |
-|----|------|
-| BR-005-1 | Web voice provides the same business reliability as phone voice. |
-| BR-005-2 | Written input complements Voice2Voice; it does not replace the V1 voice requirement. |
-| BR-005-3 | Displayed evidence matches the spoken explanation. |
-
-### User Stories
-
-- US-015 - Ask from a web voice chat.
-- US-016 - Read the synthesis on the web page.
-- US-017 - Use text to complement a voice question.
-
----
-
-## EPIC-006 - Escalate To A Human Advisor
-
-**Status:** Ready for review  
-**Priority:** High  
-**Classification:** V1 core
-
-### Goal
-
-The customer is transferred or prepared for transfer when they ask for a human or
-when the bot cannot answer safely.
+The customer is transferred or prepared for transfer through Genesys when they ask
+for a human advisor or when the bot cannot answer safely.
 
 ### Scope
 
 - Detect explicit advisor requests.
 - Detect insufficient evidence, unusable extraction or unresolved deltas.
-- Provide a useful summary for the human advisor through the Genesys handoff
-  path.
-- Attach the permitted backend handoff context to the Genesys interaction before
-  advisor transfer when Genesys is used.
-- Keep full Genesys Audio Connector voice routing separate from the mandatory V1
-  escalation contract unless the pilot environment requires it.
+- Prepare a Genesys-compatible advisor context.
+- Keep full Genesys voice routing separate from mandatory V1 handoff unless the
+  pilot environment requires it.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-006-1 | Every explicit advisor request triggers the handoff path. |
-| BR-006-2 | The bot escalates when it lacks enough proof to explain the delta. |
-| BR-006-3 | The handoff context helps the customer avoid repeating the whole request. |
-| BR-006-4 | V1 escalation targets Genesys for advisor handoff; full Genesys voice routing is a separate pilot option. |
-| BR-006-5 | Genesys remains the contact-center system of record; the backend remains the owner of escalation policy and handoff content. |
+| BR-007-1 | Every explicit advisor request triggers the handoff path. |
+| BR-007-2 | The bot escalates when it lacks enough proof to explain the delta. |
+| BR-007-3 | Genesys remains the contact-center system of record. |
+| BR-007-4 | The backend owns escalation policy and handoff content. |
 
 ### User Stories
 
-- US-018 - Be transferred on explicit request.
-- US-019 - Be transferred when the bot lacks enough certainty.
-- US-020 - Provide the advisor with usable context.
-- US-033 - Hand off to Genesys with advisor context.
+- US-023 - Be transferred on explicit request.
+- US-024 - Be transferred when the bot lacks enough certainty.
+- US-025 - Provide the advisor with usable context.
+- US-026 - Hand off to Genesys with advisor context.
+- US-027 - Validate whether full Genesys voice routing is required for the pilot.
+
+### Open Questions
+
+- OQ-006 - Genesys handoff integration shape.
 
 ---
 
-## EPIC-007 - Provide Web Synthesis And Evidence
+## EPIC-008 - Web Synthesis And Evidence View
 
-**Status:** Ready for review  
-**Priority:** Medium  
+**Status:** Draft
+**Priority:** Medium
 **Classification:** V1 enabler
 
 ### Goal
 
-The customer or advisor can consult a clear view of the invoice delta, main causes
-and supporting evidence after or during the spoken explanation.
+The web journey can show the customer or advisor the same explanation, limits and
+evidence that were used in the spoken answer.
 
 ### Scope
 
 - Display the global delta.
-- Display the main causes and their contribution.
-- Display line-by-line differences when the web interface is available.
-- Display evidence and known limits when available.
+- Display main causes and their contribution.
+- Display line-by-line differences when safe and available.
+- Display evidence, unresolved points and analysis limits.
 
 ### User Stories
 
-- US-021 - Consult the global delta.
-- US-022 - Consult cause details.
-- US-023 - See evidence and analysis limits.
-- US-030 - Consult line-by-line invoice differences.
+- US-028 - Read the synthesis on the web page.
+- US-029 - Consult the global delta.
+- US-030 - Consult cause details.
+- US-031 - See evidence and analysis limits.
+- US-032 - Consult line-by-line invoice differences.
 
 ---
 
-## EPIC-008 - Guarantee Trust, Security And Auditability
+## EPIC-009 - Trust, Security And Auditability
 
-**Status:** Ready for review  
-**Priority:** High  
+**Status:** Draft
+**Priority:** High
 **Classification:** V1 enabler
 
 ### Goal
@@ -328,93 +338,54 @@ support, audit and dispute handling.
 ### Scope
 
 - Limit exposed personal and billing data.
-- Log sensitive consultation outcomes for audit.
-- Make analysis limits visible.
 - Keep BSS access read-only.
+- Audit sensitive consultations and escalation outcomes.
+- Make analysis limits visible to the customer and advisor.
 
 ### User Stories
 
-- US-024 - Protect personal data exposed to the customer.
-- US-025 - Audit sensitive consultations.
-- US-026 - Disclose analysis limits.
+- US-033 - Protect personal data exposed to the customer.
+- US-034 - Audit sensitive consultations.
+- US-035 - Disclose analysis limits.
 
 ---
 
-## EPIC-009 - Measure Conversational Quality And V1 Performance
+## EPIC-010 - Observability, Latency And Pilot Validation
 
-**Status:** Ready for review  
-**Priority:** High  
+**Status:** Draft
+**Priority:** High
 **Classification:** V1 pilot gate
 
 ### Goal
 
-The team can validate whether the V1 voice journey is acceptable and identify
-where conversations fail or escalate.
+The team can validate pilot readiness, explain failures, and identify which
+component contributes to latency before making any production SLO claim.
 
 ### Scope
 
-- Measure voice timing points by pipeline slice: channel ingress, end-of-turn,
-  STT, backend first token or action, BSS/PDF evidence, comparison, RAG, LLM,
-  TTS first audio, channel egress and Genesys handoff.
-- Measure invoice comparison response time for conversational use.
-- Track escalations and unresolved questions.
-- Correlate Genesys, voice runtime, backend, BSS/PDF, LLM, TTS and handoff events
-  with a shared correlation id.
-- Support OpenTelemetry-style span collection and dashboards for p50, p95 and
-  p99 by channel and provider configuration.
-- Combine Genesys contact-center metrics with AI-layer metrics for pilot review.
-- Support the ADR-0018 pilot criterion before any production SLO claim.
-
-### User Stories
-
-- US-027 - Measure key voice journey timings.
-- US-028 - Track escalations and their reasons.
-- US-029 - Track unresolved questions.
-- US-032 - Measure invoice comparison response time.
-
----
-
-## EPIC-010 - Validate The BSS/PDF Evidence Fixture Path
-
-**Status:** Draft  
-**Priority:** High  
-**Classification:** V1 enabler
-
-### Goal
-
-The team can validate the V1 invoice explanation behavior before real BSS sandbox
-access is fully stable, using realistic fixtures and extraction statuses.
-
-### Scope
-
-- Define realistic fixture journeys for nominal, expired discount, overage,
-  proration, insufficient data and unreliable extraction cases.
-- Cover `parseable`, `partial` and `unusable` invoice extraction statuses.
-- Keep amounts normalized as integer cents internally.
-- Keep fixture evidence readable by Product, Billing, QA and Engineering.
-- Validate that the billing/pricing KB contains the rules needed to explain the
-  first V1 fixture journeys.
-
-### Out Of Scope
-
-- Building generic Confluence/PDF/database KB connectors.
-- Replacing the BSS.
-- Treating mock fixtures as production truth.
+- Measure voice timing by pipeline slice: channel ingress, end-of-turn, STT,
+  backend first token or action, BSS/PDF evidence, comparison, RAG, LLM, TTS,
+  channel egress and Genesys handoff.
+- Correlate participating components with a shared correlation id.
+- Combine Genesys contact-center metrics with AI-layer metrics.
+- Track escalations, unresolved questions and pilot go/no-go evidence.
 
 ### Business Rules
 
 | ID | Rule |
 |----|------|
-| BR-010-1 | A V1 fixture must demonstrate either reliable explanation or a safe limitation/escalation path. |
-| BR-010-2 | Fixture amounts use integer cents after unit verification. |
-| BR-010-3 | Partial or unusable extraction must never lead to confirmed unsupported amounts. |
+| BR-010-1 | End-to-end latency alone is not enough for pilot acceptance. |
+| BR-010-2 | Pilot reports must publish p50, p95, p99, sample size, channel and warm/cold state. |
+| BR-010-3 | Production SLOs remain unclaimed until degraded modes and observability are proven. |
 
 ### User Stories
 
-- US-010 - Handle invoice extraction status.
-- US-011 - Use realistic BSS/PDF fixtures for V1 validation.
-- US-031 - Validate billing and pricing KB content for V1.
+- US-036 - Measure key voice journey timings by pipeline slice.
+- US-037 - Measure invoice comparison response time.
+- US-038 - Track escalations and their reasons.
+- US-039 - Track unresolved questions.
+- US-040 - Produce the pilot readiness report.
 
 ### Open Questions
 
-- OQ-004 - Invoice PDF extraction reliability and fixture coverage.
+- OQ-005 - Pilot latency acceptance context.

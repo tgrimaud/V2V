@@ -4,6 +4,10 @@ This folder is the local product backlog for Voice Support Bot. It keeps the
 V1 epics, user stories, product decisions and open questions in Markdown before
 any future Jira migration.
 
+On `feat/restart-from-scratch`, this backlog is the delivery baseline for a fresh
+implementation. The previous code remains on `main`; all current epics and user
+stories are reset to `Draft` until reviewed for the new empty-codebase plan.
+
 ## V1 Product Baseline
 
 The canonical V1 is an operator invoice explanation assistant for end users.

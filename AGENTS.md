@@ -5,18 +5,26 @@
 - `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
 - **One branch per sprint/epic** (`feat/<name>`). Do not commit directly on `main`. Merge after validation.
 - **Commit after each task**; do not leave code uncommitted.
+- On `feat/restart-from-scratch`, the previous implementation directories
+  (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
+  intentionally removed. `main` is the backup/reference for the old code.
 
 ## Before you edit
 
-1. Java backend: follow the `java-backend-developer` skill + `code-guidelines` (methods <= 20 lines, classes <= 200 lines, no Javadoc on ports).
-2. Pure domain (no Spring annotations); wire services through `@Bean` in `DomainServiceConfig`.
-3. Tests: manual fakes, GIVEN/WHEN/THEN, **no Mockito**.
-4. Voice agent: the V1 target is `agent/bot.py` (Pipecat + Gradium, WebRTC/Twilio). The custom bridge `agent/bridge_server.py` is legacy/fallback.
-5. Documentation files under `docs/` must be written in English.
-6. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
-7. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
-8. Presentation work : use `.cursor/skills/presentation-maker/SKILL.md` to create high-level technical/strategy decks from `~/Downloads/Presentation.odp`.
-9. Architecture decisions : use `.cursor/skills/software-architect/SKILL.md` and create or update an ADR under `docs/architecture/adrs/`.
+1. On the restart branch, create new implementation scaffolds only when the
+   corresponding backlog story is selected.
+2. Java backend: follow the `java-backend-developer` skill + `code-guidelines`
+   (methods <= 20 lines, classes <= 200 lines, no Javadoc on ports).
+3. Pure domain (no Spring annotations); wire services through `@Bean` in
+   infrastructure configuration.
+4. Tests: manual fakes, GIVEN/WHEN/THEN, **no Mockito**.
+5. Voice runtime: preserve the target architecture direction (Pipecat + provider
+   adapters), but rebuild the runtime from scratch on this branch.
+6. Documentation files under `docs/` must be written in English.
+7. Documentation work : use `.cursor/skills/technical-writer/SKILL.md` before creating, editing, translating or reviewing technical docs.
+8. Diagram work : use `.cursor/skills/diagram-drawer/SKILL.md` before creating, editing or reviewing Mermaid/Draw.io diagrams.
+9. Presentation work : use `.cursor/skills/presentation-maker/SKILL.md` to create high-level technical/strategy decks from `~/Downloads/Presentation.odp`.
+10. Architecture decisions : use `.cursor/skills/software-architect/SKILL.md` and create or update an ADR under `docs/architecture/adrs/`.
 
 ## Common mistakes to avoid
 
@@ -56,10 +64,14 @@
 - Adding Genesys voice routing without testing barge-in and interruption across
   the media layer and voice runtime: cancellation behavior is a cross-component
   integration concern, not a backend-only feature.
+- Treating missing implementation directories on `feat/restart-from-scratch` as
+  an accident: they were removed intentionally so the project can restart from
+  the backlog and architecture baseline.
 
 ## Checklist After Substantive Changes
 
-- [ ] `mvn test` passes in `backend/`.
+- [ ] If implementation scaffolds exist, run their relevant tests.
+- [ ] On documentation-only changes, run `git diff --check`.
 - [ ] If a REST contract changed: update `docs/` (architecture.md, README, API).
 - [ ] If there is a new bean/port: wire it in `DomainServiceConfig`.
 - [ ] Update `docs/` together with code (not as a separate batch).

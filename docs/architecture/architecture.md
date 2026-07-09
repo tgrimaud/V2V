@@ -1,5 +1,10 @@
 # Architecture — Voice Support Bot
 
+> Restart branch note: on `feat/restart-from-scratch`, the previous
+> implementation code has been removed. This document describes the target
+> architecture and preserved decisions for the rebuild. The former executable
+> implementation remains available on `main` as backup/reference.
+
 ## Overview
 
 Voice Support Bot is an intelligent voice agent that answers customer support

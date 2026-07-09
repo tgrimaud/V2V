@@ -4,13 +4,24 @@
 
 > This repository (`voice-support-bot`) is a **separate git repository** (default branch `main`) nested in the `BMad` workspace. Bot commits belong here, not in the `BMad` repository.
 
+> Branch note: `feat/restart-from-scratch` intentionally removes the previous
+> backend, frontend, voice-agent and Docker Compose implementation. The previous
+> code remains preserved on `main` as backup/reference; this branch restarts from
+> product scope, architecture decisions, backlog, BSS docs and knowledge-base
+> content.
+
 ## Application layout
 
 | Part | Path | Stack |
 |------|------|-------|
-| Backend | `backend/` | Java 21, Spring Boot 3.4.3, Spring AI 1.0.0, Maven, hexagonal |
-| Voice agent | `voice-agent/` | Python, Pipecat WebRTC/Twilio + Gradium STT/TTS (custom WebSocket bridge as legacy/fallback) |
-| Frontend | `frontend/` | React 19, TypeScript, Vite, TailwindCSS 4 |
+| Product backlog | `product-backlog/` | V1 epics, user stories, decisions, open questions |
+| Architecture docs | `docs/architecture/` | ADRs, architecture spine, diagrams, reviews |
+| Product docs | `docs/product/` | V1 scope and broader functional specification |
+| Integration docs | `docs/integrations/` | Galaxion/BSS contracts and missing inputs |
+| Knowledge base | `knowledge-base/` | Billing/support/commercial content for future RAG |
+
+The former executable layout (`backend/`, `voice-agent/`, `frontend/`,
+`docker-compose.yml`) exists on `main`, not on the restart branch.
 
 ## Product scope V1
 
@@ -19,7 +30,9 @@
 - The **Voice2Voice journey is mandatory**: activation by phone or web voice chat, with text only as a complementary channel.
 - The billing source of truth is the **read-only BSS**. The LLM formulates a traceable explanation after deterministic discrepancy calculations; it must not guess amounts.
 - The product core must remain agnostic to **LLM / STT / TTS** providers through configurable ports/adapters so several solutions can be benchmarked easily.
-- The V1 voice target starts with **Gradium + Pipecat** (`voice-agent/agent/bot.py`): WebRTC for web and Twilio Media Streams for telephony. `bridge_server.py` remains a historical POC / fallback, not the target path.
+- The target V1 voice architecture remains **Gradium + Pipecat** as the current
+  reference direction, but implementation must be rebuilt from scratch on the
+  restart branch.
 - Target Genesys pattern: **Genesys Cloud CX is the contact-center system of
   record** (call ingestion, IVR/ANI, recording, routing, queues, supervision,
   reporting, advisor desktop); the Java backend remains the owner of AI
@@ -72,11 +85,9 @@
 
 ## Testing commands
 
-```bash
-cd backend && mvn test
-cd frontend && npx vitest run
-cd voice-agent && python -m pytest tests/
-```
+No application test command exists on `feat/restart-from-scratch` until the new
+backend, frontend and voice runtime scaffolds are created. Use `git diff --check`
+for documentation-only changes.
 
 ## Issues historically hit (and fixes)
 
@@ -99,3 +110,4 @@ cd voice-agent && python -m pytest tests/
 | Presentation content overflowed template frames | For `Presentation.odp`, prefer simple large layouts, one idea per slide, and two short bullets max; do not fill every placeholder just because it exists. |
 | Treating Genesys as the AI brain | Keep Genesys as contact-center SoR only; RAG, billing rules, guardrails, memory and escalation content stay in the backend. |
 | Validating only end-to-end voice latency | Measure each slice separately: channel ingress, end-of-turn, STT, backend, BSS/PDF, comparison, RAG, LLM, TTS, channel egress and Genesys handoff. |
+| Reusing old implementation assumptions on the restart branch | Do not assume `backend/`, `frontend/`, `voice-agent/` or `docker-compose.yml` exist on `feat/restart-from-scratch`; rebuild from backlog and target architecture. |
