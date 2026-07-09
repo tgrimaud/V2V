@@ -117,7 +117,8 @@ QA starts in parallel with development and must prepare:
 
 ## Open Questions
 
-- Which STT provider is the first validation target?
+- ~~Which STT provider is the first validation target?~~ **Resolved: Gradium**
+  (DEC-005, ADR-0002). Connected via a fresh implementation in TASK-STT-008.
 - Which languages and accents must be present in the first fixture set?
 - What transcript quality threshold is acceptable for the pilot?
 - How many fixture samples are required before p95/p99 are meaningful?

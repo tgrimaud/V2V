@@ -78,6 +78,7 @@ against the new empty-codebase plan.
 | TASK-STT-005 | Redact bare sensitive identifiers in failure sanitization | V1 pilot gate | Draft | Medium |
 | TASK-STT-006 | Add a dedicated UNAVAILABLE STT outcome | V1 pilot gate | Draft | Low |
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category | V1 pilot gate | Draft | Medium |
+| TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | Draft | High |
 
 ## Planned Sprints
 
@@ -122,7 +123,9 @@ The recommended first implementation sequence is:
 
 Non-blocking adversarial-review findings and their residual risk are tracked in
 `product-backlog/review-findings.md` (RF-001 … RF-005 to date). Actionable ones
-are ticketed as TASK-STT-005/006/007; gated ones link their blocking dependency.
+are ticketed as TASK-STT-005/006/007/008; gated ones link their blocking
+dependency. RF-003 became actionable once Gradium was selected (DEC-005) and is
+now ticketed as TASK-STT-008.
 
 ## Decisions
 
