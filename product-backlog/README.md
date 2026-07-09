@@ -26,6 +26,8 @@ are governed by ADR-0018 and ADR-0019.
 |---|---|---|
 | Product scope | `docs/product/v1-scope.md` | Canonical V1 value slice and success criteria |
 | Product epics and stories | `product-backlog/` | Business-level backlog, acceptance criteria and open questions |
+| Technical tasks | `product-backlog/tasks/` | Technical tickets that make product stories deliverable and testable |
+| Sprint plans | `product-backlog/sprints/` | Sprint-level ticket grouping and delivery order |
 | Technical / operations backlog | `docs/operations/backlog.md` | Engineering work, pilot gates and post-MVP roadmap |
 | BSS contract planning | `docs/integrations/galaxion/` | Evidence sources, mock fixtures and missing external inputs |
 | Ticket templates | `product-backlog/templates/` | Default templates for bug tickets and future delivery tickets |
@@ -56,6 +58,8 @@ are governed by ADR-0018 and ADR-0019.
 backlog-index.md
 epics/v1-epics.md
 stories/v1-user-stories.md
+tasks/stt-validation-tasks.md
+sprints/sprint-stt-validation.md
 decisions/v1-decisions.md
 open-questions/v1-open-questions.md
 templates/bug-ticket-template.md

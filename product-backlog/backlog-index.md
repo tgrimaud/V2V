@@ -67,6 +67,21 @@ against the new empty-codebase plan.
 | US-039 | Track unresolved questions | V1 pilot gate | Draft | Medium |
 | US-040 | Produce the pilot readiness report | V1 pilot gate | Draft | High |
 
+## Technical Tasks
+
+| Key | Title | Classification | Status | Priority |
+|-----|-------|---|--------|----------|
+| TASK-STT-001 | Create the voice runtime STT validation scaffold | V1 enabler | Draft | High |
+| TASK-STT-002 | Validate STT transcription quality with audio fixtures | V1 pilot gate | Draft | High |
+| TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | V1 pilot gate | Draft | High |
+| TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | V1 pilot gate | Draft | High |
+
+## Planned Sprints
+
+| Key | Title | Status | Goal |
+|-----|-------|--------|------|
+| SPRINT-STT | STT Validation | Draft | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
+
 ## Restart Delivery Notes
 
 The recommended first implementation sequence is:
