@@ -59,7 +59,7 @@ Scenario: Delivery order is reviewable
 
 **Parent:** EPIC-001
 **Classification:** V1 foundation
-**Status:** Draft
+**Status:** Done
 **Priority:** High
 
 ### User Story
@@ -77,6 +77,11 @@ Scenario: Channel boundary is confirmed
   Then channels provide trusted context and media transport
   And the backend owns billing reasoning, guardrails, escalation policy and handoff content
 ```
+
+### Review Evidence
+
+- `docs/architecture/channel-identity-boundary.md`
+- Validated by the user on 2026-07-09.
 
 ---
 

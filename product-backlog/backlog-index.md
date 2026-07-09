@@ -28,7 +28,7 @@ against the new empty-codebase plan.
 |-----|-------|---|--------|----------|
 | US-001 | Reconfirm the V1 restart baseline | V1 foundation | Draft | High |
 | US-002 | Define the delivery sequence for the empty codebase | V1 foundation | Draft | High |
-| US-003 | Confirm the channel and identity boundary | V1 foundation | Draft | High |
+| US-003 | Confirm the channel and identity boundary | V1 foundation | Done | High |
 | US-004 | Identify the customer at the start of the exchange | V1 core | Draft | High |
 | US-005 | Retrieve available invoices and billing periods | V1 core | Draft | High |
 | US-006 | Detect insufficient BSS evidence | V1 core | Draft | High |
@@ -80,7 +80,7 @@ against the new empty-codebase plan.
 
 | Key | Title | Status | Goal |
 |-----|-------|--------|------|
-| SPRINT-STT | STT Validation | Draft | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
+| SPRINT-STT | STT Validation | In progress | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 
 ## Restart Delivery Notes
 

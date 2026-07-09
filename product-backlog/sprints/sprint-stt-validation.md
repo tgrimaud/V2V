@@ -10,7 +10,7 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** Draft  
+**Status:** In progress
 **Created:** 2026-07-09  
 **Final validator:** User  
 **Merge rule:** no branch is merged unless the user explicitly asks.
@@ -26,6 +26,18 @@ go/no-go decisions.
 | TASK-STT-002 | Validate STT transcription quality with audio fixtures | Technical task | High | Establishes transcript-quality evidence |
 | TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | Technical task | High | Makes STT latency/outcome observable |
 | TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | Technical task | High | Defines QA evidence and readiness report |
+
+## Ticket Status
+
+| Ticket | Sprint status | Evidence |
+|---|---|---|
+| US-003 | Done | `docs/architecture/channel-identity-boundary.md`; user validation 2026-07-09 |
+| US-019 | Not started | Pending US-003 review and STT scaffold |
+| US-036 | Not started | Pending STT instrumentation path |
+| TASK-STT-001 | Not started | Pending US-003 review |
+| TASK-STT-002 | Not started | Pending STT scaffold |
+| TASK-STT-003 | Not started | Pending STT scaffold |
+| TASK-STT-004 | Not started | Pending QA preparation |
 
 ## Optional Stretch Ticket
 

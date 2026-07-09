@@ -20,6 +20,7 @@
 - Product backlog: [`../product-backlog/`](../product-backlog/) contains the V1
   epics, user stories, product decisions and open questions.
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
+- Channel and identity boundary: [`architecture/channel-identity-boundary.md`](architecture/channel-identity-boundary.md)
 - Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
 - Documentation coherence review: [`architecture/documentation-coherence-review-2026-07-08.md`](architecture/documentation-coherence-review-2026-07-08.md)
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
