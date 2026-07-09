@@ -14,7 +14,9 @@ class TranscriptResult:
     provider: str
     outcome: SttOutcome
     duration_ms: float
+    stt_request_ms: float
     correlation_id: str
+    error_code: str | None = None
     error_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -23,6 +25,8 @@ class TranscriptResult:
             "provider": self.provider,
             "outcome": self.outcome.value,
             "duration_ms": round(self.duration_ms, 3),
+            "stt_request_ms": round(self.stt_request_ms, 3),
             "correlation_id": self.correlation_id,
+            "error_code": self.error_code,
             "error_reason": self.error_reason,
         }

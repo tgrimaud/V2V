@@ -115,7 +115,7 @@ Scenario: Silence or unusable audio is handled safely
 **Parent:** EPIC-010  
 **Related stories:** US-036  
 **Classification:** V1 pilot gate  
-**Status:** Draft  
+**Status:** Done  
 **Priority:** High  
 **Branch:** `task/TASK-STT-003-stt-opentelemetry`
 
@@ -157,6 +157,16 @@ Scenario: STT failure is observable without leaking sensitive data
 - OpenTelemetry trace sample or local equivalent.
 - Metrics sample showing STT duration and outcome.
 - Structured log sample with sanitized fields.
+
+### Delivery Evidence
+
+- Spans `stt.audio.accept` / `stt.request` isolate the STT slice; `LatencyReport`
+  provides p50/p95/p99 from `stt.request.duration_ms` samples.
+- Sanitized failure path (`error_code` + `<redacted-path>`) in
+  `voice-agent/stt_validation/sanitization.py`.
+- Evidence document: `docs/observability/stt-validation-telemetry.md`.
+- Tests: `voice-agent/tests/test_stt_validation_runner.py`,
+  `voice-agent/tests/test_latency_report.py` (7 passing).
 
 ---
 
