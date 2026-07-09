@@ -15,6 +15,9 @@
 > (`us/US-XXX-short-name`, `fix/BUG-XXX-short-name`,
 > `task/TASK-XXX-short-name`). The user is the final validator; do not merge any
 > branch unless the user explicitly asks for the merge.
+> When the user says a ticket is validated, record the validation, rerun checks,
+> then commit and push the ticket branch automatically. Merge still requires an
+> explicit user request.
 
 ## Application layout
 
@@ -117,6 +120,12 @@ No application test command exists on `feat/restart-from-scratch` until the new
 backend, frontend and voice runtime scaffolds are created. Use `git diff --check`
 for documentation-only changes.
 
+Voice runtime STT scaffold:
+
+```bash
+cd voice-agent && python3 -m unittest discover tests
+```
+
 ## Issues historically hit (and fixes)
 
 | Issue | Resolution |
@@ -139,3 +148,6 @@ for documentation-only changes.
 | Treating Genesys as the AI brain | Keep Genesys as contact-center SoR only; RAG, billing rules, guardrails, memory and escalation content stay in the backend. |
 | Validating only end-to-end voice latency | Measure each slice separately: channel ingress, end-of-turn, STT, backend, BSS/PDF, comparison, RAG, LLM, TTS, channel egress and Genesys handoff. |
 | Reusing old implementation assumptions on the restart branch | Do not assume `backend/`, `frontend/`, `voice-agent/` or `docker-compose.yml` exist on `feat/restart-from-scratch`; rebuild from backlog and target architecture. |
+| Broad patch on repeated Markdown status fields updated the wrong tickets | When changing backlog status, include the exact ticket header in patch context and reread the target section before committing. |
+| `git diff --stat` hid new untracked scaffold files | Always pair diff review with `git status --short` and explicitly stage new folders such as `voice-agent/`. |
+| STT scaffold emitted events but not metrics/logs | Runtime scaffolds must expose local OpenTelemetry-compatible evidence: events, metrics, structured logs, correlation id, provider, outcome and duration. |

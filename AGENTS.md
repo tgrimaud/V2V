@@ -8,6 +8,9 @@
   technical tasks. Do not commit directly on `main`.
 - The user is the final validator. Do not merge any branch unless the user
   explicitly asks for the merge.
+- When the user validates a ticket, record the validation, rerun checks, commit
+  and push the ticket branch automatically. Merge still needs an explicit user
+  request.
 - **Commit after each task**; do not leave code uncommitted.
 - On `feat/restart-from-scratch`, the previous implementation directories
   (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
@@ -118,6 +121,14 @@
   change, create the user story, bug or task ticket first.
 - Merging because tests or QA passed: the user is the final validator; no branch
   is merged unless the user explicitly requests it.
+- Patching repeated Markdown fields like `**Status:**` without the ticket header
+  in context: it can update the wrong story. Reread the target block before
+  committing.
+- Reviewing only tracked diffs: `git diff --stat` does not show untracked
+  scaffolds. Always inspect `git status --short` before staging or committing.
+- Treating local telemetry events as enough for runtime work: STT/runtime
+  scaffolds must expose events, metrics and structured logs with correlation id,
+  provider, outcome and duration.
 
 ## Checklist After Substantive Changes
 

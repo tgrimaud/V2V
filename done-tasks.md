@@ -136,3 +136,30 @@
 - `docs/product/v1-scope.md` — Genesys V1 scope and latency test matrix.
 - `product-backlog/` — epics, stories, decisions, open questions and index aligned with the target architecture.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — shared knowledge updated.
+
+## 2026-07-09 — STT sprint workflow and first scaffold
+
+**Summary:**
+
+- Defined the delivery workflow: one ticket per branch, QA bug ticket template,
+  adversarial code review at 90%, OpenTelemetry required for runtime work, and
+  no merge without explicit user approval.
+- Created the STT validation sprint with existing stories plus
+  `TASK-STT-001` to `TASK-STT-004`.
+- Completed `US-003` by documenting the channel/runtime/backend/Genesys identity
+  boundary and recording user validation.
+- Completed `TASK-STT-001` with a minimal Python `voice-agent` scaffold for
+  repeatable STT fixture validation, replaceable provider boundary, local
+  OpenTelemetry-compatible events/metrics/logs and unit tests.
+- Process learning: after user validation, record validation, rerun checks, then
+  commit and push the ticket branch automatically; merge remains explicit.
+
+### Files changed
+- `docs/operations/development-workflow.md` — delivery workflow and OpenTelemetry gate.
+- `.cursor/skills/{qa-functional-latency,adversarial-code-review,skill-creator}/` — QA/review/skill management support.
+- `product-backlog/templates/bug-ticket-template.md` — default QA bug ticket format.
+- `product-backlog/sprints/sprint-stt-validation.md` and
+  `product-backlog/tasks/stt-validation-tasks.md` — STT sprint and technical tasks.
+- `docs/architecture/channel-identity-boundary.md` — accepted boundary for
+  channel identity and responsibilities.
+- `voice-agent/stt_validation/` and `voice-agent/tests/test_stt_validation_runner.py` — STT fixture validation scaffold and tests.
