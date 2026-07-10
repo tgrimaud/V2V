@@ -130,6 +130,17 @@
 - Treating local telemetry events as enough for runtime work: STT/runtime
   scaffolds must expose events, metrics and structured logs with correlation id,
   provider, outcome and duration.
+- Including the current user turn in LLM conversation history when building context — if `addUserTurn(question)` is called before `buildHistory()`, the history already contains the question being asked. This duplicates the question (once in history, once in the user message) and breaks "empty history" detection for first-message greeting logic. Exclude the last turn from `buildHistory()` output.
+- Using `String.contains()` for keyword matching in intent classification — short keywords like `"ip"` match inside unrelated words like `"équipement"`, `"équipe"`. Use word-boundary matching (check that adjacent characters are not alphanumeric) instead.
+- Sending `conversationId` (camelCase) from a Python bridge to a Spring Boot backend that expects `conversation_id` (snake_case via `@JsonProperty`) — Spring silently ignores the unrecognized field and uses the default value. Always verify the Jackson field name in the Java DTO.
+- Forgetting to stop the `AudioBufferSourceNode` when clearing an audio queue — emptying the queue array and resetting flags does not stop audio already playing. Call `source.stop()` on the current source node.
+- Leaving dead adapter code in the backend after a pipeline migration (e.g. Deepgram STT → Gradium) — unused ports, adapters, and config accumulate confusion and false dependency impressions. Audit and remove legacy pipeline code when the replacement is confirmed working.
+- Filtering vector search results by `domain` metadata without ensuring all chunks have the metadata set — legacy chunks stored without `domain` are silently excluded. Always store a default `domain` value (e.g. `"general"`) and expand the search filter to include it.
+- Feeding a WAV container to Gradium STT — it expects **raw PCM16 mono 16 kHz** (`input_format=pcm_16000`, `Content-Type: audio/pcm`). A WAV 44-byte header is read as leading samples (click). Generate fixtures as raw `.pcm` (macOS `say` → `wave.readframes()` to strip the header); don't name raw PCM `.wav`.
+- Committing STT audio fixtures as `.txt`/ASCII placeholders — they pass the deterministic `FixtureSttProvider` (which reads the `.txt` sidecar) but no real engine can transcribe them, so a live provider run is silently blocked. Commit real audio, and keep the `.txt` sidecar (resolved via `audio_path.with_suffix(".txt")`).
+- Scoring STT quality with a raw whitespace WER against a real engine — punctuation, case and accents (`telephone` vs `téléphone`, `Bonjour` vs `Bonjour.`) inflate WER to the point of failing correct transcripts. Normalize reference and hypothesis (lowercase, strip punctuation, fold accents) before WER; keep the raw transcript for audit.
+- Assuming batch STT latency is a fixed cost — it scales with audio duration (Gradium processes the whole clip after upload). Use streaming/partial transcription as the latency lever, and always report the utterance length alongside the latency.
+- Omitting an un-instrumented pipeline slice from a latency report — always emit every canonical slice and mark missing ones `"measured": false` with a reason/owning ticket, so a gap is never mistaken for a fast slice. When one slice can be fed by several span names, let the first present name win so distributions from different paths don't mix.
 
 ## Checklist After Substantive Changes
 

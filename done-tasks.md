@@ -1,5 +1,30 @@
 # Done tasks
 
+## 2026-06-22 — Agent name badges, conversation fixes, dead code cleanup
+
+**Summary:**
+
+- Fixed conversation history bug where the LLM repeated greetings after every message — `buildHistory()` was including the current user turn, so history was never empty on first message and the question was duplicated in the prompt
+- Added `agentName` propagation through the full stack: backend `StreamingResult` / `ConversationResponse` → SSE `done` event → Python bridge `answer_done` WebSocket message → frontend `VoiceChat` message model
+- Implemented colored agent name badges in `MessageList.tsx` — each assistant message displays the responding agent's name (blue for Support Technique, green for Facturation, orange for Commercial)
+- Ran full-repository Bugbot review and fixed all flagged issues: domain vector search excluding legacy chunks without `domain` metadata, `IntentClassifier` arbitrary tie-breaking, keyword matching false positives (substring `"ip"` matching `"équipement"`), React `setState` during render, bridge Python camelCase field name mismatch, missing SSE error event handling, missing HTTP response status checks, audio queue not stopping current source on clear
+- Removed 504 lines of dead legacy voice pipeline code: Deepgram STT adapter, Piper TTS adapter, backend WebSocket handlers, voice controller, voice config, WebSocket config, and associated ports
+- Updated architecture diagrams (draw.io)
+
+### Files changed
+- `backend/.../service/ConversationOrchestrator.java` — agentName in StreamingResult/ConversationResponse, fixed buildHistory() to exclude current turn
+- `backend/.../adapter/in/rest/StreamingConversationController.java` — agentName in SSE done event JSON
+- `backend/.../adapter/in/rest/ConversationController.java` — agentName in AskResponse
+- `backend/.../service/IntentClassifier.java` — session-sticky tie-breaking, word-boundary keyword matching
+- `backend/.../service/GuardrailService.java` — word-boundary keyword matching
+- `backend/.../adapter/out/pgvector/PgVectorStoreAdapter.java` — default domain metadata, expanded search filter
+- `bridge/bridge_server.py` — agentId/agentName propagation, SSE error handling, snake_case field fix
+- `frontend/src/features/voice-chat/VoiceChat.tsx` — agentName on messages, setState fix
+- `frontend/src/features/voice-chat/MessageList.tsx` — colored agent name badges
+- `frontend/src/features/voice-chat/useVoiceWebSocket.ts` — agentName callback param
+- `frontend/src/features/voice-chat/useAudioQueue.ts` — source.stop() on clear
+- Deleted: `DeepgramSttAdapter`, `PiperTtsAdapter`, `VoiceWebSocketHandler`, `TwilioMediaStreamHandler`, `VoiceController`, `VoiceConfig`, `WebSocketConfig`, `SpeechToTextPort`, `TextToSpeechPort` (504 lines removed)
+
 ## 2026-06-23 — Socle KB multi-sources (Lot 0) + docs
 
 **Summary:**
@@ -23,6 +48,19 @@
 - `backend/src/main/resources/application.yml` — clés `markdown-path`, `default-language`, `sync-cron`.
 - `knowledge-base/{telecom,billing,commercial}-faq.md` — front-matter `domain`.
 - `docs/{architecture.md,development-guide.md}`, `README.md`, `docs/architecture-kb.drawio` — documentation.
+
+## 2026-06-24 — Knowledge-base draw.io diagram fixes
+
+**Summary:**
+
+- Fixed the knowledge-base architecture diagram where arrows rendered "detached" from boxes and labels were misplaced — root cause was nodes nested in swimlanes (relative coords) combined with edges lacking fixed anchor points
+- Rebuilt every edge with explicit `exitX/exitY` + `entryX/entryY` anchor fractions so arrows glue to precise box borders and labels sit on the segment
+- Re-laid the diagram to minimise edge crossings (boxes routed through clear lanes) and kept the color convention (green = PostgreSQL/pgvector links, red = external AI calls, dashed = future connectors)
+- Per user request, converted the three zones (`Sources KB`, `Backend Java`, `PostgreSQL + pgvector`) into proper draw.io **swimlanes** with nodes nested inside, recomputing child coordinates relative to each swimlane origin (accounting for the `startSize=30` title bar)
+- Validated XML well-formedness with the Python minidom parser after each edit
+
+### Files changed
+- `docs/diagrams/knowledge-base.drawio` — rebuilt with anchored edges and swimlane zones
 
 ## 2026-06-30 — Scope V1 billing Voice2Voice + decisions architecture
 
@@ -88,6 +126,20 @@
 - `docs/architecture/architecture.md` — clarification Pipecat cible vs bridge legacy et labels Mermaid.
 - `outputs/presentations/voice-support-bot-scope-architecture/` — storyboard et presentation PPTX.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — connaissances partagees mises a jour.
+
+## 2026-07-08 — Functional specification and omnichannel strategy
+
+**Summary:**
+
+- Created a functional specification for Voice Support Bot covering business context, scope, stakeholders, user journeys, functional/non-functional requirements, handled data, MVP acceptance criteria, and roadmap.
+- Added WhatsApp/messaging as a future omnichannel channel that must reuse the same conversation backend, KB, guardrails, multi-agent routing, and escalation rules.
+- Clarified the industrialization strategy: start with the current stack for speed and control, while keeping the option to integrate Genesys Cloud CX later as a contact-center layer for channels, queues, agent desktop, supervision, and human handoff.
+- Captured the architectural boundary: Genesys/WhatsApp should not replace the Java conversation engine; RAG, business rules, guardrails, routing, and persistence remain in the backend.
+
+### Files changed
+- `docs/product/cahier-des-charges-fonctionnel.md` — new functional specification with WhatsApp and Genesys Cloud CX readiness.
+- `CLAUDE.md` — added omnichannel and Genesys Cloud CX architecture notes.
+- `AGENTS.md` — added common mistake warning about not moving conversation-engine responsibilities into channel/contact-center integrations.
 
 ## 2026-07-08 — Revue adversariale architecture omnicanale
 
@@ -163,3 +215,42 @@
 - `docs/architecture/channel-identity-boundary.md` — accepted boundary for
   channel identity and responsibilities.
 - `voice-agent/stt_validation/` and `voice-agent/tests/test_stt_validation_runner.py` — STT fixture validation scaffold and tests.
+
+## 2026-07-10 — STT validation sprint (US-036 pipeline timing, real fixtures, live Gradium run)
+
+**Summary:**
+
+- **US-036 — voice-journey timing by pipeline slice:** built `PipelineTimingReport` that aggregates latency spans into six canonical journey slices (channel ingress → end-of-turn → STT request → backend first token → TTS first audio → channel egress) with p50/p95/p99 per slice. Un-instrumented slices are emitted explicitly as `"measured": false` with a reason/owning ticket so a gap can never be read as a fast slice. Added a `pipeline_timing_cli`, unit tests, and a Behave scenario. Requalified as done for the STT scope.
+- **Real STT fixtures (TASK-STT-007):** replaced the ASCII placeholder `.wav` files (19–33 bytes) with real **raw PCM16 mono 16 kHz** audio generated by `generate_fixtures.py` (macOS `say` → strip WAV header via `wave.readframes()`), across short / long / accented / noisy / silence categories (noisy = synthetic white-noise mix, accented = `fr_CA` voice as proxies). Fixtures are now `.pcm`; the `.txt` transcript sidecars are unchanged.
+- **First live Gradium run:** ran the quality CLI over the real fixtures with the key from `.env`, capturing per-category WER + real latency. Confirmed Gradium wants raw PCM (not a WAV container) and that batch latency scales with clip length (~1.1 s / 1 s → ~2.7 s / 4.3 s).
+- **RF-008 / TASK-STT-011 opened:** live run exposed that the raw whitespace WER over-penalizes correct transcripts (punctuation/case/accents count as errors, e.g. WER 1.0 for `Bonjour` vs `Bonjour.`). Normalization before scoring is required before the quality gate is meaningful.
+- **Backlog hygiene:** reintegrated the missing TASK-STT-008 (Gradium provider) into the sprint; recorded streaming follow-ups (TASK-STT-009 end-of-turn/VAD, TASK-STT-010 partial STT, TASK-WEB-004 incremental TTS) as out-of-sprint follow-ups mapped to the pipeline slices/findings they close.
+- Merged all feature branches (US-036, TASK-STT-007/008, backlog updates) into `feat/restart-from-scratch` fast-forward; deleted the obsolete US-019 branch.
+
+### Files changed
+- `voice-agent/stt_validation/pipeline_timing.py` — canonical-slice latency report with explicit gap reporting.
+- `voice-agent/stt_validation/pipeline_timing_cli.py` — CLI replaying fixtures → JSON timing report.
+- `voice-agent/tests/test_pipeline_timing.py` — unit tests (slice precedence, gap reporting, serialization).
+- `voice-agent/features/pipeline_timing.feature` (+ steps) — Behave scenario for US-036.
+- `voice-agent/fixtures/generate_fixtures.py` — generates raw PCM16 16 kHz fixtures.
+- `voice-agent/fixtures/**/*.pcm` + `manifest.json` — real audio fixtures replacing placeholders.
+- `docs/qa/stt-transcription-quality.md` — recorded first live Gradium per-category run + RF-008.
+- `product-backlog/**` — sprint, tasks, findings and story traceability updates.
+
+## 2026-07-10 — STT Sprint 2 hardening (TASK-STT-011/007/005) + review remediation
+
+**Summary:**
+
+- **TASK-STT-011 — WER normalization:** added `normalize_transcript` (lowercase, strip punctuation, fold accents via NFKD) applied before `word_error_rate`, so the quality gate stops penalizing punctuation/case/accent artifacts. Live re-run: `short` WER 1.00→0.00, `long` 0.083, `accented` 0.182 pass; only `noisy` fails on a genuine error. Closed RF-008.
+- **TASK-STT-007 — multi-sample fixtures + per-category reporting:** expanded to 5 samples per usable category (+2 silence), added `CategorySummary` aggregation and `MIN_SAMPLES_FOR_PERCENTILES=5` significance flag, and padded fixture onsets with silence to avoid first-word clipping. Closed RF-005.
+- **TASK-STT-005 — sanitization hardening:** `_redact_token` now also redacts bare filenames (`<redacted-file>`) and identifier-like tokens (`<redacted-id>`: UUID, secret prefixes, ≥7-digit runs, mixed ids). Closed RF-001.
+- **Adversarial review remediation (RF-009/010/011):** added a `_SAFE_TOKENS` allowlist so technical tokens (`pcm_16000`, `audio/pcm`) stay readable; added a manifest↔sidecar drift-guard test; excluded unusable categories from the significance aggregate.
+- Per-ticket branches merged into `feat/sprint-2-stt-hardening`; RF remediation on `task/sprint-2-review-remediation`.
+
+### Files changed
+- `voice-agent/stt_validation/quality.py` — `normalize_transcript`, `CategorySummary`, significance aggregate excluding unusable categories.
+- `voice-agent/stt_validation/sanitization.py` — bare filename/id redaction + `_SAFE_TOKENS` allowlist.
+- `voice-agent/fixtures/generate_fixtures.py` + `manifest.json` — 22-sample padded fixture set.
+- `voice-agent/tests/test_quality.py`, `test_manifest.py`, `test_sanitization.py` — coverage for aggregation, drift guard, redaction.
+- `docs/qa/stt-transcription-quality.md`, `docs/observability/stt-validation-telemetry.md` — updated runs + sanitization notes.
+- `product-backlog/review-findings.md`, `sprints/`, `tasks/`, `backlog-index.md` — statuses and RF dispositions.
