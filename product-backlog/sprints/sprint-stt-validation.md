@@ -32,7 +32,7 @@ go/no-go decisions.
 | Ticket | Sprint status | Evidence |
 |---|---|---|
 | US-003 | Done | `docs/architecture/channel-identity-boundary.md`; user validation 2026-07-09 |
-| US-019 | Not started | STT scaffold available; pending web voice journey work |
+| US-019 | In progress | Decomposed into TASK-WEB-001 (STT half, in progress), TASK-WEB-002 (TTS half), TASK-WEB-003 (backend bridge); see `product-backlog/tasks/web-voice-tasks.md` |
 | US-036 | Not started | Pending STT instrumentation path |
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |

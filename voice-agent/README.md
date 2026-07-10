@@ -118,3 +118,42 @@ Gradium ASR validates the request `Content-Type` against an allowlist. The
 provider sends `audio/pcm` for PCM input and `audio/basic` for u-law telephony
 (verified live). Sending the urllib default `application/x-www-form-urlencoded`
 or `application/octet-stream` returns `HTTP 500 unsupported content type`.
+
+## Web voice ingress (US-019 STT half, TASK-WEB-001)
+
+`web_voice` turns the STT scaffold into a real web ingress: a browser page
+captures the microphone, converts it to the Gradium input contract (mono 16 kHz
+PCM16) and posts it to the voice runtime, which transcribes the turn through the
+same `SttProvider` protocol and returns the transcript. No backend, LLM or TTS in
+this slice (those are TASK-WEB-002 / TASK-WEB-003).
+
+```bash
+# live capture (needs a mic + a valid Gradium key)
+export GRADIUM_API_KEY=...          # never commit this
+python3 -m web_voice.server --provider gradium
+# then open http://127.0.0.1:8090/ and record a question
+
+# offline plumbing check (fixture provider, no key, no network)
+python3 -m web_voice.server --provider fixture
+```
+
+- `POST /api/voice/stt` accepts raw PCM16 mono 16 kHz bytes (`Content-Type:
+  audio/pcm`) and returns the `TranscriptResult` JSON (`transcript`, `outcome`,
+  `error_code`, `error_reason`, `provider`, `stt_request_ms`, `correlation_id`).
+- The ingress records a **real channel-ingress span** `web.voice.ingress`
+  (received audio byte count + the time spent reading the audio off the wire,
+  channel, correlation id) before delegating to the STT slice, replacing the
+  scaffold `path.exists()` analog (RF-002) for the web path.
+- Optional query params `conversation_id`, `session_id`, `correlation_id` seed the
+  channel envelope; missing ids are generated.
+- The server uses only the Python standard library (no new dependency) and skips
+  the `socket.getfqdn()` reverse-DNS lookup on bind (it can hang for tens of
+  seconds when reverse DNS is slow).
+- Failures (auth, credits, timeout, unreachable, no speech) surface a sanitized
+  reason with a stable `error_code` and never invent a transcript or leak the API
+  key, raw audio or a filesystem path.
+
+The web ingress outcome contract is covered by `tests/test_web_voice_ingress.py`
+and `features/web_voice.feature` (both run against the same code path with an
+in-memory stub provider). Live browser validation (mic capture, transcript
+render, time-to-transcript) is a QA step using Chrome DevTools MCP.

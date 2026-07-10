@@ -44,7 +44,7 @@ against the new empty-codebase plan.
 | US-016 | Explain the billing rule behind a delta | V1 core | Draft | Medium |
 | US-017 | Disclose when no reliable explanation can be produced | V1 core | Draft | High |
 | US-018 | Call the bot for a spoken invoice explanation | V1 core | Draft | High |
-| US-019 | Ask from a web voice chat | V1 core | Draft | High |
+| US-019 | Ask from a web voice chat | V1 core | In progress | High |
 | US-020 | Receive a quick spoken acknowledgement during long analysis | V1 core | Draft | Medium |
 | US-021 | Interrupt the bot during a spoken answer | V1 core | Draft | Medium |
 | US-022 | Use text to complement a voice question | V1 enabler | Draft | Low |
@@ -78,7 +78,10 @@ against the new empty-codebase plan.
 | TASK-STT-005 | Redact bare sensitive identifiers in failure sanitization | V1 pilot gate | Draft | Medium |
 | TASK-STT-006 | Add a dedicated UNAVAILABLE STT outcome | V1 pilot gate | Draft | Low |
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category | V1 pilot gate | Draft | Medium |
-| TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | Draft | High |
+| TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | In progress | High |
+| TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | In progress | High |
+| TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Draft | High |
+| TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
 
 ## Planned Sprints
 

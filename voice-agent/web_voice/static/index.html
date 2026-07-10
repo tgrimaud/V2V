@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web Voice Chat — STT (US-019)</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --error: #f87171;
+        --ok: #4ade80;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        width: min(640px, 92vw);
+        background: var(--panel);
+        border-radius: 16px;
+        padding: 28px 32px 32px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      p.subtitle { margin: 0 0 24px; color: var(--muted); font-size: 0.9rem; }
+      .controls { display: flex; gap: 12px; align-items: center; }
+      button {
+        font: inherit;
+        font-weight: 600;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 20px;
+        cursor: pointer;
+        background: var(--accent);
+        color: #0f172a;
+        transition: opacity 0.15s ease;
+      }
+      button[disabled] { opacity: 0.45; cursor: not-allowed; }
+      button.recording { background: var(--error); color: #fff; }
+      .status { color: var(--muted); font-size: 0.9rem; }
+      .transcript {
+        margin-top: 24px;
+        padding: 18px 20px;
+        min-height: 72px;
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+      .transcript.empty { color: var(--muted); font-style: italic; }
+      .transcript.error { border-color: var(--error); color: var(--error); }
+      .meta { margin-top: 12px; font-size: 0.78rem; color: var(--muted); }
+      code { background: rgba(148, 163, 184, 0.15); padding: 1px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Web Voice Chat — Speech-to-Text</h1>
+      <p class="subtitle">
+        US-019 (STT half). Record a spoken question; the voice runtime transcribes it
+        through the configured STT provider.
+      </p>
+      <div class="controls">
+        <button id="record" type="button">Record</button>
+        <span id="status" class="status">Idle</span>
+      </div>
+      <div id="transcript" class="transcript empty">Transcript will appear here.</div>
+      <div id="meta" class="meta"></div>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
