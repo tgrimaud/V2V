@@ -84,10 +84,10 @@ run. The bug-ticket process is documented below for future failing runs.
 
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
-| Medium | Quality reflects `fixture-stt`, not a real STT engine (RF-003) | Numbers not representative of production | Architecture (provider choice) |
-| Low | One sample per category → p95/p99 not statistically meaningful (RF-005 / TASK-STT-007) | Weak latency/quality confidence | QA |
+| Medium | Quality reflects `fixture-stt`, not a real STT engine (RF-003) | Numbers not representative of production | **Resolved 2026-07-10** (Gradium live + expanded set) |
+| Low | One sample per category → p95/p99 not statistically meaningful (RF-005 / TASK-STT-007) | Weak latency/quality confidence | **Resolved 2026-07-10** (5/category; real recordings still advised) |
 | Low | Ingress span is a scaffold analog (RF-002) | Ingress latency not truly measured | Gated by US-019/US-036 |
-| Low | Sanitization only redacts path-bearing tokens (RF-001 / TASK-STT-005) | Bare sensitive id could leak with a real adapter | Backend/voice runtime |
+| Low | Sanitization only redacts path-bearing tokens (RF-001 / TASK-STT-005) | Bare sensitive id could leak with a real adapter | **Resolved 2026-07-10** (filename/id redaction) |
 
 ### Bug ticket process (no blocking defect this run)
 

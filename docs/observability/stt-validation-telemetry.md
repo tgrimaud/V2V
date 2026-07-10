@@ -123,18 +123,28 @@ Failure event and structured log — the absolute path is redacted and a stable
 - maps the exception type to a stable `error_code`
   (`fixture_missing`, `invalid_fixture`, `stt_timeout`, `stt_error`),
 - replaces any token containing a path separator with `<redacted-path>`,
+- **(TASK-STT-005)** replaces a **bare filename** (media/data extension, no path
+  separator — e.g. `secret-customer.wav`, `export.json`) with `<redacted-file>`,
+- **(TASK-STT-005)** replaces an **identifier-like token** with `<redacted-id>`:
+  UUIDs, secret-prefixed tokens (`gsk_…`, `sk_…`, `bearer_…`), long digit runs
+  (≥ 7 digits, e.g. account/phone numbers) and mixed letter+digit ids
+  (`CUST0009812`). Trailing/leading punctuation is stripped before matching.
+- keeps ordinary words, short numbers (`HTTP 401`) and plain dates (`2026-07-10`)
+  readable so the reason stays diagnostic,
 - caps the reason at 160 characters,
 - never emits raw audio bytes, transcript payloads beyond the returned result,
   or billing data.
 
-Covered by `tests/test_stt_validation_runner.py::test_failure_reason_is_sanitized_without_leaking_path`.
+Covered by `tests/test_stt_validation_runner.py::test_failure_reason_is_sanitized_without_leaking_path`
+and the dedicated `tests/test_sanitization.py` (path, bare filename, UUID, secret
+prefix, digit run, mixed-alnum id redaction; words/dates preserved; length cap).
 
 ## Acceptance criteria coverage
 
 | Scenario | Evidence |
 |---|---|
 | STT latency is observable, isolable, percentile-ready | `stt.request` span + `stt.request.duration_ms` metric + `LatencyReport` |
-| STT failure observable without leaking sensitive data | `stt.failure` event + warning log with `error_code` and `<redacted-path>` |
+| STT failure observable without leaking sensitive data | `stt.failure` event + warning log with `error_code`; sensitive tokens replaced by `<redacted-path>` / `<redacted-file>` / `<redacted-id>` (TASK-STT-005) |
 
 ## Reproduce
 

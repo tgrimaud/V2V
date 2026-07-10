@@ -12,7 +12,7 @@ where it is built alongside streaming TTS (TASK-WEB-004).
 **Parent:** EPIC-010
 **Related finding:** RF-001 (TASK-STT-003)
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 2 (STT hardening)
+**Status:** Done — Sprint 2 (STT hardening)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-005-redact-bare-identifiers`
 
@@ -43,6 +43,22 @@ Scenario: A bare sensitive identifier is redacted
 
 - Unit tests for bare-token redaction.
 - Updated `docs/observability/stt-validation-telemetry.md` sanitization section.
+
+### Delivery Evidence (2026-07-10)
+
+- `voice-agent/stt_validation/sanitization.py`: `_redact_token` now, in addition to
+  path-separator tokens (`<redacted-path>`), redacts **bare filenames** with a
+  media/data extension (`<redacted-file>`) and **identifier-like tokens**
+  (`<redacted-id>`): UUIDs, secret-prefixed tokens (`gsk_/sk_/bearer_…`), long digit
+  runs (≥ 7 digits), and mixed letter+digit ids. Surrounding punctuation is stripped
+  before classification; the stable `error_code` and the 160-char cap are preserved.
+- Plain words, short numbers (`HTTP 401`) and dates (`2026-07-10`) stay readable so
+  the reason remains diagnostic (guarded by tests).
+- `voice-agent/tests/test_sanitization.py`: new dedicated suite (13 tests) covering
+  reason-code mapping, path/filename/UUID/secret/digit-run/mixed-id redaction,
+  preservation of words/dates/no-speech messages, and the length cap. Full suite
+  **72 unit tests + 8 Behave scenarios green**.
+- **Closes RF-001.**
 
 ---
 

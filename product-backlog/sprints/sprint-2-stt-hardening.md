@@ -44,7 +44,7 @@ reviews and QA run.
 |---|---|---|
 | TASK-STT-011 | ✅ Done (2026-07-10) | `normalize_transcript` folds case/punctuation/accents before WER; 55 unit tests green. Live Gradium re-run: `short` WER 1.00→0.00, `long` 0.083, `accented` 0.182 pass; only `noisy` (0.40) fails on a genuine error (→ TASK-STT-007). Threshold kept at 0.8. |
 | TASK-STT-007 | ✅ Done (2026-07-10) | Expanded to 22 fixtures (5/usable category, varied voices, padded onsets); per-category aggregation + `MIN_SAMPLES_FOR_PERCENTILES=5` significance flag; live Gradium per-category run recorded. Closes RF-003 + RF-005. Residual (documented open risk, not blocking): real human recordings for `short`/`noisy`. |
-| TASK-STT-005 | Planned | Independent; small, well-scoped sanitization change. |
+| TASK-STT-005 | ✅ Done (2026-07-10) | `sanitization.py` now redacts bare filenames (`<redacted-file>`) and identifier-like tokens (`<redacted-id>`: UUID, secret prefixes, digit runs, mixed ids) on top of paths; words/dates preserved; `error_code` + length cap kept. Dedicated `test_sanitization.py` (13 tests). Closes RF-001. |
 | TASK-STT-006 | Planned | Independent; audit the four telemetry surfaces + quality harness for the new outcome. |
 | TASK-STT-009 | Planned | Voice-runtime end-of-turn detection on the web voice stream; emits an OpenTelemetry span consumed by `PipelineTimingReport`. |
 
@@ -75,8 +75,8 @@ branching strategy):
 | Ticket | Branch | Status |
 |---|---|---|
 | TASK-STT-011 | `task/TASK-STT-011-normalize-wer` | ✅ merged into sprint branch |
-| TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` | ✅ done (awaiting merge into sprint branch) |
-| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | pending |
+| TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` | ✅ merged into sprint branch |
+| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ done (awaiting merge into sprint branch) |
 | TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | pending |
 | TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | pending |
 
