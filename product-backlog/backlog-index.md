@@ -61,7 +61,7 @@ against the new empty-codebase plan.
 | US-033 | Protect personal data exposed to the customer | V1 enabler | Draft | High |
 | US-034 | Audit sensitive consultations | V1 enabler | Draft | High |
 | US-035 | Disclose analysis limits | V1 core | Draft | High |
-| US-036 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Done | High |
+| US-036 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Done (STT sprint scope) | High |
 | US-037 | Measure invoice comparison response time | V1 pilot gate | Draft | Medium |
 | US-038 | Track escalations and their reasons | V1 pilot gate | Draft | Medium |
 | US-039 | Track unresolved questions | V1 pilot gate | Draft | Medium |
@@ -88,7 +88,7 @@ against the new empty-codebase plan.
 
 | Key | Title | Status | Goal |
 |-----|-------|--------|------|
-| SPRINT-STT | STT Validation | In progress | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
+| SPRINT-STT | STT Validation | In review | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 
 ## Restart Delivery Notes
 

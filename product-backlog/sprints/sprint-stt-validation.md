@@ -10,7 +10,7 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** In review — all sprint tickets delivered (US-036 pending merge)
+**Status:** In review — STT-scope tickets delivered; US-036 (STT scope) pending merge. Residual: TASK-STT-008 live quality/latency run pending real Gradium credentials.
 **Created:** 2026-07-09  
 **Final validator:** User  
 **Merge rule:** no branch is merged unless the user explicitly asks.
@@ -26,6 +26,7 @@ go/no-go decisions.
 | TASK-STT-002 | Validate STT transcription quality with audio fixtures | Technical task | High | Establishes transcript-quality evidence |
 | TASK-STT-003 | Add OpenTelemetry instrumentation for STT validation | Technical task | High | Makes STT latency/outcome observable |
 | TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | Technical task | High | Defines QA evidence and readiness report |
+| TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | Technical task | High | Replaces the fixture provider so quality/latency reflect the real STT engine (emerged mid-sprint from RF-003 once Gradium was selected) |
 
 ## Ticket Status
 
@@ -33,11 +34,12 @@ go/no-go decisions.
 |---|---|---|
 | US-003 | Done | `docs/architecture/channel-identity-boundary.md`; user validation 2026-07-09 |
 | US-019 | Done (STT scope) | STT half delivered & merged: `TASK-WEB-001` (live web mic → Gradium → transcript), QA GO in `docs/qa/web-voice-qa-report.md`. Voice response `TASK-WEB-002` (TTS) and `TASK-WEB-003` (backend bridge) are **deferred out of this STT sprint** per user decision; US-019 as a full Voice2Voice story stays In progress in the backlog. |
-| US-036 | Done | `docs/observability/voice-journey-timing.md`; `PipelineTimingReport` reports all six canonical slices with p50/p95/p99 for the instrumented slices (`channel_ingress`, `stt`) and explicit `"measured": false` gaps for the deferred slices (`end_of_turn`, `backend_first_token`, `tts_first_audio`, `channel_egress`). CLI `pipeline_timing_cli`; 6 unit tests + Behave `features/pipeline_timing.feature`. |
+| US-036 | Done (STT sprint scope) | `docs/observability/voice-journey-timing.md`; `PipelineTimingReport` reports all six canonical slices with p50/p95/p99 for the instrumented slices (`channel_ingress`, `stt`) and explicit `"measured": false` gaps for the four downstream slices. **STT-sprint scope is complete** (the reporting capability + the STT-path slices are measured); the full 6-slice measurement stays open and is gated by out-of-sprint follow-ups: `end_of_turn`→TASK-STT-009, `backend_first_token`→TASK-WEB-003, `tts_first_audio`/`channel_egress`→TASK-WEB-002. CLI `pipeline_timing_cli`; 6 unit tests + Behave `features/pipeline_timing.feature`. |
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
 | TASK-STT-004 | Done | `docs/qa/stt-qa-report.md`; Behave `features/stt_validation.feature` (5 scenarios); go/no-go recommendation |
+| TASK-STT-008 | In progress | `voice-agent/stt_validation/gradium_provider.py` + `provider_factory.py`; 11 provider tests, live smoke test 2026-07-09 (auth OK, `audio/pcm` content-type fix). Live quality/latency run pending real `GRADIUM_API_KEY` + fixtures; RF-003 stays open until real numbers recorded. |
 
 ## Optional Stretch Ticket
 
@@ -60,6 +62,22 @@ is required for this first STT validation.
 | Billing comparison stories | STT can be validated with controlled utterances before invoice reasoning is implemented |
 | Genesys handoff stories | Handoff is downstream from transcript capture and not needed to prove STT |
 
+## Follow-ups (Out Of Sprint, deliberately scheduled)
+
+These tickets were surfaced by this sprint's delivery or adversarial review but are
+**not** part of the STT validation objective. They are candidates for the next
+sprint. The last three each close one of US-036's `"measured": false` slices, so
+US-036 only becomes globally Done once they are delivered.
+
+| Ticket | Reason it is out of this sprint | Relation to US-036 |
+|---|---|---|
+| TASK-STT-005 | Bare-identifier redaction hardening (RF-001); STT already sanitizes path-bearing tokens | — |
+| TASK-STT-006 | Dedicated `UNAVAILABLE` outcome (RF-004); "no invented transcript" already holds | — |
+| TASK-STT-007 | Expand fixtures for statistically meaningful p95/p99 (RF-005) | Sharpens STT-slice percentiles, not a new slice |
+| TASK-STT-009 | End-of-turn / VAD detection is a voice-runtime feature, not STT validation | Closes the `end_of_turn` slice |
+| TASK-WEB-003 | Backend/LLM bridge is Voice2Voice, not STT | Closes the `backend_first_token` slice |
+| TASK-WEB-002 | Voice response (TTS) is Voice2Voice, not STT | Closes `tts_first_audio` + `channel_egress` |
+
 ## Branch Plan
 
 Each ticket must be implemented on its own branch:
@@ -73,6 +91,7 @@ Each ticket must be implemented on its own branch:
 | TASK-STT-002 | `task/TASK-STT-002-stt-quality-fixtures` |
 | TASK-STT-003 | `task/TASK-STT-003-stt-opentelemetry` |
 | TASK-STT-004 | `task/TASK-STT-004-stt-qa-report` |
+| TASK-STT-008 | `task/TASK-STT-008-gradium-stt-provider` |
 
 ## Delivery Order
 
@@ -80,9 +99,10 @@ Each ticket must be implemented on its own branch:
 2. TASK-STT-001 - create the minimal STT validation scaffold.
 3. TASK-STT-003 - add OpenTelemetry evidence for the STT path.
 4. TASK-STT-002 - run fixture-based transcription quality validation.
-5. US-019 - connect the validation path to the web voice journey scope.
-6. US-036 - verify the voice timing slice evidence is reportable.
-7. TASK-STT-004 - produce QA report, Gherkin scenarios and go/no-go decision.
+5. TASK-STT-008 - connect the real Gradium STT engine behind the provider protocol.
+6. US-019 - connect the validation path to the web voice journey scope.
+7. US-036 - verify the voice timing slice evidence is reportable.
+8. TASK-STT-004 - produce QA report, Gherkin scenarios and go/no-go decision.
 
 ## Sprint Acceptance Criteria
 
