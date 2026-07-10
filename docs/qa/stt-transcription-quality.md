@@ -8,11 +8,18 @@
 ## Scope and honesty note
 
 This validates the **quality-evaluation harness and the first controlled fixture
-set**, using the deterministic `FixtureSttProvider` (the `.txt` sidecar is the
-simulated engine output). It does **not** yet measure a real STT engine — that
-depends on provider selection (see the sprint open questions). When a real
-provider adapter is connected, the same manifest and harness produce real
-quality numbers with zero test changes.
+set**. The quality table below is produced with the deterministic
+`FixtureSttProvider` (the `.txt` sidecar is the simulated engine output), so those
+WER numbers are **not** a real-engine measurement.
+
+**Update (TASK-STT-007, 2026-07-10):** the five category fixtures are now **real
+raw PCM16 mono 16 kHz audio** (`fixtures/generate_fixtures.py`, macOS `say`), not
+the previous ASCII placeholders. A per-category **Gradium** run is therefore now
+possible and only needs a `GRADIUM_API_KEY`:
+`python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium`.
+Caveats: `say` speech is clean/synthetic, `noisy` mixes synthetic white noise, and
+`accented` uses a Canadian-French voice (fr_CA) — proxies, not real-world
+recordings; real human samples per category remain part of TASK-STT-007.
 
 ## How quality is scored
 
@@ -26,13 +33,13 @@ quality numbers with zero test changes.
 
 ## QA fixture inventory
 
-| Fixture | Category | Usable? | Reference (ground truth) |
-|---|---|---|---|
-| `short-greeting` | short | yes | `Bonjour` |
-| `long-billing-question` | long | yes | `Pourquoi ma facture de telephone est plus elevee que le mois dernier` |
-| `noisy-billing-question` | noisy | yes | `je voudrais comprendre le montant de ma derniere facture mensuelle` |
-| `accented-billing-question` | accented | yes | `est-ce que je peux payer ma facture en plusieurs fois` |
-| `silence-clip` | silence | no (must not transcribe) | — |
+| Fixture | Category | Usable? | Audio (raw PCM16 16 kHz) | Reference (ground truth) |
+|---|---|---|---|---|
+| `short-greeting` | short | yes | `short/greeting.pcm` (Thomas fr_FR, 0.74 s) | `Bonjour` |
+| `long-billing-question` | long | yes | `long/billing-question.pcm` (Thomas fr_FR, 3.50 s) | `Pourquoi ma facture de telephone est plus elevee que le mois dernier` |
+| `noisy-billing-question` | noisy | yes | `noisy/noisy-question.pcm` (Jacques fr_FR + white noise, 3.45 s) | `je voudrais comprendre le montant de ma derniere facture mensuelle` |
+| `accented-billing-question` | accented | yes | `accented/accented-question.pcm` (Amélie fr_CA, 2.41 s) | `est-ce que je peux payer ma facture en plusieurs fois` |
+| `silence-clip` | silence | no (must not transcribe) | `silence/silence.pcm` (1.00 s zeros) | — |
 
 All five declared categories (`short`, `long`, `noisy`, `silence`, `accented`)
 are covered. `missing_categories: []`.
@@ -78,16 +85,23 @@ present and all quality gates pass. If a future run produces
 
 ## Open risks
 
-- Quality numbers reflect the fixture provider, not a real STT engine.
-- The first fixture set has one sample per category; more samples are needed
-  before p95/p99 and per-category quality are statistically meaningful.
-- Real-speech accented and noisy audio may behave very differently from the
-  controlled sidecar hypotheses.
+- The quality table above reflects the fixture provider, not a real STT engine.
+  A real per-category Gradium run is now possible (audio is real) but needs a key.
+- One sample per category; more samples are needed before p95/p99 and per-category
+  quality are statistically meaningful (rest of TASK-STT-007).
+- `noisy` (synthetic white noise) and `accented` (fr_CA `say` voice) are proxies;
+  real human noisy/accented recordings may behave very differently.
 
 ## Reproduce
 
 ```bash
 cd voice-agent
+# (re)generate the raw PCM16 16 kHz fixtures (macOS `say`)
+python3 fixtures/generate_fixtures.py
 python3 -m unittest discover -s tests -p 'test_*.py'
+# fixture-provider quality (simulated):
 python3 -m stt_validation.quality_cli fixtures/manifest.json
+# real-engine per-category quality (needs a key):
+export GRADIUM_API_KEY=...
+python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
 ```

@@ -83,22 +83,29 @@ Scenario: Silence is reported as unavailable, not failed
 ## TASK-STT-007 - Expand The STT Fixture Set With Multiple Samples Per Category
 
 **Parent:** EPIC-010
-**Related finding:** RF-005 (TASK-STT-002)
+**Related finding:** RF-005 (TASK-STT-002), RF-003 (per-category matrix now audio-unblocked)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** In progress (real single-sample audio done; multiple samples + real recordings remaining)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-007-expand-fixture-samples`
 
 ### Objective
 
 Make per-category quality and p95/p99 latency statistically meaningful by adding
-multiple fixtures per category.
+multiple fixtures per category — and, first, by replacing the placeholder audio
+with real audio so the fixtures can actually run against a real engine.
 
 ### Scope
 
+- ~~Replace the ASCII placeholder `.wav` fixtures with real audio~~ **Done**: the
+  5 category fixtures are now raw PCM16 mono 16 kHz (`fixtures/generate_fixtures.py`).
 - Add several fixtures per category (short, long, noisy, silence, accented).
+- Prefer real human recordings for `noisy` and `accented` (current ones are `say`
+  proxies: synthetic white noise, fr_CA voice).
 - Extend the manifest and QA report to summarise quality per category.
 - Define the minimum sample size before p95/p99 is reported as meaningful.
+- Run `--provider gradium` over the manifest and record the per-category WER
+  (now unblocked by real audio; needs a `GRADIUM_API_KEY`) — this closes RF-003.
 
 ### Acceptance Criteria
 
@@ -114,6 +121,17 @@ Scenario: Category quality is reported over multiple samples
 
 - Expanded fixture set and manifest.
 - Updated `docs/qa/stt-transcription-quality.md` with per-category summaries.
+
+### Delivery Evidence (partial, 2026-07-10)
+
+- `voice-agent/fixtures/generate_fixtures.py`: reproducible generator (macOS `say`)
+  producing raw PCM16 mono 16 kHz — native Gradium `pcm_16000` input, no WAV header.
+- 5 real fixtures replacing the ASCII placeholders (short 0.74 s, long 3.50 s,
+  noisy 3.45 s + white noise, accented 2.41 s fr_CA, silence 1.00 s). Manifest
+  updated to `.pcm`. Fixture-provider harness, 47 unit tests and 8 Behave scenarios
+  still green.
+- Remaining: multiple samples/category, real human noisy/accented recordings,
+  minimum-sample-size rule, and the live Gradium per-category run.
 
 ---
 
