@@ -10,7 +10,7 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** In review — all STT-scope tickets delivered and merged into `feat/restart-from-scratch`; live Gradium validated end to end (real transcripts + latency). Awaiting user validation to close. Only residual (not sprint-blocking): per-category WER matrix over controlled fixtures needs real fixture audio (TASK-STT-007, already out of sprint).
+**Status:** In review — all STT-scope tickets delivered and merged into `feat/restart-from-scratch`; live Gradium validated end to end (real transcripts + latency). The 5 controlled fixtures are now **real PCM16 16 kHz audio** (TASK-STT-007 merged) and a first **live per-category Gradium run** was executed (`docs/qa/stt-transcription-quality.md`, 2026-07-10). Awaiting user validation to close. Only residual (not sprint-blocking): the per-category WER numbers are not yet a usable pass/fail gate because the scorer does not normalize punctuation/case/accents (RF-008 → TASK-STT-011, out of sprint).
 **Created:** 2026-07-09  
 **Final validator:** User  
 **Merge rule:** no branch is merged unless the user explicitly asks.
@@ -39,7 +39,7 @@ go/no-go decisions.
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
 | TASK-STT-004 | Done | `docs/qa/stt-qa-report.md`; Behave `features/stt_validation.feature` (5 scenarios); go/no-go recommendation |
-| TASK-STT-008 | Done (STT sprint scope) | `voice-agent/stt_validation/gradium_provider.py` + `provider_factory.py`; 11 provider tests. **Live Gradium validated end to end** with a real `GRADIUM_API_KEY`: web path (`docs/qa/web-voice-qa-report.md`, 2026-07-10) produced real transcripts and real latency (2296 ms injected sample, 2694 ms human mic session), plus the 2026-07-09 smoke test (auth OK, `audio/pcm` content-type fix). Residual (not sprint-blocking): the per-category WER matrix over the 5 controlled fixtures still uses the fixture provider because those `.wav` are ASCII placeholders — real per-category quality needs real fixture audio (**TASK-STT-007**), where RF-003's matrix is re-pointed. |
+| TASK-STT-008 | Done (STT sprint scope) | `voice-agent/stt_validation/gradium_provider.py` + `provider_factory.py`; 11 provider tests. **Live Gradium validated end to end** with a real `GRADIUM_API_KEY`: web path (`docs/qa/web-voice-qa-report.md`, 2026-07-10) produced real transcripts and real latency (2296 ms injected sample, 2694 ms human mic session), plus the 2026-07-09 smoke test (auth OK, `audio/pcm` content-type fix). The 5 controlled fixtures are now real PCM16 16 kHz audio (**TASK-STT-007** merged) and were transcribed by live Gradium in a first per-category run (`docs/qa/stt-transcription-quality.md`, 2026-07-10). Residual (not sprint-blocking): those per-category WER figures are not yet a usable pass/fail gate — the scorer counts punctuation/case/accents as errors (e.g. WER 1.0 for `Bonjour` vs `Bonjour.`), so transcript normalization (RF-008 → **TASK-STT-011**) is required before the matrix can gate quality. |
 
 ## Optional Stretch Ticket
 

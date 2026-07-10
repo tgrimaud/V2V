@@ -234,17 +234,19 @@ Scenario: Gradium failure stays observable and sanitized
 
 ### Remaining (not sprint-blocking, re-pointed)
 
-- The per-category WER matrix over the 5 controlled fixtures still uses the fixture
-  provider because those `.wav` are ASCII placeholders (19–33 bytes), not real
-  audio — Gradium cannot transcribe them. A live per-category quality run needs
-  real fixture audio, which is **TASK-STT-007**. RF-003's per-category matrix is
-  re-pointed there.
+- The 5 controlled fixtures are now real PCM16 16 kHz audio (**TASK-STT-007** merged)
+  and a first live per-category Gradium run was executed
+  (`docs/qa/stt-transcription-quality.md`, 2026-07-10). The remaining gap is that the
+  per-category WER figures are not yet a usable pass/fail gate: the scorer counts
+  punctuation/case/accents as errors (WER 1.0 for `Bonjour` vs `Bonjour.`), so
+  transcript normalization (RF-008 → **TASK-STT-011**) is required before the matrix
+  can gate quality.
 
 ### Notes
 
-- RF-003 is **partially addressed**: the real engine is validated live (transcripts
-  + latency); only the controlled per-category matrix remains, gated by real fixture
-  audio (TASK-STT-007).
+- RF-003 is **addressed**: the real engine is validated live (transcripts + latency)
+  and the controlled fixtures now carry real audio; only the WER scoring artifact
+  (RF-008 → TASK-STT-011) stands between the per-category run and a usable gate.
 - RF-002 (channel ingress span is a scaffold analog) stays gated by US-019/US-036,
   which introduce the real channel ingress path.
 
