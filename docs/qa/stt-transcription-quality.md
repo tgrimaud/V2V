@@ -51,8 +51,11 @@ breakdown is:
 | silence | no (must not transcribe) | 2 | — | 1.00 s + 1.50 s zeros |
 
 All five declared categories are covered (`missing_categories: []`). `silence`
-(2 samples) is below the reporting floor of 5 and is flagged
-`underpowered_categories: ["silence"]`.
+(2 samples) is below the reporting floor of 5, but as an *unusable* category (no
+WER) it is excluded from the significance aggregate rather than reported as
+underpowered — so `underpowered_categories: []` and
+`all_categories_significant: true` once every usable category has ≥ 5 samples
+(RF-011).
 
 ## Expanded fixture set — live Gradium per-category run (TASK-STT-007, 2026-07-10)
 
@@ -76,7 +79,8 @@ python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
 | silence | 2 | 2/2 | — | — | 1123 ms | 1328 ms | **no** (n < 5) |
 
 - `ready: false`; `failed_categories: [accented, long, noisy, short]`;
-  `underpowered_categories: [silence]`; `missing_categories: []`.
+  `underpowered_categories: []` (silence is unusable → excluded, RF-011);
+  `missing_categories: []`.
 - **Overall STT slice latency (22 samples):** `min 1123 ms, p50 2165 ms,
   p95 3063 ms, p99 = max 3150 ms`. Latency scales with utterance length (batch STT).
 
@@ -217,7 +221,7 @@ runs yield different hallucinations, e.g. `Avec Wottand` vs `vous le fais confor
 | Transcript quality reviewed per fixture category | Yes | `category_summaries` in the report + per-category table above |
 | Each category has multiple fixtures | Yes | 5 samples per usable category (`test_committed_manifest_has_multiple_samples_per_usable_category`) |
 | Per-category quality + latency percentiles reported | Yes | `CategorySummary` (mean/worst WER + `LatencyReport` per category) |
-| Categories below the required sample size flagged | Yes | `underpowered_categories: [silence]`; `MIN_SAMPLES_FOR_PERCENTILES = 5` |
+| Categories below the required sample size flagged | Yes | `underpowered_categories()` flags any *usable* category with < `MIN_SAMPLES_FOR_PERCENTILES` (5); unusable categories excluded (RF-011) |
 | Missing fixture categories explicitly reported | Yes | `missing_categories` list; unit test `test_missing_categories_are_reported_explicitly` |
 | Silence/unusable reported as unavailable/failed | Yes | `silence-clip` outcome `failed`, empty transcript |
 | No invented transcript accepted as valid | Yes | `test_invented_transcript_for_unusable_audio_fails` |
