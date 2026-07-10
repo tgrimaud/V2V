@@ -150,7 +150,7 @@ Scenario: Web voice STT failure stays safe and observable
 ## TASK-WEB-002 - Speak The Bot Response On The Web Page (TTS Half)
 
 **Parent:** EPIC-006
-**Related story:** US-019 (TTS half)
+**Related story:** US-019 (TTS half), US-036 (feeds the `tts_first_audio` and `channel_egress` slices)
 **Related decision:** DEC-005 / DEC-007
 **Classification:** V1 core
 **Status:** Draft
@@ -170,6 +170,9 @@ provider path.
 - Web page plays the synthesized audio for the returned response.
 - TTS-slice OpenTelemetry span (text -> audio -> playback start) with correlation
   id, plus safe failure handling (no silent failure, no secret leak).
+- Register the emitted span name(s) in `stt_validation/pipeline_timing.py`
+  (`_SLICE_SPAN_NAMES[TTS_FIRST_AUDIO]` and `[CHANNEL_EGRESS]`) so US-036 measures
+  these slices instead of reporting them as gaps.
 - Fixture/offline mode so QA can validate without live credentials.
 
 ### Out Of Scope
@@ -201,7 +204,7 @@ Scenario: The bot response is spoken on the web page
 ## TASK-WEB-003 - Orchestrate Transcript To Backend Answer (STT <-> TTS Bridge)
 
 **Parent:** EPIC-006
-**Related story:** US-019 (middle orchestration)
+**Related story:** US-019 (middle orchestration), US-036 (feeds the `backend_first_token` slice)
 **Related decision:** DEC-007 (backend owns conversation intelligence)
 **Classification:** V1 core
 **Status:** Draft
@@ -228,7 +231,9 @@ page answers by voice. This is the middle of the Voice2Voice journey.
   propagated end-to-end).
 - Backend response text -> TTS slice.
 - End-to-end OpenTelemetry trace across ingress -> STT -> backend -> TTS with a
-  single correlation id, enabling per-slice latency (feeds US-036).
+  single correlation id, enabling per-slice latency (feeds US-036). Register the
+  backend span name in `stt_validation/pipeline_timing.py`
+  (`_SLICE_SPAN_NAMES[BACKEND_FIRST_TOKEN]`) so US-036 measures that slice.
 - Degraded-mode handling when the backend is unavailable or not confident.
 
 ### Out Of Scope

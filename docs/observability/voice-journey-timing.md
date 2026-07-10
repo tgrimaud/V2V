@@ -20,7 +20,7 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | Slice | Span source | Status |
 |---|---|---|
 | `channel_ingress` | `web.voice.ingress` (web) or `stt.audio.accept` (fixture) | Instrumented |
-| `end_of_turn` | — | Gap: turn/end-of-speech detection not implemented |
+| `end_of_turn` | — | Gap: turn/end-of-speech detection not implemented (TASK-STT-009) |
 | `stt` | `stt.request` | Instrumented |
 | `backend_first_token` | — | Gap: backend orchestration deferred (TASK-WEB-003) |
 | `tts_first_audio` | — | Gap: voice response / TTS deferred (TASK-WEB-002) |

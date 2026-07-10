@@ -41,7 +41,7 @@ _SLICE_SPAN_NAMES: dict[str, tuple[str, ...]] = {
 # Why a slice is not measured yet (only used when no span is present).
 _UNMEASURED_NOTES: dict[str, str] = {
     CHANNEL_INGRESS: "no channel-ingress span in this sample",
-    END_OF_TURN: "turn/end-of-speech detection not implemented in the STT ingress slice",
+    END_OF_TURN: "turn/end-of-speech detection not implemented (TASK-STT-009)",
     STT: "no stt.request span in this sample",
     BACKEND_FIRST_TOKEN: "backend orchestration deferred (TASK-WEB-003)",
     TTS_FIRST_AUDIO: "voice response / TTS deferred (TASK-WEB-002)",

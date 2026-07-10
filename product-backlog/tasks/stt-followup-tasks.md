@@ -219,3 +219,62 @@ Scenario: Gradium failure stays observable and sanitized
   ticketed until the real numbers are recorded.
 - RF-002 (channel ingress span is a scaffold analog) stays gated by US-019/US-036,
   which introduce the real channel ingress path.
+
+---
+
+## TASK-STT-009 - Detect And Instrument End-Of-Turn For The Voice Journey
+
+**Parent:** EPIC-006, EPIC-010
+**Related story:** US-036 (the `end_of_turn` slice it reports on)
+**Related decision:** DEC-010 (per-step latency traces before any SLO claim)
+**Classification:** V1 pilot gate
+**Status:** Draft
+**Priority:** Medium
+**Branch:** `task/TASK-STT-009-end-of-turn-detection`
+
+### Objective
+
+Own the one voice-journey slice that US-036 reports with **no backing ticket**:
+`end_of_turn`. Detect when the customer has finished speaking (VAD / silence
+window / end-of-speech signal) and emit an OpenTelemetry span for that slice so
+`PipelineTimingReport` measures it instead of flagging it as a gap.
+
+### Context
+
+US-036 (`docs/observability/voice-journey-timing.md`) reports six canonical
+slices. `channel_ingress` and `stt` are instrumented; `backend_first_token`,
+`tts_first_audio` and `channel_egress` are owned by TASK-WEB-003 / TASK-WEB-002.
+`end_of_turn` is the only slice whose "not measured" note points to no ticket —
+this task closes that traceability gap.
+
+### Scope
+
+- Detect end-of-turn on the captured web voice stream (silence/VAD threshold or an
+  explicit stop signal), configurable and replaceable.
+- Emit an `end.of.turn` (or equivalently named) OpenTelemetry span with the turn
+  correlation id, so it feeds `PipelineTimingReport`.
+- Register the span name in `stt_validation/pipeline_timing.py`
+  (`_SLICE_SPAN_NAMES[END_OF_TURN]`) so the slice reports p50/p95/p99 once emitted.
+- Safe behaviour when no clear end-of-turn is detected (timeout, no invented turn
+  boundary).
+
+### Out Of Scope
+
+- Barge-in / interruption during playback (US-021).
+- Backend orchestration (TASK-WEB-003) and TTS (TASK-WEB-002).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: End-of-turn is detected and measured as its own slice
+  Given a customer finishes speaking on the web voice page
+  When the voice runtime detects the end of the turn
+  Then an end-of-turn span is recorded with the turn correlation id
+  And US-036's pipeline timing report measures the end_of_turn slice with p50/p95/p99
+```
+
+### Required Evidence
+
+- Unit tests for the end-of-turn detector and its span emission.
+- `pipeline_timing.py` mapping updated so `end_of_turn` is no longer a gap.
+- Updated `docs/observability/voice-journey-timing.md` slice table.
