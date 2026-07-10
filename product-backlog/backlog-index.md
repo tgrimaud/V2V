@@ -132,7 +132,7 @@ The recommended first implementation sequence is:
 ## Review Findings
 
 Non-blocking findings and their residual risk are tracked in
-`product-backlog/review-findings.md` (RF-001 … RF-008 to date). Actionable ones are
+`product-backlog/review-findings.md` (RF-001 … RF-011 to date). Actionable ones are
 ticketed as TASK-STT-005/006/007/008/010/011; gated ones link their blocking
 dependency (RF-006 → OQ-001 / TASK-WEB-003). RF-003 became actionable once Gradium
 was selected (DEC-005, TASK-STT-008); RF-007 (chunked/streaming ingress) → TASK-STT-010;
