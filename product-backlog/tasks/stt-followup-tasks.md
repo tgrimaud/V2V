@@ -278,3 +278,70 @@ Scenario: End-of-turn is detected and measured as its own slice
 - Unit tests for the end-of-turn detector and its span emission.
 - `pipeline_timing.py` mapping updated so `end_of_turn` is no longer a gap.
 - Updated `docs/observability/voice-journey-timing.md` slice table.
+
+---
+
+## TASK-STT-010 - Stream Partial STT Transcripts To Cut Perceived Latency
+
+**Parent:** EPIC-006, EPIC-010
+**Related stories:** US-036 (the `stt` slice latency), US-019 (web voice), US-018 (phone voice)
+**Related finding:** RF-007 (chunked/streaming ingress client)
+**Related decision:** DEC-005 (Pipecat streaming voice path; ADR-0002), DEC-010 (per-step latency before any SLO claim)
+**Depends on:** TASK-STT-008 (Gradium provider)
+**Pairs with:** TASK-WEB-004 (streaming TTS voice-out) — the two form the low-latency voice loop
+**Classification:** V1 pilot gate
+**Status:** Draft
+**Priority:** High (latency-driven)
+**Branch:** `task/TASK-STT-010-streaming-stt`
+
+### Objective
+
+Move the STT path from whole-utterance **batch** transcription to **streaming /
+incremental** transcription, so partial transcripts arrive *while the customer is
+still speaking* and the final transcript lands shortly after end-of-turn — instead
+of a single call whose latency grows with the utterance length.
+
+### Context (why this is needed)
+
+Live Gradium QA (`docs/qa/web-voice-qa-report.md`) measured the STT slice in
+**batch** mode: **2296 ms** for a 3.37 s utterance, **2694 ms** for a 4.3 s mic
+recording, **1125 ms** for 1 s of silence — i.e. latency scales with audio
+duration because the whole clip is processed after upload. Streaming is the primary
+lever to cut this perceived latency. Gradium already exposes line-delimited
+`type: text` streaming tokens (the TASK-STT-008 target spec), and RF-007 notes the
+current ingress reads a fixed `Content-Length` body and would need chunked/streaming
+transport.
+
+### Scope
+
+- A streaming `SttProvider` variant emitting **partial** and **final** results over
+  Gradium's streaming ASR; keep the batch provider for fixtures/offline dev.
+- Streaming ingress transport (chunked or WebSocket) replacing/augmenting the fixed
+  `Content-Length` read — **closes RF-007**.
+- Telemetry: measure **time-to-first-partial** and **time-to-final** separately so
+  US-036 can report both for the `stt` slice.
+- Safe failure + no secret leak (reuse `sanitization.py`).
+
+### Out Of Scope
+
+- Streaming voice-out / TTS (TASK-WEB-004).
+- End-of-turn detection itself (TASK-STT-009), though this task consumes it.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Partial transcripts stream during speech
+  Given a customer is speaking on the web voice page
+  When audio streams to the STT provider
+  Then partial transcripts are emitted before the customer stops speaking
+  And a final transcript is produced shortly after end-of-turn
+  And time-to-first-partial and time-to-final are observable via OpenTelemetry
+```
+
+### Required Evidence
+
+- Unit tests with a fake streaming transport (partial + final, no network).
+- Latency numbers (time-to-first-partial vs time-to-final) recorded in the QA docs,
+  compared against the batch baseline.
+- Behave scenario for the streaming outcome.
+- RF-007 moved to Closed once the streaming transport lands.

@@ -75,8 +75,10 @@ US-036 only becomes globally Done once they are delivered.
 | TASK-STT-006 | Dedicated `UNAVAILABLE` outcome (RF-004); "no invented transcript" already holds | — |
 | TASK-STT-007 | Expand fixtures for statistically meaningful p95/p99 (RF-005) | Sharpens STT-slice percentiles, not a new slice |
 | TASK-STT-009 | End-of-turn / VAD detection is a voice-runtime feature, not STT validation | Closes the `end_of_turn` slice |
+| TASK-STT-010 | Streaming / partial STT is a latency enhancement, not first-pass STT validation | Adds time-to-first-partial vs time-to-final to the `stt` slice; closes RF-007 |
 | TASK-WEB-003 | Backend/LLM bridge is Voice2Voice, not STT | Closes the `backend_first_token` slice |
 | TASK-WEB-002 | Voice response (TTS) is Voice2Voice, not STT | Closes `tts_first_audio` + `channel_egress` |
+| TASK-WEB-004 | Streaming TTS voice-out is Voice2Voice, not STT | Sharpens `tts_first_audio` (time-to-first-audio) |
 
 ## Branch Plan
 

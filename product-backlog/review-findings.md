@@ -26,7 +26,7 @@ that gates it.
 | RF-004 | TASK-STT-002 | Low | Silence/unusable audio maps to outcome `failed` (`invalid_fixture`) rather than a dedicated `UNAVAILABLE` outcome. AC allows either. | Behaviour is correct (no invented transcript); only the outcome label is coarse. | Follow-up ticket **TASK-STT-006** | Ticketed |
 | RF-005 | TASK-STT-002 | Low | One fixture per category; p95/p99 and per-category quality are not yet statistically meaningful. | Sprint open question already flags required sample size. | Follow-up ticket **TASK-STT-007** | Ticketed |
 | RF-006 | TASK-WEB-001 | Low | The web ingress endpoint (`POST /api/voice/stt`) has no authentication or identity gate; anyone reaching the host can post audio. | Ingress is a local pilot/dev server; the web voice identity model is explicitly deferred, and the backend (not the channel) owns billing-data exposure. | Gated by **OQ-001** (web voice identity) and **TASK-WEB-003** (backend orchestration / identity confidence). | Gated |
-| RF-007 | TASK-WEB-001 | Low | `server._read_body` reads exactly `Content-Length` bytes and does not support chunked `Transfer-Encoding`. | Browser `fetch` with an `ArrayBuffer` body always sets `Content-Length`, which is the only client for this slice. | Revisit if a streaming/chunked client is added (e.g. real-time capture in a later voice slice). | Open |
+| RF-007 | TASK-WEB-001 | Low | `server._read_body` reads exactly `Content-Length` bytes and does not support chunked `Transfer-Encoding`. | Browser `fetch` with an `ArrayBuffer` body always sets `Content-Length`, which is the only client for this slice. | Follow-up ticket **TASK-STT-010** (streaming STT) adds the chunked/streaming ingress transport that closes this. | Ticketed |
 
 ## Process
 

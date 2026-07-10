@@ -264,3 +264,62 @@ Scenario: End-to-end web Voice2Voice loop
 - When all three tasks pass QA and the user validates the loop, US-019 moves to
   Done and RF-002 can be closed (real ingress span replaced the scaffold analog).
 - Per-slice timing produced here is the input US-036 reports on.
+
+---
+
+## TASK-WEB-004 - Stream The Bot Voice Response (Incremental TTS Playback)
+
+**Parent:** EPIC-006, EPIC-010
+**Related stories:** US-019 (voice-out), US-036 (the `tts_first_audio` slice), US-020 (quick spoken acknowledgement)
+**Depends on:** TASK-WEB-002 (base TTS provider)
+**Pairs with:** TASK-STT-010 (streaming STT) — the two form the low-latency voice loop
+**Related decision:** DEC-005 (Pipecat streaming voice path; ADR-0002), DEC-010 (per-step latency before any SLO claim)
+**Classification:** V1 core
+**Status:** Draft
+**Priority:** High (latency-driven)
+**Branch:** `task/TASK-WEB-004-streaming-tts`
+
+### Objective
+
+Stream synthesized speech so playback starts on the **first audio chunk**
+(time-to-first-audio) instead of waiting for the full clip to be synthesized. This
+minimizes the perceived response latency of the voice-out half and, paired with
+streaming STT (TASK-STT-010), keeps the full voice loop conversational despite the
+~2.3 s batch STT baseline measured in `docs/qa/web-voice-qa-report.md`.
+
+### Context
+
+TASK-WEB-002 introduces a batch TTS provider (synthesize whole text -> play). Given
+the measured STT latency, waiting for full synthesis on top would push the loop well
+past a conversational target. Streaming TTS emits audio incrementally so the
+customer hears the first words quickly.
+
+### Scope
+
+- A streaming TTS provider variant emitting audio chunks; the web page plays them
+  incrementally (e.g. `MediaSource` / audio worklet queue).
+- Telemetry: the `tts_first_audio` span = time-to-first-audio chunk; register the
+  span name in `stt_validation/pipeline_timing.py` so US-036 measures it.
+- Safe failure handling (no silent failure, no secret leak); offline/fixture mode.
+
+### Out Of Scope
+
+- Streaming STT (TASK-STT-010).
+- Barge-in during playback (US-021), though streaming playback is a prerequisite for it.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The bot response audio starts before full synthesis
+  Given a response text is available for the customer turn
+  When the TTS provider streams synthesized audio
+  Then playback begins on the first audio chunk
+  And time-to-first-audio is observable via OpenTelemetry
+```
+
+### Required Evidence
+
+- Developer tests for the streaming TTS provider with a fake chunked transport.
+- Chrome DevTools MCP notes + time-to-first-audio vs full-clip comparison.
+- Behave scenario for the streaming playback outcome.
+- OpenTelemetry evidence for the `tts_first_audio` slice.

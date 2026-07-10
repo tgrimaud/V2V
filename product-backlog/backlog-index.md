@@ -80,9 +80,11 @@ against the new empty-codebase plan.
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category | V1 pilot gate | Draft | Medium |
 | TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | In progress | High |
 | TASK-STT-009 | Detect and instrument end-of-turn for the voice journey (US-036 `end_of_turn` slice) | V1 pilot gate | Draft | Medium |
+| TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Draft | High |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | In progress | High |
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Draft | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
+| TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Draft | High |
 
 ## Planned Sprints
 
@@ -126,10 +128,11 @@ The recommended first implementation sequence is:
 ## Review Findings
 
 Non-blocking adversarial-review findings and their residual risk are tracked in
-`product-backlog/review-findings.md` (RF-001 … RF-005 to date). Actionable ones
-are ticketed as TASK-STT-005/006/007/008; gated ones link their blocking
-dependency. RF-003 became actionable once Gradium was selected (DEC-005) and is
-now ticketed as TASK-STT-008.
+`product-backlog/review-findings.md` (RF-001 … RF-007 to date). Actionable ones
+are ticketed as TASK-STT-005/006/007/008 and TASK-STT-010; gated ones link their
+blocking dependency (RF-006 → OQ-001 / TASK-WEB-003). RF-003 became actionable once
+Gradium was selected (DEC-005) and is ticketed as TASK-STT-008; RF-007 (chunked/
+streaming ingress) is ticketed as TASK-STT-010.
 
 ## Decisions
 
