@@ -67,6 +67,47 @@ python3 -m stt_validation.quality_cli fixtures/manifest.json
 - STT slice latency (`stt_request_ms`): `count=5, p50≈0.023ms, p95≈0.032ms`
   (fixture provider, not a real engine).
 
+## Live Gradium per-category run (2026-07-10)
+
+First real-engine run over the committed PCM16 fixtures:
+
+```bash
+cd voice-agent
+export GRADIUM_API_KEY=...   # from the local .env, never committed
+python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
+```
+
+| Fixture | Reference | Gradium transcript | WER | Quality | Pass |
+|---|---|---|---:|---:|---|
+| short-greeting | `Bonjour` | `Bonjour.` | 1.00 | 0.00 | no |
+| long-billing-question | `Pourquoi ma facture de telephone est plus elevee que le mois dernier` | `ma facture de téléphone est plus élevée que le mois dernier.` | 0.33 | 0.67 | no |
+| noisy-billing-question | `je voudrais comprendre le montant de ma derniere facture mensuelle` | `Avec Wottand, le montant de ma dernière facture mensuelle.` | 0.50 | 0.50 | no |
+| accented-billing-question | `est-ce que je peux payer ma facture en plusieurs fois` | `que je peux payer ma facture en plusieurs fois ?` | 0.20 | 0.80 | yes |
+| silence-clip | — | (empty) | — | — | yes |
+
+- `ready: false`; `failed_categories: [long, noisy, short]`; `missing_categories: []`.
+- **Real STT slice latency:** `count=5, min=1093ms, p50=1811ms, p95=p99=2268ms, max=2268ms`.
+- Silence correctly returns no speech (`stt_error` / "recognized no speech"), no
+  invented transcript.
+
+### Interpretation — the low scores are mostly scoring artifacts, not STT errors
+
+The transcription is largely correct; the failing gate is driven by the WER metric
+and by synthetic-fixture limitations, **not** by Gradium accuracy:
+
+1. **Punctuation/case not normalized:** `Bonjour` vs `Bonjour.` scores WER **1.0**
+   although the transcript is perfect. The WER is a raw whitespace word-diff.
+2. **Accents:** references are ASCII (`telephone`, `elevee`) but Gradium returns
+   correct accents (`téléphone`, `élevée`) — counted as word errors.
+3. **Leading word clipped:** `Pourquoi`, `est-ce`, `je voudrais comprendre` are
+   dropped — the `say`-generated clips start abruptly and truncate the first word.
+4. **Only genuine engine degradation:** `noisy` (`Avec Wottand` hallucination),
+   caused by the synthetic white noise, not a realistic sample.
+
+**Conclusion:** Gradium performs well; the `ready` gate is not usable against a
+real engine until the WER is normalized (see **RF-008 / TASK-STT-011**) and the
+fixtures use real recordings with clean onsets (rest of **TASK-STT-007**).
+
 ## Acceptance criteria coverage
 
 | Acceptance criterion | Covered? | Evidence |

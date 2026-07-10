@@ -373,3 +373,66 @@ Scenario: Partial transcripts stream during speech
   compared against the batch baseline.
 - Behave scenario for the streaming outcome.
 - RF-007 moved to Closed once the streaming transport lands.
+
+---
+
+## TASK-STT-011 - Normalize Transcripts Before WER Scoring
+
+**Parent:** EPIC-010
+**Related finding:** RF-008 (TASK-STT-002 / TASK-STT-007)
+**Related story:** US-036 (quality gate feeding pilot readiness)
+**Classification:** V1 pilot gate
+**Status:** Draft
+**Priority:** Medium
+**Branch:** `task/TASK-STT-011-normalize-wer`
+
+### Objective
+
+Make `word_error_rate` (and the `quality_score` gate) meaningful against a real STT
+engine by normalizing both reference and hypothesis before comparison, so trivial
+formatting differences stop counting as transcription errors.
+
+### Context (why this is needed)
+
+The first live Gradium per-category run (2026-07-10,
+`docs/qa/stt-transcription-quality.md`) marked 3/4 usable categories as "failed"
+almost entirely on artifacts, not real errors:
+
+- `Bonjour` vs `Bonjour.` → WER **1.0** (punctuation).
+- ASCII references (`telephone`, `elevee`) vs accented engine output (`téléphone`,
+  `élevée`) → counted as word errors.
+- Case differences (`Est-ce` vs `est-ce`).
+
+The `ready` gate is unusable against a real engine until this is fixed.
+
+### Scope
+
+- Normalize before WER: lowercase, strip/normalize punctuation, collapse
+  whitespace, and fold accents (or store accented references) — applied identically
+  to reference and hypothesis.
+- Keep the raw transcript in the report for audit; score on the normalized form.
+- Re-run the live Gradium manifest and record realistic per-category WER.
+- Decide whether the default `quality_threshold` needs revisiting once artifacts
+  are removed.
+
+### Out Of Scope
+
+- Fixture realism / multiple samples (TASK-STT-007).
+- Semantic scoring beyond WER.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Formatting differences do not count as transcription errors
+  Given a reference and a hypothesis that differ only by case, punctuation or accents
+  When the word error rate is computed
+  Then the WER is 0.0
+  And a genuine word substitution or omission still increases the WER
+```
+
+### Required Evidence
+
+- Unit tests: punctuation/case/accent-only diffs score WER 0.0; real
+  substitutions/omissions still counted.
+- Updated `docs/qa/stt-transcription-quality.md` with the re-run per-category WER.
+- RF-008 moved to Closed.
