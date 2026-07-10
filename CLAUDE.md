@@ -4,6 +4,8 @@
 
 > This repository (`voice-support-bot`) is a **separate git repository** (default branch `main`) nested in the `BMad` workspace. Bot commits belong here, not in the `BMad` repository.
 
+> Self-contained guidance: when working in this repo, use **only** this repository's `CLAUDE.md` / `AGENTS.md` and the skills under `voice-support-bot/.cursor/skills/`. Do **not** apply the workspace-root `BMad/claude.md`, `BMad/agents.md`, or root `.cursor/skills/` (those govern `cursor-usage-dashboard/`).
+
 > Branch note: `feat/restart-from-scratch` intentionally removes the previous
 > backend, frontend, voice-agent and Docker Compose implementation. The previous
 > code remains preserved on `main` as backup/reference; this branch restarts from

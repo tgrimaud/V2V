@@ -3,6 +3,7 @@
 ## Repo & git
 
 - `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
+- **This repo is self-contained for guidance.** When working here, use only this repository's `CLAUDE.md` / `AGENTS.md` and the skills under `voice-support-bot/.cursor/skills/`. Do **not** apply the workspace-root `BMad/claude.md`, `BMad/agents.md`, or root `.cursor/skills/` — those govern `cursor-usage-dashboard/`, not this project.
 - **One branch per development ticket**. Use `us/US-XXX-short-name` for user
   stories, `fix/BUG-XXX-short-name` for bugs and `task/TASK-XXX-short-name` for
   technical tasks. Do not commit directly on `main`.
