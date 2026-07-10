@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -8,6 +10,9 @@ from .runner import SttValidationRunner
 from .telemetry import LatencyReport
 
 DEFAULT_QUALITY_THRESHOLD = 0.8
+
+# Anything that is neither a word character nor whitespace (punctuation, symbols).
+_PUNCTUATION = re.compile(r"[^\w\s]", flags=re.UNICODE)
 
 
 class FixtureCategory(str, Enum):
@@ -86,10 +91,27 @@ class FixtureQualityReport:
         }
 
 
+def normalize_transcript(text: str) -> str:
+    """Fold case, accents and punctuation so formatting-only diffs are not errors.
+
+    Applied identically to reference and hypothesis before WER so that a real STT
+    engine is not penalized for capitalization (`Est-ce` vs `est-ce`), punctuation
+    (`Bonjour` vs `Bonjour.`) or accents (`telephone` vs `téléphone`).
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    stripped = _PUNCTUATION.sub(" ", without_accents.lower())
+    return " ".join(stripped.split())
+
+
 def word_error_rate(reference: str, hypothesis: str) -> float:
-    """Levenshtein word error rate; 0.0 means the hypothesis matches exactly."""
-    ref_words = reference.split()
-    hyp_words = hypothesis.split()
+    """Levenshtein word error rate on normalized text; 0.0 means a semantic match.
+
+    Both sides are normalized (see `normalize_transcript`) so case, punctuation and
+    accent differences score 0.0 while genuine substitutions/omissions still count.
+    """
+    ref_words = normalize_transcript(reference).split()
+    hyp_words = normalize_transcript(hypothesis).split()
     if not ref_words:
         return 0.0 if not hyp_words else 1.0
     distance = _edit_distance(ref_words, hyp_words)

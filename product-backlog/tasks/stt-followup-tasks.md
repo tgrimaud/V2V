@@ -387,9 +387,9 @@ Scenario: Partial transcripts stream during speech
 **Related finding:** RF-008 (TASK-STT-002 / TASK-STT-007)
 **Related story:** US-036 (quality gate feeding pilot readiness)
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 2 (STT hardening); do first
+**Status:** Done — Sprint 2 (STT hardening)
 **Priority:** Medium
-**Branch:** `task/TASK-STT-011-normalize-wer`
+**Branch:** `feat/sprint-2-stt-hardening`
 
 ### Objective
 
@@ -441,3 +441,20 @@ Scenario: Formatting differences do not count as transcription errors
   substitutions/omissions still counted.
 - Updated `docs/qa/stt-transcription-quality.md` with the re-run per-category WER.
 - RF-008 moved to Closed.
+
+### Delivery Evidence (2026-07-10)
+
+- `voice-agent/stt_validation/quality.py`: new `normalize_transcript` (NFKD accent
+  folding, lowercase, `[^\w\s]` punctuation → space, whitespace collapse; stdlib
+  only). `word_error_rate` now normalizes both sides before the Levenshtein diff;
+  the raw `transcript`/`reference` are still stored verbatim in the report for
+  audit — only the score uses the normalized form. Exported from the package barrel.
+- `voice-agent/tests/test_quality.py`: +8 tests — punctuation/case/accent-only and
+  combined formatting diffs score WER 0.0; real substitution/omission still 0.25;
+  `normalize_transcript` behaviour. Full suite **55 tests green**.
+- **Live Gradium re-run (2026-07-10)** over the PCM16 manifest: `short` WER
+  **1.00 → 0.00**, `long` 0.083, `accented` 0.182 (all pass at 0.8); only `noisy`
+  fails (WER 0.40) on a **genuine** transcription error from the synthetic
+  white-noise fixture (owned by TASK-STT-007). The `ready` gate now reflects real
+  quality — RF-008 resolved. Default `quality_threshold` kept at 0.8 (it cleanly
+  separates good transcripts ≥ 0.82 from the degraded noisy sample at 0.60).

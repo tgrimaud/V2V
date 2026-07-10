@@ -12,8 +12,10 @@
 > now resolved — **Gradium (TASK-STT-008) is validated live end to end** (real transcripts
 > + latency, `docs/qa/web-voice-qa-report.md`) and the 5 controlled fixtures now carry
 > **real PCM16 audio** (TASK-STT-007) with a first live per-category run
-> (`docs/qa/stt-transcription-quality.md`). The remaining STT-quality gap is WER scoring
-> normalization (RF-008 → TASK-STT-011), not the absence of a provider or of real audio.
+> (`docs/qa/stt-transcription-quality.md`). WER scoring normalization
+> (RF-008 → TASK-STT-011) is now **resolved** (2026-07-10): `word_error_rate` folds
+> case/punctuation/accents, so the per-category gate reflects real accuracy — only the
+> synthetic `noisy` fixture still fails (a genuine error, owned by TASK-STT-007).
 
 ## Executive Summary
 

@@ -12,9 +12,10 @@ reviews and QA run.
 
 ## Status
 
-**Status:** Planned
+**Status:** In progress (started 2026-07-10)
 **Created:** 2026-07-10
 **Predecessor:** [`sprint-stt-validation.md`](sprint-stt-validation.md) (Sprint 1 — Done, 2026-07-10)
+**Working branch:** `feat/sprint-2-stt-hardening` (from `feat/restart-from-scratch`)
 **Final validator:** User
 **Merge rule:** no branch is merged unless the user explicitly asks.
 
@@ -41,7 +42,7 @@ reviews and QA run.
 
 | Ticket | Sprint status | Notes |
 |---|---|---|
-| TASK-STT-011 | Planned | Do first — several other measurements depend on a trustworthy WER. Re-run the live Gradium manifest afterwards to record realistic per-category WER. |
+| TASK-STT-011 | ✅ Done (2026-07-10) | `normalize_transcript` folds case/punctuation/accents before WER; 55 unit tests green. Live Gradium re-run: `short` WER 1.00→0.00, `long` 0.083, `accented` 0.182 pass; only `noisy` (0.40) fails on a genuine error (→ TASK-STT-007). Threshold kept at 0.8. |
 | TASK-STT-007 | Planned (In progress) | Real single-sample audio already committed; remaining = multiple samples/category, real human noisy/accented recordings, minimum-sample-size rule. Best paired with TASK-STT-011 (re-score on the expanded set). |
 | TASK-STT-005 | Planned | Independent; small, well-scoped sanitization change. |
 | TASK-STT-006 | Planned | Independent; audit the four telemetry surfaces + quality harness for the new outcome. |
@@ -66,15 +67,18 @@ reviews and QA run.
 
 ## Branch Plan
 
-Each ticket is implemented on its own branch (per the repository branching strategy):
+The sprint branch `feat/sprint-2-stt-hardening` is cut from
+`feat/restart-from-scratch`. Each ticket is developed on its **own branch cut from
+the sprint branch** and merged back into it once validated (per the repository
+branching strategy):
 
-| Ticket | Branch |
-|---|---|
-| TASK-STT-011 | `task/TASK-STT-011-normalize-wer` |
-| TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` |
-| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` |
-| TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` |
-| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` |
+| Ticket | Branch | Status |
+|---|---|---|
+| TASK-STT-011 | `task/TASK-STT-011-normalize-wer` | ✅ done (awaiting merge into sprint branch) |
+| TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` | pending |
+| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | pending |
+| TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | pending |
+| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | pending |
 
 ## Sprint Acceptance Criteria
 
@@ -98,5 +102,5 @@ Scenario: The STT path is fully observable and safe
 ## Open Questions
 
 - How many samples per category before p95/p99 is reported as meaningful (feeds TASK-STT-007)?
-- After removing WER artifacts, does the default `quality_threshold` (0.8) still make sense (feeds TASK-STT-011)?
+- ~~After removing WER artifacts, does the default `quality_threshold` (0.8) still make sense?~~ **Answered (TASK-STT-011):** yes — 0.8 cleanly separates good transcripts (short/long/accented ≥ 0.82) from the genuinely degraded noisy sample (0.60). Kept.
 - Which end-of-turn signal is authoritative for the web path — silence window, VAD, or an explicit client stop (feeds TASK-STT-009)?

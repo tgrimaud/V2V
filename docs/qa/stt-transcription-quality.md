@@ -108,6 +108,39 @@ and by synthetic-fixture limitations, **not** by Gradium accuracy:
 real engine until the WER is normalized (see **RF-008 / TASK-STT-011**) and the
 fixtures use real recordings with clean onsets (rest of **TASK-STT-007**).
 
+## Normalized WER re-run (TASK-STT-011, 2026-07-10)
+
+After adding transcript normalization (`normalize_transcript`: lowercase, strip
+punctuation, fold accents, collapse whitespace — applied identically to reference
+and hypothesis before WER), the live Gradium run was repeated. The scores now
+reflect real transcription accuracy, not formatting:
+
+| Fixture | Reference | Gradium transcript | WER | Quality | Pass |
+|---|---|---|---:|---:|---|
+| short-greeting | `Bonjour` | `Bonjour.` | **0.00** | 1.00 | yes |
+| long-billing-question | `Pourquoi ma facture de telephone est plus elevee que le mois dernier` | `ma facture de téléphone est plus élevée que le mois dernier.` | **0.083** | 0.917 | yes |
+| noisy-billing-question | `je voudrais comprendre le montant de ma derniere facture mensuelle` | `vous le fais conforme le montant de ma dernière facture mensuelle.` | **0.40** | 0.60 | no |
+| accented-billing-question | `est-ce que je peux payer ma facture en plusieurs fois` | `que je peux payer ma facture en plusieurs fois ?` | **0.182** | 0.818 | yes |
+| silence-clip | — | (empty) | — | — | yes |
+
+- `ready: false`; `failed_categories: [noisy]`; `missing_categories: []`.
+- Real STT slice latency: `count=5, min≈1078ms, p50≈1780ms, p95=p99≈2252ms`.
+- **`short` went from WER 1.00 → 0.00** (the `Bonjour` vs `Bonjour.` artifact is
+  gone); `long`/`accented` now score real, small errors (a clipped leading word).
+- **The only remaining failure is `noisy` (WER 0.40) — a genuine transcription
+  error** caused by the synthetic white-noise fixture, not a scoring artifact. This
+  is the expected behaviour of a meaningful gate and is tied to fixture realism
+  (rest of **TASK-STT-007**: real human noisy recording).
+- **Threshold decision:** the default `quality_threshold = 0.8` is kept. Once the
+  formatting artifacts are removed, 0.8 cleanly separates good transcripts
+  (short/long/accented ≥ 0.82) from the genuinely degraded noisy sample (0.60).
+
+**Conclusion (updated):** RF-008 is resolved — the WER gate is now usable against
+the real engine. Gradium transcribes the clean/accented samples well; the residual
+`noisy` failure is a real fixture-quality issue owned by TASK-STT-007, not a
+scoring defect. Note Gradium is non-deterministic on the noisy clip (successive
+runs yield different hallucinations, e.g. `Avec Wottand` vs `vous le fais conforme`).
+
 ## Acceptance criteria coverage
 
 | Acceptance criterion | Covered? | Evidence |

@@ -12,6 +12,7 @@ from stt_validation import (  # noqa: E402
     SttValidationRunner,
     TelemetryRecorder,
     evaluate_fixture_set,
+    normalize_transcript,
     word_error_rate,
 )
 
@@ -40,6 +41,34 @@ class WordErrorRateTest(unittest.TestCase):
 
     def test_empty_reference_and_hypothesis_is_zero(self) -> None:
         self.assertEqual(word_error_rate("", ""), 0.0)
+
+    def test_punctuation_only_difference_is_not_an_error(self) -> None:
+        self.assertEqual(word_error_rate("Bonjour", "Bonjour."), 0.0)
+
+    def test_case_only_difference_is_not_an_error(self) -> None:
+        self.assertEqual(word_error_rate("Est-ce que", "est-ce que"), 0.0)
+
+    def test_accent_only_difference_is_not_an_error(self) -> None:
+        self.assertEqual(word_error_rate("ma facture est elevee", "ma facture est élevée"), 0.0)
+
+    def test_combined_formatting_differences_are_not_errors(self) -> None:
+        reference = "telephone, est-ce que ma facture est elevee"
+        hypothesis = "Téléphone. Est-ce que ma facture est élevée ?"
+        self.assertEqual(word_error_rate(reference, hypothesis), 0.0)
+
+    def test_real_substitution_still_counts_after_normalization(self) -> None:
+        self.assertAlmostEqual(word_error_rate("ma facture est élevée", "ma facture est mentale"), 0.25)
+
+    def test_real_omission_still_counts_after_normalization(self) -> None:
+        self.assertAlmostEqual(word_error_rate("ma facture est élevée", "ma facture élevée"), 0.25)
+
+
+class NormalizeTranscriptTest(unittest.TestCase):
+    def test_lowercases_strips_punctuation_and_accents(self) -> None:
+        self.assertEqual(normalize_transcript("Téléphone, Est-ce ?"), "telephone est ce")
+
+    def test_collapses_whitespace(self) -> None:
+        self.assertEqual(normalize_transcript("  ma   facture  "), "ma facture")
 
 
 class EvaluateFixtureSetTest(unittest.TestCase):

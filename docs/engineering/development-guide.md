@@ -56,7 +56,7 @@ Troubleshooting (current branch):
 | Quality/Behave run finds no audio | `.pcm` fixtures not generated | `python3 fixtures/generate_fixtures.py` (macOS `say`) |
 | `No module named behave` | behave not installed | Use the `.venv` shown above |
 | Port 8090 busy | web_voice server already running | `kill $(lsof -ti:8090)` |
-| WER = 1.0 on a correct transcript | scorer not normalized (RF-008) | Known gap, tracked as TASK-STT-011 |
+| WER = 1.0 on a correct transcript | pre-2026-07-10 scorer did not normalize | Fixed — `word_error_rate` now folds case/punctuation/accents (TASK-STT-011, RF-008 Closed) |
 
 See `voice-agent/README.md` for the full harness reference and
 `docs/observability/` + `docs/qa/` for evidence.

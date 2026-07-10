@@ -15,6 +15,7 @@ from .quality import (
     FixtureQualityReport,
     FixtureSpec,
     evaluate_fixture_set,
+    normalize_transcript,
     word_error_rate,
 )
 from .runner import SttValidationRunner
@@ -41,5 +42,6 @@ __all__ = [
     "TranscriptResult",
     "build_provider",
     "evaluate_fixture_set",
+    "normalize_transcript",
     "word_error_rate",
 ]
