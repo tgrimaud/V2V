@@ -254,3 +254,17 @@
 - `voice-agent/tests/test_quality.py`, `test_manifest.py`, `test_sanitization.py` — coverage for aggregation, drift guard, redaction.
 - `docs/qa/stt-transcription-quality.md`, `docs/observability/stt-validation-telemetry.md` — updated runs + sanitization notes.
 - `product-backlog/review-findings.md`, `sprints/`, `tasks/`, `backlog-index.md` — statuses and RF dispositions.
+
+## 2026-07-10 — Knowledge base reorganization + generalize-knowledge skill fix
+
+**Summary:**
+
+- Discovered this repo's `generalize-knowledge` skill was a verbatim copy of the workspace-root one still targeting "workspace root" — so Voice Support Bot learnings were being written into the sibling `BMad` repo instead of here. Rewrote the skill to target `voice-support-bot/{CLAUDE.md,AGENTS.md,done-tasks.md}` explicitly (with a "write to this repo only" table); scoped the root skill to BMad/`cursor-usage-dashboard` and made it redirect bot work here.
+- Repatriated all Voice Support Bot knowledge that had leaked into the `BMad` root files: 4 done-task entries, a runtime-architecture section + 16 `CLAUDE.md` "Issues" rows, and 13 `AGENTS.md` common-mistake bullets (including all draw.io guidance). Generic cross-project knowledge (React `setState`, Grep cross-check, sprint hygiene) stayed in root.
+- Marked this repository self-contained for AI guidance: notes in `CLAUDE.md`/`AGENTS.md` plus an "Authoritative docs & skills" section in the workspace-root `.cursor/rules/voice-support-bot.mdc`, so bot work uses only this repo's docs and `.cursor/skills/`.
+- Merged the Sprint 2 branches into `feat/sprint-2-stt-hardening`: `chore/self-contained-guidance` (fast-forward) and `task/sprint-2-review-remediation` (RF-009/010/011, no-ff). 75 unit tests + 8 behave scenarios green after merge.
+- Learned: `voice-support-bot` is a separate nested git repo — git operations must run from inside it, and a reverted working tree can silently drop committed content (verify against HEAD before appending to knowledge files).
+
+### Files changed
+- `.cursor/skills/generalize-knowledge/SKILL.md` — retargeted to this repository's own knowledge files.
+- `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — self-contained notes + repatriated Voice Support Bot knowledge; new nested-repo / working-tree pitfalls.

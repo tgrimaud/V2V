@@ -143,6 +143,8 @@
 - Scoring STT quality with a raw whitespace WER against a real engine — punctuation, case and accents (`telephone` vs `téléphone`, `Bonjour` vs `Bonjour.`) inflate WER to the point of failing correct transcripts. Normalize reference and hypothesis (lowercase, strip punctuation, fold accents) before WER; keep the raw transcript for audit.
 - Assuming batch STT latency is a fixed cost — it scales with audio duration (Gradium processes the whole clip after upload). Use streaming/partial transcription as the latency lever, and always report the utterance length alongside the latency.
 - Omitting an un-instrumented pipeline slice from a latency report — always emit every canonical slice and mark missing ones `"measured": false` with a reason/owning ticket, so a gap is never mistaken for a fast slice. When one slice can be fed by several span names, let the first present name win so distributions from different paths don't mix.
+- Running git commands for bot work from the `BMad` workspace root — `voice-support-bot` is a **separate nested git repository**. `git checkout <vsb-branch>` / `git stash` executed from the root repo fail with "pathspec did not match" or land the stash in the wrong repo. Always `cd voice-support-bot` (confirm with `git rev-parse --show-toplevel`) before staging, committing, stashing or switching branches for bot work.
+- Editing knowledge/doc files without first confirming the working tree matches HEAD — a stale or reverted working copy can silently drop already-committed content, so an append re-commits a regression. Run `git status` / `git diff HEAD` and restore from HEAD before appending.
 
 ## Checklist After Substantive Changes
 
