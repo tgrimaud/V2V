@@ -1,5 +1,16 @@
 # V1 Scope - Operator Invoice Explanation Assistant
 
+> **Current delivery (`feat/restart-from-scratch`, 2026-07-10):** this document
+> defines the **target** V1. The only slice built so far is **STT validation**
+> (web mic / fixtures → Gradium transcript + per-slice latency). Billing/BSS,
+> invoice comparison, evidence-backed explanation, TTS/voice-out, phone Voice2Voice
+> and Genesys handoff are **not built yet**. Consequently the latency slice table
+> and the `time_to_first_audio` pilot criterion below are only partially measurable
+> today: only the `channel_ingress` and `stt` slices are instrumented (there is no
+> TTS, so no end-to-end `time_to_first_audio`). See
+> `docs/observability/voice-journey-timing.md` and
+> `product-backlog/sprints/sprint-stt-validation.md`.
+
 ## Product Hierarchy
 
 This document is the canonical V1 value slice. It narrows the broader functional

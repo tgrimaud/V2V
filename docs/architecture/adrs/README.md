@@ -6,6 +6,11 @@ ADRs capture structural decisions that should remain visible beyond code, chats,
 diagrams, and planning notes. When a decision changes, create a new ADR and mark
 the previous one as superseded instead of rewriting history.
 
+> **Note:** an ADR status of `Accepted` records an accepted **target decision**,
+> not that the decision is implemented on this branch. On `feat/restart-from-scratch`
+> only the STT-validation slice is built; implementation status is tracked in
+> `product-backlog/` and `docs/operations/backlog.md`.
+
 ## Index
 
 | ADR | Status | Decision |

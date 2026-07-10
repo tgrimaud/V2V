@@ -163,7 +163,9 @@ While waiting for real PDFs and payloads, the team can move forward on:
 - prototyping PDF extraction on a synthetic non-Galaxion PDF;
 - preparing product acceptance scenarios for nominal, partial and unusable
   invoice cases;
-- benchmarking the Pipecat/Gradium voice target independently from the BSS.
+- benchmarking the Gradium voice path independently from the BSS — **partly done**:
+  Gradium STT + the web voice ingress are validated (see `docs/qa/stt-qa-report.md`,
+  `docs/qa/stt-transcription-quality.md`); Pipecat orchestration and TTS remain to build.
 
 ## Related Open Questions
 

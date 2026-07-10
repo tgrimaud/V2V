@@ -230,13 +230,21 @@ Check, at minimum:
 
 - `docs/` (architecture, ADRs, observability, QA, operations) when behavior,
   boundaries, contracts, latency slices or observability changed;
-- `voice-agent/README.md`, `backend` or `frontend` READMEs when run/build/usage
-  instructions changed;
+- `voice-agent/README.md` (and the root `README.md`) when run/build/usage
+  instructions changed — on this branch there is no `backend/` or `frontend/`
+  README yet (target only);
 - `product-backlog/` status, sprint doc, `review-findings.md` and decision log
   when ticket status, findings or decisions changed;
 - `CLAUDE.md` / `AGENTS.md` context when the repository map, stack, conventions
   or gotchas changed;
-- `.env.example` when a new configuration variable was introduced.
+- the repo-root `.env` documentation when a new configuration variable was
+  introduced (no `.env.example` is committed on this branch — document the
+  variable in `voice-agent/README.md` / development guide instead).
+- **Cross-doc sweep:** a ticket that changes a *fact* (e.g. "placeholder audio" →
+  "real audio", "no provider" → "Gradium connected") must `rg` the ticket id and
+  the changed fact across `docs/` + `product-backlog/` and fix every doc that
+  *references* it — not only the files the ticket edited. Docs that merely mention
+  the fact drift silently otherwise.
 
 If no documentation change is required, state that explicitly in the ticket or
 review evidence ("documentation not affected"). Silent drift between code and

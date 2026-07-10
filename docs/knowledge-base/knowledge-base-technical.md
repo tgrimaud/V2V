@@ -4,6 +4,15 @@
 > For a non-technical guide on **adding and editing content**, see
 > [`knowledge-base-guide.md`](./knowledge-base-guide.md).
 
+> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** this document
+> describes the **target** KB/RAG architecture as implemented on the `main`
+> reference. **None of it runs on this branch** — there is no Java backend, no
+> `pgvector`, no Ollama embeddings, no `KnowledgeSyncService`/`KnowledgeController`
+> and no `ConversationOrchestrator` here. The only code on this branch is the
+> Python STT-validation slice. Present-tense wording below ("the bot answers…",
+> "embeddings are served by Ollama today", `cd backend && mvn test`,
+> `POST /api/knowledge/sync`) refers to the target/`main` system, not this checkout.
+
 This document describes how the bot's Knowledge Base (KB) works: its
 architecture, the data model, the ingestion and synchronization pipelines, the
 storage layout, and how to extend it with new content sources.

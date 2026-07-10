@@ -4,6 +4,13 @@ This is the technical and operational backlog. Product epics and user stories
 live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 [`docs/product/v1-scope.md`](../product/v1-scope.md).
 
+> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** the previous full
+> stack was removed and preserved on `main`. On this branch, the **only delivered
+> code is the STT-validation slice** (`voice-agent/stt_validation` + `web_voice`:
+> audio in → Gradium transcript + per-slice latency). Items marked `Done` below
+> refer to work delivered **on the `main` reference**, not this branch — they are
+> "To rebuild" here. See `product-backlog/sprints/sprint-stt-validation.md`.
+
 ## Classification
 
 | Classification | Meaning |
@@ -12,7 +19,7 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 | `V1 enabler` | Needed to deliver V1 safely, repeatedly or with enough evidence |
 | `V1 pilot gate` | Needed to validate the pilot before making production-grade claims |
 | `Post-MVP` | Useful after the first V1 slice |
-| `Done` | Delivered in the current codebase or documentation |
+| `Done` | Delivered on the `main` reference implementation (removed on this restart branch — treat as "to rebuild" here) |
 
 ## V1 Core
 
@@ -70,13 +77,16 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 ### V2V1. Phone And Web Voice2Voice Journeys
 
 - **Classification:** V1 core
-- **Status:** In progress
+- **Status:** In progress (STT-in half only, on this branch)
 - **Product links:** EPIC-004, EPIC-005
 - **Objective:** deliver oral question -> oral answer on phone and web voice.
-- **Current state:** Pipecat + Gradium is the V1 target path. The custom bridge
-  remains fallback/comparison only.
-- **Remaining product need:** validate that billing explanations and escalation
-  behave correctly on both channels.
+- **Current state (this branch):** only the STT-in half is delivered — the web
+  voice ingress captures the mic and returns a Gradium transcript (`web_voice/`).
+  There is no voice OUT (TTS), no LLM/backend bridge, and no Pipecat agent here.
+  Pipecat + Gradium remains the V1 **target** path (ADR-0011/0012); the custom
+  bridge is target fallback/comparison only.
+- **Remaining product need:** rebuild the backend/TTS path, then validate that
+  billing explanations and escalation behave correctly on both channels.
 
 ### V2V2. Phone Telephony Validation
 
@@ -126,21 +136,22 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 
 ### S1. Shared Active Conversation State
 
-- **Classification:** Done / V1 enabler
-- **Status:** Done
+- **Classification:** V1 enabler
+- **Status:** Done on `main` — to rebuild on this branch
 - **Product links:** EPIC-004, EPIC-005, EPIC-006
-- **Delivered:** `ConversationStore` has a Redis adapter activatable via
-  `CONVERSATION_STORE=redis`, with TTL (`CONVERSATION_TTL_SECONDS`). Docker
-  Compose starts Redis and configures the backend for active sessions.
+- **Delivered (on `main` reference):** `ConversationStore` has a Redis adapter
+  activatable via `CONVERSATION_STORE=redis`, with TTL (`CONVERSATION_TTL_SECONDS`).
+  Docker Compose starts Redis and configures the backend for active sessions.
+  **Not present on this branch** (backend + Docker Compose removed).
 
 ### C1. Durable Conversation Events
 
-- **Classification:** Done / V1 enabler
-- **Status:** Done
+- **Classification:** V1 enabler
+- **Status:** Done on `main` — to rebuild on this branch
 - **Product links:** EPIC-006, EPIC-008, EPIC-009
-- **Delivered:** `ConversationEventStore` has a JPA/Postgres adapter,
-  activatable via `CONVERSATION_EVENT_STORE=jpa`, for admin history, metrics and
-  audit-oriented event review.
+- **Delivered (on `main` reference):** `ConversationEventStore` has a JPA/Postgres
+  adapter, activatable via `CONVERSATION_EVENT_STORE=jpa`, for admin history,
+  metrics and audit-oriented event review. **Not present on this branch.**
 
 ### OM1. Channel Envelope And Escalation Handoff Contract
 
@@ -210,7 +221,10 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
   override evidence quality. If analysis takes longer, the voice journey should
   acknowledge quickly and wait for reliable evidence.
 
-## Done Reference
+## Done Reference (preserved on `main` — removed on this restart branch)
+
+> These were delivered on the pre-reset `main` implementation and are kept here as
+> a rebuild reference. **None of them are present on `feat/restart-from-scratch`.**
 
 - Inter-step streaming with backend `TokenStream` and SSE.
 - Pipecat/Silero server-side VAD for the target voice path.

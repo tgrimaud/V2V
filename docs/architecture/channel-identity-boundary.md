@@ -1,5 +1,12 @@
 # Channel And Identity Boundary
 
+> **Branch state (`feat/restart-from-scratch`):** this document defines the
+> **target** responsibility boundary. US-003 validated that boundary **as a design**,
+> not as built software. On this branch, only the STT-in slice exists (web voice
+> ingress → Gradium transcript + channel-ingress telemetry). TTS, turn detection,
+> barge-in, the backend, guardrails, escalation and Genesys handoff are target,
+> not implemented here.
+
 ## Objective
 
 This document confirms the V1 product-visible boundary between channels, the
@@ -121,19 +128,23 @@ ownership boundary; it does not require the final API contract to be implemented
 
 ## Acceptance Evidence For US-003
 
-`US-003` is accepted as the baseline for the STT validation sprint.
+`US-003` is accepted as the baseline for the STT validation sprint. It validates
+the **boundary design** (who owns what), not a built implementation of every
+responsibility below — on this branch only STT-in + channel-ingress telemetry is
+implemented; the rest is target ownership.
 
 Validation:
 
 - **Validated by:** User
 - **Validation date:** 2026-07-09
 
-Evidence:
+Evidence (boundary design; ✅ = implemented on this branch, ◻ = target):
 
-- channels provide trusted context and media transport;
-- the voice runtime owns real-time media, STT/TTS, turn detection and barge-in;
-- the backend owns billing reasoning, guardrails, escalation policy and handoff
-  content;
+- ✅ channels provide trusted context and media transport (web voice ingress);
+- the voice runtime owns real-time media (✅ STT + ingress telemetry; ◻ TTS, turn
+  detection and barge-in are target);
+- ◻ the backend owns billing reasoning, guardrails, escalation policy and handoff
+  content (target — no backend on this branch);
 - Genesys remains the contact-center system of record, not the owner of
   conversation intelligence;
 - unresolved identity details are recorded as open questions rather than guessed.

@@ -4,6 +4,12 @@
 
 Accepted
 
+> **Branch note (2026-07-10):** on `feat/restart-from-scratch` the custom bridge
+> (`bridge_server.py`, `ws_server.py`, `twilio_server.py`, …) has been **removed**
+> along with the rest of the pre-reset implementation; it is preserved on `main`.
+> This decision still stands as target policy, but the "still contains" / "preserves
+> a working fallback" wording below refers to the `main` reference, not this branch.
+
 ## Context
 
 The project still contains a custom voice bridge with browser WebSocket and

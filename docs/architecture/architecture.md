@@ -1,9 +1,19 @@
 # Architecture — Voice Support Bot
 
 > Restart branch note: on `feat/restart-from-scratch`, the previous
-> implementation code has been removed. This document describes the target
-> architecture and preserved decisions for the rebuild. The former executable
-> implementation remains available on `main` as backup/reference.
+> implementation code has been removed. **This entire document (diagrams, routes,
+> domain model, adapters, sequences below) describes the TARGET architecture for
+> the rebuild — present-tense wording refers to the design intent and to the
+> `main` reference implementation, not to code runnable on this branch.** The
+> former executable implementation remains on `main` as backup/reference.
+>
+> **What is actually built on this branch today** is a single slice: STT
+> validation, in Python under `voice-agent/` — `stt_validation/` (fixture + real
+> Gradium STT providers, WER quality, OpenTelemetry-style telemetry, per-slice
+> pipeline timing) and `web_voice/` (browser mic → 16 kHz PCM16 →
+> `POST /api/voice/stt` → Gradium transcript). No Java backend, no Pipecat agent,
+> no React frontend, no RAG/pgvector, no TTS/voice-out, no billing, no Genesys.
+> See `voice-agent/README.md` and `product-backlog/sprints/sprint-stt-validation.md`.
 
 ## Overview
 
@@ -19,7 +29,7 @@ The architecture is **hybrid**:
 - **Genesys Cloud CX** is the target contact-center system of record for call
   ingestion, compliance recording, queueing, supervision, reporting, and human
   advisor handoff
-- The **React frontend + custom WebSocket bridge** remains available as a historical POC / fallback, but is no longer the target V1 path
+- The **React frontend + custom WebSocket bridge** existed on `main` as a historical POC / fallback (removed on this branch); it is no longer the target V1 path
 
 The machine/VM target for an operator V1 pilot is detailed in
 [`infra-v1.md`](infra-v1.md). The BSS integration plan and contract-compatible
@@ -645,9 +655,11 @@ To add a new LLM provider (for example OpenAI):
 
 ### Replacing Gradium (STT/TTS)
 
-Modify `voice-agent/agent/gradium_stt.py` and `gradium_tts.py` to call another
-provider. The internal contract (functions `transcribe_audio()` and
-`synthesize_speech()`) remains the same.
+On this branch, STT lives in `voice-agent/stt_validation/gradium_provider.py`
+behind the `SttProvider` protocol (`transcribe()`); swap providers by adding a
+new implementation and selecting it in `provider_factory.py`. In the target
+Pipecat agent, the equivalent would be `agent/gradium_stt.py` / `gradium_tts.py`
+(on `main` reference); TTS is not built on this branch.
 
 ### Adding a Transport
 

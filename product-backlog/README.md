@@ -5,8 +5,11 @@ V1 epics, user stories, product decisions and open questions in Markdown before
 any future Jira migration.
 
 On `feat/restart-from-scratch`, this backlog is the delivery baseline for a fresh
-implementation. The previous code remains on `main`; all current epics and user
-stories are reset to `Draft` until reviewed for the new empty-codebase plan.
+implementation. The previous code remains on `main`. Epics and user stories were
+reset to `Draft` for the rebuild; since then the **STT validation** slice has been
+delivered (see `sprints/sprint-stt-validation.md` and `tasks/stt-validation-tasks.md`,
+several tickets marked Done) — the codebase is therefore no longer empty. All other
+V1 value (billing, RAG, multi-agent, TTS, Genesys) is still to build.
 
 ## V1 Product Baseline
 

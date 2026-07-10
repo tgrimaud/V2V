@@ -1,5 +1,11 @@
 # Voice Support Bot Documentation
 
+> **Branch state (`feat/restart-from-scratch`):** most docs here describe the
+> **target** V1 (and the `main` reference implementation). The **only runnable
+> code on this branch** is the Python STT-validation slice under `voice-agent/`
+> (`stt_validation/` + `web_voice/`). For what actually runs, start at
+> `voice-agent/README.md` and `product-backlog/sprints/sprint-stt-validation.md`.
+
 ## Structure
 
 | Folder | Audience | Contents |

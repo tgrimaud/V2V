@@ -1,5 +1,15 @@
 # Documentation Coherence Review - 2026-07-08
 
+> **Superseded (2026-07-10):** the "Remediation status: fixed / code-verified"
+> conclusions below were true against the pre-reset codebase. `feat/restart-from-scratch`
+> then removed the Java backend, Pipecat paths, React and Docker Compose, so the
+> claims that TokenStream/SSE, Redis/JPA persistence, Pipecat `bot.py`/`bridge_server.py`
+> and backend DTOs are "aligned/verified" no longer hold on this branch (they
+> describe the `main` reference only). A fresh post-restart coherence pass was done
+> on 2026-07-10; see the updated banners in `architecture.md`, `development-guide.md`,
+> `operations/backlog.md`, the KB docs and the READMEs. The ADR count is now 20
+> (this doc references 0001–0010).
+
 ## Purpose
 
 This document preserves the complete documentation coherence review performed on

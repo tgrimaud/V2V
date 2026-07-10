@@ -1,5 +1,13 @@
 # Functional Specification — Voice Support Bot
 
+> **Current delivery (`feat/restart-from-scratch`, 2026-07-10):** this is the
+> **target** functional spec. On this branch only the STT-in slice is built (web
+> mic / fixtures → Gradium transcript). Present-tense phrasing such as "the
+> existing backend" or "the stack can be launched via Docker Compose" is target /
+> `main` reference, not runnable here — the backend, TTS/voice-out, RAG,
+> multi-agent routing and Docker Compose were removed on this branch. Voice-out
+> (an oral answer) is explicitly **not yet delivered**.
+
 ## Document Status
 
 This document describes the broad functional target for Voice Support Bot: a

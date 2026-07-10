@@ -4,6 +4,14 @@
 
 Accepted
 
+> **Branch note (2026-07-10):** on `feat/restart-from-scratch` neither voice path
+> is implemented — both `agent/bot.py` and `agent/bridge_server.py` were removed
+> (preserved on `main`). Pipecat + Gradium remains the accepted **target**; the
+> "the project has two voice paths" wording below describes the `main` reference.
+> The only voice code on this branch is the STT-in web ingress (`voice-agent/web_voice/`),
+> which posts PCM16 audio to a Python server and returns a Gradium transcript — no
+> Pipecat, no TTS.
+
 ## Context
 
 The project has two voice paths:

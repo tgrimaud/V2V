@@ -2,6 +2,16 @@
 
 Date: 2026-07-08
 
+> **Superseded context (2026-07-10):** this review was performed against the
+> pre-reset codebase. Since then, `feat/restart-from-scratch` removed the POC
+> implementation (Java backend, Pipecat pipelines, React, bridge). Present-tense
+> findings below ("the Java backend is well structured", "GradiumSTTService is
+> instantiated in the Python pipelines", "direct coupling in the Python pipelines")
+> refer to that removed code and remain valid only against the `main` reference.
+> On this branch the only code is the Python STT-validation slice
+> (`voice-agent/stt_validation` + `web_voice`). The NFR/SLA/observability gaps
+> called out here stay relevant as **rebuild requirements**.
+
 ## Verdict
 
 The overall direction is sound: independent channels, a shared Java backend for

@@ -17,12 +17,30 @@ This branch intentionally keeps:
 - knowledge-base content;
 - shared agent guidance.
 
-This branch intentionally removes:
+This branch intentionally removes (the previous full V1 stack, preserved on `main`):
 
 - Java backend implementation;
-- Python voice-agent implementation;
 - React frontend implementation;
+- the Pipecat voice agent (`agent/bot.py`) and the legacy WebSocket bridge (`bridge_server.py`);
 - Docker Compose and implementation runtime scaffolding.
+
+## What Actually Runs On This Branch Today
+
+Since the reset, one slice has been rebuilt from scratch: **STT (speech-to-text)
+validation**. It is the only runnable code here, all in Python under `voice-agent/`:
+
+- `voice-agent/stt_validation/` — STT validation harness: fixture + real **Gradium**
+  providers, WER quality scoring, OpenTelemetry-style telemetry + latency report,
+  per-pipeline-slice timing (US-036), and CLIs.
+- `voice-agent/web_voice/` — a small HTTP server: browser mic → 16 kHz PCM16 →
+  `POST /api/voice/stt` → Gradium transcript. No LLM, no TTS, no backend in this slice.
+- `voice-agent/fixtures/`, `voice-agent/tests/` (unittest), `voice-agent/features/` (Behave).
+
+Delivered capability = audio in → transcript out, with per-slice latency evidence.
+**Not yet built** (target only): billing/invoice comparison, RAG, multi-agent
+routing, guardrails, TTS / voice response, phone Voice2Voice, Genesys handoff.
+See `voice-agent/README.md` to run it and `product-backlog/sprints/sprint-stt-validation.md`
+for the sprint status.
 
 ## V1 Product Outcome
 

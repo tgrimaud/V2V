@@ -1,5 +1,9 @@
 # Galaxion Billing - Initial V1 Contract
 
+> **Status:** this is a documentation/analysis of the Galaxion Swagger contracts.
+> No runtime BSS adapter is implemented (on this branch or `main`); the billing
+> integration is target work.
+
 ## Analyzed Sources
 
 Analyzed Swagger contracts:

@@ -1,5 +1,75 @@
 # Development Guide
 
+> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** this branch is a
+> deliberate restart. The Java backend, React frontend, Pipecat agent (`agent/bot.py`)
+> and legacy bridge (`bridge_server.py`) were removed (preserved on `main`). The
+> **only runnable code here is the Python STT-validation slice** under `voice-agent/`.
+> The "Working On This Branch" section below is accurate for this branch. Everything
+> from "## Target V1 Stack" onward describes the target stack (reference on `main`)
+> and does **not** run here — do not follow those `mvn` / `npm` / `docker compose` /
+> `agent.bot` steps against this checkout.
+
+## Working On This Branch (STT validation — the only runnable code)
+
+All code lives under `voice-agent/` (Python 3, standard library + `behave` for BDD).
+Configuration comes from a repo-root `.env` (no `.env.example` is committed):
+
+```bash
+# voice-support-bot/.env
+GRADIUM_API_KEY=...          # never commit a real key
+GRADIUM_LANGUAGE=fr
+GRADIUM_INPUT_FORMAT=pcm_16000
+GRADIUM_VOICE_ID=default
+```
+
+Common tasks (run from `voice-agent/`):
+
+```bash
+# Unit tests
+python3 -m unittest discover -s tests -p 'test_*.py'
+
+# Behave acceptance scenarios (isolated venv)
+python3 -m venv .venv && ./.venv/bin/pip install behave
+./.venv/bin/behave features/
+
+# (Re)generate the raw PCM16 16 kHz fixtures (macOS `say`)
+python3 fixtures/generate_fixtures.py
+
+# Transcription quality (WER) — offline fixture provider, then real Gradium
+python3 -m stt_validation.quality_cli fixtures/manifest.json
+export $(grep -v '^#' ../.env | xargs) && \
+  python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
+
+# Per-pipeline-slice latency report (US-036)
+python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium
+
+# Web voice ingress: browser mic -> 16 kHz PCM16 -> Gradium transcript
+python3 -m web_voice.server --provider gradium   # then open http://127.0.0.1:8090/
+python3 -m web_voice.server --provider fixture   # offline plumbing check (no key)
+```
+
+Troubleshooting (current branch):
+
+| Problem | Cause | Solution |
+|---|---|---|
+| `GRADIUM_API_KEY not set` | env not loaded | Fill repo-root `.env`, then `export $(grep -v '^#' ../.env \| xargs)` |
+| Quality/Behave run finds no audio | `.pcm` fixtures not generated | `python3 fixtures/generate_fixtures.py` (macOS `say`) |
+| `No module named behave` | behave not installed | Use the `.venv` shown above |
+| Port 8090 busy | web_voice server already running | `kill $(lsof -ti:8090)` |
+| WER = 1.0 on a correct transcript | scorer not normalized (RF-008) | Known gap, tracked as TASK-STT-011 |
+
+See `voice-agent/README.md` for the full harness reference and
+`docs/observability/` + `docs/qa/` for evidence.
+
+---
+
+## Target V1 Stack (reference — preserved on `main`, NOT runnable on this branch)
+
+> Everything below describes the intended/previous full stack (Java backend,
+> Pipecat agent, React frontend, Docker Compose, pgvector, Ollama). It is kept as
+> a build reference for the restart. **None of these commands work against
+> `feat/restart-from-scratch`** — the code they target does not exist here.
+
 ## Project Conventions
 
 ### Architecture

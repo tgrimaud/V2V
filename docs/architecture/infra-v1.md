@@ -1,5 +1,10 @@
 # Infrastructure V1 - Machine/VM Target
 
+> **Branch note:** this is a **target** pilot topology (Java backend, Pipecat,
+> Postgres, Redis, etc.). None of it is deployed from `feat/restart-from-scratch`,
+> which only contains the Python STT-validation slice. The WebSocket bridge listed
+> as "legacy/fallback" was removed on this branch (preserved on `main`).
+
 ## Objective
 
 This document describes a V1 infrastructure target for running the Voice Support
