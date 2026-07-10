@@ -10,6 +10,8 @@ from .pipeline_timing import (
 from .provider_factory import PROVIDER_NAMES, build_provider
 from .providers import FixtureSttProvider, SttProvider
 from .quality import (
+    MIN_SAMPLES_FOR_PERCENTILES,
+    CategorySummary,
     FixtureAssessment,
     FixtureCategory,
     FixtureQualityReport,
@@ -22,7 +24,9 @@ from .runner import SttValidationRunner
 from .telemetry import LatencyReport, TelemetryRecorder
 
 __all__ = [
+    "MIN_SAMPLES_FOR_PERCENTILES",
     "PROVIDER_NAMES",
+    "CategorySummary",
     "FixtureAssessment",
     "FixtureCategory",
     "FixtureQualityReport",

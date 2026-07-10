@@ -8,14 +8,18 @@
 **Provider under test:** `fixture-stt` (deterministic `FixtureSttProvider`; real engine not yet selected)
 
 > **Update 2026-07-10 (superseding note):** this report is the 2026-07-09 snapshot taken
-> *before* the real engine was connected. The "no real STT provider" blocker below is
-> now resolved — **Gradium (TASK-STT-008) is validated live end to end** (real transcripts
-> + latency, `docs/qa/web-voice-qa-report.md`) and the 5 controlled fixtures now carry
-> **real PCM16 audio** (TASK-STT-007) with a first live per-category run
-> (`docs/qa/stt-transcription-quality.md`). WER scoring normalization
-> (RF-008 → TASK-STT-011) is now **resolved** (2026-07-10): `word_error_rate` folds
-> case/punctuation/accents, so the per-category gate reflects real accuracy — only the
-> synthetic `noisy` fixture still fails (a genuine error, owned by TASK-STT-007).
+> *before* the real engine was connected. Several "blockers" below are now resolved:
+> - **Real STT provider (RF-003):** **Gradium (TASK-STT-008) validated live end to end**
+>   (real transcripts + latency, `docs/qa/web-voice-qa-report.md`).
+> - **Sample size (RF-005):** the fixture set is now **22 clips, 5 per usable category**
+>   (TASK-STT-007) with per-category aggregation and a significance flag; a full live
+>   per-category Gradium run is recorded in `docs/qa/stt-transcription-quality.md`.
+> - **WER normalization (RF-008 → TASK-STT-011):** `word_error_rate` folds
+>   case/punctuation/accents, so the per-category gate reflects real accuracy.
+>
+> The remaining honest caveat is **fixture realism**: synthetic `say` clips still clip
+> ultra-short `short` utterances and the synthetic `noisy` set is a harsh proxy, so STT
+> is **not certified pilot-ready on quality** until real human recordings are added.
 
 ## Executive Summary
 

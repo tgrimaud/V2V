@@ -12,14 +12,19 @@ set**. The quality table below is produced with the deterministic
 `FixtureSttProvider` (the `.txt` sidecar is the simulated engine output), so those
 WER numbers are **not** a real-engine measurement.
 
-**Update (TASK-STT-007, 2026-07-10):** the five category fixtures are now **real
-raw PCM16 mono 16 kHz audio** (`fixtures/generate_fixtures.py`, macOS `say`), not
-the previous ASCII placeholders. A per-category **Gradium** run is therefore now
-possible and only needs a `GRADIUM_API_KEY`:
-`python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium`.
-Caveats: `say` speech is clean/synthetic, `noisy` mixes synthetic white noise, and
-`accented` uses a Canadian-French voice (fr_CA) — proxies, not real-world
-recordings; real human samples per category remain part of TASK-STT-007.
+**Update (TASK-STT-007, 2026-07-10):** the fixture set is now **22 real raw PCM16
+mono 16 kHz clips** (`fixtures/generate_fixtures.py`, macOS `say`) — **5 samples per
+usable category** (short, long, noisy, accented) with varied voices/phrasings, plus
+2 silence clips. Each clip is padded with 300 ms lead-in / 200 ms lead-out silence
+so Gradium's endpointing does not clip the first word. The report now aggregates
+**per-category** quality + latency and flags categories below the reporting floor
+(`MIN_SAMPLES_FOR_PERCENTILES = 5`) as not yet significant. See the
+**"Expanded fixture set" section below** for the current per-category numbers; the
+5-fixture tables further down are kept as the earlier historical snapshots.
+Caveats (unchanged): `say` speech is clean/synthetic, `noisy` mixes synthetic white
+noise, and `accented` uses Canadian-French voices (fr_CA) — proxies, **not**
+real-world recordings. Real human samples (especially for `noisy` and ultra-short
+`short` clips, which `say` still clips) remain the highest-value follow-up.
 
 ## How quality is scored
 
@@ -31,18 +36,82 @@ recordings; real human samples per category remain part of TASK-STT-007.
 - Unusable audio (`expect_usable: false`, e.g. silence) passes only when the
   path reports failure/unavailable and **invents no transcript**.
 
-## QA fixture inventory
+## QA fixture inventory (expanded, TASK-STT-007)
 
-| Fixture | Category | Usable? | Audio (raw PCM16 16 kHz) | Reference (ground truth) |
+The manifest (`voice-agent/fixtures/manifest.json`) declares **22 fixtures** across
+all five categories. The full reference text lives in the manifest; the per-category
+breakdown is:
+
+| Category | Usable? | Samples | Voices used | Notes |
 |---|---|---|---|---|
-| `short-greeting` | short | yes | `short/greeting.pcm` (Thomas fr_FR, 0.74 s) | `Bonjour` |
-| `long-billing-question` | long | yes | `long/billing-question.pcm` (Thomas fr_FR, 3.50 s) | `Pourquoi ma facture de telephone est plus elevee que le mois dernier` |
-| `noisy-billing-question` | noisy | yes | `noisy/noisy-question.pcm` (Jacques fr_FR + white noise, 3.45 s) | `je voudrais comprendre le montant de ma derniere facture mensuelle` |
-| `accented-billing-question` | accented | yes | `accented/accented-question.pcm` (Amélie fr_CA, 2.41 s) | `est-ce que je peux payer ma facture en plusieurs fois` |
-| `silence-clip` | silence | no (must not transcribe) | `silence/silence.pcm` (1.00 s zeros) | — |
+| short | yes | 5 | Thomas, Jacques, Flo, Sandy, Rocko (fr_FR) | 1–4 word utterances |
+| long | yes | 5 | Thomas, Jacques, Eddy, Flo, Sandy (fr_FR) | full support/billing sentences |
+| noisy | yes | 5 | Jacques, Thomas, Flo, Rocko, Sandy (fr_FR) + synthetic white noise | hardest category |
+| accented | yes | 5 | Amélie, Eddy, Flo, Reed, Sandy (fr_CA) | genuine fr_CA accent |
+| silence | no (must not transcribe) | 2 | — | 1.00 s + 1.50 s zeros |
 
-All five declared categories (`short`, `long`, `noisy`, `silence`, `accented`)
-are covered. `missing_categories: []`.
+All five declared categories are covered (`missing_categories: []`). `silence`
+(2 samples) is below the reporting floor of 5 and is flagged
+`underpowered_categories: ["silence"]`.
+
+## Expanded fixture set — live Gradium per-category run (TASK-STT-007, 2026-07-10)
+
+Command (normalized WER from TASK-STT-011 is applied):
+
+```bash
+cd voice-agent
+python3 fixtures/generate_fixtures.py           # 22 clips, padded onsets
+export GRADIUM_API_KEY=...                       # from the local .env
+python3 -m stt_validation.quality_cli fixtures/manifest.json --provider gradium
+```
+
+### Per-category summary
+
+| Category | Samples | Pass | Mean WER | Worst WER | p50 latency | p95 latency | Significant (n ≥ 5) |
+|---|---:|---:|---:|---:|---:|---:|---|
+| short | 5 | 2/5 | 0.280 | 0.500 | 1474 ms | 1636 ms | yes |
+| long | 5 | 2/5 | 0.191 | 0.375 | 2964 ms | 3150 ms | yes |
+| noisy | 5 | 1/5 | 0.383 | 0.667 | 2268 ms | 2433 ms | yes |
+| accented | 5 | 4/5 | 0.149 | 0.444 | 1985 ms | 2396 ms | yes |
+| silence | 2 | 2/2 | — | — | 1123 ms | 1328 ms | **no** (n < 5) |
+
+- `ready: false`; `failed_categories: [accented, long, noisy, short]`;
+  `underpowered_categories: [silence]`; `missing_categories: []`.
+- **Overall STT slice latency (22 samples):** `min 1123 ms, p50 2165 ms,
+  p95 3063 ms, p99 = max 3150 ms`. Latency scales with utterance length (batch STT).
+
+### Interpretation — what is real vs. a synthetic-fixture artifact
+
+The expanded set is deliberately honest: it does **not** pass the gate, and that is
+the point — it shows exactly where synthetic `say` fixtures are and are not
+representative.
+
+- **`accented` (fr_CA) transcribes well** — 4/5, mean WER 0.149. Two clips are WER
+  0.0 (`Est-ce que je peux payer…`, `Je veux ajouter une option…`). Gradium handles
+  the Canadian-French voices cleanly.
+- **`long` failures are genuine engine errors**, not artifacts: `résilier` →
+  `résigner`, `échéancier` → `essai en cire`, `des frais` → `de frais`. The onset
+  padding fixed the previously-clipped leading words (`Pourquoi ma facture…` is now
+  WER 0.0, was 1.00 before TASK-STT-011 + padding).
+- **`short` is dominated by a synthetic artifact:** Gradium's endpointing still
+  clips the first word of ultra-short 2–3 word `say` clips even with 300 ms of
+  lead-in silence (`Merci beaucoup` → `beaucoup`, `C'est assez urgent` →
+  `assez urgent`). On a 2-word reference that single drop is WER 0.5. This is a
+  **fixture limitation**, not a Gradium accuracy result — real human recordings with
+  natural onsets are needed.
+- **`noisy` is genuinely degraded** by the synthetic white noise (`Mon forfait
+  mobile a été modifié` → `Mon portrait est mobile, arrêtez de modifier`; one clip
+  returns empty). Synthetic noise is a harsh, unrealistic proxy; real ambient-noise
+  recordings would behave differently.
+
+### Statistical significance
+
+`MIN_SAMPLES_FOR_PERCENTILES = 5` is a **pragmatic reporting floor**, not a
+guarantee of tight percentiles: with nearest-rank percentiles, p95 over 5 samples is
+effectively the max. Stable p95/p99 realistically needs many more samples **and**
+real human recordings (especially for `noisy`/`short`). The usable categories clear
+the floor (flagged significant); `silence` (2) is flagged not significant. Treat the
+current per-category WER as **indicative**, not a certified gate.
 
 ## Transcript results (run 2026-07-09)
 
@@ -145,26 +214,34 @@ runs yield different hallucinations, e.g. `Avec Wottand` vs `vous le fais confor
 
 | Acceptance criterion | Covered? | Evidence |
 |---|---|---|
-| Transcript quality reviewed per fixture category | Yes | per-fixture table + `category` field in report |
+| Transcript quality reviewed per fixture category | Yes | `category_summaries` in the report + per-category table above |
+| Each category has multiple fixtures | Yes | 5 samples per usable category (`test_committed_manifest_has_multiple_samples_per_usable_category`) |
+| Per-category quality + latency percentiles reported | Yes | `CategorySummary` (mean/worst WER + `LatencyReport` per category) |
+| Categories below the required sample size flagged | Yes | `underpowered_categories: [silence]`; `MIN_SAMPLES_FOR_PERCENTILES = 5` |
 | Missing fixture categories explicitly reported | Yes | `missing_categories` list; unit test `test_missing_categories_are_reported_explicitly` |
 | Silence/unusable reported as unavailable/failed | Yes | `silence-clip` outcome `failed`, empty transcript |
 | No invented transcript accepted as valid | Yes | `test_invented_transcript_for_unusable_audio_fails` |
 
 ## Defects
 
-No blocking defects for the current fixture set: all declared categories are
-present and all quality gates pass. If a future run produces
-`failed_categories` or `missing_categories`, QA must open a bug ticket using
-`product-backlog/templates/bug-ticket-template.md` before STT is declared ready.
+No harness defects. Against the real engine the expanded set does **not** pass the
+gate (`failed_categories: [accented, long, noisy, short]`), which is the honest,
+expected state for synthetic proxies — not a code defect. The `noisy` and ultra-short
+`short` failures are fixture-realism issues (synthetic noise; `say` onset clipping);
+the `long`/`accented` misses are genuine engine errors on harder vocabulary. STT is
+therefore **not certified pilot-ready on quality** until real human recordings are
+added. If the *harness* itself regresses (missing categories, invented transcripts on
+silence), open a bug ticket via `product-backlog/templates/bug-ticket-template.md`.
 
 ## Open risks
 
-- The quality table above reflects the fixture provider, not a real STT engine.
-  A real per-category Gradium run is now possible (audio is real) but needs a key.
-- One sample per category; more samples are needed before p95/p99 and per-category
-  quality are statistically meaningful (rest of TASK-STT-007).
-- `noisy` (synthetic white noise) and `accented` (fr_CA `say` voice) are proxies;
+- `say` still clips the first word of ultra-short (2–3 word) clips even with 300 ms
+  of lead-in silence — the `short` category WER is not representative. **Real human
+  recordings are required** for short utterances.
+- `noisy` (synthetic white noise) and `accented` (fr_CA `say` voices) are proxies;
   real human noisy/accented recordings may behave very differently.
+- 5 samples per usable category clears the reporting floor but is **not** enough for
+  stable p95/p99 (nearest-rank p95 of 5 ≈ max). More samples + real recordings needed.
 
 ## Reproduce
 

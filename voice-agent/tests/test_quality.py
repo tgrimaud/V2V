@@ -146,5 +146,63 @@ class EvaluateFixtureSetTest(unittest.TestCase):
             self.assertFalse(report.ready)
 
 
+class CategorySummaryTest(unittest.TestCase):
+    def test_reports_per_category_counts_mean_and_worst_wer(self) -> None:
+        # GIVEN five short fixtures: four perfect, one with a single substitution
+        with TemporaryDirectory() as tmp:
+            specs = []
+            for i in range(4):
+                audio = _fixture(tmp, f"s{i}", "ma facture est elevee")
+                specs.append(FixtureSpec(f"s{i}", FixtureCategory.SHORT, audio, "ma facture est elevee", True))
+            last = _fixture(tmp, "s4", "ma facture est mentale")
+            specs.append(FixtureSpec("s4", FixtureCategory.SHORT, last, "ma facture est elevee", True))
+
+            # WHEN
+            report = evaluate_fixture_set(_runner(), specs, [FixtureCategory.SHORT], quality_threshold=0.5)
+
+            # THEN
+            summary = report.category_summaries[0]
+            self.assertEqual(summary.sample_count, 5)
+            self.assertTrue(summary.significant)
+            self.assertEqual(summary.worst_wer, 0.25)
+            self.assertAlmostEqual(summary.mean_wer, 0.05)
+            self.assertEqual(summary.passed_count, 5)
+
+    def test_flags_category_below_minimum_sample_size_as_not_significant(self) -> None:
+        # GIVEN only two fixtures in a category (below the reporting floor of 5)
+        with TemporaryDirectory() as tmp:
+            audio_a = _fixture(tmp, "n1", "bonjour")
+            audio_b = _fixture(tmp, "n2", "bonjour")
+            specs = [
+                FixtureSpec("n1", FixtureCategory.NOISY, audio_a, "bonjour", True),
+                FixtureSpec("n2", FixtureCategory.NOISY, audio_b, "bonjour", True),
+            ]
+
+            # WHEN
+            report = evaluate_fixture_set(_runner(), specs, [FixtureCategory.NOISY])
+
+            # THEN
+            summary = report.category_summaries[0]
+            self.assertEqual(summary.sample_count, 2)
+            self.assertFalse(summary.significant)
+            self.assertEqual(report.underpowered_categories(), ["noisy"])
+            self.assertFalse(report.all_categories_significant)
+
+    def test_silence_category_summary_has_no_wer(self) -> None:
+        # GIVEN a silence fixture that must not be transcribed
+        with TemporaryDirectory() as tmp:
+            audio = _fixture(tmp, "silence", "   ")
+            spec = FixtureSpec("silence", FixtureCategory.SILENCE, audio, None, False)
+
+            # WHEN
+            report = evaluate_fixture_set(_runner(), [spec], [FixtureCategory.SILENCE])
+
+            # THEN
+            summary = report.category_summaries[0]
+            self.assertIsNone(summary.mean_wer)
+            self.assertIsNone(summary.worst_wer)
+            self.assertEqual(summary.usable_count, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

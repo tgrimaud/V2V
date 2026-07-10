@@ -6,34 +6,153 @@
       "name": "short-greeting",
       "category": "short",
       "audio": "short/greeting.pcm",
-      "reference": "Bonjour",
+      "reference": "Bonjour.",
+      "expect_usable": true
+    },
+    {
+      "name": "short-thanks",
+      "category": "short",
+      "audio": "short/thanks.pcm",
+      "reference": "Merci beaucoup.",
+      "expect_usable": true
+    },
+    {
+      "name": "short-goodbye",
+      "category": "short",
+      "audio": "short/goodbye.pcm",
+      "reference": "Au revoir et bonne journée.",
+      "expect_usable": true
+    },
+    {
+      "name": "short-question",
+      "category": "short",
+      "audio": "short/question.pcm",
+      "reference": "J'ai une question.",
+      "expect_usable": true
+    },
+    {
+      "name": "short-urgent",
+      "category": "short",
+      "audio": "short/urgent.pcm",
+      "reference": "C'est assez urgent.",
       "expect_usable": true
     },
     {
       "name": "long-billing-question",
       "category": "long",
       "audio": "long/billing-question.pcm",
-      "reference": "Pourquoi ma facture de telephone est plus elevee que le mois dernier",
+      "reference": "Pourquoi ma facture de téléphone est plus élevée que le mois dernier ?",
       "expect_usable": true
     },
     {
-      "name": "noisy-billing-question",
+      "name": "long-extra-fees",
+      "category": "long",
+      "audio": "long/extra-fees.pcm",
+      "reference": "Je souhaite comprendre pourquoi des frais supplémentaires apparaissent sur mon relevé ce mois.",
+      "expect_usable": true
+    },
+    {
+      "name": "long-invoice-breakdown",
+      "category": "long",
+      "audio": "long/invoice-breakdown.pcm",
+      "reference": "Pouvez-vous m'expliquer en détail les différentes lignes qui composent le montant total de ma facture ?",
+      "expect_usable": true
+    },
+    {
+      "name": "long-cancel-subscription",
+      "category": "long",
+      "audio": "long/cancel-subscription.pcm",
+      "reference": "J'aimerais savoir comment résilier mon abonnement et connaître les frais de résiliation associés.",
+      "expect_usable": true
+    },
+    {
+      "name": "long-payment-plan",
+      "category": "long",
+      "audio": "long/payment-plan.pcm",
+      "reference": "Serait-il possible de mettre en place un échéancier pour étaler le paiement de ma facture ?",
+      "expect_usable": true
+    },
+    {
+      "name": "noisy-monthly-amount",
       "category": "noisy",
-      "audio": "noisy/noisy-question.pcm",
-      "reference": "je voudrais comprendre le montant de ma derniere facture mensuelle",
+      "audio": "noisy/monthly-amount.pcm",
+      "reference": "Je voudrais comprendre le montant de ma dernière facture mensuelle.",
       "expect_usable": true
     },
     {
-      "name": "accented-billing-question",
+      "name": "noisy-slow-internet",
+      "category": "noisy",
+      "audio": "noisy/slow-internet.pcm",
+      "reference": "Ma connexion internet est très lente depuis plusieurs jours.",
+      "expect_usable": true
+    },
+    {
+      "name": "noisy-no-sms",
+      "category": "noisy",
+      "audio": "noisy/no-sms.pcm",
+      "reference": "Je n'arrive plus à envoyer des messages depuis ce matin.",
+      "expect_usable": true
+    },
+    {
+      "name": "noisy-plan-changed",
+      "category": "noisy",
+      "audio": "noisy/plan-changed.pcm",
+      "reference": "Mon forfait mobile a été modifié sans mon accord.",
+      "expect_usable": true
+    },
+    {
+      "name": "noisy-landline-issue",
+      "category": "noisy",
+      "audio": "noisy/landline-issue.pcm",
+      "reference": "Je souhaite signaler un problème sur ma ligne fixe.",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-installments",
       "category": "accented",
-      "audio": "accented/accented-question.pcm",
-      "reference": "est-ce que je peux payer ma facture en plusieurs fois",
+      "audio": "accented/installments.pcm",
+      "reference": "Est-ce que je peux payer ma facture en plusieurs fois ?",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-cheaper-plan",
+      "category": "accented",
+      "audio": "accented/cheaper-plan.pcm",
+      "reference": "J'aimerais changer mon forfait pour un plan moins cher.",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-check-balance",
+      "category": "accented",
+      "audio": "accented/check-balance.pcm",
+      "reference": "Pouvez-vous vérifier mon solde s'il vous plaît ?",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-too-high",
+      "category": "accented",
+      "audio": "accented/too-high.pcm",
+      "reference": "Ma facture me semble beaucoup trop élevée ce mois-ci.",
+      "expect_usable": true
+    },
+    {
+      "name": "accented-add-option",
+      "category": "accented",
+      "audio": "accented/add-option.pcm",
+      "reference": "Je veux ajouter une option à mon abonnement.",
       "expect_usable": true
     },
     {
       "name": "silence-clip",
       "category": "silence",
       "audio": "silence/silence.pcm",
+      "reference": null,
+      "expect_usable": false
+    },
+    {
+      "name": "silence-clip-long",
+      "category": "silence",
+      "audio": "silence/silence-long.pcm",
       "reference": null,
       "expect_usable": false
     }

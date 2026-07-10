@@ -77,7 +77,7 @@ against the new empty-codebase plan.
 | TASK-STT-004 | Produce the STT QA report and Gherkin scenarios | V1 pilot gate | Done | High |
 | TASK-STT-005 | Redact bare sensitive identifiers in failure sanitization | V1 pilot gate | Planned (Sprint 2) | Medium |
 | TASK-STT-006 | Add a dedicated UNAVAILABLE STT outcome | V1 pilot gate | Planned (Sprint 2) | Low |
-| TASK-STT-007 | Expand the STT fixture set with multiple samples per category | V1 pilot gate | Planned (Sprint 2, In progress) | Medium |
+| TASK-STT-007 | Expand the STT fixture set with multiple samples per category (closes RF-003, RF-005) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | Done (STT sprint scope) | High |
 | TASK-STT-009 | Detect and instrument end-of-turn for the voice journey (US-036 `end_of_turn` slice) | V1 pilot gate | Planned (Sprint 2) | Medium |
 | TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Planned (Sprint 4) | High |

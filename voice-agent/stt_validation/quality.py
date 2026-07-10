@@ -11,6 +11,13 @@ from .telemetry import LatencyReport
 
 DEFAULT_QUALITY_THRESHOLD = 0.8
 
+# Minimum samples in a category before its latency percentiles / quality are
+# reported as statistically meaningful. Below this a single outlier dominates
+# p95/p99, so the category is flagged "not yet significant". This is a pragmatic
+# reporting floor; stable p95/p99 realistically needs many more (and, for noisy /
+# accented, real human recordings — see TASK-STT-007 open risks).
+MIN_SAMPLES_FOR_PERCENTILES = 5
+
 # Anything that is neither a word character nor whitespace (punctuation, symbols).
 _PUNCTUATION = re.compile(r"[^\w\s]", flags=re.UNICODE)
 
@@ -67,26 +74,63 @@ class FixtureAssessment:
 
 
 @dataclass(frozen=True)
+class CategorySummary:
+    category: str
+    sample_count: int
+    usable_count: int
+    passed_count: int
+    mean_wer: float | None
+    worst_wer: float | None
+    latency: LatencyReport
+    significant: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "sample_count": self.sample_count,
+            "usable_count": self.usable_count,
+            "passed_count": self.passed_count,
+            "mean_wer": self.mean_wer,
+            "worst_wer": self.worst_wer,
+            "significant": self.significant,
+            "latency_report": self.latency.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class FixtureQualityReport:
     assessments: list[FixtureAssessment]
     missing_categories: list[str]
     quality_threshold: float
     latency: LatencyReport
+    category_summaries: list[CategorySummary]
+    min_samples_for_percentiles: int = MIN_SAMPLES_FOR_PERCENTILES
 
     @property
     def ready(self) -> bool:
         return not self.missing_categories and all(a.quality_ok for a in self.assessments)
 
+    @property
+    def all_categories_significant(self) -> bool:
+        return bool(self.category_summaries) and all(c.significant for c in self.category_summaries)
+
     def failed_categories(self) -> list[str]:
         return sorted({a.category for a in self.assessments if not a.quality_ok})
+
+    def underpowered_categories(self) -> list[str]:
+        return sorted(c.category for c in self.category_summaries if not c.significant)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "ready": self.ready,
+            "all_categories_significant": self.all_categories_significant,
             "quality_threshold": self.quality_threshold,
+            "min_samples_for_percentiles": self.min_samples_for_percentiles,
             "missing_categories": self.missing_categories,
             "failed_categories": self.failed_categories(),
+            "underpowered_categories": self.underpowered_categories(),
             "latency_report": self.latency.to_dict(),
+            "category_summaries": [summary.to_dict() for summary in self.category_summaries],
             "assessments": [assessment.to_dict() for assessment in self.assessments],
         }
 
@@ -139,7 +183,29 @@ def evaluate_fixture_set(
     covered = {spec.category for spec in specs}
     missing = [category.value for category in expected_categories if category not in covered]
     latency = LatencyReport.from_samples([a.stt_request_ms for a in assessments])
-    return FixtureQualityReport(assessments, sorted(missing), quality_threshold, latency)
+    summaries = _summarize_categories(assessments)
+    return FixtureQualityReport(assessments, sorted(missing), quality_threshold, latency, summaries)
+
+
+def _summarize_categories(assessments: list[FixtureAssessment]) -> list[CategorySummary]:
+    grouped: dict[str, list[FixtureAssessment]] = {}
+    for assessment in assessments:
+        grouped.setdefault(assessment.category, []).append(assessment)
+    return [_summarize_one(category, grouped[category]) for category in sorted(grouped)]
+
+
+def _summarize_one(category: str, items: list[FixtureAssessment]) -> CategorySummary:
+    wers = [a.wer for a in items if a.wer is not None]
+    return CategorySummary(
+        category=category,
+        sample_count=len(items),
+        usable_count=sum(1 for a in items if a.expect_usable),
+        passed_count=sum(1 for a in items if a.quality_ok),
+        mean_wer=round(sum(wers) / len(wers), 3) if wers else None,
+        worst_wer=round(max(wers), 3) if wers else None,
+        latency=LatencyReport.from_samples([a.stt_request_ms for a in items]),
+        significant=len(items) >= MIN_SAMPLES_FOR_PERCENTILES,
+    )
 
 
 def _assess(runner: SttValidationRunner, spec: FixtureSpec, threshold: float) -> FixtureAssessment:

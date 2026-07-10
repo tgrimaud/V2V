@@ -88,7 +88,7 @@ Scenario: Silence is reported as unavailable, not failed
 **Parent:** EPIC-010
 **Related finding:** RF-005 (TASK-STT-002), RF-003 (per-category matrix now audio-unblocked)
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 2 (STT hardening); In progress (real single-sample audio done; multiple samples + real recordings remaining)
+**Status:** Done — Sprint 2 (STT hardening). Synthetic-proxy scope complete (5 samples/usable category, per-category aggregation, live Gradium run). **Real human recordings remain an explicit residual follow-up** (see Delivery Evidence).
 **Priority:** Medium
 **Branch:** `task/TASK-STT-007-expand-fixture-samples`
 
@@ -125,16 +125,31 @@ Scenario: Category quality is reported over multiple samples
 - Expanded fixture set and manifest.
 - Updated `docs/qa/stt-transcription-quality.md` with per-category summaries.
 
-### Delivery Evidence (partial, 2026-07-10)
+### Delivery Evidence (2026-07-10)
 
-- `voice-agent/fixtures/generate_fixtures.py`: reproducible generator (macOS `say`)
-  producing raw PCM16 mono 16 kHz — native Gradium `pcm_16000` input, no WAV header.
-- 5 real fixtures replacing the ASCII placeholders (short 0.74 s, long 3.50 s,
-  noisy 3.45 s + white noise, accented 2.41 s fr_CA, silence 1.00 s). Manifest
-  updated to `.pcm`. Fixture-provider harness, 47 unit tests and 8 Behave scenarios
-  still green.
-- Remaining: multiple samples/category, real human noisy/accented recordings,
-  minimum-sample-size rule, and the live Gradium per-category run.
+- **Expanded fixture set:** `voice-agent/fixtures/generate_fixtures.py` now produces
+  **22 raw PCM16 mono 16 kHz clips** — 5 samples per usable category (short, long,
+  noisy, accented) with varied fr_FR/fr_CA voices and phrasings, plus 2 silence
+  clips. Each clip is padded 300 ms lead-in / 200 ms lead-out so Gradium's
+  endpointing does not clip the first word. Manifest rebuilt to 22 entries.
+- **Per-category aggregation + significance rule:** `quality.py` now emits a
+  `CategorySummary` per category (sample_count, usable/passed counts, mean/worst WER,
+  latency percentiles, `significant`) plus `underpowered_categories()` and
+  `all_categories_significant`. `MIN_SAMPLES_FOR_PERCENTILES = 5` is the documented
+  reporting floor; categories below it (silence, n=2) are flagged not significant.
+- **Tests:** +8 unit tests (`test_quality.py` category summaries; `test_manifest.py`
+  expanded coverage + per-category counts). Full suite **59 unit tests + 8 Behave
+  scenarios green**.
+- **Live Gradium per-category run** (`docs/qa/stt-transcription-quality.md`,
+  2026-07-10, normalized WER): accented 4/5 (mean 0.149), long 2/5 (0.191),
+  short 2/5 (0.280), noisy 1/5 (0.383), silence 2/2 (not significant). Overall STT
+  latency: p50 2165 ms, p95 3063 ms, p99 3150 ms over 22 samples. **Closes RF-003**
+  (real-engine per-category matrix) and **RF-005** (multiple samples/category).
+- **Honest residual (not sprint-blocking):** `say` still clips the first word of
+  ultra-short 2–3 word clips (short WER inflated) and synthetic white noise is a harsh
+  proxy (noisy genuinely degraded). **Real human recordings** — especially for
+  `short` and `noisy` — are the highest-value remaining follow-up before STT quality
+  can be certified pilot-ready. Tracked as an open risk in the QA doc.
 
 ---
 
