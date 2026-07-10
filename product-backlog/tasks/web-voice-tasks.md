@@ -135,12 +135,14 @@ Scenario: Web voice STT failure stays safe and observable
   `channel: web_voice`) + correlation id; server log has zero `gsk_` (no key leak).
 - **Console:** clean after fixing a cosmetic `favicon.ico` 404 (server now 204,
   locked by a test). Suite: 13 web-voice unittests + 2 Behave scenarios green.
+- **Human mic session (2026-07-10):** real microphone → `app.js` capture +
+  48 kHz→16 kHz downsampling → 137 898 B of 16 kHz PCM → `POST /api/voice/stt`
+  (200) → Gradium → transcript *"Bonjour. J'ai un problème avec ma facture."*
+  rendered (success). Console clean, `web.voice.ingress` span `audio_bytes=137898`,
+  no key leak. Closes the mic/downsampling gap; `web-voice-mic-session.png`.
 
 ### Remaining Before Done
 
-- **Human mic session:** validate the microphone capture + 48 kHz→16 kHz
-  downsampling JavaScript in `app.js` (the QA above injected a ready 16 kHz PCM,
-  which bypasses the mic + downsampler; hardware is not drivable headlessly).
 - User validation of the branch before any merge.
 
 ---
