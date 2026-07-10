@@ -10,7 +10,7 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** In review — STT-scope tickets delivered; US-036 (STT scope) pending merge. Residual: TASK-STT-008 live quality/latency run pending real Gradium credentials.
+**Status:** In review — all STT-scope tickets delivered and merged into `feat/restart-from-scratch`; live Gradium validated end to end (real transcripts + latency). Awaiting user validation to close. Only residual (not sprint-blocking): per-category WER matrix over controlled fixtures needs real fixture audio (TASK-STT-007, already out of sprint).
 **Created:** 2026-07-09  
 **Final validator:** User  
 **Merge rule:** no branch is merged unless the user explicitly asks.
@@ -39,7 +39,7 @@ go/no-go decisions.
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
 | TASK-STT-004 | Done | `docs/qa/stt-qa-report.md`; Behave `features/stt_validation.feature` (5 scenarios); go/no-go recommendation |
-| TASK-STT-008 | In progress | `voice-agent/stt_validation/gradium_provider.py` + `provider_factory.py`; 11 provider tests, live smoke test 2026-07-09 (auth OK, `audio/pcm` content-type fix). Live quality/latency run pending real `GRADIUM_API_KEY` + fixtures; RF-003 stays open until real numbers recorded. |
+| TASK-STT-008 | Done (STT sprint scope) | `voice-agent/stt_validation/gradium_provider.py` + `provider_factory.py`; 11 provider tests. **Live Gradium validated end to end** with a real `GRADIUM_API_KEY`: web path (`docs/qa/web-voice-qa-report.md`, 2026-07-10) produced real transcripts and real latency (2296 ms injected sample, 2694 ms human mic session), plus the 2026-07-09 smoke test (auth OK, `audio/pcm` content-type fix). Residual (not sprint-blocking): the per-category WER matrix over the 5 controlled fixtures still uses the fixture provider because those `.wav` are ASCII placeholders — real per-category quality needs real fixture audio (**TASK-STT-007**), where RF-003's matrix is re-pointed. |
 
 ## Optional Stretch Ticket
 

@@ -124,7 +124,7 @@ Scenario: Category quality is reported over multiple samples
 **Related stories:** US-019, US-036
 **Related decision:** DEC-005 (Gradium + Pipecat reference voice path; ADR-0002)
 **Classification:** V1 pilot gate
-**Status:** In progress (implementation + offline tests done; live run pending Gradium credentials)
+**Status:** Done (STT sprint scope) — live Gradium validated end to end via the web path; per-category fixture matrix re-pointed to TASK-STT-007
 **Priority:** High
 **Branch:** `task/TASK-STT-008-gradium-stt-provider`
 
@@ -206,17 +206,27 @@ Scenario: Gradium failure stays observable and sanitized
   PCM buffer returns HTTP 200 with an empty transcript, correctly mapped to
   `failed` / "no speech" (no invented transcript).
 
-### Remaining Before Done
+### Live validation (done)
 
-- Run `--provider gradium` with a real `GRADIUM_API_KEY` and real audio fixtures,
-  then record real quality/latency numbers in the QA docs. This step needs
-  credentials and is not runnable in this environment.
+- **Live Gradium, real `GRADIUM_API_KEY`, end to end via the web path**
+  (`docs/qa/web-voice-qa-report.md`, 2026-07-10): real transcripts and real STT
+  latency (2296 ms injected `say` sample, 2694 ms human mic session, 1125 ms
+  silence). Plus the 2026-07-09 smoke test (auth OK, `audio/pcm` content-type fix).
+- This validates the real engine for the sprint's go/no-go decision.
+
+### Remaining (not sprint-blocking, re-pointed)
+
+- The per-category WER matrix over the 5 controlled fixtures still uses the fixture
+  provider because those `.wav` are ASCII placeholders (19–33 bytes), not real
+  audio — Gradium cannot transcribe them. A live per-category quality run needs
+  real fixture audio, which is **TASK-STT-007**. RF-003's per-category matrix is
+  re-pointed there.
 
 ### Notes
 
-- The implementation slice makes RF-003 actionable but does **not** close it: the
-  quality numbers stay fixture-based until the live run is executed. Keep RF-003
-  ticketed until the real numbers are recorded.
+- RF-003 is **partially addressed**: the real engine is validated live (transcripts
+  + latency); only the controlled per-category matrix remains, gated by real fixture
+  audio (TASK-STT-007).
 - RF-002 (channel ingress span is a scaffold analog) stays gated by US-019/US-036,
   which introduce the real channel ingress path.
 
