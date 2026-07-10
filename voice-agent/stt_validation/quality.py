@@ -112,13 +112,20 @@ class FixtureQualityReport:
 
     @property
     def all_categories_significant(self) -> bool:
-        return bool(self.category_summaries) and all(c.significant for c in self.category_summaries)
+        # Significance only applies to categories with usable (scored) fixtures;
+        # unusable categories (e.g. silence) carry no WER and are excluded.
+        scored = [c for c in self.category_summaries if c.usable_count > 0]
+        return bool(scored) and all(c.significant for c in scored)
 
     def failed_categories(self) -> list[str]:
         return sorted({a.category for a in self.assessments if not a.quality_ok})
 
     def underpowered_categories(self) -> list[str]:
-        return sorted(c.category for c in self.category_summaries if not c.significant)
+        return sorted(
+            c.category
+            for c in self.category_summaries
+            if c.usable_count > 0 and not c.significant
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

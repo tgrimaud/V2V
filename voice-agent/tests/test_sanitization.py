@@ -65,6 +65,18 @@ class RedactionTest(unittest.TestCase):
         result = sanitize_error(RuntimeError("Gradium STT recognized no speech in the audio"))
         self.assertEqual(result.reason, "Gradium STT recognized no speech in the audio")
 
+    def test_known_audio_format_token_is_preserved(self) -> None:
+        # RF-009: technical format tokens must stay readable for diagnostics.
+        result = sanitize_error(ValueError("unsupported format pcm_16000 expected ulaw_8000"))
+        self.assertIn("pcm_16000", result.reason)
+        self.assertIn("ulaw_8000", result.reason)
+
+    def test_known_content_type_token_is_preserved(self) -> None:
+        # RF-009: content-types contain '/' but are not sensitive paths.
+        result = sanitize_error(ValueError("rejected content-type audio/pcm not audio/basic"))
+        self.assertIn("audio/pcm", result.reason)
+        self.assertIn("audio/basic", result.reason)
+
     def test_reason_is_length_capped(self) -> None:
         result = sanitize_error(RuntimeError("word " * 100))
         self.assertLessEqual(len(result.reason), 163)

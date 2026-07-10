@@ -14,6 +14,18 @@ _REASON_CODES: dict[type[Exception], str] = {
 _STRIP_CHARS = ".,;:!?()[]{}<>'\""
 _PATH_SEPARATORS = ("/", "\\")
 
+# Known non-sensitive technical tokens (audio formats, content-types) that would
+# otherwise be caught by the path/id heuristics. Kept readable so error reasons
+# stay diagnostic (e.g. "unsupported format pcm_16000"). Matched case-insensitively.
+_SAFE_TOKENS = frozenset(
+    {
+        "pcm_16000", "pcm_8000", "ulaw_8000", "alaw_8000",
+        "audio/pcm", "audio/basic", "audio/wav", "audio/x-wav",
+        "application/json", "application/octet-stream",
+        "application/x-www-form-urlencoded",
+    }
+)
+
 # Bare filenames with a media/data extension (no path separator required):
 # e.g. `secret-customer.wav`, `recording.mp3`, `export.json`.
 _SENSITIVE_EXTENSIONS = (
@@ -64,6 +76,8 @@ def _redact(message: str) -> str:
 def _redact_token(token: str) -> str:
     core = token.strip(_STRIP_CHARS)
     if not core:
+        return token
+    if core.lower() in _SAFE_TOKENS:
         return token
     if any(sep in core for sep in _PATH_SEPARATORS):
         return "<redacted-path>"
