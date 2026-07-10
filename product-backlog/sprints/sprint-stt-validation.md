@@ -32,7 +32,7 @@ go/no-go decisions.
 | Ticket | Sprint status | Evidence |
 |---|---|---|
 | US-003 | Done | `docs/architecture/channel-identity-boundary.md`; user validation 2026-07-09 |
-| US-019 | In progress | Decomposed into TASK-WEB-001 (STT half, in progress), TASK-WEB-002 (TTS half), TASK-WEB-003 (backend bridge); see `product-backlog/tasks/web-voice-tasks.md` |
+| US-019 | Done (STT scope) | STT half delivered & merged: `TASK-WEB-001` (live web mic → Gradium → transcript), QA GO in `docs/qa/web-voice-qa-report.md`. Voice response `TASK-WEB-002` (TTS) and `TASK-WEB-003` (backend bridge) are **deferred out of this STT sprint** per user decision; US-019 as a full Voice2Voice story stays In progress in the backlog. |
 | US-036 | Not started | Pending STT instrumentation path |
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
@@ -55,6 +55,7 @@ is required for this first STT validation.
 |---|---|
 | US-018 | Phone Voice2Voice adds telephony complexity; validate web voice STT first |
 | US-020 | Quick spoken acknowledgement depends more on backend/TTS orchestration than STT |
+| TASK-WEB-002 / TASK-WEB-003 | Voice response (TTS) and backend/LLM bridge for US-019 are Voice2Voice, not STT validation; deferred out of this sprint per user decision (2026-07-10) |
 | US-027 | Full Genesys voice routing is optional and should not block first STT validation |
 | Billing comparison stories | STT can be validated with controlled utterances before invoice reasoning is implemented |
 | Genesys handoff stories | Handoff is downstream from transcript capture and not needed to prove STT |
