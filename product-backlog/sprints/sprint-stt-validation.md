@@ -10,9 +10,10 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** In review — all STT-scope tickets delivered and merged into `feat/restart-from-scratch`; live Gradium validated end to end (real transcripts + latency). The 5 controlled fixtures are now **real PCM16 16 kHz audio** (TASK-STT-007 merged) and a first **live per-category Gradium run** was executed (`docs/qa/stt-transcription-quality.md`, 2026-07-10). Awaiting user validation to close. Only residual (not sprint-blocking): the per-category WER numbers are not yet a usable pass/fail gate because the scorer does not normalize punctuation/case/accents (RF-008 → TASK-STT-011, out of sprint).
+**Status:** ✅ **Done — closed by user on 2026-07-10.** All STT-scope tickets delivered, merged and pushed on `feat/restart-from-scratch`; live Gradium validated end to end (real transcripts + latency). The 5 controlled fixtures are real PCM16 16 kHz audio (TASK-STT-007) and a first live per-category Gradium run was executed (`docs/qa/stt-transcription-quality.md`). Non-blocking follow-ups (WER normalization, fixture expansion, redaction, UNAVAILABLE outcome, end-of-turn instrumentation) move to **Sprint 2 — STT hardening**; TTS/voice-out is **Sprint 3**.
 **Created:** 2026-07-09  
-**Final validator:** User  
+**Closed:** 2026-07-10  
+**Final validator:** User (validated)  
 **Merge rule:** no branch is merged unless the user explicitly asks.
 
 ## Included Tickets

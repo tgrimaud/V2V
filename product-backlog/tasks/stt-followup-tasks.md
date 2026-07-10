@@ -1,15 +1,18 @@
 # STT Follow-up Technical Tasks
 
 Follow-up tickets created from non-blocking adversarial-review findings recorded
-in `product-backlog/review-findings.md`. They are not part of the core STT
-validation sprint scope and should be scheduled deliberately.
+in `product-backlog/review-findings.md`. They were out of the Sprint 1 (STT
+validation) scope and have now been scheduled: **TASK-STT-005/006/007/009/011 are
+in Sprint 2 (STT hardening)** — see `sprints/sprint-2-stt-hardening.md`.
+**TASK-STT-010 (streaming STT) is deferred to Sprint 4** (latency optimization),
+where it is built alongside streaming TTS (TASK-WEB-004).
 
 ## TASK-STT-005 - Redact Bare Sensitive Identifiers In Failure Sanitization
 
 **Parent:** EPIC-010
 **Related finding:** RF-001 (TASK-STT-003)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Planned — Sprint 2 (STT hardening)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-005-redact-bare-identifiers`
 
@@ -48,7 +51,7 @@ Scenario: A bare sensitive identifier is redacted
 **Parent:** EPIC-010
 **Related finding:** RF-004 (TASK-STT-002)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Planned — Sprint 2 (STT hardening)
 **Priority:** Low
 **Branch:** `task/TASK-STT-006-unavailable-outcome`
 
@@ -85,7 +88,7 @@ Scenario: Silence is reported as unavailable, not failed
 **Parent:** EPIC-010
 **Related finding:** RF-005 (TASK-STT-002), RF-003 (per-category matrix now audio-unblocked)
 **Classification:** V1 pilot gate
-**Status:** In progress (real single-sample audio done; multiple samples + real recordings remaining)
+**Status:** Planned — Sprint 2 (STT hardening); In progress (real single-sample audio done; multiple samples + real recordings remaining)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-007-expand-fixture-samples`
 
@@ -258,7 +261,7 @@ Scenario: Gradium failure stays observable and sanitized
 **Related story:** US-036 (the `end_of_turn` slice it reports on)
 **Related decision:** DEC-010 (per-step latency traces before any SLO claim)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Planned — Sprint 2 (STT hardening)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-009-end-of-turn-detection`
 
@@ -320,7 +323,7 @@ Scenario: End-of-turn is detected and measured as its own slice
 **Depends on:** TASK-STT-008 (Gradium provider)
 **Pairs with:** TASK-WEB-004 (streaming TTS voice-out) — the two form the low-latency voice loop
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Planned — Sprint 4 (latency optimization, paired with streaming TTS TASK-WEB-004)
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-STT-010-streaming-stt`
 
@@ -384,7 +387,7 @@ Scenario: Partial transcripts stream during speech
 **Related finding:** RF-008 (TASK-STT-002 / TASK-STT-007)
 **Related story:** US-036 (quality gate feeding pilot readiness)
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Planned — Sprint 2 (STT hardening); do first
 **Priority:** Medium
 **Branch:** `task/TASK-STT-011-normalize-wer`
 
