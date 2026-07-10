@@ -122,11 +122,25 @@ Scenario: Web voice STT failure stays safe and observable
   (`error_reason` shows `<redacted-path>`, no path leak) with a `web.voice.ingress`
   span logged.
 
+### QA Evidence (Chrome DevTools MCP, 2026-07-10)
+
+- `docs/qa/web-voice-qa-report.md` (+ `docs/qa/assets/web-voice-*.png`). Live
+  Gradium engine, real browser at `http://localhost:8090/`.
+- **Success end to end:** a pre-recorded 16 kHz PCM utterance driven through the
+  page's real `sendAudio()` → `POST /api/voice/stt` (200, `audio/pcm`, 107 956 B) →
+  Gradium → transcript *"Bonjour, pourquoi ma facture augmentée ce mois-ci?"*
+  rendered; time-to-transcript **2307 ms** (STT slice 2296 ms).
+- **Safe failure:** silence → *"no speech"*, error styling, no invented transcript.
+- **Observability:** real `web.voice.ingress` span (`audio_bytes: 107956`,
+  `channel: web_voice`) + correlation id; server log has zero `gsk_` (no key leak).
+- **Console:** clean after fixing a cosmetic `favicon.ico` 404 (server now 204,
+  locked by a test). Suite: 13 web-voice unittests + 2 Behave scenarios green.
+
 ### Remaining Before Done
 
-- Live browser QA with `--provider gradium` and a real Gradium key: record a real
-  spoken question, confirm the transcript renders, and measure time-to-transcript
-  via Chrome DevTools MCP (needs a mic + credentials, not runnable headless here).
+- **Human mic session:** validate the microphone capture + 48 kHz→16 kHz
+  downsampling JavaScript in `app.js` (the QA above injected a ready 16 kHz PCM,
+  which bypasses the mic + downsampler; hardware is not drivable headlessly).
 - User validation of the branch before any merge.
 
 ---

@@ -51,6 +51,10 @@ def build_handler(ingress: WebVoiceIngress) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
+            if path == "/favicon.ico":
+                self.send_response(204)
+                self.end_headers()
+                return
             filename = "index.html" if path in ("/", "") else path.lstrip("/")
             self._serve_static(filename)
 

@@ -175,6 +175,12 @@ class WebVoiceServerTest(unittest.TestCase):
 
         self.assertIn("Web Voice Chat", body)
 
+    def test_favicon_returns_no_content(self) -> None:
+        _, port = self._serve(WebVoiceIngress(_StubProvider()))
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/favicon.ico", timeout=5) as resp:
+            self.assertEqual(resp.status, 204)
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())
