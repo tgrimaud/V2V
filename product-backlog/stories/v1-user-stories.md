@@ -866,7 +866,7 @@ Scenario: Analysis limit is disclosed
 
 **Parent:** EPIC-010
 **Classification:** V1 pilot gate
-**Status:** Draft
+**Status:** Done (STT sprint scope) — see `docs/observability/voice-journey-timing.md`
 **Priority:** High
 
 ### User Story

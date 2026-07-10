@@ -2,6 +2,11 @@
 
 from .gradium_provider import GradiumResponse, GradiumSttError, GradiumSttProvider
 from .models import SttOutcome, TranscriptResult
+from .pipeline_timing import (
+    PIPELINE_SLICES,
+    PipelineTimingReport,
+    SliceTiming,
+)
 from .provider_factory import PROVIDER_NAMES, build_provider
 from .providers import FixtureSttProvider, SttProvider
 from .quality import (
@@ -26,6 +31,9 @@ __all__ = [
     "GradiumSttError",
     "GradiumSttProvider",
     "LatencyReport",
+    "PIPELINE_SLICES",
+    "PipelineTimingReport",
+    "SliceTiming",
     "SttOutcome",
     "SttProvider",
     "SttValidationRunner",

@@ -10,7 +10,7 @@ go/no-go decisions.
 
 ## Status
 
-**Status:** In progress
+**Status:** In review — all sprint tickets delivered (US-036 pending merge)
 **Created:** 2026-07-09  
 **Final validator:** User  
 **Merge rule:** no branch is merged unless the user explicitly asks.
@@ -33,7 +33,7 @@ go/no-go decisions.
 |---|---|---|
 | US-003 | Done | `docs/architecture/channel-identity-boundary.md`; user validation 2026-07-09 |
 | US-019 | Done (STT scope) | STT half delivered & merged: `TASK-WEB-001` (live web mic → Gradium → transcript), QA GO in `docs/qa/web-voice-qa-report.md`. Voice response `TASK-WEB-002` (TTS) and `TASK-WEB-003` (backend bridge) are **deferred out of this STT sprint** per user decision; US-019 as a full Voice2Voice story stays In progress in the backlog. |
-| US-036 | Not started | Pending STT instrumentation path |
+| US-036 | Done | `docs/observability/voice-journey-timing.md`; `PipelineTimingReport` reports all six canonical slices with p50/p95/p99 for the instrumented slices (`channel_ingress`, `stt`) and explicit `"measured": false` gaps for the deferred slices (`end_of_turn`, `backend_first_token`, `tts_first_audio`, `channel_egress`). CLI `pipeline_timing_cli`; 6 unit tests + Behave `features/pipeline_timing.feature`. |
 | TASK-STT-001 | Done | `voice-agent/stt_validation/`; developer tests; user validation 2026-07-09 |
 | TASK-STT-002 | Done | `docs/qa/stt-transcription-quality.md`; quality harness + fixture manifest; 17 tests |
 | TASK-STT-003 | Done | `docs/observability/stt-validation-telemetry.md`; spans + LatencyReport + sanitization; 7 tests |
