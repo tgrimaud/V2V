@@ -12,12 +12,13 @@ reviews and QA run.
 
 ## Status
 
-**Status:** In progress (started 2026-07-10)
+**Status:** In progress (started 2026-07-10) — 3/5 tickets done (TASK-STT-011/007/005), 2 planned (TASK-STT-006/009)
 **Created:** 2026-07-10
 **Predecessor:** [`sprint-stt-validation.md`](sprint-stt-validation.md) (Sprint 1 — Done, 2026-07-10)
 **Working branch:** `feat/sprint-2-stt-hardening` (from `feat/restart-from-scratch`)
 **Final validator:** User
 **Merge rule:** no branch is merged unless the user explicitly asks.
+**Adversarial review:** run after the first three tickets; findings RF-009/010/011 raised and resolved on `task/sprint-2-review-remediation` (merged).
 
 ## Roadmap Context
 
@@ -76,9 +77,14 @@ branching strategy):
 |---|---|---|
 | TASK-STT-011 | `task/TASK-STT-011-normalize-wer` | ✅ merged into sprint branch |
 | TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` | ✅ merged into sprint branch |
-| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ done (awaiting merge into sprint branch) |
+| TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ merged into sprint branch |
+| Review remediation | `task/sprint-2-review-remediation` | ✅ merged (RF-009/010/011) |
 | TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | pending |
 | TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | pending |
+
+> Docs/knowledge chores (`chore/self-contained-guidance`,
+> `chore/generalize-knowledge-session`) were also cut from and merged back into the
+> sprint branch during the sprint.
 
 ## Sprint Acceptance Criteria
 
