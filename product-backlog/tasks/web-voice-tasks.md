@@ -218,7 +218,7 @@ STT/TTS separation is a hard contract: `tts_synthesis/` must not import
   - AC: fixture returns non-empty PCM for a known text; empty/whitespace text raises `EmptyTextError`.
   - Test: `tests/test_tts_providers.py` (no network).
 
-- [ ] **ST-3 — Gradium TTS provider + factory.**
+- [x] **ST-3 — Gradium TTS provider + factory.** Done 2026-07-13 — WebSocket provider (injectable transport, key only in `x-api-key` header, safe error mapping incl. handshake-level rejection) + `build_provider` factory normalizing `voice_id=default` → Elise FR (`b35yykvVppLXyw_l`). 16 tests green; adversarial review 95/100.
   - Files: `voice-agent/tts_synthesis/gradium_tts_provider.py`, `provider_factory.py`.
   - Content: `GradiumTtsProvider(api_key, *, voice_id, output_format, url, timeout_s, transport=None)` with an injectable WS transport (default = thin `websockets` async wrapper called synchronously); `build_tts_provider(name)` reads `GRADIUM_API_KEY` + `GRADIUM_VOICE_ID` (+ output format).
   - AC: with a fake transport, returns concatenated PCM bytes; HTTP/WS/credit errors map to a sanitized failure; API key never appears in any exception message.

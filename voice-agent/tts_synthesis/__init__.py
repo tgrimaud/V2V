@@ -5,7 +5,14 @@ code is stateless cross-cutting utilities (telemetry, sanitization). Enforced by
 tests/test_architecture_separation.py.
 """
 
+from .gradium_tts_provider import (
+    DEFAULT_VOICE_ID,
+    GRADIUM_TTS_URL,
+    GradiumTtsError,
+    GradiumTtsProvider,
+)
 from .models import SynthesisResult, TtsOutcome
+from .provider_factory import PROVIDER_NAMES, build_provider
 from .providers import (
     DEFAULT_AUDIO_FORMAT,
     EmptyTextError,
@@ -15,9 +22,15 @@ from .providers import (
 
 __all__ = [
     "DEFAULT_AUDIO_FORMAT",
+    "DEFAULT_VOICE_ID",
+    "GRADIUM_TTS_URL",
+    "GradiumTtsError",
+    "GradiumTtsProvider",
+    "PROVIDER_NAMES",
     "EmptyTextError",
     "FixtureTtsProvider",
     "SynthesisResult",
     "TtsOutcome",
     "TtsProvider",
+    "build_provider",
 ]
