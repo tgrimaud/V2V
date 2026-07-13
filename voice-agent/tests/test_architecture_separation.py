@@ -17,6 +17,7 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
 STT_PACKAGE = "stt_validation"
 TTS_PACKAGE = "tts_synthesis"
+SHARED_PACKAGE = "voice_common"
 
 
 def _imported_modules(source: str) -> set[str]:
@@ -62,6 +63,15 @@ class ArchitectureSeparationTest(unittest.TestCase):
         offenders = _forbidden_imports(STT_PACKAGE, TTS_PACKAGE)
         # THEN nothing reaches into the voice-out package
         self.assertEqual(offenders, {}, f"stt_validation must not import tts_synthesis: {offenders}")
+
+    def test_shared_package_stays_neutral(self) -> None:
+        # GIVEN the neutral shared package
+        # WHEN its imports are inspected against both halves
+        stt_offenders = _forbidden_imports(SHARED_PACKAGE, STT_PACKAGE)
+        tts_offenders = _forbidden_imports(SHARED_PACKAGE, TTS_PACKAGE)
+        # THEN voice_common depends on neither half (or the boundary is circular)
+        self.assertEqual(stt_offenders, {}, f"voice_common must not import stt_validation: {stt_offenders}")
+        self.assertEqual(tts_offenders, {}, f"voice_common must not import tts_synthesis: {tts_offenders}")
 
     def test_detector_flags_a_synthetic_cross_import(self) -> None:
         # GIVEN a source file that crosses the boundary (guards against a broken test)

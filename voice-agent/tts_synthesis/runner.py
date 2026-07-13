@@ -59,13 +59,7 @@ class TtsSynthesisRunner:
         duration_ms: float,
         correlation_id: str,
     ) -> SynthesisResult:
-        self._telemetry.span(
-            TTS_FIRST_AUDIO_SPAN,
-            tts_request_ms,
-            correlation_id=correlation_id,
-            provider=self._provider.name,
-            outcome=TtsOutcome.SUCCESS.value,
-        )
+        self._emit_first_audio_span(TtsOutcome.SUCCESS, tts_request_ms, correlation_id)
         self._telemetry.record(
             "tts.audio.final",
             correlation_id=correlation_id,
@@ -73,17 +67,8 @@ class TtsSynthesisRunner:
             audio_bytes=len(audio),
             tts_request_ms=round(tts_request_ms, 3),
         )
-        result = SynthesisResult(
-            audio=audio,
-            provider=self._provider.name,
-            outcome=TtsOutcome.SUCCESS,
-            duration_ms=duration_ms,
-            tts_request_ms=tts_request_ms,
-            correlation_id=correlation_id,
-            audio_format=self._audio_format,
-        )
-        self._record_outcome(result)
-        return result
+        result = self._build_result(TtsOutcome.SUCCESS, audio, tts_request_ms, duration_ms, correlation_id)
+        return self._finalize(result)
 
     def _failure(
         self,
@@ -93,34 +78,13 @@ class TtsSynthesisRunner:
         correlation_id: str,
     ) -> SynthesisResult:
         sanitized = sanitize_error(exc, domain="tts")
-        self._telemetry.span(
-            TTS_FIRST_AUDIO_SPAN,
-            tts_request_ms,
-            correlation_id=correlation_id,
-            provider=self._provider.name,
-            outcome=TtsOutcome.FAILED.value,
+        self._emit_first_audio_span(TtsOutcome.FAILED, tts_request_ms, correlation_id)
+        self._record_error_event("tts.failure", correlation_id, tts_request_ms, sanitized.reason_code, sanitized.reason)
+        result = self._build_result(
+            TtsOutcome.FAILED, b"", tts_request_ms, duration_ms, correlation_id,
+            error_code=sanitized.reason_code, error_reason=sanitized.reason,
         )
-        self._telemetry.record(
-            "tts.failure",
-            correlation_id=correlation_id,
-            provider=self._provider.name,
-            error_code=sanitized.reason_code,
-            error_reason=sanitized.reason,
-            tts_request_ms=round(tts_request_ms, 3),
-        )
-        result = SynthesisResult(
-            audio=b"",
-            provider=self._provider.name,
-            outcome=TtsOutcome.FAILED,
-            duration_ms=duration_ms,
-            tts_request_ms=tts_request_ms,
-            correlation_id=correlation_id,
-            audio_format=self._audio_format,
-            error_code=sanitized.reason_code,
-            error_reason=sanitized.reason,
-        )
-        self._record_outcome(result)
-        return result
+        return self._finalize(result)
 
     def _unavailable(
         self,
@@ -130,32 +94,63 @@ class TtsSynthesisRunner:
         correlation_id: str,
     ) -> SynthesisResult:
         reason = sanitize_error(exc, domain="tts").reason
+        self._emit_first_audio_span(TtsOutcome.UNAVAILABLE, tts_request_ms, correlation_id)
+        self._record_error_event("tts.unavailable", correlation_id, tts_request_ms, EMPTY_TEXT_CODE, reason)
+        result = self._build_result(
+            TtsOutcome.UNAVAILABLE, b"", tts_request_ms, duration_ms, correlation_id,
+            error_code=EMPTY_TEXT_CODE, error_reason=reason,
+        )
+        return self._finalize(result)
+
+    def _emit_first_audio_span(self, outcome: TtsOutcome, tts_request_ms: float, correlation_id: str) -> None:
         self._telemetry.span(
             TTS_FIRST_AUDIO_SPAN,
             tts_request_ms,
             correlation_id=correlation_id,
             provider=self._provider.name,
-            outcome=TtsOutcome.UNAVAILABLE.value,
+            outcome=outcome.value,
         )
+
+    def _record_error_event(
+        self,
+        event: str,
+        correlation_id: str,
+        tts_request_ms: float,
+        error_code: str,
+        error_reason: str,
+    ) -> None:
         self._telemetry.record(
-            "tts.unavailable",
+            event,
             correlation_id=correlation_id,
             provider=self._provider.name,
-            error_code=EMPTY_TEXT_CODE,
-            error_reason=reason,
+            error_code=error_code,
+            error_reason=error_reason,
             tts_request_ms=round(tts_request_ms, 3),
         )
-        result = SynthesisResult(
-            audio=b"",
+
+    def _build_result(
+        self,
+        outcome: TtsOutcome,
+        audio: bytes,
+        tts_request_ms: float,
+        duration_ms: float,
+        correlation_id: str,
+        error_code: str | None = None,
+        error_reason: str | None = None,
+    ) -> SynthesisResult:
+        return SynthesisResult(
+            audio=audio,
             provider=self._provider.name,
-            outcome=TtsOutcome.UNAVAILABLE,
+            outcome=outcome,
             duration_ms=duration_ms,
             tts_request_ms=tts_request_ms,
             correlation_id=correlation_id,
             audio_format=self._audio_format,
-            error_code=EMPTY_TEXT_CODE,
-            error_reason=reason,
+            error_code=error_code,
+            error_reason=error_reason,
         )
+
+    def _finalize(self, result: SynthesisResult) -> SynthesisResult:
         self._record_outcome(result)
         return result
 

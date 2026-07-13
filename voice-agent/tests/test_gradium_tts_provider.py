@@ -1,5 +1,7 @@
 import base64
+import json
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -170,6 +172,62 @@ class GradiumSynthesizeTest(unittest.TestCase):
         provider = GradiumTtsProvider(API_KEY, output_format="pcm_16000")
         # THEN it advertises that format for downstream WAV wrapping
         self.assertEqual(provider.audio_format, "pcm_16000")
+
+
+class _FakeWebSocket:
+    """Minimal async context manager standing in for a live websockets connection."""
+
+    def __init__(self, replies: list[str]) -> None:
+        self._replies = list(replies)
+        self.sent: list[str] = []
+
+    async def __aenter__(self) -> "_FakeWebSocket":
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+    async def send(self, message: str) -> None:
+        self.sent.append(message)
+
+    async def recv(self) -> str:
+        if not self._replies:
+            raise AssertionError("recv called with no remaining replies")
+        return self._replies.pop(0)
+
+
+def _fake_websockets_module(replies: list[str]) -> types.ModuleType:
+    module = types.ModuleType("websockets")
+
+    def connect(url, additional_headers=None):
+        module.last_url = url
+        module.last_headers = additional_headers
+        return _FakeWebSocket(replies)
+
+    module.connect = connect
+    exceptions = types.ModuleType("websockets.exceptions")
+    exceptions.WebSocketException = type("WebSocketException", (Exception,), {})
+    module.exceptions = exceptions
+    return module
+
+
+class GradiumLiveTransportTest(unittest.TestCase):
+    def test_default_transport_runs_the_real_asyncio_websocket_path(self) -> None:
+        # GIVEN a fake websockets module (no injected transport) returning audio then end_of_stream
+        replies = [
+            json.dumps({"type": "audio", "audio": _b64(b"\x01\x02")}),
+            json.dumps({"type": "end_of_stream"}),
+        ]
+        fake = _fake_websockets_module(replies)
+
+        # WHEN synthesizing through the default _websocket_transport (asyncio.run path)
+        with mock.patch.dict(sys.modules, {"websockets": fake, "websockets.exceptions": fake.exceptions}):
+            provider = GradiumTtsProvider(API_KEY, voice_id="voice-xyz")
+            pcm = provider.synthesize("Bonjour")
+
+        # THEN the live path resolves end to end and the key travels only in the header
+        self.assertEqual(pcm, b"\x01\x02")
+        self.assertEqual(fake.last_headers, {"x-api-key": API_KEY})
 
 
 class TtsProviderFactoryTest(unittest.TestCase):

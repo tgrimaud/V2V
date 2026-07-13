@@ -11,7 +11,9 @@ connect with `x-api-key` -> send `setup` -> expect `ready` -> send `text` +
 `end_of_stream` -> collect `audio` (base64 PCM16) chunks until `end_of_stream`.
 """
 
+import asyncio
 import base64
+import json
 from typing import Any, Callable
 
 from .providers import DEFAULT_AUDIO_FORMAT, EmptyTextError
@@ -120,13 +122,7 @@ def _websocket_transport(
     messages: list[dict[str, Any]],
     timeout: float,
 ) -> list[dict[str, Any]]:
-    """Live path: run the WebSocket handshake and collect server messages.
-
-    `websockets` is imported lazily so the module (and every unit test using an
-    injected transport) never requires the dependency on the offline path.
-    """
-    import asyncio
-
+    """Live path: run the WebSocket handshake and collect server messages."""
     return asyncio.run(_run_ws(url, headers, messages, timeout))
 
 
@@ -136,21 +132,15 @@ async def _run_ws(
     messages: list[dict[str, Any]],
     timeout: float,
 ) -> list[dict[str, Any]]:
-    import json
-
+    # `websockets` is imported lazily so the module (and every unit test using an
+    # injected transport) never requires the dependency on the offline path.
     import websockets
 
-    received: list[dict[str, Any]] = []
     try:
         async with websockets.connect(url, additional_headers=headers) as ws:
             for message in messages:
                 await ws.send(json.dumps(message))
-            while True:
-                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-                data = json.loads(raw)
-                received.append(data)
-                if data.get("type") in ("end_of_stream", "error"):
-                    break
+            return await _recv_until_end(ws, timeout)
     except asyncio.TimeoutError as exc:
         raise TimeoutError("Gradium TTS request timed out") from exc
     except websockets.exceptions.WebSocketException as exc:
@@ -160,4 +150,14 @@ async def _run_ws(
         raise GradiumTtsError("Gradium TTS connection was rejected") from exc
     except OSError as exc:  # connection refused / DNS / TLS
         raise GradiumTtsError("Gradium TTS service is unreachable") from exc
+
+
+async def _recv_until_end(ws: Any, timeout: float) -> list[dict[str, Any]]:
+    received: list[dict[str, Any]] = []
+    while True:
+        raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+        data = json.loads(raw)
+        received.append(data)
+        if data.get("type") in ("end_of_stream", "error"):
+            break
     return received
