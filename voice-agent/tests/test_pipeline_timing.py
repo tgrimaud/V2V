@@ -55,11 +55,34 @@ class PipelineTimingReportTest(unittest.TestCase):
         # THEN measured slices carry a distribution
         self.assertTrue(by_slice[CHANNEL_INGRESS].measured)
         self.assertTrue(by_slice[STT].measured)
-        # AND deferred slices are explicit gaps, not silent omissions
+        # AND uninstrumented slices are explicit gaps, not silent omissions
         for name in (BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
             self.assertFalse(by_slice[name].measured)
             self.assertIsNone(by_slice[name].report)
             self.assertTrue(by_slice[name].note)
+
+    def test_tts_first_audio_slice_is_measured_when_its_span_is_present(self) -> None:
+        # GIVEN a reviewed sample carrying the TTS first-audio span (TASK-WEB-002)
+        spans = [_span("voice.tts.first_audio", float(value)) for value in range(1, 21)]
+
+        # WHEN
+        report = PipelineTimingReport.from_spans(spans)
+        tts = next(s for s in report.slices if s.slice == TTS_FIRST_AUDIO)
+
+        # THEN the slice is measured with percentiles, not flagged as a gap
+        self.assertTrue(tts.measured)
+        self.assertEqual(tts.report.count, 20)
+        self.assertEqual(tts.report.p50_ms, 10.0)
+
+    def test_channel_egress_slice_is_measured_when_its_span_is_present(self) -> None:
+        # GIVEN a sample carrying the web voice egress span (TASK-WEB-002)
+        report = PipelineTimingReport.from_spans([_span("web.voice.egress", 7.0)])
+        egress = next(s for s in report.slices if s.slice == CHANNEL_EGRESS)
+
+        # THEN the egress slice is measured
+        self.assertTrue(egress.measured)
+        self.assertEqual(egress.report.count, 1)
+        self.assertEqual(egress.report.p50_ms, 7.0)
 
     def test_end_of_turn_slice_is_measured_when_its_span_is_present(self) -> None:
         # GIVEN a reviewed sample carrying the end-of-turn span (TASK-STT-009)
@@ -124,9 +147,12 @@ class PipelineTimingReportTest(unittest.TestCase):
         tts = next(s for s in payload["slices"] if s["slice"] == TTS_FIRST_AUDIO)
         self.assertTrue(stt["measured"])
         self.assertEqual(stt["latency"]["count"], 1)
+        # TTS is now instrumented (TASK-WEB-002): a gap in this sample means the
+        # span was absent, and the note must no longer point to a pending ticket.
         self.assertFalse(tts["measured"])
         self.assertIsNone(tts["latency"])
-        self.assertIn("TASK-WEB-002", tts["note"])
+        self.assertNotIn("TASK-WEB-002", tts["note"])
+        self.assertIn("voice.tts.first_audio", tts["note"])
 
 
 if __name__ == "__main__":

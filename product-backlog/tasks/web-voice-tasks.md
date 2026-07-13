@@ -203,8 +203,10 @@ Scenario: The bot response is spoken on the web page
 
 Each subtask is one commit (`implement -> test -> commit`), independently testable.
 STT/TTS separation is a hard contract: `tts_synthesis/` must not import
-`stt_validation/` and vice versa (shared only: `telemetry`, `sanitization`,
-`ChannelEnvelope`, read-only `pipeline_timing`).
+`stt_validation/` and vice versa. Shared cross-cutting utilities now live in the
+neutral `voice_common/` package (`telemetry`, `sanitization`) which both halves
+import; `ChannelEnvelope` and the read-only `pipeline_timing` slice registry
+remain the only other shared surfaces.
 
 - [x] **ST-1 — Gradium TTS spike (lock the contract).** Done 2026-07-13 — contract verified live; see `docs/qa/gradium-tts-contract.md`. Finding: `voice_id=default` invalid, real catalog id required.
   - Files: `voice-agent/scripts/gradium_tts_spike.py` (disposable), findings note in `docs/qa/` or `docs/observability/`.
@@ -224,9 +226,9 @@ STT/TTS separation is a hard contract: `tts_synthesis/` must not import
   - AC: with a fake transport, returns concatenated PCM bytes; HTTP/WS/credit errors map to a sanitized failure; API key never appears in any exception message.
   - Test: `tests/test_gradium_tts_provider.py` (fake transport, success + error + key-never-leaks).
 
-- [ ] **ST-4 — Synthesis runner + telemetry + pipeline slices.**
-  - Files: `voice-agent/tts_synthesis/runner.py`; edit `voice-agent/stt_validation/pipeline_timing.py`.
-  - Content: `TtsSynthesisRunner(provider, telemetry)` mirroring `SttValidationRunner` — events `tts.synthesis.started/…/completed`, metric `tts.request.duration_ms`, span `voice.tts.first_audio`; outcome mapping (`EmptyTextError`->UNAVAILABLE, else FAILED); reuse `stt_validation/sanitization.py`. Register `_SLICE_SPAN_NAMES[TTS_FIRST_AUDIO]=("voice.tts.first_audio",)` and `[CHANNEL_EGRESS]=("web.voice.egress",)`; drop their `_UNMEASURED_NOTES`.
+- [x] **ST-4 — Synthesis runner + telemetry + pipeline slices.** Done 2026-07-13 — extracted shared `telemetry`/`sanitization` into neutral `voice_common/` (STT keeps its public API via re-export shims + its fixture reason codes); `TtsSynthesisRunner` mirrors the STT runner (3 outcomes, `voice.tts.first_audio` span, `tts.request.duration_ms` metric, `sanitize_error(domain="tts")`). Registered TTS_FIRST_AUDIO/CHANNEL_EGRESS slice spans. 118 tests green; adversarial review 94/100.
+  - Files: `voice-agent/voice_common/{telemetry,sanitization}.py` (new), `voice-agent/tts_synthesis/runner.py`; edited `voice-agent/stt_validation/{telemetry,sanitization,pipeline_timing}.py`.
+  - Content: `TtsSynthesisRunner(provider, telemetry)` mirroring `SttValidationRunner` — events `tts.synthesis.started/…/completed`, metric `tts.request.duration_ms`, span `voice.tts.first_audio`; outcome mapping (`EmptyTextError`->UNAVAILABLE, else FAILED); reuse `voice_common/sanitization.py`. Registered `_SLICE_SPAN_NAMES[TTS_FIRST_AUDIO]=("voice.tts.first_audio",)` and `[CHANNEL_EGRESS]=("web.voice.egress",)`; notes updated (no longer deferred).
   - AC: three outcomes covered; `tts_first_audio` (and `channel_egress` once egress emits) reported measured.
   - Test: `tests/test_tts_runner.py`, extend `tests/test_pipeline_timing.py`.
 
@@ -244,7 +246,7 @@ STT/TTS separation is a hard contract: `tts_synthesis/` must not import
 
 - [ ] **ST-7 — Architecture separation test.**
   - Files: `voice-agent/tests/test_architecture_separation.py`.
-  - AC: fails if any `tts_synthesis/` module imports `stt_validation.*` (beyond allowed `telemetry`/`sanitization`) or any `stt_validation/` module imports `tts_synthesis.*`.
+  - AC: fails if any `tts_synthesis/` module imports `stt_validation.*` or any `stt_validation/` module imports `tts_synthesis.*` (shared code lives in the neutral `voice_common/`, which both may import).
 
 - [ ] **ST-8 — QA harness + fixtures + behave + docs.**
   - Files: `voice-agent/fixtures/tts/` (reference texts + committed clips), `voice-agent/features/tts_synthesis.feature`, extend `voice-agent/features/pipeline_timing.feature`; optional live round-trip QA (`synthesize -> existing Gradium STT -> WER vs input text`); docs `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`.
