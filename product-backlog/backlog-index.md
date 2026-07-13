@@ -94,7 +94,7 @@ against the new empty-codebase plan.
 |-----|-------|--------|------|
 | SPRINT-STT | STT Validation | ✅ Done (2026-07-10) | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 | SPRINT-2-STT-HARDENING | STT Hardening | ✅ Done (2026-07-13) | Make the WER quality gate usable (normalization) and complete STT observability (fixtures, sanitization, UNAVAILABLE outcome, end-of-turn) — `sprints/sprint-2-stt-hardening.md` |
-| SPRINT-3-TTS | TTS / Voice-out (batch) | Planned | Speak the bot response and close the first end-to-end voice loop (no streaming yet) |
+| SPRINT-3-TTS | TTS / Voice-out (batch) | In progress (2026-07-13) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
 | SPRINT-4-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) for the low-latency voice loop |
 
 ## Restart Delivery Notes

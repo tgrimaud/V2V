@@ -153,9 +153,9 @@ Scenario: Web voice STT failure stays safe and observable
 **Related story:** US-019 (TTS half), US-036 (feeds the `tts_first_audio` and `channel_egress` slices)
 **Related decision:** DEC-005 / DEC-007
 **Classification:** V1 core
-**Status:** Draft
+**Status:** In progress (Sprint 3, started 2026-07-13)
 **Priority:** High
-**Branch:** `us/US-019-web-voice-chat`
+**Branch:** `task/TASK-WEB-002-tts-voice-out` (from `feat/sprint-3-tts-voice-out`)
 
 ### Objective
 
@@ -198,6 +198,57 @@ Scenario: The bot response is spoken on the web page
 - Chrome DevTools MCP notes (playback, failure render) + time-to-first-audio.
 - Behave scenario(s) for the TTS outcome.
 - OpenTelemetry evidence for the TTS slice.
+
+### Subtasks (Sprint 3 execution)
+
+Each subtask is one commit (`implement -> test -> commit`), independently testable.
+STT/TTS separation is a hard contract: `tts_synthesis/` must not import
+`stt_validation/` and vice versa (shared only: `telemetry`, `sanitization`,
+`ChannelEnvelope`, read-only `pipeline_timing`).
+
+- [ ] **ST-1 — Gradium TTS spike (lock the contract).**
+  - Files: `voice-agent/scripts/gradium_tts_spike.py` (disposable), findings note in `docs/qa/` or `docs/observability/`.
+  - Do: load `.env`, open `wss://api.gradium.ai/api/speech/tts`, send `setup` (`voice_id` from `GRADIUM_VOICE_ID`, `output_format: pcm_16000`), send `text` + `end_of_stream`, collect `audio` chunks, save a `.wav` to listen.
+  - AC: documented message shapes, base64 chunk format, `ready`/`end_of_stream` handshake, first-chunk latency, and whether `GRADIUM_VOICE_ID=default` is valid.
+  - Evidence: live run note (real key). Add `websockets` to `voice-agent/requirements.txt`.
+
+- [ ] **ST-2 — TTS models + provider protocol + fixture provider.**
+  - Files: `voice-agent/tts_synthesis/__init__.py`, `models.py`, `providers.py`.
+  - Content: `TtsOutcome{SUCCESS,FAILED,UNAVAILABLE}`, `SynthesisResult(audio, provider, outcome, duration_ms, tts_request_ms, correlation_id, audio_format, error_code, error_reason)`; `TtsProvider` Protocol (`name`, `synthesize(text)->bytes`); `EmptyTextError` (-> UNAVAILABLE); `FixtureTtsProvider` returning a committed reference clip keyed by text.
+  - AC: fixture returns non-empty PCM for a known text; empty/whitespace text raises `EmptyTextError`.
+  - Test: `tests/test_tts_providers.py` (no network).
+
+- [ ] **ST-3 — Gradium TTS provider + factory.**
+  - Files: `voice-agent/tts_synthesis/gradium_tts_provider.py`, `provider_factory.py`.
+  - Content: `GradiumTtsProvider(api_key, *, voice_id, output_format, url, timeout_s, transport=None)` with an injectable WS transport (default = thin `websockets` async wrapper called synchronously); `build_tts_provider(name)` reads `GRADIUM_API_KEY` + `GRADIUM_VOICE_ID` (+ output format).
+  - AC: with a fake transport, returns concatenated PCM bytes; HTTP/WS/credit errors map to a sanitized failure; API key never appears in any exception message.
+  - Test: `tests/test_gradium_tts_provider.py` (fake transport, success + error + key-never-leaks).
+
+- [ ] **ST-4 — Synthesis runner + telemetry + pipeline slices.**
+  - Files: `voice-agent/tts_synthesis/runner.py`; edit `voice-agent/stt_validation/pipeline_timing.py`.
+  - Content: `TtsSynthesisRunner(provider, telemetry)` mirroring `SttValidationRunner` — events `tts.synthesis.started/…/completed`, metric `tts.request.duration_ms`, span `voice.tts.first_audio`; outcome mapping (`EmptyTextError`->UNAVAILABLE, else FAILED); reuse `stt_validation/sanitization.py`. Register `_SLICE_SPAN_NAMES[TTS_FIRST_AUDIO]=("voice.tts.first_audio",)` and `[CHANNEL_EGRESS]=("web.voice.egress",)`; drop their `_UNMEASURED_NOTES`.
+  - AC: three outcomes covered; `tts_first_audio` (and `channel_egress` once egress emits) reported measured.
+  - Test: `tests/test_tts_runner.py`, extend `tests/test_pipeline_timing.py`.
+
+- [ ] **ST-5 — Web egress + `POST /api/voice/tts` (WAV out).**
+  - Files: `voice-agent/web_voice/egress.py`, edit `voice-agent/web_voice/server.py`; `pcm_to_wav` helper.
+  - Content: `WebVoiceEgress(provider)` mirroring `WebVoiceIngress` — emits `web.voice.egress` span (real bytes-out) + delegates to `TtsSynthesisRunner`. Endpoint accepts text + envelope query params, returns WAV bytes (PCM16 + 44-byte header), stable JSON error contract on failure.
+  - AC: endpoint returns playable WAV for a text; failure returns sanitized JSON error; egress span emitted.
+  - Test: `tests/test_web_voice_egress.py`.
+
+- [ ] **ST-6 — Web playback + echo loop (frontend).**
+  - Files: edit `voice-agent/web_voice/static/app.js` (+ minor `index.html` if needed).
+  - Content: after STT returns, call `/api/voice/tts?text=<transcript>`, `decodeAudioData` the WAV, play via a single `AudioBufferSourceNode`; guard the "stop source on clear" pitfall.
+  - AC: speaking a phrase plays back its echo; time-to-first-audio measurable.
+  - Evidence: Chrome DevTools MCP note (playback + failure render + timing).
+
+- [ ] **ST-7 — Architecture separation test.**
+  - Files: `voice-agent/tests/test_architecture_separation.py`.
+  - AC: fails if any `tts_synthesis/` module imports `stt_validation.*` (beyond allowed `telemetry`/`sanitization`) or any `stt_validation/` module imports `tts_synthesis.*`.
+
+- [ ] **ST-8 — QA harness + fixtures + behave + docs.**
+  - Files: `voice-agent/fixtures/tts/` (reference texts + committed clips), `voice-agent/features/tts_synthesis.feature`, extend `voice-agent/features/pipeline_timing.feature`; optional live round-trip QA (`synthesize -> existing Gradium STT -> WER vs input text`); docs `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`.
+  - AC: behave green (synthesize -> audio -> slice observable; empty text -> unavailable, no audio); both new slices shown measured; docs updated.
 
 ---
 
