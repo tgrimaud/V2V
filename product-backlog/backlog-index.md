@@ -82,6 +82,7 @@ against the new empty-codebase plan.
 | TASK-STT-009 | Detect and instrument end-of-turn for the voice journey (US-036 `end_of_turn` slice) | V1 pilot gate | ✅ Done (Sprint 2, 2026-07-13) | Medium |
 | TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Planned (Sprint 4) | High |
 | TASK-STT-011 | Normalize transcripts (case/punctuation/accents) before WER scoring (closes RF-008) | V1 pilot gate | Done (Sprint 2) | Medium |
+| TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 4) | Medium |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | In progress | High |
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Draft | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
@@ -94,7 +95,7 @@ against the new empty-codebase plan.
 | SPRINT-STT | STT Validation | ✅ Done (2026-07-10) | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 | SPRINT-2-STT-HARDENING | STT Hardening | Planned | Make the WER quality gate usable (normalization) and complete STT observability (fixtures, sanitization, UNAVAILABLE outcome, end-of-turn) — `sprints/sprint-2-stt-hardening.md` |
 | SPRINT-3-TTS | TTS / Voice-out (batch) | Planned | Speak the bot response and close the first end-to-end voice loop (no streaming yet) |
-| SPRINT-4-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) for the low-latency voice loop |
+| SPRINT-4-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) for the low-latency voice loop |
 
 ## Restart Delivery Notes
 

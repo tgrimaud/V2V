@@ -359,9 +359,10 @@ Scenario: End-of-turn is detected and measured as its own slice
 
 For the V1 batch web path the **trailing-silence window** over the captured PCM16
 is authoritative, with an **explicit client stop** as the fallback when the buffer
-ends before a full window. A streaming **VAD** is the future drop-in replacement:
-`EndOfTurnDetector` is injected into `WebVoiceIngress`, so it can be swapped
-without touching the ingress, span or pipeline wiring.
+ends before a full window. A streaming **VAD** is the future drop-in replacement
+(ticketed as **TASK-STT-012**, Sprint 4): `EndOfTurnDetector` is injected into
+`WebVoiceIngress`, so it can be swapped without touching the ingress, span or
+pipeline wiring.
 
 ### Delivery Notes (2026-07-13)
 
@@ -522,3 +523,69 @@ Scenario: Formatting differences do not count as transcription errors
   white-noise fixture (owned by TASK-STT-007). The `ready` gate now reflects real
   quality — RF-008 resolved. Default `quality_threshold` kept at 0.8 (it cleanly
   separates good transcripts ≥ 0.82 from the degraded noisy sample at 0.60).
+
+---
+
+## TASK-STT-012 - Streaming VAD-Based End-Of-Turn Detection
+
+**Parent:** EPIC-006, EPIC-010
+**Related story:** US-036 (the `end_of_turn` slice), US-019 (web voice), US-018 (phone voice)
+**Builds on:** TASK-STT-009 (batch end-of-turn detector + `voice.end_of_turn` span)
+**Pairs with:** TASK-STT-010 (streaming STT) — real-time turn detection is a prerequisite for the streaming path
+**Classification:** V1 pilot gate
+**Status:** Planned — Sprint 4 (latency optimization, paired with streaming STT/TTS)
+**Priority:** Medium
+**Branch:** `task/TASK-STT-012-streaming-vad-end-of-turn`
+
+### Objective
+
+Replace the batch trailing-silence `EndOfTurnDetector` (TASK-STT-009) with a
+**real-time voice-activity-detection (VAD)** end-of-turn signal that decides the
+turn is over *while the audio streams*, instead of inspecting a fully captured
+buffer after the fact. This is the "future drop-in" the TASK-STT-009 decision
+explicitly deferred.
+
+### Context (why this is needed)
+
+TASK-STT-009 shipped a **batch** detector: it computes trailing silence over the
+whole captured PCM16 buffer, which only works once the client has stopped and
+uploaded the full utterance. The streaming path (TASK-STT-010) delivers audio in
+chunks and cannot wait for a complete buffer — it needs a detector that consumes
+frames incrementally and fires an end-of-turn event as soon as a silence window
+elapses. The `EndOfTurnDetector` is already **injected** into `WebVoiceIngress`,
+so this is a replacement of the strategy, not a rewrite of the wiring.
+
+### Scope
+
+- A streaming/frame-incremental VAD detector implementing the same injection
+  point as `EndOfTurnDetector` (energy-based VAD at minimum; pluggable to a
+  library VAD such as WebRTC/Silero later).
+- Fire `voice.end_of_turn` incrementally (same span/attributes contract as
+  TASK-STT-009) so `PipelineTimingReport` keeps measuring the slice unchanged.
+- Configurable silence window / hangover; safe behaviour on no-speech (no
+  invented boundary — keep the TASK-STT-009 guarantee).
+- Keep the batch detector for fixtures/offline dev.
+
+### Out Of Scope
+
+- Barge-in / interruption during playback (US-021).
+- The streaming STT transport itself (TASK-STT-010).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: End-of-turn fires from streamed audio frames
+  Given audio is streamed to the voice runtime frame by frame
+  When the speaker stops and a silence window elapses
+  Then an end-of-turn is fired before the full buffer is available
+  And a voice.end_of_turn span with the turn correlation id is recorded
+  And no turn boundary is invented when the stream carries no speech
+```
+
+### Required Evidence
+
+- Unit tests driving the detector with a frame sequence (speech → silence →
+  fire), including the no-speech guarantee.
+- Behave scenario for the streaming end-of-turn outcome.
+- `docs/observability/voice-journey-timing.md` updated to note the streaming
+  detector once it lands.
