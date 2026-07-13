@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .providers import NoSpeechDetectedError
+
 GRADIUM_ASR_URL = "https://api.gradium.ai/api/post/speech/asr"
 DEFAULT_MODEL = "default"
 DEFAULT_LANGUAGE = "fr"
@@ -88,7 +90,7 @@ class GradiumSttProvider:
             raise _http_error(response)
         transcript = _parse_transcript(response.body)
         if not transcript:
-            raise GradiumSttError("Gradium STT recognized no speech in the audio")
+            raise NoSpeechDetectedError("Gradium STT recognized no speech in the audio")
         return transcript
 
 

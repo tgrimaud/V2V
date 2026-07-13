@@ -67,7 +67,7 @@ Scenario: A bare sensitive identifier is redacted
 **Parent:** EPIC-010
 **Related finding:** RF-004 (TASK-STT-002)
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 2 (STT hardening)
+**Status:** ✅ Done — Sprint 2 (STT hardening), 2026-07-13
 **Priority:** Low
 **Branch:** `task/TASK-STT-006-unavailable-outcome`
 
@@ -96,6 +96,18 @@ Scenario: Silence is reported as unavailable, not failed
 
 - Unit tests for the new outcome.
 - Updated telemetry and quality docs.
+
+### Delivery Notes (2026-07-13)
+
+- `SttOutcome.UNAVAILABLE` added; providers raise a provider-agnostic
+  `NoSpeechDetectedError` on empty/no-speech transcripts (fixture + Gradium),
+  so the runner maps a single exception to the outcome (no message matching).
+- Runner emits a dedicated `stt.unavailable` event, an `info` log
+  (`STT reported no usable speech`), `error_code=no_speech`, empty transcript;
+  the `stt.request` span and `stt.validation.completed` carry `outcome=unavailable`.
+- Quality harness reports the distinct note for unavailable unusable fixtures;
+  behave scenario tightened to assert `unavailable` specifically.
+- Evidence: 77 unit tests + 8 behave scenarios green; telemetry + QA docs updated.
 
 ---
 

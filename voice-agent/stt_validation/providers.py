@@ -2,6 +2,15 @@ from pathlib import Path
 from typing import Protocol
 
 
+class NoSpeechDetectedError(RuntimeError):
+    """The provider processed the audio but found no usable speech.
+
+    Raised (instead of a generic error) so the runner can report the outcome as
+    UNAVAILABLE rather than FAILED. Provider-agnostic on purpose: any adapter can
+    signal "no usable speech" without the runner string-matching messages.
+    """
+
+
 class SttProvider(Protocol):
     @property
     def name(self) -> str:
@@ -24,5 +33,5 @@ class FixtureSttProvider:
             raise FileNotFoundError(f"Transcript fixture not found: {transcript_path}")
         transcript = transcript_path.read_text(encoding="utf-8").strip()
         if not transcript:
-            raise ValueError("Transcript fixture is empty")
+            raise NoSpeechDetectedError("Transcript fixture contains no usable speech")
         return transcript

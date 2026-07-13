@@ -2,9 +2,20 @@ from pathlib import Path
 from uuid import uuid4
 
 from .models import SttOutcome, TranscriptResult
-from .providers import SttProvider
+from .providers import NoSpeechDetectedError, SttProvider
 from .sanitization import sanitize_error
 from .telemetry import TelemetryRecorder, Timer
+
+# Stable code attached to an UNAVAILABLE outcome so QA/telemetry can filter
+# "no usable speech" apart from processing errors without parsing the message.
+NO_SPEECH_CODE = "no_speech"
+
+# outcome -> (log level, message). UNAVAILABLE is an expected, non-error result.
+_OUTCOME_LOG: dict[SttOutcome, tuple[str, str]] = {
+    SttOutcome.SUCCESS: ("info", "STT validation completed"),
+    SttOutcome.UNAVAILABLE: ("info", "STT reported no usable speech"),
+    SttOutcome.FAILED: ("warning", "STT validation failed"),
+}
 
 
 class SttValidationRunner:
@@ -30,6 +41,8 @@ class SttValidationRunner:
         try:
             transcript = self._provider.transcribe(audio_path)
             return self._success(transcript, stt.elapsed_ms(), total.elapsed_ms(), run_id)
+        except NoSpeechDetectedError as exc:
+            return self._unavailable(exc, stt.elapsed_ms(), total.elapsed_ms(), run_id)
         except Exception as exc:  # noqa: BLE001 - failure must stay observable
             return self._failure(exc, stt.elapsed_ms(), total.elapsed_ms(), run_id)
 
@@ -119,6 +132,42 @@ class SttValidationRunner:
         self._record_outcome(result)
         return result
 
+    def _unavailable(
+        self,
+        exc: NoSpeechDetectedError,
+        stt_request_ms: float,
+        duration_ms: float,
+        correlation_id: str,
+    ) -> TranscriptResult:
+        reason = sanitize_error(exc).reason
+        self._telemetry.span(
+            "stt.request",
+            stt_request_ms,
+            correlation_id=correlation_id,
+            provider=self._provider.name,
+            outcome=SttOutcome.UNAVAILABLE.value,
+        )
+        self._telemetry.record(
+            "stt.unavailable",
+            correlation_id=correlation_id,
+            provider=self._provider.name,
+            error_code=NO_SPEECH_CODE,
+            error_reason=reason,
+            stt_request_ms=round(stt_request_ms, 3),
+        )
+        result = TranscriptResult(
+            transcript="",
+            provider=self._provider.name,
+            outcome=SttOutcome.UNAVAILABLE,
+            duration_ms=duration_ms,
+            stt_request_ms=stt_request_ms,
+            correlation_id=correlation_id,
+            error_code=NO_SPEECH_CODE,
+            error_reason=reason,
+        )
+        self._record_outcome(result)
+        return result
+
     def _record_outcome(self, result: TranscriptResult) -> None:
         attrs = self._outcome_attributes(result)
         self._telemetry.record(
@@ -129,10 +178,8 @@ class SttValidationRunner:
         )
         self._telemetry.metric("stt.request.duration_ms", result.stt_request_ms, **attrs)
         self._telemetry.metric("stt.validation.duration_ms", result.duration_ms, **attrs)
-        if result.outcome is SttOutcome.SUCCESS:
-            self._telemetry.log("info", "STT validation completed", **attrs)
-        else:
-            self._telemetry.log("warning", "STT validation failed", **attrs)
+        level, message = _OUTCOME_LOG[result.outcome]
+        self._telemetry.log(level, message, **attrs)
 
     def _outcome_attributes(self, result: TranscriptResult) -> dict[str, str]:
         attrs = {

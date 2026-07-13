@@ -87,8 +87,9 @@ python3 -m stt_validation.quality_cli fixtures/manifest.json
 It computes a word error rate (WER) against each fixture's ground-truth
 `reference`, derives a `quality_score` (`1 - WER`), gates on a configurable
 threshold (default `0.8`), reports `missing_categories` explicitly, and enforces
-that unusable audio (e.g. silence) produces **no invented transcript**. The QA
-inventory and results live in `docs/qa/stt-transcription-quality.md`.
+that unusable audio (e.g. silence) is reported with the dedicated `unavailable`
+outcome (TASK-STT-006) and produces **no invented transcript**. The QA inventory
+and results live in `docs/qa/stt-transcription-quality.md`.
 
 ## QA acceptance scenarios (TASK-STT-004)
 

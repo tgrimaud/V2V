@@ -6,6 +6,9 @@ from typing import Any
 class SttOutcome(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
+    # Audio was processed but held no usable speech (silence / no-speech). This is
+    # not a processing error and never carries an invented transcript.
+    UNAVAILABLE = "unavailable"
 
 
 @dataclass(frozen=True)

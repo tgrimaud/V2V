@@ -10,6 +10,7 @@ from stt_validation import (  # noqa: E402
     GradiumResponse,
     GradiumSttError,
     GradiumSttProvider,
+    NoSpeechDetectedError,
     SttOutcome,
     SttValidationRunner,
     TelemetryRecorder,
@@ -71,15 +72,16 @@ class GradiumTranscribeTest(unittest.TestCase):
         # THEN the credit exhaustion is surfaced
         self.assertIn("credits", str(ctx.exception).lower())
 
-    def test_no_recognized_speech_raises(self) -> None:
+    def test_no_recognized_speech_raises_no_speech_detected(self) -> None:
         # GIVEN a 200 response with no text tokens
         provider = _provider(_transport(200, '{"type": "meta", "text": ""}'))
         with TemporaryDirectory() as tmp:
             # WHEN the audio is transcribed
-            with self.assertRaises(GradiumSttError) as ctx:
+            with self.assertRaises(NoSpeechDetectedError) as ctx:
                 provider.transcribe(_audio(tmp))
-        # THEN no invented transcript is returned
+        # THEN no invented transcript is returned and it is not a generic error
         self.assertIn("no speech", str(ctx.exception).lower())
+        self.assertNotIsInstance(ctx.exception, GradiumSttError)
 
     def test_missing_api_key_is_rejected(self) -> None:
         # GIVEN no API key
@@ -145,6 +147,22 @@ class GradiumRunnerIntegrationTest(unittest.TestCase):
         self.assertIs(result.outcome, SttOutcome.FAILED)
         self.assertNotIn(API_KEY, dump)
         self.assertEqual(result.error_code, "stt_error")
+
+    def test_no_speech_maps_to_unavailable_not_failed(self) -> None:
+        # GIVEN a 200 response that carries no speech tokens
+        telemetry = TelemetryRecorder()
+        runner = SttValidationRunner(_provider(_transport(200, '{"type": "meta", "text": ""}')), telemetry)
+        with TemporaryDirectory() as tmp:
+            # WHEN the runner validates the audio
+            result = runner.validate(_audio(tmp), "corr-silence")
+        # THEN it is reported as UNAVAILABLE with a stable code and no invented transcript
+        self.assertIs(result.outcome, SttOutcome.UNAVAILABLE)
+        self.assertEqual(result.transcript, "")
+        self.assertEqual(result.error_code, "no_speech")
+        event_names = [event.name for event in telemetry.events()]
+        self.assertIn("stt.unavailable", event_names)
+        self.assertNotIn("stt.failure", event_names)
+        self.assertEqual(telemetry.logs()[0].level, "info")
 
 
 class ProviderFactoryTest(unittest.TestCase):

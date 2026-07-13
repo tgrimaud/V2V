@@ -74,6 +74,27 @@ class SttValidationRunnerTest(unittest.TestCase):
             self.assertIn("stt.failure", event_names)
             self.assertEqual(telemetry.logs()[0].level, "warning")
 
+    def test_validate_returns_unavailable_when_transcript_has_no_speech(self) -> None:
+        # GIVEN
+        with TemporaryDirectory() as tmp_dir:
+            audio_path = Path(tmp_dir) / "silence.wav"
+            audio_path.write_bytes(b"fake-audio")
+            audio_path.with_suffix(".txt").write_text("   ", encoding="utf-8")
+
+            # WHEN
+            result, telemetry = _run(audio_path, "corr-silence")
+
+            # THEN
+            self.assertEqual(result.outcome, SttOutcome.UNAVAILABLE)
+            self.assertEqual(result.transcript, "")
+            self.assertEqual(result.error_code, "no_speech")
+            event_names = [event.name for event in telemetry.events()]
+            self.assertIn("stt.unavailable", event_names)
+            self.assertNotIn("stt.failure", event_names)
+            self.assertEqual(telemetry.logs()[0].level, "info")
+            span_names = [span.name for span in telemetry.spans()]
+            self.assertEqual(span_names, ["stt.audio.accept", "stt.request"])
+
     def test_failure_reason_is_sanitized_without_leaking_path(self) -> None:
         # GIVEN
         with TemporaryDirectory() as tmp_dir:

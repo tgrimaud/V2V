@@ -99,8 +99,8 @@ class EvaluateFixtureSetTest(unittest.TestCase):
             self.assertFalse(report.ready)
             self.assertEqual(report.failed_categories(), ["noisy"])
 
-    def test_silence_fixture_is_ok_when_no_transcript_is_invented(self) -> None:
-        # GIVEN silence == empty transcript sidecar -> provider fails, no transcript
+    def test_silence_fixture_is_reported_unavailable_without_inventing_transcript(self) -> None:
+        # GIVEN silence == empty transcript sidecar -> no usable speech, no transcript
         with TemporaryDirectory() as tmp:
             audio = _fixture(tmp, "silence", "   ")
             spec = FixtureSpec("silence", FixtureCategory.SILENCE, audio, None, False)
@@ -110,9 +110,10 @@ class EvaluateFixtureSetTest(unittest.TestCase):
 
             # THEN
             assessment = report.assessments[0]
-            self.assertEqual(assessment.outcome, "failed")
+            self.assertEqual(assessment.outcome, "unavailable")
             self.assertEqual(assessment.transcript, "")
             self.assertTrue(assessment.quality_ok)
+            self.assertIn("unavailable", assessment.note)
             self.assertTrue(report.ready)
 
     def test_invented_transcript_for_unusable_audio_fails(self) -> None:

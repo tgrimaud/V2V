@@ -237,12 +237,16 @@ def _assess_usable(spec, result, succeeded, threshold) -> FixtureAssessment:  # 
 def _assess_unusable(spec, result, succeeded) -> FixtureAssessment:  # type: ignore[no-untyped-def]
     invented = succeeded and bool(result.transcript.strip())
     quality_ok = not invented
-    note = (
-        "invented transcript for unusable audio"
-        if invented
-        else "correctly reported as unusable, no transcript invented"
-    )
+    note = _unusable_note(invented, result.outcome)
     return _build_assessment(spec, result, None, None, quality_ok, note)
+
+
+def _unusable_note(invented: bool, outcome: SttOutcome) -> str:
+    if invented:
+        return "invented transcript for unusable audio"
+    if outcome is SttOutcome.UNAVAILABLE:
+        return "correctly reported as unavailable (no usable speech), no transcript invented"
+    return "correctly reported as unusable, no transcript invented"
 
 
 def _usable_note(succeeded: bool, quality_score: float | None, threshold: float) -> str:

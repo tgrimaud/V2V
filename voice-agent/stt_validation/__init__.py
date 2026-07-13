@@ -8,7 +8,7 @@ from .pipeline_timing import (
     SliceTiming,
 )
 from .provider_factory import PROVIDER_NAMES, build_provider
-from .providers import FixtureSttProvider, SttProvider
+from .providers import FixtureSttProvider, NoSpeechDetectedError, SttProvider
 from .quality import (
     MIN_SAMPLES_FOR_PERCENTILES,
     CategorySummary,
@@ -36,6 +36,7 @@ __all__ = [
     "GradiumSttError",
     "GradiumSttProvider",
     "LatencyReport",
+    "NoSpeechDetectedError",
     "PIPELINE_SLICES",
     "PipelineTimingReport",
     "SliceTiming",

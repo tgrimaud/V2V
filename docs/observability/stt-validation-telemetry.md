@@ -38,8 +38,20 @@ acceptance overhead and any future backend processing.
 ### Events (ordered phase markers)
 
 `stt.validation.started` -> `stt.audio.accepted` -> `stt.request.started` ->
-`stt.transcript.final` (success) **or** `stt.failure` (failure) ->
-`stt.validation.completed`.
+`stt.transcript.final` (success) **or** `stt.unavailable` (no usable speech)
+**or** `stt.failure` (processing error) -> `stt.validation.completed`.
+
+The three terminal outcomes carried on `stt.validation.completed` (and the
+`stt.request` span) are:
+
+| `outcome` | Meaning | Emitted event | Log level |
+|---|---|---|---|
+| `success` | A transcript was produced | `stt.transcript.final` | `info` |
+| `unavailable` | Audio processed but held **no usable speech** (silence / no-speech); never carries an invented transcript. `error_code` is the stable `no_speech` **(TASK-STT-006)** | `stt.unavailable` | `info` |
+| `failed` | A genuine processing error (missing/invalid fixture, timeout, provider error) | `stt.failure` | `warning` |
+
+`unavailable` is deliberately distinct from `failed` so QA and dashboards can
+tell "the caller said nothing" apart from "the STT path broke".
 
 ### Metrics
 
@@ -55,9 +67,11 @@ size grows.
 
 ### Structured logs
 
-Success emits an `info` log (`STT validation completed`); failure emits a
-`warning` log (`STT validation failed`) carrying `correlation_id`, `provider`,
-`outcome`, `error_code` and a sanitized `error_reason`.
+Success emits an `info` log (`STT validation completed`); a no-usable-speech run
+emits an `info` log (`STT reported no usable speech`) with `error_code=no_speech`;
+a processing error emits a `warning` log (`STT validation failed`). All three
+carry `correlation_id`, `provider`, `outcome`, and — for the non-success
+outcomes — `error_code` and a sanitized `error_reason`.
 
 ## Evidence: success run (isolated STT slice + latency distribution)
 
@@ -116,6 +130,32 @@ Failure event and structured log — the absolute path is redacted and a stable
                   "error_reason": "Transcript fixture not found: <redacted-path>" } }
 ```
 
+## Evidence: unavailable run (no usable speech, safe) — TASK-STT-006
+
+When the provider processes the audio but finds no speech (silence fixture, or a
+Gradium `200` response with no text tokens), the runner emits `stt.unavailable`
+and reports the `unavailable` outcome — not `failed` — with no invented
+transcript:
+
+```json
+{ "name": "stt.unavailable",
+  "attributes": { "correlation_id": "demo-silence", "provider": "fixture-stt",
+                  "error_code": "no_speech",
+                  "error_reason": "Transcript fixture contains no usable speech",
+                  "stt_request_ms": 0.014 } }
+```
+
+```json
+{ "level": "info", "message": "STT reported no usable speech",
+  "attributes": { "correlation_id": "demo-silence", "provider": "fixture-stt",
+                  "outcome": "unavailable", "error_code": "no_speech",
+                  "error_reason": "Transcript fixture contains no usable speech" } }
+```
+
+Providers signal this by raising `NoSpeechDetectedError` (provider-agnostic, in
+`stt_validation/providers.py`); the runner maps that single exception to the
+`UNAVAILABLE` outcome, so no message string-matching is required.
+
 ## Sanitization guarantees
 
 `stt_validation/sanitization.py`:
@@ -145,6 +185,7 @@ prefix, digit run, mixed-alnum id redaction; words/dates preserved; length cap).
 |---|---|
 | STT latency is observable, isolable, percentile-ready | `stt.request` span + `stt.request.duration_ms` metric + `LatencyReport` |
 | STT failure observable without leaking sensitive data | `stt.failure` event + warning log with `error_code`; sensitive tokens replaced by `<redacted-path>` / `<redacted-file>` / `<redacted-id>` (TASK-STT-005) |
+| Silence reported as UNAVAILABLE, not a processing error (TASK-STT-006) | `stt.unavailable` event + `info` log, `outcome=unavailable`, `error_code=no_speech`, empty transcript; behave `Silence is reported as unavailable...` |
 
 ## Reproduce
 

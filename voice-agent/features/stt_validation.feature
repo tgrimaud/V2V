@@ -12,10 +12,10 @@ Feature: STT validation across controlled audio fixtures
     Then every usable fixture category is scored against its reference transcript
     And every usable fixture meets the configured quality threshold
 
-  # TASK-STT-002 - silence or unusable audio is handled safely
-  Scenario: Silence is handled safely without an invented transcript
+  # TASK-STT-002 / TASK-STT-006 (RF-004) - silence is a distinct, safe outcome
+  Scenario: Silence is reported as unavailable without an invented transcript
     When QA runs the STT validation harness over the fixture set
-    Then the silence fixture is reported as failed or unavailable
+    Then the silence fixture is reported as unavailable
     And the silence fixture transcript is empty
 
   # TASK-STT-002 - missing fixture categories are explicit

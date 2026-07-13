@@ -64,10 +64,10 @@ def step_usable_threshold(context):
         )
 
 
-@then("the silence fixture is reported as failed or unavailable")
-def step_silence_failed(context):
+@then("the silence fixture is reported as unavailable")
+def step_silence_unavailable(context):
     silence = _by_category(context, "silence")
-    assert silence.outcome in {SttOutcome.FAILED.value, "unavailable"}, silence.outcome
+    assert silence.outcome == SttOutcome.UNAVAILABLE.value, silence.outcome
 
 
 @then("the silence fixture transcript is empty")

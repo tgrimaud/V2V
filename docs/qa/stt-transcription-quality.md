@@ -34,7 +34,8 @@ real-world recordings. Real human samples (especially for `noisy` and ultra-shor
 - `quality_score = max(0, 1 - WER)`; a fixture passes when
   `quality_score >= quality_threshold` (default `0.8`).
 - Unusable audio (`expect_usable: false`, e.g. silence) passes only when the
-  path reports failure/unavailable and **invents no transcript**.
+  path reports the dedicated `unavailable` outcome (TASK-STT-006) and **invents
+  no transcript**.
 
 ## QA fixture inventory (expanded, TASK-STT-007)
 
@@ -223,7 +224,7 @@ runs yield different hallucinations, e.g. `Avec Wottand` vs `vous le fais confor
 | Per-category quality + latency percentiles reported | Yes | `CategorySummary` (mean/worst WER + `LatencyReport` per category) |
 | Categories below the required sample size flagged | Yes | `underpowered_categories()` flags any *usable* category with < `MIN_SAMPLES_FOR_PERCENTILES` (5); unusable categories excluded (RF-011) |
 | Missing fixture categories explicitly reported | Yes | `missing_categories` list; unit test `test_missing_categories_are_reported_explicitly` |
-| Silence/unusable reported as unavailable/failed | Yes | `silence-clip` outcome `failed`, empty transcript |
+| Silence/unusable reported as unavailable | Yes | `silence-clip` outcome `unavailable` (TASK-STT-006), empty transcript |
 | No invented transcript accepted as valid | Yes | `test_invented_transcript_for_unusable_audio_fails` |
 
 ## Defects

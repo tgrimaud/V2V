@@ -50,7 +50,7 @@
 |---|---|---|---|
 | Transcript quality reviewed per category | PASS | `docs/qa/stt-transcription-quality.md`; Behave "Each declared fixture category produces a reviewed transcript outcome" | short/long WER 0.0; noisy/accented WER 0.1 (≥ 0.8 threshold) |
 | Missing categories reported explicitly | PASS | `missing_categories: []`; Behave "Declared fixture coverage is reported explicitly" | 5/5 declared categories present |
-| Silence / unusable handled safely | PASS | `silence-clip` outcome `failed`, empty transcript; Behave "Silence is handled safely without an invented transcript" | no invented transcript |
+| Silence / unusable handled safely | PASS | `silence-clip` outcome `unavailable` (TASK-STT-006), empty transcript; Behave "Silence is reported as unavailable without an invented transcript" | no invented transcript |
 | STT slice latency observable / percentile-ready | PASS | `LatencyReport` p50/p95/p99; Behave "STT latency is isolated and percentile-ready" | fixture-provider timings only |
 | Failure observable without leaking sensitive data | PASS | sanitized reason + `error_code`; Behave "STT failure is observable without leaking a filesystem path" | `<redacted-path>`, stable code |
 | STT provider replaceable | PASS (by design) | `SttProvider` protocol; manifest/harness unchanged when a real adapter is added | not exercised with a real engine |
