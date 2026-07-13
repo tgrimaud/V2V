@@ -1,5 +1,8 @@
 # Done tasks
 
+> **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
+> work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
+
 ## 2026-06-22 — Agent name badges, conversation fixes, dead code cleanup
 
 **Summary:**
@@ -286,3 +289,40 @@
 - `voice-agent/tests/test_end_of_turn.py` (new), `test_web_voice_ingress.py`, `test_pipeline_timing.py`, `test_gradium_provider.py`, `test_stt_validation_runner.py`, `test_quality.py` — coverage.
 - `product-backlog/` — TASK-STT-006/009 marked Done, TASK-STT-012 added (Sprint 4), Sprint 2 status closed, backlog-index registry updated.
 - `docs/observability/`, `docs/qa/` — telemetry + QA doc updates for the new outcome and slice.
+
+## 2026-07-13 — Sprint 3: TTS voice-out (TASK-WEB-002)
+
+**Summary:**
+
+Delivered the **voice-out half** of US-019: turn response text into speech via a Gradium TTS provider and play it back in the web page, closing the first visible **voice-in → voice-out echo loop**. Built as a strict architectural mirror of the STT half, with a hard boundary between the two.
+
+### What shipped (ST-1 → ST-8, adversarial review after each)
+- **ST-1 — Gradium TTS spike:** live WebSocket probe locked the contract (`wss://api.gradium.ai/api/speech/tts`, base64 PCM chunks until `end_of_stream`); documented in `docs/qa/gradium-tts-contract.md`. Surfaced that `GRADIUM_VOICE_ID=default` is rejected — a real catalog voice id is required.
+- **ST-2 — TTS provider layer:** `tts_synthesis` package — `TtsOutcome`/`SynthesisResult` models, `TtsProvider` protocol + `EmptyTextError`, deterministic `FixtureTtsProvider` (generated tone keyed by text length; no committed binary clips).
+- **ST-3 — `GradiumTtsProvider` + factory:** WebSocket-based provider with an injectable transport (async wrapped synchronously); unit tests cover success/invalid-voice/credit/auth/timeout/no-audio with no network and assert the API key never reaches an exception, log or telemetry.
+- **ST-4 — Runner + shared extraction:** `TtsSynthesisRunner` mirroring the STT runner (telemetry + sanitized errors). Extracted telemetry + sanitization into a **neutral `voice_common/` package** imported by both halves; `stt_validation` telemetry/sanitization became re-export shims. Registered `voice.tts.first_audio` + `web.voice.egress` slices in the pipeline-timing aggregator.
+- **ST-5 — Web egress + `POST /api/voice/tts`:** `WebVoiceEgress` (synthesis → PCM → 44-byte WAV via `pcm_to_wav`) returns `audio/wav` on success, sanitized JSON on failure; `web.voice.egress` span measured on the **real send window** (span emission split from synthesis so the transport times the actual socket write). `MAX_TTS_TEXT_CHARS` guard.
+- **ST-6 — Frontend echo loop:** after STT success, `app.js` POSTs the transcript to `/api/voice/tts`, `decodeAudioData`s the WAV, plays it via a single `AudioBufferSourceNode` on a dedicated playback context; `stopPlayback()` guards the "stop source on clear" pitfall. Validated live via Chrome DevTools MCP (decode 2.04 s mono, TTFA ~109 ms, correlation id propagated, sanitized failure path, clean console).
+- **ST-7 — Architecture separation test:** AST import scan fails if `tts_synthesis` imports `stt_validation.*` or vice versa (relative + `voice_common` allowed); includes a self-test proving the detector flags a synthetic cross-import.
+- **ST-8 — QA + docs:** `features/tts_synthesis.feature` (synthesize→audio→slice, empty→unavailable, failure sanitized with a secret-leak assertion) + extended `pipeline_timing.feature` (full-turn sample proving TTS slices become measured, only `backend_first_token` remains a gap); `fixtures/tts/reference-texts.txt`; updated `docs/observability/voice-journey-timing.md` + `voice-agent/README.md`.
+
+### Post-review follow-ups (same sprint, before merge)
+- **`pipeline_timing` moved to `voice_common`** (canonical, neutral) with a re-export shim at `stt_validation.pipeline_timing`, so both halves build the same per-slice report; separation test hardened to assert `voice_common` neutrality.
+- **`TtsSynthesisRunner` refactored** (span/result/record helpers, methods ≤ 20 lines) and a latent **`asyncio` scope bug** on the live Gradium path fixed (module-level import + extracted `_recv_until_end`), covered by a new fake-WebSocket live-path test.
+- **`websockets` pin widened** `>=13,<16` → `>=13,<17` to match the tested/demoed runtime (16.1).
+
+### Boundary + tests
+- **Hard STT/TTS separation:** neither package imports the other; shared code lives in `voice_common`, enforced by `tests/test_architecture_separation.py` (both directions + `voice_common` neutrality).
+- **130 unit tests green; 4 behave features / 12 scenarios green.** Echo loop MCP-validated; live Gradium voice-out demo validated by the user (full voice→voice turn traced under one correlation id).
+- **Merged (fast-forward) into `feat/restart-from-scratch`** after the user validated the live demo.
+
+### Key files
+- `voice-agent/tts_synthesis/` — `models.py`, `providers.py`, `gradium_tts_provider.py`, `provider_factory.py`, `runner.py`
+- `voice-agent/voice_common/` — `telemetry.py`, `sanitization.py`, `pipeline_timing.py` (neutral shared; `pipeline_timing` registers the TTS slices)
+- `voice-agent/web_voice/egress.py` + edits to `server.py`, `__init__.py`, `static/app.js`, `static/index.html`
+- `voice-agent/stt_validation/pipeline_timing.py` — re-export shim over `voice_common.pipeline_timing`
+- `voice-agent/tests/` — `test_tts_providers.py`, `test_gradium_tts_provider.py`, `test_tts_runner.py`, `test_web_voice_egress.py`, `test_architecture_separation.py`
+- `voice-agent/features/tts_synthesis.feature` + `steps/tts_steps.py`; extended `pipeline_timing.feature` + steps
+- `voice-agent/fixtures/tts/reference-texts.txt`; `voice-agent/scripts/gradium_tts_spike.py`
+- Docs: `docs/qa/gradium-tts-contract.md`, `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`
+- Planning: `product-backlog/sprints/sprint-3-tts-voice-out.md`, `product-backlog/tasks/web-voice-tasks.md`, `product-backlog/backlog-index.md`

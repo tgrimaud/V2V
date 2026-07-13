@@ -3,6 +3,7 @@
 ## Repo & git
 
 - `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
+- **Ledgers and docs live in THIS repo.** When working on the Voice Support Bot, the `done-tasks.md` you append to is **`voice-support-bot/done-tasks.md`** — never the workspace-root `BMad/done-tasks.md` (that one logs only the `cursor-usage-dashboard` project). The same applies to `product-backlog/`, `docs/`, and any planning file: always use the copies **inside `voice-support-bot/`**. If you catch yourself editing a file above this directory for bot work, stop and move it here.
 - **This repo is self-contained for guidance.** When working here, use only this repository's `CLAUDE.md` / `AGENTS.md` and the skills under `voice-support-bot/.cursor/skills/`. Do **not** apply the workspace-root `BMad/claude.md`, `BMad/agents.md`, or root `.cursor/skills/` — those govern `cursor-usage-dashboard/`, not this project.
 - **One branch per development ticket**. Use `us/US-XXX-short-name` for user
   stories, `fix/BUG-XXX-short-name` for bugs and `task/TASK-XXX-short-name` for
@@ -17,7 +18,8 @@
   the same session (a fast-forward merge carries no closure commit, so nothing
   updates itself): (1) the sprint file `## Status` + roadmap row → `✅ Done (closed <date>)`,
   (2) the `backlog-index.md` sprint registry row → `✅ Done (<date>)`, (3) a dated
-  `done-tasks.md` entry summarizing the sprint. Then commit + push these doc updates.
+  entry in **this repo's** `voice-support-bot/done-tasks.md` summarizing the sprint.
+  Then commit + push these doc updates.
 - **Commit after each task**; do not leave code uncommitted.
 - On `feat/restart-from-scratch`, the previous implementation directories
   (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
