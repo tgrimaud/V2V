@@ -38,7 +38,10 @@ def _span(telemetry: TelemetryRecorder, name: str):
 class TtsSynthesisRunnerTest(unittest.TestCase):
     def test_success_produces_audio_and_first_audio_span(self) -> None:
         # GIVEN the deterministic fixture provider
-        result, telemetry = _run(FixtureTtsProvider(), "Bonjour le monde")
+        provider = FixtureTtsProvider()
+
+        # WHEN a phrase is synthesized
+        result, telemetry = _run(provider, "Bonjour le monde")
 
         # THEN the outcome is SUCCESS with non-empty audio and the TTS slice span
         self.assertIs(result.outcome, TtsOutcome.SUCCESS)
@@ -55,8 +58,11 @@ class TtsSynthesisRunnerTest(unittest.TestCase):
         self.assertEqual(telemetry.logs()[0].level, "info")
 
     def test_empty_text_maps_to_unavailable_not_failed(self) -> None:
-        # GIVEN whitespace-only text
-        result, telemetry = _run(FixtureTtsProvider(), "   ")
+        # GIVEN the fixture provider
+        provider = FixtureTtsProvider()
+
+        # WHEN whitespace-only text is synthesized
+        result, telemetry = _run(provider, "   ")
 
         # THEN it is UNAVAILABLE with a stable code and no invented audio
         self.assertIs(result.outcome, TtsOutcome.UNAVAILABLE)
@@ -70,6 +76,8 @@ class TtsSynthesisRunnerTest(unittest.TestCase):
     def test_provider_error_maps_to_failed_with_tts_error_code(self) -> None:
         # GIVEN a provider that raises a generic runtime failure
         provider = _RaisingProvider(RuntimeError("Gradium TTS credits exhausted"))
+
+        # WHEN a phrase is synthesized
         result, telemetry = _run(provider, "Bonjour")
 
         # THEN it is FAILED with the generic tts_error code and a warning log
@@ -81,7 +89,10 @@ class TtsSynthesisRunnerTest(unittest.TestCase):
 
     def test_timeout_maps_to_tts_timeout_outcome(self) -> None:
         # GIVEN a provider that times out
-        result, _ = _run(_RaisingProvider(TimeoutError("Gradium TTS request timed out")), "Bonjour")
+        provider = _RaisingProvider(TimeoutError("Gradium TTS request timed out"))
+
+        # WHEN a phrase is synthesized
+        result, _ = _run(provider, "Bonjour")
 
         # THEN the outcome is a sanitized timeout failure
         self.assertIs(result.outcome, TtsOutcome.FAILED)
@@ -90,6 +101,8 @@ class TtsSynthesisRunnerTest(unittest.TestCase):
     def test_sensitive_token_in_error_is_redacted_in_telemetry(self) -> None:
         # GIVEN an error carrying a secret-looking token
         provider = _RaisingProvider(RuntimeError("auth rejected key gsk_live_abc123DEF456 invalid"))
+
+        # WHEN a phrase is synthesized
         result, telemetry = _run(provider, "Bonjour")
 
         # THEN the token never reaches any recorded telemetry
@@ -107,9 +120,12 @@ class TtsSynthesisRunnerTest(unittest.TestCase):
         self.assertIn("<redacted-id>", dump)
 
     def test_correlation_id_is_generated_when_absent(self) -> None:
-        # GIVEN no correlation id
+        # GIVEN the fixture provider and no correlation id
         telemetry = TelemetryRecorder()
-        result = TtsSynthesisRunner(FixtureTtsProvider(), telemetry).synthesize("Bonjour")
+        runner = TtsSynthesisRunner(FixtureTtsProvider(), telemetry)
+
+        # WHEN a phrase is synthesized without a correlation id
+        result = runner.synthesize("Bonjour")
 
         # THEN a run id is generated and propagated to telemetry
         self.assertTrue(result.correlation_id)

@@ -5,6 +5,7 @@ package, but never on each other. Only stateless, domain-agnostic helpers live
 here: telemetry recording/latency reporting and error sanitization.
 """
 
+from .pipeline_timing import PIPELINE_SLICES, PipelineTimingReport, SliceTiming
 from .sanitization import SanitizedError, sanitize_error
 from .telemetry import (
     LatencyReport,
@@ -17,9 +18,12 @@ from .telemetry import (
 )
 
 __all__ = [
+    "PIPELINE_SLICES",
     "LatencyReport",
     "MetricSample",
+    "PipelineTimingReport",
     "SanitizedError",
+    "SliceTiming",
     "Span",
     "StructuredLog",
     "TelemetryEvent",

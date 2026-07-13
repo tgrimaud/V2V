@@ -2,7 +2,7 @@
 
 **Story:** US-036 - Measure key voice journey timings by pipeline slice
 **Parent:** EPIC-010
-**Module:** `voice-agent/stt_validation/pipeline_timing.py`
+**Module:** `voice-agent/voice_common/pipeline_timing.py` (neutral, shared; re-exported by `stt_validation.pipeline_timing` for the STT CLI/tests)
 **Status:** Delivered on branch `us/US-036-voice-timing-slices`
 
 ## Purpose

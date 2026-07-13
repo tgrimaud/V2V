@@ -4,7 +4,8 @@ from pathlib import Path
 
 from behave import given, then, when
 
-from stt_validation.pipeline_timing import (
+from tts_synthesis import FixtureTtsProvider
+from voice_common.pipeline_timing import (
     BACKEND_FIRST_TOKEN,
     CHANNEL_EGRESS,
     CHANNEL_INGRESS,
@@ -13,7 +14,6 @@ from stt_validation.pipeline_timing import (
     TTS_FIRST_AUDIO,
     PipelineTimingReport,
 )
-from tts_synthesis import FixtureTtsProvider
 from voice_common.telemetry import TelemetryRecorder
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
 
