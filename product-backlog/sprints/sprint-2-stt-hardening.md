@@ -79,7 +79,7 @@ branching strategy):
 | TASK-STT-007 | `task/TASK-STT-007-expand-fixture-samples` | ✅ merged into sprint branch |
 | TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ merged into sprint branch |
 | Review remediation | `task/sprint-2-review-remediation` | ✅ merged (RF-009/010/011) |
-| TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | ✅ done (awaiting merge into sprint branch) |
+| TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | ✅ merged into sprint branch |
 | TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | pending |
 
 > Docs/knowledge chores (`chore/self-contained-guidance`,
