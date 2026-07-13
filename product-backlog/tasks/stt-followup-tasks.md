@@ -304,7 +304,7 @@ Scenario: Gradium failure stays observable and sanitized
 **Related story:** US-036 (the `end_of_turn` slice it reports on)
 **Related decision:** DEC-010 (per-step latency traces before any SLO claim)
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 2 (STT hardening)
+**Status:** ✅ Done — Sprint 2 (STT hardening), 2026-07-13
 **Priority:** Medium
 **Branch:** `task/TASK-STT-009-end-of-turn-detection`
 
@@ -354,6 +354,27 @@ Scenario: End-of-turn is detected and measured as its own slice
 - Unit tests for the end-of-turn detector and its span emission.
 - `pipeline_timing.py` mapping updated so `end_of_turn` is no longer a gap.
 - Updated `docs/observability/voice-journey-timing.md` slice table.
+
+### Decision — authoritative end-of-turn signal (closes the sprint open question)
+
+For the V1 batch web path the **trailing-silence window** over the captured PCM16
+is authoritative, with an **explicit client stop** as the fallback when the buffer
+ends before a full window. A streaming **VAD** is the future drop-in replacement:
+`EndOfTurnDetector` is injected into `WebVoiceIngress`, so it can be swapped
+without touching the ingress, span or pipeline wiring.
+
+### Delivery Notes (2026-07-13)
+
+- New `web_voice/end_of_turn.py`: `EndOfTurnDetector` (silence-window +
+  client-stop fallback, configurable threshold/window, endianness-safe PCM16).
+- `WebVoiceIngress` runs the detector between ingress and STT and emits a
+  `voice.end_of_turn` span (duration = slice latency) + `voice.end_of_turn.detected`
+  event; a silent/empty buffer invents no boundary and records
+  `voice.end_of_turn.absent` instead (no span).
+- `pipeline_timing.py`: `end_of_turn -> ("voice.end_of_turn",)`; the unmeasured
+  note no longer points to a pending ticket. Slice now reports p50/p95/p99.
+- Evidence: 88 unit tests + 8 behave scenarios green; docs updated
+  (`voice-journey-timing.md`, README).
 
 ---
 

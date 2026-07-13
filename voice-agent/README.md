@@ -62,10 +62,10 @@ Evidence samples and acceptance-criteria coverage are documented in
 
 `stt_validation/pipeline_timing.py` aggregates spans into the six canonical
 journey slices (channel ingress → end-of-turn → STT → backend first token → TTS
-first audio → channel egress) with p50/p95/p99 per slice. Only the slices that
-have spans on this branch are measured (`channel_ingress`, `stt`); the downstream
-slices are reported explicitly as `"measured": false` with the ticket that will
-close them, so a gap is never mistaken for a fast slice.
+first audio → channel egress) with p50/p95/p99 per slice. The instrumented slices
+are `channel_ingress`, `end_of_turn` (TASK-STT-009, web voice runtime) and `stt`;
+the downstream slices are reported explicitly as `"measured": false` with the
+ticket that will close them, so a gap is never mistaken for a fast slice.
 
 ```bash
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium

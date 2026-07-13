@@ -33,15 +33,18 @@ PIPELINE_SLICES = (
 )
 
 # Canonical slice -> span names that measure it (first present name wins).
+# String literals (not imports) so this module stays free of a back-dependency on
+# the web_voice runtime; the emitter side owns the constants (END_OF_TURN_SPAN).
 _SLICE_SPAN_NAMES: dict[str, tuple[str, ...]] = {
     CHANNEL_INGRESS: ("web.voice.ingress", "stt.audio.accept"),
+    END_OF_TURN: ("voice.end_of_turn",),
     STT: ("stt.request",),
 }
 
 # Why a slice is not measured yet (only used when no span is present).
 _UNMEASURED_NOTES: dict[str, str] = {
     CHANNEL_INGRESS: "no channel-ingress span in this sample",
-    END_OF_TURN: "turn/end-of-speech detection not implemented (TASK-STT-009)",
+    END_OF_TURN: "no end-of-turn span in this sample",
     STT: "no stt.request span in this sample",
     BACKEND_FIRST_TOKEN: "backend orchestration deferred (TASK-WEB-003)",
     TTS_FIRST_AUDIO: "voice response / TTS deferred (TASK-WEB-002)",

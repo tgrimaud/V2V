@@ -1,3 +1,4 @@
+import array
 import json
 import sys
 import threading
@@ -10,7 +11,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from stt_validation import SttOutcome, TelemetryRecorder  # noqa: E402
 from web_voice import ChannelEnvelope, WebVoiceIngress  # noqa: E402
+from web_voice.end_of_turn import END_OF_TURN_SPAN, SIGNAL_SILENCE_WINDOW  # noqa: E402
 from web_voice.envelope import WEB_VOICE_CHANNEL  # noqa: E402
+
+
+def _speech_then_silence(speech_ms: float, silence_ms: float, sample_rate: int = 16000) -> bytes:
+    speech = [8000] * int(sample_rate * speech_ms / 1000)
+    silence = [0] * int(sample_rate * silence_ms / 1000)
+    data = array.array("h", speech + silence)
+    if sys.byteorder == "big":
+        data.byteswap()
+    return data.tobytes()
 from web_voice.server import (  # noqa: E402
     STT_ROUTE,
     WebVoiceHTTPServer,
@@ -111,6 +122,33 @@ class WebVoiceIngressTest(unittest.TestCase):
 
         self.assertTrue(provider.path_existed_during_call)
         self.assertFalse(provider.received_paths[0].exists())
+
+    def test_end_of_turn_span_measures_the_slice_for_speech_with_silence(self) -> None:
+        # GIVEN speech followed by a full trailing-silence window (TASK-STT-009)
+        ingress = WebVoiceIngress(_StubProvider())
+        telemetry = TelemetryRecorder()
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-eot")
+
+        ingress.transcribe_turn(_speech_then_silence(200, 500), envelope, telemetry)
+
+        span = _span(telemetry, END_OF_TURN_SPAN)
+        self.assertEqual(span.attributes["correlation_id"], "corr-eot")
+        self.assertEqual(span.attributes["end_of_turn_signal"], SIGNAL_SILENCE_WINDOW)
+        self.assertEqual(span.duration_ms, 500.0)
+        event_names = [event.name for event in telemetry.events()]
+        self.assertIn("voice.end_of_turn.detected", event_names)
+
+    def test_no_end_of_turn_span_for_pure_silence(self) -> None:
+        # GIVEN a silent buffer: no turn boundary must be invented
+        ingress = WebVoiceIngress(_StubProvider())
+        telemetry = TelemetryRecorder()
+
+        ingress.transcribe_turn(b"\x00" * 640, ChannelEnvelope.for_web_turn(), telemetry)
+
+        span_names = [span.name for span in telemetry.spans()]
+        self.assertNotIn(END_OF_TURN_SPAN, span_names)
+        event_names = [event.name for event in telemetry.events()]
+        self.assertIn("voice.end_of_turn.absent", event_names)
 
 
 class EnvelopeFromQueryTest(unittest.TestCase):

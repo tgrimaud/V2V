@@ -14,15 +14,23 @@ from stt_validation.providers import SttProvider
 from stt_validation.runner import SttValidationRunner
 from stt_validation.telemetry import TelemetryRecorder, Timer
 
+from .end_of_turn import END_OF_TURN_SPAN, EndOfTurnDetector, EndOfTurnResult
 from .envelope import ChannelEnvelope
 
 DEFAULT_AUDIO_FORMAT = "pcm_16000"
 
 
 class WebVoiceIngress:
-    def __init__(self, provider: SttProvider, *, audio_format: str = DEFAULT_AUDIO_FORMAT) -> None:
+    def __init__(
+        self,
+        provider: SttProvider,
+        *,
+        audio_format: str = DEFAULT_AUDIO_FORMAT,
+        end_of_turn_detector: EndOfTurnDetector | None = None,
+    ) -> None:
         self._provider = provider
         self._audio_format = audio_format
+        self._end_of_turn_detector = end_of_turn_detector or EndOfTurnDetector()
 
     def transcribe_turn(
         self,
@@ -34,12 +42,44 @@ class WebVoiceIngress:
     ) -> TranscriptResult:
         telemetry = telemetry or TelemetryRecorder()
         self._record_ingress(audio, envelope, telemetry, received_ms)
+        self._detect_end_of_turn(audio, envelope, telemetry)
         audio_path = _write_temp_audio(audio)
         try:
             runner = SttValidationRunner(self._provider, telemetry)
             return runner.validate(audio_path, envelope.correlation_id)
         finally:
             audio_path.unlink(missing_ok=True)
+
+    def _detect_end_of_turn(
+        self,
+        audio: bytes,
+        envelope: ChannelEnvelope,
+        telemetry: TelemetryRecorder,
+    ) -> None:
+        result = self._end_of_turn_detector.detect(audio)
+        if not result.detected or result.slice_ms is None:
+            # No usable speech -> no invented turn boundary; the slice stays
+            # "not measured" for this turn rather than a fabricated latency.
+            telemetry.record(
+                "voice.end_of_turn.absent",
+                correlation_id=envelope.correlation_id,
+                channel=envelope.channel,
+                provider=self._provider.name,
+            )
+            return
+        attrs = self._end_of_turn_attrs(envelope, result)
+        telemetry.span(END_OF_TURN_SPAN, result.slice_ms, **attrs)
+        telemetry.record("voice.end_of_turn.detected", **attrs)
+
+    def _end_of_turn_attrs(self, envelope: ChannelEnvelope, result: EndOfTurnResult) -> dict[str, object]:
+        return {
+            "correlation_id": envelope.correlation_id,
+            "channel": envelope.channel,
+            "provider": self._provider.name,
+            "end_of_turn_signal": result.signal,
+            "trailing_silence_ms": round(result.trailing_silence_ms, 3),
+            "speech_end_ms": round(result.speech_end_ms, 3) if result.speech_end_ms is not None else None,
+        }
 
     def _record_ingress(
         self,

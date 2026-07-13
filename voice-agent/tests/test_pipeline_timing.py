@@ -56,10 +56,32 @@ class PipelineTimingReportTest(unittest.TestCase):
         self.assertTrue(by_slice[CHANNEL_INGRESS].measured)
         self.assertTrue(by_slice[STT].measured)
         # AND deferred slices are explicit gaps, not silent omissions
-        for name in (END_OF_TURN, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+        for name in (BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
             self.assertFalse(by_slice[name].measured)
             self.assertIsNone(by_slice[name].report)
             self.assertTrue(by_slice[name].note)
+
+    def test_end_of_turn_slice_is_measured_when_its_span_is_present(self) -> None:
+        # GIVEN a reviewed sample carrying the end-of-turn span (TASK-STT-009)
+        spans = [_span("voice.end_of_turn", float(value)) for value in range(1, 21)]
+
+        # WHEN
+        report = PipelineTimingReport.from_spans(spans)
+        end_of_turn = next(s for s in report.slices if s.slice == END_OF_TURN)
+
+        # THEN the slice is measured with percentiles, not flagged as a gap
+        self.assertTrue(end_of_turn.measured)
+        self.assertEqual(end_of_turn.report.count, 20)
+        self.assertEqual(end_of_turn.report.p50_ms, 10.0)
+
+    def test_end_of_turn_is_a_gap_only_when_its_span_is_absent(self) -> None:
+        # GIVEN a sample without an end-of-turn span
+        report = PipelineTimingReport.from_spans([_span("stt.request", 5.0)])
+        by_slice = {s.slice: s for s in report.slices}
+
+        # THEN it is a gap, and the note no longer points to a pending ticket
+        self.assertFalse(by_slice[END_OF_TURN].measured)
+        self.assertNotIn("TASK-STT-009", by_slice[END_OF_TURN].note)
 
     def test_channel_ingress_prefers_web_span_over_fixture_accept_span(self) -> None:
         # GIVEN both a web ingress span and a fixture accept span in the sample

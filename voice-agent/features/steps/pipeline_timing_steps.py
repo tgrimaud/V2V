@@ -1,3 +1,5 @@
+import array
+import sys
 from pathlib import Path
 
 from behave import given, then, when
@@ -14,8 +16,8 @@ from stt_validation.pipeline_timing import (
 )
 from web_voice import ChannelEnvelope, WebVoiceIngress
 
-_INSTRUMENTED = (CHANNEL_INGRESS, STT)
-_DEFERRED = (END_OF_TURN, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS)
+_INSTRUMENTED = (CHANNEL_INGRESS, END_OF_TURN, STT)
+_DEFERRED = (BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS)
 
 
 class _SampleProvider:
@@ -28,13 +30,24 @@ class _SampleProvider:
         return "bonjour je voudrais comprendre ma facture"
 
 
+def _turn_audio(speech_ms: float, silence_ms: float, sample_rate: int = 16000) -> bytes:
+    # Speech followed by a trailing-silence window so end-of-turn is detected.
+    speech = [8000] * int(sample_rate * speech_ms / 1000)
+    silence = [0] * int(sample_rate * silence_ms / 1000)
+    data = array.array("h", speech + silence)
+    if sys.byteorder == "big":
+        data.byteswap()
+    return data.tobytes()
+
+
 @given("a reviewed sample of web voice turns captured on one recorder")
 def step_reviewed_sample(context):
     context.telemetry = TelemetryRecorder()
     ingress = WebVoiceIngress(_SampleProvider())
     for index in range(5):
         envelope = ChannelEnvelope.for_web_turn(correlation_id=f"qa-timing-{index}")
-        ingress.transcribe_turn(b"\x10\x20" * (200 + index * 40), envelope, context.telemetry)
+        audio = _turn_audio(speech_ms=150 + index * 20, silence_ms=500)
+        ingress.transcribe_turn(audio, envelope, context.telemetry)
 
 
 @when("the pipeline timing report is built for the sample")

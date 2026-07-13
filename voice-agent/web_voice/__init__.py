@@ -7,7 +7,22 @@ audio, builds a minimal channel envelope, and transcribes the turn through the
 existing SttProvider protocol without forking the provider.
 """
 
+from .end_of_turn import (
+    END_OF_TURN_SPAN,
+    SIGNAL_CLIENT_STOP,
+    SIGNAL_SILENCE_WINDOW,
+    EndOfTurnDetector,
+    EndOfTurnResult,
+)
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 
-__all__ = ["ChannelEnvelope", "WebVoiceIngress"]
+__all__ = [
+    "END_OF_TURN_SPAN",
+    "SIGNAL_CLIENT_STOP",
+    "SIGNAL_SILENCE_WINDOW",
+    "ChannelEnvelope",
+    "EndOfTurnDetector",
+    "EndOfTurnResult",
+    "WebVoiceIngress",
+]

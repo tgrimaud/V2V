@@ -12,7 +12,7 @@ reviews and QA run.
 
 ## Status
 
-**Status:** In progress (started 2026-07-10) — 4/5 tickets done (TASK-STT-011/007/005/006), 1 planned (TASK-STT-009)
+**Status:** In progress (started 2026-07-10) — 5/5 tickets done (TASK-STT-011/007/005/006/009); awaiting final sprint validation + merge
 **Created:** 2026-07-10
 **Predecessor:** [`sprint-stt-validation.md`](sprint-stt-validation.md) (Sprint 1 — Done, 2026-07-10)
 **Working branch:** `feat/sprint-2-stt-hardening` (from `feat/restart-from-scratch`)
@@ -47,7 +47,7 @@ reviews and QA run.
 | TASK-STT-007 | ✅ Done (2026-07-10) | Expanded to 22 fixtures (5/usable category, varied voices, padded onsets); per-category aggregation + `MIN_SAMPLES_FOR_PERCENTILES=5` significance flag; live Gradium per-category run recorded. Closes RF-003 + RF-005. Residual (documented open risk, not blocking): real human recordings for `short`/`noisy`. |
 | TASK-STT-005 | ✅ Done (2026-07-10) | `sanitization.py` now redacts bare filenames (`<redacted-file>`) and identifier-like tokens (`<redacted-id>`: UUID, secret prefixes, digit runs, mixed ids) on top of paths; words/dates preserved; `error_code` + length cap kept. Dedicated `test_sanitization.py` (13 tests). Closes RF-001. |
 | TASK-STT-006 | ✅ Done (2026-07-13) | `SttOutcome.UNAVAILABLE` + provider-agnostic `NoSpeechDetectedError`; runner maps no-speech to `unavailable` across all four telemetry surfaces (`stt.unavailable` event, `info` log, `error_code=no_speech`, span/completed `outcome=unavailable`); quality harness note + behave scenario tightened to assert `unavailable`. 77 unit + 8 behave green. Closes RF-004. |
-| TASK-STT-009 | Planned | Voice-runtime end-of-turn detection on the web voice stream; emits an OpenTelemetry span consumed by `PipelineTimingReport`. |
+| TASK-STT-009 | ✅ Done (2026-07-13) | `EndOfTurnDetector` (web voice runtime): trailing-silence window authoritative + explicit client-stop fallback (VAD = future drop-in). `WebVoiceIngress` emits a `voice.end_of_turn` span consumed by `PipelineTimingReport`; silence invents no boundary. `end_of_turn` slice now reports p50/p95/p99. 88 unit + 8 behave green. Closes the US-036 `end_of_turn` gap. |
 
 ## Out Of Sprint
 
@@ -80,7 +80,7 @@ branching strategy):
 | TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ merged into sprint branch |
 | Review remediation | `task/sprint-2-review-remediation` | ✅ merged (RF-009/010/011) |
 | TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | ✅ merged into sprint branch |
-| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | pending |
+| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | ✅ done (awaiting merge into sprint branch) |
 
 > Docs/knowledge chores (`chore/self-contained-guidance`,
 > `chore/generalize-knowledge-session`) were also cut from and merged back into the
@@ -109,4 +109,4 @@ Scenario: The STT path is fully observable and safe
 
 - ~~How many samples per category before p95/p99 is reported as meaningful?~~ **Partly answered (TASK-STT-007):** `MIN_SAMPLES_FOR_PERCENTILES = 5` is the reporting floor below which a category is flagged not significant; but 5 is not enough for stable p95/p99 (nearest-rank p95 of 5 ≈ max). Real trust needs many more samples **and** real human recordings — still open.
 - ~~After removing WER artifacts, does the default `quality_threshold` (0.8) still make sense?~~ **Answered (TASK-STT-011):** yes — 0.8 cleanly separates good transcripts (short/long/accented ≥ 0.82) from the genuinely degraded noisy sample (0.60). Kept.
-- Which end-of-turn signal is authoritative for the web path — silence window, VAD, or an explicit client stop (feeds TASK-STT-009)?
+- ~~Which end-of-turn signal is authoritative for the web path — silence window, VAD, or an explicit client stop (feeds TASK-STT-009)?~~ **Answered (TASK-STT-009):** the **trailing-silence window** is authoritative for the V1 batch web path, with an **explicit client stop** as the fallback when the buffer ends before a full window; **VAD** is the future drop-in replacement (the `EndOfTurnDetector` is injected into `WebVoiceIngress`).
