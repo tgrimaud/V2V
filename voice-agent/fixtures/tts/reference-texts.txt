@@ -1,0 +1,10 @@
+# Reference response texts for the voice-out (TTS) QA harness (TASK-WEB-002).
+# One phrase per line; blank lines and lines starting with '#' are ignored.
+# The offline fixture provider synthesizes a deterministic tone (no committed
+# audio clips needed); these texts also feed the optional live round-trip QA
+# (synthesize -> Gradium STT -> WER vs the input text).
+Bonjour, je peux vous aider avec votre facture.
+Votre forfait a bien été mis à jour ce mois-ci.
+Le montant total est de vingt-neuf euros et quatre-vingt-dix centimes.
+Souhaitez-vous que je vous mette en relation avec un conseiller ?
+Je vous remercie de votre appel et vous souhaite une bonne journée.

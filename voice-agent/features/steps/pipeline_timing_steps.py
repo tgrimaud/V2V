@@ -4,7 +4,6 @@ from pathlib import Path
 
 from behave import given, then, when
 
-from stt_validation import TelemetryRecorder
 from stt_validation.pipeline_timing import (
     BACKEND_FIRST_TOKEN,
     CHANNEL_EGRESS,
@@ -14,7 +13,9 @@ from stt_validation.pipeline_timing import (
     TTS_FIRST_AUDIO,
     PipelineTimingReport,
 )
-from web_voice import ChannelEnvelope, WebVoiceIngress
+from tts_synthesis import FixtureTtsProvider
+from voice_common.telemetry import TelemetryRecorder
+from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
 
 _INSTRUMENTED = (CHANNEL_INGRESS, END_OF_TURN, STT)
 _DEFERRED = (BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS)
@@ -50,6 +51,19 @@ def step_reviewed_sample(context):
         ingress.transcribe_turn(audio, envelope, context.telemetry)
 
 
+@given("a reviewed sample of full web voice turns with a spoken reply")
+def step_full_turn_sample(context):
+    context.telemetry = TelemetryRecorder()
+    ingress = WebVoiceIngress(_SampleProvider())
+    egress = WebVoiceEgress(FixtureTtsProvider())
+    for index in range(5):
+        envelope = ChannelEnvelope.for_web_turn(correlation_id=f"qa-full-{index}")
+        audio = _turn_audio(speech_ms=150 + index * 20, silence_ms=500)
+        result = ingress.transcribe_turn(audio, envelope, context.telemetry)
+        response = egress.synthesize_turn(result.transcript, envelope, context.telemetry)
+        egress.record_egress(response, envelope, context.telemetry, sent_ms=1.0 + index * 0.5)
+
+
 @when("the pipeline timing report is built for the sample")
 def step_build_report(context):
     context.report = PipelineTimingReport.from_spans(context.telemetry.spans())
@@ -79,3 +93,21 @@ def step_deferred_gaps(context):
         assert not timing.measured, name
         assert timing.report is None, name
         assert timing.note, name
+
+
+@then("the TTS first audio and channel egress slices expose p50, p95 and p99 for the reviewed sample")
+def step_voice_out_percentiles(context):
+    for name in (TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+        timing = context.by_slice[name]
+        assert timing.measured, name
+        report = timing.report
+        assert report.count == 5, (name, report.count)
+        assert report.p50_ms is not None and report.p95_ms is not None and report.p99_ms is not None
+
+
+@then("only the backend slice remains a latency gap to close")
+def step_only_backend_gap(context):
+    assert not context.by_slice[BACKEND_FIRST_TOKEN].measured
+    assert context.by_slice[BACKEND_FIRST_TOKEN].note
+    for name in (CHANNEL_INGRESS, END_OF_TURN, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+        assert context.by_slice[name].measured, name

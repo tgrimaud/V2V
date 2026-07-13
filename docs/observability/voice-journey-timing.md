@@ -23,8 +23,8 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | `end_of_turn` | `voice.end_of_turn` (web voice runtime) | Instrumented (TASK-STT-009) |
 | `stt` | `stt.request` | Instrumented |
 | `backend_first_token` | — | Gap: backend orchestration deferred (TASK-WEB-003) |
-| `tts_first_audio` | — | Gap: voice response / TTS deferred (TASK-WEB-002) |
-| `channel_egress` | — | Gap: voice response egress deferred (TASK-WEB-002) |
+| `tts_first_audio` | `voice.tts.first_audio` (TTS synthesis runner) | Instrumented (TASK-WEB-002) |
+| `channel_egress` | `web.voice.egress` (web voice runtime) | Instrumented (TASK-WEB-002) |
 
 For `channel_ingress` the first present span wins: a web turn uses
 `web.voice.ingress`; a fixture-only run falls back to `stt.audio.accept`. The two
@@ -63,9 +63,11 @@ python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json
 ```
 
 Example output (fixture sample, 5 turns). The fixture CLI is a pure STT replay
-(it does not run the web voice runtime), so `end_of_turn` is a gap here; it is
-measured on the **web voice path** — see the end-of-turn section above and the
-`pipeline_timing.feature` scenario, which drives turns through `WebVoiceIngress`:
+(it does not run the web voice runtime), so `end_of_turn`, `tts_first_audio` and
+`channel_egress` are gaps here; they are measured on the **web voice path** — see
+the end-of-turn section above and the `pipeline_timing.feature` scenarios, which
+drive turns through `WebVoiceIngress` and (for the voice-out slices)
+`WebVoiceEgress`:
 
 ```json
 {
@@ -79,9 +81,9 @@ measured on the **web voice path** — see the end-of-turn section above and the
     { "slice": "backend_first_token", "measured": false,
       "note": "backend orchestration deferred (TASK-WEB-003)" },
     { "slice": "tts_first_audio", "measured": false,
-      "note": "voice response / TTS deferred (TASK-WEB-002)" },
+      "note": "no voice.tts.first_audio span in this sample" },
     { "slice": "channel_egress", "measured": false,
-      "note": "voice response egress deferred (TASK-WEB-002)" }
+      "note": "no web.voice.egress span in this sample" }
   ]
 }
 ```
@@ -93,7 +95,8 @@ measured on the **web voice path** — see the end-of-turn section above and the
 | Ingress, end-of-turn, STT, backend, TTS first audio, egress assessed separately | Six canonical slices always reported (`PIPELINE_SLICES`) |
 | p50/p95/p99 for the reviewed sample | `LatencyReport` per instrumented slice over the sample's spans |
 | End-of-turn detected and measured as its own slice (TASK-STT-009) | `voice.end_of_turn` span from `WebVoiceIngress`; `end_of_turn` slice reports p50/p95/p99 over the web sample |
-| Latency gaps are visible, not hidden | Deferred slices reported `"measured": false` with a reason |
+| TTS first audio + channel egress measured (TASK-WEB-002) | `voice.tts.first_audio` span from `TtsSynthesisRunner`, `web.voice.egress` span from `WebVoiceEgress`; both slices report p50/p95/p99 over a full-turn sample |
+| Latency gaps are visible, not hidden | The remaining deferred slice (`backend_first_token`) is reported `"measured": false` with a reason |
 
 ## Tests
 
@@ -102,5 +105,8 @@ measured on the **web voice path** — see the end-of-turn section above and the
 - `tests/test_end_of_turn.py` (unit: silence-window vs client-stop signal,
   no invented boundary on silence/empty audio, threshold/config).
 - `tests/test_web_voice_ingress.py` (end-of-turn span emission + absent event).
-- `features/pipeline_timing.feature` (US-036 acceptance scenario over a
-  reviewed sample of web voice turns — now including the `end_of_turn` slice).
+- `tests/test_tts_runner.py` / `tests/test_web_voice_egress.py` (`voice.tts.first_audio`
+  and `web.voice.egress` span emission for the voice-out slices).
+- `features/pipeline_timing.feature` (US-036 acceptance scenarios over a reviewed
+  sample of web voice turns — the STT-only sample, plus a full-turn sample where
+  the `tts_first_audio` and `channel_egress` slices become measured).

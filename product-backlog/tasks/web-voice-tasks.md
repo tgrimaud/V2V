@@ -248,8 +248,8 @@ remain the only other shared surfaces.
   - Files: `voice-agent/tests/test_architecture_separation.py`.
   - AC: fails if any `tts_synthesis/` module imports `stt_validation.*` or any `stt_validation/` module imports `tts_synthesis.*` (shared code lives in the neutral `voice_common/`, which both may import).
 
-- [ ] **ST-8 — QA harness + fixtures + behave + docs.**
-  - Files: `voice-agent/fixtures/tts/` (reference texts + committed clips), `voice-agent/features/tts_synthesis.feature`, extend `voice-agent/features/pipeline_timing.feature`; optional live round-trip QA (`synthesize -> existing Gradium STT -> WER vs input text`); docs `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`.
+- [x] **ST-8 — QA harness + fixtures + behave + docs.** Done 2026-07-13 — `features/tts_synthesis.feature` (synthesize→audio→slice observable, empty→unavailable no audio, failure sanitized with no secret leak) + extended `pipeline_timing.feature` (full-turn sample: TTS_FIRST_AUDIO + CHANNEL_EGRESS measured, only backend gap remains); `fixtures/tts/reference-texts.txt` consumed by the steps. Behave 4 features/12 scenarios green, 128 unit tests green. Docs updated. Adversarial review 93/100. (Offline fixture path is synthetic — no committed clips; live round-trip WER QA left as optional/future using the reference texts.)
+  - Files: `voice-agent/fixtures/tts/reference-texts.txt`, `voice-agent/features/tts_synthesis.feature` + `features/steps/tts_steps.py`, extended `features/pipeline_timing.feature` + steps; docs `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`.
   - AC: behave green (synthesize -> audio -> slice observable; empty text -> unavailable, no audio); both new slices shown measured; docs updated.
 
 ---

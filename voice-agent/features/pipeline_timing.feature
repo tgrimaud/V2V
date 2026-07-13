@@ -10,3 +10,10 @@ Feature: Voice journey timing by pipeline slice
     Then channel ingress, end-of-turn, STT, backend, TTS first audio and channel egress are reported separately
     And the instrumented slices expose p50, p95 and p99 for the reviewed sample
     And the not-yet-instrumented slices are flagged as latency gaps to close
+
+  # TASK-WEB-002 / US-036 - the voice-out slices become measurable once egress runs
+  Scenario: Voice-out slices are measurable once the egress runs
+    Given a reviewed sample of full web voice turns with a spoken reply
+    When the pipeline timing report is built for the sample
+    Then the TTS first audio and channel egress slices expose p50, p95 and p99 for the reviewed sample
+    And only the backend slice remains a latency gap to close

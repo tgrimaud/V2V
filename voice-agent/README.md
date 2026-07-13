@@ -176,3 +176,47 @@ The web ingress outcome contract is covered by `tests/test_web_voice_ingress.py`
 and `features/web_voice.feature` (both run against the same code path with an
 in-memory stub provider). Live browser validation (mic capture, transcript
 render, time-to-transcript) is a QA step using Chrome DevTools MCP.
+
+## Web voice response (US-019 TTS half, TASK-WEB-002)
+
+`tts_synthesis` is the **voice-out** half: the symmetric mirror of
+`stt_validation`. It turns response text into audio through the same
+port/adapter shape (a `TtsProvider` protocol, a `fixture`/`gradium` factory, and
+a `TtsSynthesisRunner` that emits the TTS-slice telemetry). `web_voice` then
+exposes it over HTTP and the browser plays the reply (echo loop).
+
+```bash
+# live synthesis (needs a valid Gradium key + a real voice id)
+export GRADIUM_API_KEY=...          # never commit this
+export GRADIUM_VOICE_ID=...         # a real catalog voice; "default" is rejected
+python3 -m web_voice.server --provider gradium
+# then open http://127.0.0.1:8090/ , record a question, and hear the echo
+
+# offline plumbing check (fixture provider, no key, no network)
+python3 -m web_voice.server --provider fixture
+```
+
+- `POST /api/voice/tts?text=...` returns `audio/wav` (PCM16 mono wrapped in a
+  44-byte header, ready for `decodeAudioData`) on success, or a sanitized JSON
+  error on failure/unavailable (same `error_code`/`error_reason` contract as STT).
+- `GradiumTtsProvider` speaks the ST-1 WebSocket contract
+  (`docs/qa/gradium-tts-contract.md`); its transport is injectable so unit tests
+  cover success, invalid-voice, credit, auth, timeout and no-audio paths with no
+  network, and assert the API key never reaches an exception, log or telemetry.
+- The runner emits a `voice.tts.first_audio` span and `tts.request.duration_ms`
+  metric; the egress adds a real `web.voice.egress` span (WAV byte count + the
+  time spent writing to the wire). Both feed the US-036 slice report.
+- Empty text is reported `unavailable` (not a failure) and invents no audio.
+
+### Shared code and the STT/TTS boundary
+
+Cross-cutting utilities live in the neutral `voice_common/` package
+(`telemetry`, `sanitization`) which **both** halves import. `stt_validation` and
+`tts_synthesis` must never import each other — enforced by
+`tests/test_architecture_separation.py` (an AST import scan, both directions).
+
+The voice-out contract is covered by `tests/test_tts_providers.py`,
+`tests/test_gradium_tts_provider.py`, `tests/test_tts_runner.py`,
+`tests/test_web_voice_egress.py` and `features/tts_synthesis.feature`. Live
+browser validation (echo playback + time-to-first-audio) is a Chrome DevTools MCP
+QA step.
