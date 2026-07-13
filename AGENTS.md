@@ -12,6 +12,12 @@
 - When the user validates a ticket, record the validation, rerun checks, commit
   and push the ticket branch automatically. Merge still needs an explicit user
   request.
+- **Closing a sprint is not just merging the branch.** When the user says a sprint
+  is closed, the merge is only step one — you MUST also update the sprint status in
+  the same session (a fast-forward merge carries no closure commit, so nothing
+  updates itself): (1) the sprint file `## Status` + roadmap row → `✅ Done (closed <date>)`,
+  (2) the `backlog-index.md` sprint registry row → `✅ Done (<date>)`, (3) a dated
+  `done-tasks.md` entry summarizing the sprint. Then commit + push these doc updates.
 - **Commit after each task**; do not leave code uncommitted.
 - On `feat/restart-from-scratch`, the previous implementation directories
   (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
@@ -124,6 +130,11 @@
   change, create the user story, bug or task ticket first.
 - Merging because tests or QA passed: the user is the final validator; no branch
   is merged unless the user explicitly requests it.
+- Treating "close the sprint" as merge-only and leaving the sprint status stale — a
+  fast-forward merge carries no closure commit, so the sprint file, `backlog-index.md`
+  registry and `done-tasks.md` stay "In progress/Planned" unless you update them in
+  the same session. On sprint closure: merge, then flip all three to `✅ Done`, then
+  commit + push the doc updates.
 - Patching repeated Markdown fields like `**Status:**` without the ticket header
   in context: it can update the wrong story. Reread the target block before
   committing.
