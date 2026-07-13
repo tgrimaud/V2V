@@ -268,3 +268,21 @@
 ### Files changed
 - `.cursor/skills/generalize-knowledge/SKILL.md` — retargeted to this repository's own knowledge files.
 - `CLAUDE.md`, `AGENTS.md`, `done-tasks.md` — self-contained notes + repatriated Voice Support Bot knowledge; new nested-repo / working-tree pitfalls.
+
+## 2026-07-13 — Sprint 2 completion (TASK-STT-006 + TASK-STT-009) + sprint closure
+
+**Summary:**
+
+- **TASK-STT-006 — dedicated `UNAVAILABLE` STT outcome:** added `SttOutcome.UNAVAILABLE` and a `NoSpeechDetectedError` raised by the fixture and Gradium providers on an empty transcript, mapped in `SttValidationRunner` to a distinct outcome/telemetry (no invented transcript) and recognized by the quality harness. Distinguishes "no usable speech" from a genuine failure. Validated live on Gradium: the two silence fixtures return `unavailable` / `no_speech` with an empty transcript.
+- **TASK-STT-009 — end-of-turn detection + instrumentation (US-036 `end_of_turn` slice):** added `EndOfTurnDetector` (authoritative trailing-silence window over PCM16 with an explicit `client_stop` fallback, endianness-safe), wired into `WebVoiceIngress` to emit the `voice.end_of_turn` span + `detected`/`absent` events, and registered the slice in `pipeline_timing`. Streaming VAD upgrade ticketed as **TASK-STT-012** (Sprint 4) as a drop-in replacement.
+- **Live Gradium validation (real API key from `.env`):** full 22-fixture quality run (real transcripts, per-category WER, latency p50≈2.3s/p95≈3.1s) and full web-voice-ingress run driving `WebVoiceIngress` + real Gradium — all three implemented slices (`channel_ingress`, `end_of_turn`, `stt`) measured end to end.
+- **Quality threshold:** briefly recalibrated 0.8→0.7 against the live run, then reverted to **0.8** — the fixtures are synthetic, so the strict target stays as a reference; recalibration deferred until real human recordings exist (TASK-STT-007 residual). The gate is legitimately `ready: false` on synthetic noisy audio.
+- **Sprint closure:** validated by the user; `feat/sprint-2-stt-hardening` merged fast-forward into `feat/restart-from-scratch` (88 unit + 8 behave green), sprint branch deleted, `feat/restart-from-scratch` pushed to origin.
+
+### Files changed
+- `voice-agent/stt_validation/models.py`, `providers.py`, `gradium_provider.py`, `runner.py`, `quality.py` — `UNAVAILABLE` outcome + `NoSpeechDetectedError`.
+- `voice-agent/web_voice/end_of_turn.py` (new), `ingress.py` — end-of-turn detector + span/event emission.
+- `voice-agent/stt_validation/pipeline_timing.py` — `voice.end_of_turn` slice registration.
+- `voice-agent/tests/test_end_of_turn.py` (new), `test_web_voice_ingress.py`, `test_pipeline_timing.py`, `test_gradium_provider.py`, `test_stt_validation_runner.py`, `test_quality.py` — coverage.
+- `product-backlog/` — TASK-STT-006/009 marked Done, TASK-STT-012 added (Sprint 4), Sprint 2 status closed, backlog-index registry updated.
+- `docs/observability/`, `docs/qa/` — telemetry + QA doc updates for the new outcome and slice.

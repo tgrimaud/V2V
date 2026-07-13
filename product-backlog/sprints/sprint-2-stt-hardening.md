@@ -12,10 +12,10 @@ reviews and QA run.
 
 ## Status
 
-**Status:** In progress (started 2026-07-10) — 5/5 tickets done (TASK-STT-011/007/005/006/009); awaiting final sprint validation + merge
+**Status:** ✅ Done (closed 2026-07-13) — 5/5 tickets done (TASK-STT-011/007/005/006/009); validated by the user, merged fast-forward into `feat/restart-from-scratch` and pushed to origin.
 **Created:** 2026-07-10
 **Predecessor:** [`sprint-stt-validation.md`](sprint-stt-validation.md) (Sprint 1 — Done, 2026-07-10)
-**Working branch:** `feat/sprint-2-stt-hardening` (from `feat/restart-from-scratch`)
+**Working branch:** `feat/sprint-2-stt-hardening` (from `feat/restart-from-scratch`) — merged (ff) into `feat/restart-from-scratch` on 2026-07-13 and deleted.
 **Final validator:** User
 **Merge rule:** no branch is merged unless the user explicitly asks.
 **Adversarial review:** run after the first three tickets; findings RF-009/010/011 raised and resolved on `task/sprint-2-review-remediation` (merged).
@@ -25,7 +25,7 @@ reviews and QA run.
 | Sprint | Theme | State |
 |---|---|---|
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
-| **Sprint 2** | **STT hardening (this sprint)** | Planned |
+| **Sprint 2** | **STT hardening (this sprint)** | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | Planned |
 | Sprint 4 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) | Planned |
 
