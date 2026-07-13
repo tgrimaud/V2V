@@ -244,7 +244,7 @@ remain the only other shared surfaces.
   - AC: speaking a phrase plays back its echo; time-to-first-audio measurable.
   - Evidence: Chrome DevTools MCP note (playback + failure render + timing).
 
-- [ ] **ST-7 — Architecture separation test.**
+- [x] **ST-7 — Architecture separation test.** Done 2026-07-13 — AST-based import scan fails if `tts_synthesis/` imports `stt_validation.*` or vice versa (relative + `voice_common` imports allowed); includes a self-test proving the detector flags a synthetic cross-import. 4 tests green; both directions currently clean. Adversarial review 95/100.
   - Files: `voice-agent/tests/test_architecture_separation.py`.
   - AC: fails if any `tts_synthesis/` module imports `stt_validation.*` or any `stt_validation/` module imports `tts_synthesis.*` (shared code lives in the neutral `voice_common/`, which both may import).
 
