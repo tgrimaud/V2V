@@ -14,15 +14,20 @@ from .end_of_turn import (
     EndOfTurnDetector,
     EndOfTurnResult,
 )
+from .egress import CHANNEL_EGRESS_SPAN, VoiceResponse, WebVoiceEgress, pcm_to_wav
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 
 __all__ = [
+    "CHANNEL_EGRESS_SPAN",
     "END_OF_TURN_SPAN",
     "SIGNAL_CLIENT_STOP",
     "SIGNAL_SILENCE_WINDOW",
     "ChannelEnvelope",
     "EndOfTurnDetector",
     "EndOfTurnResult",
+    "VoiceResponse",
+    "WebVoiceEgress",
     "WebVoiceIngress",
+    "pcm_to_wav",
 ]

@@ -19,14 +19,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from stt_validation.models import SttOutcome  # noqa: E402
 from stt_validation.provider_factory import GRADIUM, PROVIDER_NAMES, build_provider  # noqa: E402
-from stt_validation.telemetry import TelemetryRecorder, Timer  # noqa: E402
+from tts_synthesis.provider_factory import build_provider as build_tts_provider  # noqa: E402
+from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
+from .egress import WebVoiceEgress  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STT_ROUTE = "/api/voice/stt"
+TTS_ROUTE = "/api/voice/tts"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # guard against oversized uploads (~13 min PCM16 16k)
+MAX_TTS_TEXT_CHARS = 5000  # guard against oversized synthesis requests
 _STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
 
 
@@ -47,7 +51,7 @@ class WebVoiceHTTPServer(ThreadingHTTPServer):
         self.server_port = port
 
 
-def build_handler(ingress: WebVoiceIngress) -> type[BaseHTTPRequestHandler]:
+def build_handler(ingress: WebVoiceIngress, egress: WebVoiceEgress) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
@@ -59,10 +63,13 @@ def build_handler(ingress: WebVoiceIngress) -> type[BaseHTTPRequestHandler]:
             self._serve_static(filename)
 
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-            if urlparse(self.path).path != STT_ROUTE:
+            path = urlparse(self.path).path
+            if path == STT_ROUTE:
+                self._handle_stt()
+            elif path == TTS_ROUTE:
+                self._handle_tts()
+            else:
                 self._send_json(404, {"error": "not_found"})
-                return
-            self._handle_stt()
 
         def _handle_stt(self) -> None:
             receive = Timer()
@@ -77,6 +84,24 @@ def build_handler(ingress: WebVoiceIngress) -> type[BaseHTTPRequestHandler]:
             _log_turn(telemetry)
             status = 200 if result.outcome is SttOutcome.SUCCESS else 502
             self._send_json(status, result.to_dict())
+
+        def _handle_tts(self) -> None:
+            query = urlparse(self.path).query
+            text = _first(parse_qs(query), "text") or ""
+            if len(text) > MAX_TTS_TEXT_CHARS:
+                self._send_json(413, {"error": "text_too_large"})
+                return
+            envelope = _envelope_from_query(query)
+            telemetry = TelemetryRecorder()
+            response = egress.synthesize_turn(text, envelope, telemetry)
+            if response.wav is None:
+                _log_turn(telemetry)
+                self._send_json(502, response.result.to_dict())
+                return
+            send = Timer()
+            self._send_wav(response.wav)
+            egress.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
+            _log_turn(telemetry)
 
         def _read_body(self) -> bytes | None:
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -103,6 +128,13 @@ def build_handler(ingress: WebVoiceIngress) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _send_wav(self, wav: bytes) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Content-Length", str(len(wav)))
+            self.end_headers()
+            self.wfile.write(wav)
 
         def log_message(self, *_args) -> None:  # silence default per-request stderr noise
             return
@@ -135,8 +167,9 @@ def _log_turn(telemetry: TelemetryRecorder) -> None:
 def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
-    server = WebVoiceHTTPServer((args.host, args.port), build_handler(ingress))
-    print(f"Web voice ingress on http://{args.host}:{args.port} (provider={args.provider})", file=sys.stderr)
+    egress = WebVoiceEgress(build_tts_provider(args.provider))
+    server = WebVoiceHTTPServer((args.host, args.port), build_handler(ingress, egress))
+    print(f"Web voice server on http://{args.host}:{args.port} (provider={args.provider})", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -10,7 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from stt_validation import SttOutcome, TelemetryRecorder  # noqa: E402
-from web_voice import ChannelEnvelope, WebVoiceIngress  # noqa: E402
+from tts_synthesis import FixtureTtsProvider  # noqa: E402
+from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
 from web_voice.end_of_turn import END_OF_TURN_SPAN, SIGNAL_SILENCE_WINDOW  # noqa: E402
 from web_voice.envelope import WEB_VOICE_CHANNEL  # noqa: E402
 
@@ -167,7 +168,8 @@ class EnvelopeFromQueryTest(unittest.TestCase):
 
 class WebVoiceServerTest(unittest.TestCase):
     def _serve(self, ingress: WebVoiceIngress) -> tuple[WebVoiceHTTPServer, int]:
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(ingress))
+        egress = WebVoiceEgress(FixtureTtsProvider())
+        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(ingress, egress))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)

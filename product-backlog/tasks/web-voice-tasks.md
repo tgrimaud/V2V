@@ -232,7 +232,7 @@ remain the only other shared surfaces.
   - AC: three outcomes covered; `tts_first_audio` (and `channel_egress` once egress emits) reported measured.
   - Test: `tests/test_tts_runner.py`, extend `tests/test_pipeline_timing.py`.
 
-- [ ] **ST-5 — Web egress + `POST /api/voice/tts` (WAV out).**
+- [x] **ST-5 — Web egress + `POST /api/voice/tts` (WAV out).** Done 2026-07-13 — `WebVoiceEgress` (synthesize → WAV via `pcm_to_wav`) + `web.voice.egress` span measured on the real send window; `POST /api/voice/tts?text=…` returns `audio/wav` on success, sanitized JSON on failure (`MAX_TTS_TEXT_CHARS` guard). HTTP round-trip test proves WAV out + both TTS spans with propagated correlation id. 124 tests green; adversarial review 93/100.
   - Files: `voice-agent/web_voice/egress.py`, edit `voice-agent/web_voice/server.py`; `pcm_to_wav` helper.
   - Content: `WebVoiceEgress(provider)` mirroring `WebVoiceIngress` — emits `web.voice.egress` span (real bytes-out) + delegates to `TtsSynthesisRunner`. Endpoint accepts text + envelope query params, returns WAV bytes (PCM16 + 44-byte header), stable JSON error contract on failure.
   - AC: endpoint returns playable WAV for a text; failure returns sanitized JSON error; egress span emitted.
