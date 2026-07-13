@@ -206,13 +206,13 @@ STT/TTS separation is a hard contract: `tts_synthesis/` must not import
 `stt_validation/` and vice versa (shared only: `telemetry`, `sanitization`,
 `ChannelEnvelope`, read-only `pipeline_timing`).
 
-- [ ] **ST-1 — Gradium TTS spike (lock the contract).**
+- [x] **ST-1 — Gradium TTS spike (lock the contract).** Done 2026-07-13 — contract verified live; see `docs/qa/gradium-tts-contract.md`. Finding: `voice_id=default` invalid, real catalog id required.
   - Files: `voice-agent/scripts/gradium_tts_spike.py` (disposable), findings note in `docs/qa/` or `docs/observability/`.
   - Do: load `.env`, open `wss://api.gradium.ai/api/speech/tts`, send `setup` (`voice_id` from `GRADIUM_VOICE_ID`, `output_format: pcm_16000`), send `text` + `end_of_stream`, collect `audio` chunks, save a `.wav` to listen.
   - AC: documented message shapes, base64 chunk format, `ready`/`end_of_stream` handshake, first-chunk latency, and whether `GRADIUM_VOICE_ID=default` is valid.
   - Evidence: live run note (real key). Add `websockets` to `voice-agent/requirements.txt`.
 
-- [ ] **ST-2 — TTS models + provider protocol + fixture provider.**
+- [x] **ST-2 — TTS models + provider protocol + fixture provider.** Done 2026-07-13 — `tts_synthesis/` created (no import of `stt_validation`); 6 tests green; adversarial review 93/100 (added `to_dict` no-leak test).
   - Files: `voice-agent/tts_synthesis/__init__.py`, `models.py`, `providers.py`.
   - Content: `TtsOutcome{SUCCESS,FAILED,UNAVAILABLE}`, `SynthesisResult(audio, provider, outcome, duration_ms, tts_request_ms, correlation_id, audio_format, error_code, error_reason)`; `TtsProvider` Protocol (`name`, `synthesize(text)->bytes`); `EmptyTextError` (-> UNAVAILABLE); `FixtureTtsProvider` returning a committed reference clip keyed by text.
   - AC: fixture returns non-empty PCM for a known text; empty/whitespace text raises `EmptyTextError`.
