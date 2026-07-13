@@ -60,12 +60,15 @@ Evidence samples and acceptance-criteria coverage are documented in
 
 ## Voice-journey timing by pipeline slice (US-036)
 
-`stt_validation/pipeline_timing.py` aggregates spans into the six canonical
-journey slices (channel ingress → end-of-turn → STT → backend first token → TTS
-first audio → channel egress) with p50/p95/p99 per slice. The instrumented slices
-are `channel_ingress`, `end_of_turn` (TASK-STT-009, web voice runtime) and `stt`;
-the downstream slices are reported explicitly as `"measured": false` with the
-ticket that will close them, so a gap is never mistaken for a fast slice.
+`voice_common/pipeline_timing.py` (a neutral, shared aggregator; run via the
+`stt_validation.pipeline_timing_cli` wrapper) aggregates spans into the six
+canonical journey slices (channel ingress → end-of-turn → STT → backend first
+token → TTS first audio → channel egress) with p50/p95/p99 per slice. The
+instrumented slices are `channel_ingress`, `end_of_turn` (TASK-STT-009, web voice
+runtime), `stt`, and — since Sprint 3 (TASK-WEB-002) — `tts_first_audio` and
+`channel_egress` on the web voice path. Only `backend_first_token` remains a gap
+(TASK-WEB-003); it is reported explicitly as `"measured": false` with the ticket
+that will close it, so a gap is never mistaken for a fast slice.
 
 ```bash
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium
@@ -211,9 +214,10 @@ python3 -m web_voice.server --provider fixture
 ### Shared code and the STT/TTS boundary
 
 Cross-cutting utilities live in the neutral `voice_common/` package
-(`telemetry`, `sanitization`) which **both** halves import. `stt_validation` and
-`tts_synthesis` must never import each other — enforced by
-`tests/test_architecture_separation.py` (an AST import scan, both directions).
+(`telemetry`, `sanitization`, and the read-only `pipeline_timing` aggregator)
+which **both** halves import. `stt_validation` and `tts_synthesis` must never
+import each other — enforced by `tests/test_architecture_separation.py` (an AST
+import scan, both directions, which also asserts `voice_common` stays neutral).
 
 The voice-out contract is covered by `tests/test_tts_providers.py`,
 `tests/test_gradium_tts_provider.py`, `tests/test_tts_runner.py`,

@@ -13,7 +13,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 4), no barge-
 
 ## Status
 
-**Status:** Done (2026-07-13) — TASK-WEB-002 (batch TTS voice-out) delivered; ST-1..ST-8 complete, 128 unit tests + 4 behave features green, echo loop MCP-validated. Branch **unmerged** pending user validation.
+**Status:** Done (2026-07-13) — TASK-WEB-002 (batch TTS voice-out) delivered; ST-1..ST-8 complete plus post-review follow-ups (pipeline_timing moved to `voice_common`, runner refactor, `asyncio` live-path fix, `websockets` pin widened), 130 unit tests + 4 behave features green, echo loop MCP-validated + live Gradium demo validated by the user. **Merged (fast-forward) into `feat/restart-from-scratch`.**
 **Created:** 2026-07-13
 **Predecessor:** [`sprint-2-stt-hardening.md`](sprint-2-stt-hardening.md) (Sprint 2 — Done, 2026-07-13)
 **Working branch:** `feat/sprint-3-tts-voice-out` (from `feat/restart-from-scratch`)
@@ -26,7 +26,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 4), no barge-
 |---|---|---|
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
-| **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | ✅ Done (unmerged) |
+| **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | ✅ Done (merged → `feat/restart-from-scratch`) |
 | Sprint 4 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) | Planned |
 
 ## Included Tickets

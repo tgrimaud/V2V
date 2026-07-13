@@ -7,13 +7,20 @@
 > `main` reference implementation, not to code runnable on this branch.** The
 > former executable implementation remains on `main` as backup/reference.
 >
-> **What is actually built on this branch today** is a single slice: STT
-> validation, in Python under `voice-agent/` — `stt_validation/` (fixture + real
-> Gradium STT providers, WER quality, OpenTelemetry-style telemetry, per-slice
-> pipeline timing) and `web_voice/` (browser mic → 16 kHz PCM16 →
-> `POST /api/voice/stt` → Gradium transcript). No Java backend, no Pipecat agent,
-> no React frontend, no RAG/pgvector, no TTS/voice-out, no billing, no Genesys.
-> See `voice-agent/README.md` and `product-backlog/sprints/sprint-stt-validation.md`.
+> **What is actually built on this branch today** are two symmetric voice slices
+> in Python under `voice-agent/`: **STT validation** (`stt_validation/` — fixture
+> + real Gradium STT providers, WER quality, OpenTelemetry-style telemetry) and
+> **TTS voice-out** (`tts_synthesis/` — fixture + real Gradium TTS providers, a
+> synthesis runner). `web_voice/` wires both over HTTP (browser mic → 16 kHz
+> PCM16 → `POST /api/voice/stt` → Gradium transcript → `POST /api/voice/tts` →
+> WAV → playback), closing a voice-in → voice-out **echo** loop. Cross-cutting
+> utilities (telemetry, sanitization, per-slice pipeline timing) live in a neutral
+> `voice_common/` package; the two halves never import each other (enforced by an
+> architecture test). No Java backend, no Pipecat agent, no React frontend, no
+> RAG/pgvector, no backend/LLM answer (echo only, TASK-WEB-003), no streaming
+> (TASK-WEB-004), no billing, no Genesys. See `voice-agent/README.md`,
+> `product-backlog/sprints/sprint-stt-validation.md` and
+> `product-backlog/sprints/sprint-3-tts-voice-out.md`.
 
 ## Overview
 

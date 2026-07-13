@@ -8,9 +8,12 @@ Accepted
 > is implemented — both `agent/bot.py` and `agent/bridge_server.py` were removed
 > (preserved on `main`). Pipecat + Gradium remains the accepted **target**; the
 > "the project has two voice paths" wording below describes the `main` reference.
-> The only voice code on this branch is the STT-in web ingress (`voice-agent/web_voice/`),
-> which posts PCM16 audio to a Python server and returns a Gradium transcript — no
-> Pipecat, no TTS.
+> The voice code on this branch is the STT-in web ingress plus — since Sprint 3
+> (TASK-WEB-002) — the TTS voice-out slice (`voice-agent/web_voice/`,
+> `stt_validation/`, `tts_synthesis/`): the browser posts PCM16 audio and gets a
+> Gradium transcript, then posts the echo text and gets a Gradium-synthesized WAV
+> back. Still **no Pipecat** (this is a batch HTTP echo loop, not the streaming
+> target path) and no backend/LLM answer.
 
 ## Context
 

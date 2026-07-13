@@ -61,7 +61,7 @@ against the new empty-codebase plan.
 | US-033 | Protect personal data exposed to the customer | V1 enabler | Draft | High |
 | US-034 | Audit sensitive consultations | V1 enabler | Draft | High |
 | US-035 | Disclose analysis limits | V1 core | Draft | High |
-| US-036 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Done (STT sprint scope) | High |
+| US-036 | Measure key voice journey timings by pipeline slice | V1 pilot gate | Done (STT + TTS slices measured; `backend_first_token` reported as explicit gap pending TASK-WEB-003) | High |
 | US-037 | Measure invoice comparison response time | V1 pilot gate | Draft | Medium |
 | US-038 | Track escalations and their reasons | V1 pilot gate | Draft | Medium |
 | US-039 | Track unresolved questions | V1 pilot gate | Draft | Medium |
@@ -84,7 +84,7 @@ against the new empty-codebase plan.
 | TASK-STT-011 | Normalize transcripts (case/punctuation/accents) before WER scoring (closes RF-008) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 4) | Medium |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | Done (merged) | High |
-| TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, unmerged) | High |
+| TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, merged → `feat/restart-from-scratch`) | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
 | TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Draft | High |
 
@@ -94,7 +94,7 @@ against the new empty-codebase plan.
 |-----|-------|--------|------|
 | SPRINT-STT | STT Validation | ✅ Done (2026-07-10) | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 | SPRINT-2-STT-HARDENING | STT Hardening | ✅ Done (2026-07-13) | Make the WER quality gate usable (normalization) and complete STT observability (fixtures, sanitization, UNAVAILABLE outcome, end-of-turn) — `sprints/sprint-2-stt-hardening.md` |
-| SPRINT-3-TTS | TTS / Voice-out (batch) | ✅ Done (2026-07-13, unmerged) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
+| SPRINT-3-TTS | TTS / Voice-out (batch) | ✅ Done (2026-07-13, merged → `feat/restart-from-scratch`) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
 | SPRINT-4-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) for the low-latency voice loop |
 
 ## Restart Delivery Notes
