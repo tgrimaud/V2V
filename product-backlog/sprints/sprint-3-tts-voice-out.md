@@ -13,7 +13,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 4), no barge-
 
 ## Status
 
-**Status:** In progress (started 2026-07-13) — TASK-WEB-002 (batch TTS voice-out).
+**Status:** Done (2026-07-13) — TASK-WEB-002 (batch TTS voice-out) delivered; ST-1..ST-8 complete, 128 unit tests + 4 behave features green, echo loop MCP-validated. Branch **unmerged** pending user validation.
 **Created:** 2026-07-13
 **Predecessor:** [`sprint-2-stt-hardening.md`](sprint-2-stt-hardening.md) (Sprint 2 — Done, 2026-07-13)
 **Working branch:** `feat/sprint-3-tts-voice-out` (from `feat/restart-from-scratch`)
@@ -26,7 +26,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 4), no barge-
 |---|---|---|
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
-| **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | In progress |
+| **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | ✅ Done (unmerged) |
 | Sprint 4 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) | Planned |
 
 ## Included Tickets
@@ -73,7 +73,7 @@ once validated (per the repository branching strategy).
 
 | Ticket | Branch | Status |
 |---|---|---|
-| TASK-WEB-002 | `task/TASK-WEB-002-tts-voice-out` | In progress |
+| TASK-WEB-002 | `task/TASK-WEB-002-tts-voice-out` | Done (delivered on the sprint branch) |
 
 ## Out Of Sprint
 
@@ -103,9 +103,13 @@ Scenario: STT and TTS are independent routes
   And each route can be tested independently, TTS without a live Gradium key
 ```
 
-## Open Questions
+## Open Questions (resolved)
 
-- Is `GRADIUM_VOICE_ID=default` a valid voice, or is a catalog voice id required?
-  (Phase 0 spike surfaces this.)
-- Should the offline `FixtureTtsProvider` return a committed reference clip or a
-  generated tone? (Decided in Phase 1; committed clip preferred for realism.)
+- **Is `GRADIUM_VOICE_ID=default` a valid voice, or is a catalog voice id required?**
+  Resolved (ST-1 spike): a **real catalog voice id is required**; `default` is
+  rejected by the Gradium TTS WebSocket. The provider factory normalizes/validates
+  the voice id and the README/`docs/qa/gradium-tts-contract.md` document it.
+- **Should `FixtureTtsProvider` return a committed clip or a generated tone?**
+  Resolved (ST-2): **generated deterministic tone** (PCM16 keyed by text length) —
+  avoids committing binary audio fixtures while keeping the offline path realistic
+  and reproducible. Reference *texts* (not clips) live in `fixtures/tts/`.
