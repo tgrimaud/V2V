@@ -238,8 +238,8 @@ remain the only other shared surfaces.
   - AC: endpoint returns playable WAV for a text; failure returns sanitized JSON error; egress span emitted.
   - Test: `tests/test_web_voice_egress.py`.
 
-- [ ] **ST-6 — Web playback + echo loop (frontend).**
-  - Files: edit `voice-agent/web_voice/static/app.js` (+ minor `index.html` if needed).
+- [x] **ST-6 — Web playback + echo loop (frontend).** Done 2026-07-13 — after STT success, `app.js` POSTs the transcript to `/api/voice/tts`, `decodeAudioData`s the WAV and plays it via a single `AudioBufferSourceNode` (dedicated playback context; `stopPlayback()` guards the "stop source on clear" pitfall). Chrome DevTools MCP validation (fixture provider): decode 2.04 s mono, playing, TTFA ~109 ms, correlation id propagated (3× POST 200), empty-text failure renders a sanitized error with no fabricated audio, console clean. Adversarial review 92/100.
+  - Files: edited `voice-agent/web_voice/static/app.js` + `index.html`.
   - Content: after STT returns, call `/api/voice/tts?text=<transcript>`, `decodeAudioData` the WAV, play via a single `AudioBufferSourceNode`; guard the "stop source on clear" pitfall.
   - AC: speaking a phrase plays back its echo; time-to-first-audio measurable.
   - Evidence: Chrome DevTools MCP note (playback + failure render + timing).

@@ -3,6 +3,7 @@
 // Gradium web/PCM input contract: mono, 16 kHz, signed 16-bit little-endian.
 const TARGET_SAMPLE_RATE = 16000;
 const STT_ENDPOINT = "/api/voice/stt";
+const TTS_ENDPOINT = "/api/voice/tts";
 
 const recordButton = document.getElementById("record");
 const statusEl = document.getElementById("status");
@@ -16,6 +17,12 @@ let sourceNode = null;
 let capturedChunks = [];
 let recording = false;
 
+// Playback (voice-out) uses its own AudioContext: the capture context is closed
+// on teardown, and a single active source is tracked so it can be stopped when a
+// new reply arrives or a new recording starts.
+let playbackContext = null;
+let playbackSource = null;
+
 recordButton.addEventListener("click", () => {
   if (recording) {
     stopRecording();
@@ -26,6 +33,7 @@ recordButton.addEventListener("click", () => {
 
 async function startRecording() {
   try {
+    stopPlayback();
     setStatus("Requesting microphone…");
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioContext = new AudioContext();
@@ -88,10 +96,13 @@ function renderResult(result) {
     transcriptEl.className = "transcript";
     transcriptEl.textContent = result.transcript;
     setStatus("Done.");
+    metaEl.innerHTML = buildMeta(result);
+    // Echo loop: speak the transcript back through the TTS egress route.
+    void playEcho(result.transcript, result.correlation_id);
   } else {
     renderError(result.error_code || "stt_error", result.error_reason || "No transcript produced.");
+    metaEl.innerHTML = buildMeta(result);
   }
-  metaEl.innerHTML = buildMeta(result);
 }
 
 function renderError(code, reason) {
@@ -108,6 +119,87 @@ function buildMeta(result) {
   if (typeof result.stt_request_ms === "number") parts.push("stt: <code>" + result.stt_request_ms + " ms</code>");
   if (result.correlation_id) parts.push("corr: <code>" + escapeHtml(result.correlation_id) + "</code>");
   return parts.join(" · ");
+}
+
+// Stop and release the currently playing reply, if any. Emptying/replacing the
+// buffer is not enough — the AudioBufferSourceNode keeps playing until stop().
+function stopPlayback() {
+  if (!playbackSource) return;
+  try {
+    playbackSource.onended = null;
+    playbackSource.stop();
+  } catch (_e) {
+    // already stopped / never started
+  }
+  try {
+    playbackSource.disconnect();
+  } catch (_e) {
+    // already disconnected
+  }
+  playbackSource = null;
+}
+
+async function playEcho(text, correlationId) {
+  stopPlayback();
+  setStatus("Synthesizing reply…");
+  const started = performance.now();
+  let response;
+  try {
+    const params = new URLSearchParams({ text });
+    if (correlationId) params.set("correlation_id", correlationId);
+    response = await fetch(TTS_ENDPOINT + "?" + params.toString(), { method: "POST" });
+  } catch (err) {
+    appendPlaybackError("tts_network_error", "Could not reach the voice runtime: " + err.message);
+    return;
+  }
+
+  const contentType = response.headers.get("Content-Type") || "";
+  if (!response.ok || !contentType.includes("audio/wav")) {
+    await appendPlaybackErrorFromResponse(response);
+    return;
+  }
+
+  try {
+    const wav = await response.arrayBuffer();
+    if (!playbackContext || playbackContext.state === "closed") {
+      playbackContext = new AudioContext();
+    }
+    if (playbackContext.state === "suspended") await playbackContext.resume();
+    const buffer = await playbackContext.decodeAudioData(wav);
+    const firstAudioMs = Math.round(performance.now() - started);
+
+    stopPlayback();
+    playbackSource = playbackContext.createBufferSource();
+    playbackSource.buffer = buffer;
+    playbackSource.connect(playbackContext.destination);
+    playbackSource.onended = () => {
+      if (!recording) setStatus("Reply played.");
+    };
+    playbackSource.start();
+    setStatus("Playing reply…");
+    metaEl.innerHTML += " · tts first audio: <code>" + firstAudioMs + " ms</code>";
+  } catch (err) {
+    appendPlaybackError("tts_decode_error", "Could not play the reply: " + err.message);
+  }
+}
+
+async function appendPlaybackErrorFromResponse(response) {
+  let code = "tts_error";
+  let reason = "No audio produced.";
+  try {
+    const err = await response.json();
+    code = err.error_code || code;
+    reason = err.error_reason || reason;
+  } catch (_e) {
+    // non-JSON error body; keep defaults
+  }
+  appendPlaybackError(code, reason);
+}
+
+function appendPlaybackError(code, reason) {
+  setStatus("Reply unavailable.");
+  metaEl.innerHTML +=
+    " · <span class=\"tts-error\">tts: " + escapeHtml(reason) + " (" + escapeHtml(code) + ")</span>";
 }
 
 function mergeChunks(chunks) {

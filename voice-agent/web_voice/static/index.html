@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Web Voice Chat — STT (US-019)</title>
+    <title>Web Voice Chat — Voice2Voice (US-019)</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -63,15 +63,16 @@
       .transcript.empty { color: var(--muted); font-style: italic; }
       .transcript.error { border-color: var(--error); color: var(--error); }
       .meta { margin-top: 12px; font-size: 0.78rem; color: var(--muted); }
+      .meta .tts-error { color: var(--error); }
       code { background: rgba(148, 163, 184, 0.15); padding: 1px 6px; border-radius: 6px; }
     </style>
   </head>
   <body>
     <main>
-      <h1>Web Voice Chat — Speech-to-Text</h1>
+      <h1>Web Voice Chat — Voice2Voice</h1>
       <p class="subtitle">
-        US-019 (STT half). Record a spoken question; the voice runtime transcribes it
-        through the configured STT provider.
+        US-019. Record a spoken question; the voice runtime transcribes it through the
+        STT provider, then speaks the transcript back through the TTS provider (echo loop).
       </p>
       <div class="controls">
         <button id="record" type="button">Record</button>
