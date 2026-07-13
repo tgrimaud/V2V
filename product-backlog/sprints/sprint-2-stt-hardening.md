@@ -80,7 +80,7 @@ branching strategy):
 | TASK-STT-005 | `task/TASK-STT-005-redact-bare-identifiers` | ✅ merged into sprint branch |
 | Review remediation | `task/sprint-2-review-remediation` | ✅ merged (RF-009/010/011) |
 | TASK-STT-006 | `task/TASK-STT-006-unavailable-outcome` | ✅ merged into sprint branch |
-| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | ✅ done (awaiting merge into sprint branch) |
+| TASK-STT-009 | `task/TASK-STT-009-end-of-turn-detection` | ✅ merged into sprint branch |
 
 > Docs/knowledge chores (`chore/self-contained-guidance`,
 > `chore/generalize-knowledge-session`) were also cut from and merged back into the
