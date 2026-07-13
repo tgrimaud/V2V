@@ -1,7 +1,7 @@
 # voice-agent runtime + dev dependencies
 # Runtime: Gradium TTS provider uses a WebSocket client (STT uses stdlib urllib only).
-# Approved dependency; upper bound pinned for reproducibility.
-websockets>=13,<16
+# Approved dependency; upper bound pinned for reproducibility (tested with 16.1).
+websockets>=13,<17
 
 # Dev / test
 behave>=1.2
