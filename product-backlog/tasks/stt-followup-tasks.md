@@ -329,7 +329,7 @@ this task closes that traceability gap.
   explicit stop signal), configurable and replaceable.
 - Emit an `end.of.turn` (or equivalently named) OpenTelemetry span with the turn
   correlation id, so it feeds `PipelineTimingReport`.
-- Register the span name in `stt_validation/pipeline_timing.py`
+- Register the span name in `voice_common/pipeline_timing.py`
   (`_SLICE_SPAN_NAMES[END_OF_TURN]`) so the slice reports p50/p95/p99 once emitted.
 - Safe behaviour when no clear end-of-turn is detected (timeout, no invented turn
   boundary).

@@ -26,7 +26,7 @@ owns conversation intelligence.
 ingress analog with a real web ingress
 **Related decision:** DEC-005 / DEC-007 (voice runtime owns media orchestration)
 **Classification:** V1 core
-**Status:** In progress
+**Status:** Done (merged) — STT half delivered: live web mic → Gradium → transcript, QA GO in `docs/qa/web-voice-qa-report.md` (see `sprints/sprint-stt-validation.md`).
 **Priority:** High
 **Branch:** `us/US-019-web-voice-chat`
 
@@ -153,7 +153,7 @@ Scenario: Web voice STT failure stays safe and observable
 **Related story:** US-019 (TTS half), US-036 (feeds the `tts_first_audio` and `channel_egress` slices)
 **Related decision:** DEC-005 / DEC-007
 **Classification:** V1 core
-**Status:** In progress (Sprint 3, started 2026-07-13)
+**Status:** Done (Sprint 3, 2026-07-13) — ST-1..ST-8 complete, 130 unit tests + 4 behave features green, echo loop MCP-validated. Branch **unmerged**, pending user validation.
 **Priority:** High
 **Branch:** `task/TASK-WEB-002-tts-voice-out` (from `feat/sprint-3-tts-voice-out`)
 
@@ -170,7 +170,7 @@ provider path.
 - Web page plays the synthesized audio for the returned response.
 - TTS-slice OpenTelemetry span (text -> audio -> playback start) with correlation
   id, plus safe failure handling (no silent failure, no secret leak).
-- Register the emitted span name(s) in `stt_validation/pipeline_timing.py`
+- Register the emitted span name(s) in `voice_common/pipeline_timing.py`
   (`_SLICE_SPAN_NAMES[TTS_FIRST_AUDIO]` and `[CHANNEL_EGRESS]`) so US-036 measures
   these slices instead of reporting them as gaps.
 - Fixture/offline mode so QA can validate without live credentials.
@@ -285,7 +285,7 @@ page answers by voice. This is the middle of the Voice2Voice journey.
 - Backend response text -> TTS slice.
 - End-to-end OpenTelemetry trace across ingress -> STT -> backend -> TTS with a
   single correlation id, enabling per-slice latency (feeds US-036). Register the
-  backend span name in `stt_validation/pipeline_timing.py`
+  backend span name in `voice_common/pipeline_timing.py`
   (`_SLICE_SPAN_NAMES[BACKEND_FIRST_TOKEN]`) so US-036 measures that slice.
 - Degraded-mode handling when the backend is unavailable or not confident.
 
@@ -352,7 +352,7 @@ customer hears the first words quickly.
 - A streaming TTS provider variant emitting audio chunks; the web page plays them
   incrementally (e.g. `MediaSource` / audio worklet queue).
 - Telemetry: the `tts_first_audio` span = time-to-first-audio chunk; register the
-  span name in `stt_validation/pipeline_timing.py` so US-036 measures it.
+  span name in `voice_common/pipeline_timing.py` so US-036 measures it.
 - Safe failure handling (no silent failure, no secret leak); offline/fixture mode.
 
 ### Out Of Scope
