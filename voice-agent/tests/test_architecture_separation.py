@@ -18,6 +18,11 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT))
 STT_PACKAGE = "stt_validation"
 TTS_PACKAGE = "tts_synthesis"
 SHARED_PACKAGE = "voice_common"
+WEB_VOICE_PACKAGE = "web_voice"
+
+PIPELINE_STT_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "stt_service.py"
+PIPELINE_TTS_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "tts_service.py"
+PIPELINE_ECHO = VOICE_AGENT_ROOT / "voice_pipeline" / "echo.py"
 
 
 def _imported_modules(source: str) -> set[str]:
@@ -32,6 +37,16 @@ def _imported_modules(source: str) -> set[str]:
             if node.level == 0 and node.module:
                 modules.add(node.module)
     return modules
+
+
+def _file_crossings(path: Path, forbidden_prefix: str) -> set[str]:
+    """Top-level absolute imports in one file that reach into a forbidden package."""
+    imported = _imported_modules(path.read_text(encoding="utf-8"))
+    return {
+        name
+        for name in imported
+        if name == forbidden_prefix or name.startswith(forbidden_prefix + ".")
+    }
 
 
 def _forbidden_imports(package: str, forbidden_prefix: str) -> dict[str, set[str]]:
@@ -81,6 +96,32 @@ class ArchitectureSeparationTest(unittest.TestCase):
         # THEN both cross-package imports are detected
         self.assertIn("stt_validation.telemetry", imported)
         self.assertIn("tts_synthesis.runner", imported)
+
+    def test_pipeline_stt_service_never_imports_tts(self) -> None:
+        # GIVEN the Pipecat STT service (TASK-WEB-005)
+        # WHEN its imports are inspected
+        # THEN it never reaches into the voice-out package
+        self.assertEqual(_file_crossings(PIPELINE_STT_SERVICE, TTS_PACKAGE), set())
+
+    def test_pipeline_tts_service_never_imports_stt(self) -> None:
+        # GIVEN the Pipecat TTS service (TASK-WEB-005)
+        # WHEN its imports are inspected
+        # THEN it never reaches into the voice-in package
+        self.assertEqual(_file_crossings(PIPELINE_TTS_SERVICE, STT_PACKAGE), set())
+
+    def test_pipeline_services_do_not_import_web_voice(self) -> None:
+        # GIVEN the Pipecat STT/TTS services (injection keeps them transport-agnostic)
+        # WHEN their imports are inspected
+        # THEN neither pulls the web_voice package (whose init drags BOTH halves in)
+        self.assertEqual(_file_crossings(PIPELINE_STT_SERVICE, WEB_VOICE_PACKAGE), set())
+        self.assertEqual(_file_crossings(PIPELINE_TTS_SERVICE, WEB_VOICE_PACKAGE), set())
+
+    def test_pipeline_echo_stays_domain_neutral(self) -> None:
+        # GIVEN the echo processor (TASK-WEB-005)
+        # WHEN its imports are inspected
+        # THEN it depends on neither voice half
+        self.assertEqual(_file_crossings(PIPELINE_ECHO, STT_PACKAGE), set())
+        self.assertEqual(_file_crossings(PIPELINE_ECHO, TTS_PACKAGE), set())
 
     def test_relative_imports_are_not_flagged_as_cross_package(self) -> None:
         # GIVEN in-package relative imports and a shared voice_common import
