@@ -525,7 +525,7 @@ Scenario: The bot response audio starts before full synthesis
 
 Run the existing web voice **batch** loop (STT → echo → TTS) through a **Pipecat
 pipeline** with **no user-visible change**, aligning the runtime with the ADR-0002
-target and de-risking the framework migration **before** streaming (Sprint 5). This
+target and de-risking the framework migration **before** streaming (Sprint 6). This
 is a migration / de-risking task, **not** a latency task: batch-on-Pipecat is not
 expected to beat batch-on-stdlib; the value is isolating the runtime swap from the
 streaming changes and stopping the target-vs-real drift (the code has zero Pipecat
@@ -557,7 +557,7 @@ today).
 ### Out Of Scope
 
 - Streaming STT (TASK-STT-010), streaming TTS (TASK-WEB-004), streaming VAD
-  (TASK-STT-012), WebRTC transport + Pipecat JS client — all **Sprint 5**.
+  (TASK-STT-012), WebRTC transport + Pipecat JS client — all **Sprint 6**.
 - Barge-in (US-021), backend/LLM answer (TASK-WEB-003).
 - Any frontend change (the browser keeps its current two-call echo loop).
 

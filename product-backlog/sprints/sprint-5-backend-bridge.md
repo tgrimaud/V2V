@@ -187,6 +187,9 @@ Scenario: The answer engine is replaceable behind the contract
   in the stub; the real threshold is deferred.
 - **OQ-003 / OQ-004** (BSS data, PDF extraction) — gate the real answer engine that
   later implements the HTTP contract.
+- **OQ-007** (backend AI/RAG framework: Spring AI vs LangChain4J vs other) —
+  **deferred, does not block this sprint** (the stub needs no framework). Must be
+  decided before the Java answer engine behind TASK-WEB-003-C is implemented.
 
 ## Definition Of Done (sprint)
 

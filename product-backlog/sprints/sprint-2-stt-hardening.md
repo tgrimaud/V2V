@@ -28,7 +28,8 @@ reviews and QA run.
 | **Sprint 2** | **STT hardening (this sprint)** | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | ✅ Done |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
-| Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) | Planned |
+| Sprint 5 | Backend answer bridge (echo → real answer, US-019 close) | Planned |
+| Sprint 6 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) | Planned |
 
 ## Included Tickets
 
@@ -54,10 +55,10 @@ reviews and QA run.
 
 | Ticket | Reason |
 |---|---|
-| TASK-STT-010 (streaming STT) | Latency optimization — deferred to **Sprint 5**, where it is built together with streaming TTS (TASK-WEB-004) so the chunked/streaming transport is implemented once for both directions. Closes RF-007 there. |
-| TASK-STT-012 (streaming VAD end-of-turn) | Real-time VAD replacement for the batch end-of-turn detector shipped in TASK-STT-009 — deferred to **Sprint 5** because it is a prerequisite of the streaming STT path (TASK-STT-010), not needed for the V1 batch web path. |
-| TASK-WEB-002 / TASK-WEB-003 | TTS voice-out and backend/LLM bridge — **Sprint 3** (voice-out) and backend work, not STT hardening. |
-| TASK-WEB-004 (streaming TTS) | Streaming voice-out — **Sprint 5** (latency optimization). |
+| TASK-STT-010 (streaming STT) | Latency optimization — deferred to **Sprint 6**, where it is built together with streaming TTS (TASK-WEB-004) so the chunked/streaming transport is implemented once for both directions. Closes RF-007 there. |
+| TASK-STT-012 (streaming VAD end-of-turn) | Real-time VAD replacement for the batch end-of-turn detector shipped in TASK-STT-009 — deferred to **Sprint 6** because it is a prerequisite of the streaming STT path (TASK-STT-010), not needed for the V1 batch web path. |
+| TASK-WEB-002 / TASK-WEB-003 | TTS voice-out and backend/LLM bridge — **Sprint 3** (voice-out) and **Sprint 5** (backend answer bridge), not STT hardening. |
+| TASK-WEB-004 (streaming TTS) | Streaming voice-out — **Sprint 6** (latency optimization). |
 | RF-006 (web ingress auth) | Gated by OQ-001 (web voice identity) and TASK-WEB-003 (backend orchestration); not an STT-hardening item. |
 
 ## Delivery Order
@@ -111,4 +112,4 @@ Scenario: The STT path is fully observable and safe
 
 - ~~How many samples per category before p95/p99 is reported as meaningful?~~ **Partly answered (TASK-STT-007):** `MIN_SAMPLES_FOR_PERCENTILES = 5` is the reporting floor below which a category is flagged not significant; but 5 is not enough for stable p95/p99 (nearest-rank p95 of 5 ≈ max). Real trust needs many more samples **and** real human recordings — still open.
 - ~~After removing WER artifacts, does the default `quality_threshold` (0.8) still make sense?~~ **Answered (TASK-STT-011):** yes — 0.8 cleanly separates good transcripts (short/long/accented ≥ 0.82) from the genuinely degraded noisy sample (0.60). Kept.
-- ~~Which end-of-turn signal is authoritative for the web path — silence window, VAD, or an explicit client stop (feeds TASK-STT-009)?~~ **Answered (TASK-STT-009):** the **trailing-silence window** is authoritative for the V1 batch web path, with an **explicit client stop** as the fallback when the buffer ends before a full window; **VAD** is the future drop-in replacement, ticketed as **TASK-STT-012** (Sprint 5) since real-time VAD is required by the streaming path (the `EndOfTurnDetector` is injected into `WebVoiceIngress`).
+- ~~Which end-of-turn signal is authoritative for the web path — silence window, VAD, or an explicit client stop (feeds TASK-STT-009)?~~ **Answered (TASK-STT-009):** the **trailing-silence window** is authoritative for the V1 batch web path, with an **explicit client stop** as the fallback when the buffer ends before a full window; **VAD** is the future drop-in replacement, ticketed as **TASK-STT-012** (Sprint 6) since real-time VAD is required by the streaming path (the `EndOfTurnDetector` is injected into `WebVoiceIngress`).

@@ -172,3 +172,41 @@ constraints apply.
   points to the advisor desktop.
 - Which Genesys Analytics metrics and AI-layer metrics are combined in the pilot
   KPI dashboard.
+
+---
+
+## OQ-007 - Backend AI/RAG Framework (Spring AI vs LangChain4J vs Other)
+
+**Status:** Open — discussion deferred (raised 2026-07-14, not blocking Sprint 5)
+**Owner:** Architecture / Backend
+**Impacts:** EPIC-005, EPIC-006 (TASK-WEB-003-C HTTP backend adapter and the future
+Java answer engine that implements the conversation contract), EPIC-002/003/004
+
+### Question
+
+Which framework does the Java backend use to build the answer engine (LLM
+orchestration, RAG, tool/function calling, provider abstraction): **Spring AI**,
+**LangChain4J**, or another option?
+
+### Why It Matters
+
+The Sprint 5 backend bridge is deliberately **contract-first**: the voice runtime
+talks to a `BackendAnswerPort` with a stub adapter (default) and an HTTP adapter,
+so **Sprint 5 does not require this decision**. But the real answer engine behind the
+HTTP contract does. The choice affects provider replaceability (DEC-005: LLM/STT/TTS
+must stay swappable behind ports), RAG/pgvector integration, guardrails, streaming
+support, observability hooks (DEC-010) and team familiarity.
+
+### Needed Decision
+
+- Framework for LLM orchestration + RAG in the Java backend.
+- How it preserves the provider-agnostic port/adapter boundary (Mistral API default,
+  Ollama alternative for chat; Ollama `nomic-embed-text` for embeddings).
+- Streaming-token support for the low-latency voice loop (feeds Sprint 6).
+- Whether the decision warrants an ADR under `docs/architecture/adrs/`.
+
+### Notes
+
+- Deferred by the user until after Sprint 5 planning; **must not be forgotten** — to
+  be discussed before the Java answer engine (HTTP backend behind TASK-WEB-003-C)
+  is implemented.

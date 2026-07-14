@@ -8,8 +8,8 @@ This closes the first visible **voice-in → voice-out loop** by speaking an ech
 STT transcript, with no Java backend and no streaming.
 
 This sprint stays strictly within batch (non-streaming) TTS scope: no backend/LLM
-answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 5), no barge-in
-(US-021).
+answer (TASK-WEB-003, Sprint 5), no streaming playback (TASK-WEB-004, Sprint 6), no
+barge-in (US-021).
 
 ## Status
 
@@ -28,7 +28,8 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 5), no barge-
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | ✅ Done (merged → `feat/restart-from-scratch`) |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
-| Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) | Planned |
+| Sprint 5 | Backend answer bridge (echo → real answer, US-019 close) | Planned |
+| Sprint 6 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) | Planned |
 
 ## Included Tickets
 
@@ -43,7 +44,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 5), no barge-
   (TASK-WEB-003) and streaming (TASK-WEB-004) are out of sprint.
 - **Transport: Gradium TTS WebSocket** (`wss://api.gradium.ai/api/speech/tts`) — the
   only known Gradium TTS contract (no REST batch endpoint). "Batch" = collect all
-  audio chunks until `end_of_stream`, then play once. Streaming playback is Sprint 5.
+  audio chunks until `end_of_stream`, then play once. Streaming playback is Sprint 6.
 - **Live spike first** to confirm the real WebSocket contract before building the
   provider (same discipline used for the Gradium STT adapter).
 - **Playback:** Gradium PCM16 → 44-byte WAV header → browser `decodeAudioData` +
@@ -81,7 +82,7 @@ once validated (per the repository branching strategy).
 | Ticket | Reason |
 |---|---|
 | TASK-WEB-003 (backend bridge) | Real LLM/RAG answer generation — needs a backend; Sprint 3 speaks an echo/stub text instead. |
-| TASK-WEB-004 (streaming TTS) | Incremental playback (time-to-first-audio lever) — **Sprint 5** (latency optimization). |
+| TASK-WEB-004 (streaming TTS) | Incremental playback (time-to-first-audio lever) — **Sprint 6** (latency optimization). |
 | US-020 (quick acknowledgement), US-021 (barge-in) | Depend on streaming and/or backend orchestration. |
 | Twilio / ulaw egress | Telephony channel — not the web voice slice. |
 

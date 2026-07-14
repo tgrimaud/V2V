@@ -4,14 +4,14 @@
 
 Run the existing web voice **batch** loop (STT → echo → TTS) through a **Pipecat
 pipeline**, aligning the runtime with the ADR-0002 target and **de-risking the
-framework migration before streaming (Sprint 5)**. The user-visible behaviour is
+framework migration before streaming (Sprint 6)**. The user-visible behaviour is
 unchanged: the browser keeps its current two-call echo loop and the same pipeline
 slices stay observable.
 
 This is a **migration / de-risking** sprint, **not** a latency sprint. Batch-on-Pipecat
 is not expected to beat batch-on-stdlib; the value is isolating the runtime swap from
 the streaming work and stopping the target-vs-real drift (the code has zero Pipecat
-today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
+today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 6**.
 
 ## Status
 
@@ -30,7 +30,8 @@ today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | ✅ Done (merged → `feat/restart-from-scratch`) |
 | **Sprint 4** | **Pipecat runtime migration (batch parity, pipeline-only) — this sprint** | ✅ Done |
-| Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) + WebRTC transport | Planned |
+| Sprint 5 | Backend answer bridge (echo → real answer, US-019 close) | Planned |
+| Sprint 6 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) + WebRTC transport | Planned |
 
 ## Included Tickets
 
@@ -46,7 +47,7 @@ today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
   (`POST /api/voice/stt` PCM in, `POST /api/voice/tts` WAV out) and the browser
   (`web_voice/static/*`) **unchanged**. The Pipecat pipeline is driven server-side by
   an **in-memory frame source/sink**. WebRTC transport + Pipecat JS client are coupled
-  with streaming → **Sprint 5**.
+  with streaming → **Sprint 6**.
 - **Dual runtime, selectable at startup.** Both implementations coexist and are
   switchable via `--runtime {stdlib,pipecat}` (env fallback `VOICE_RUNTIME`). The
   sprint ships with the default flipped to **`pipecat`**; `stdlib` stays selectable as
@@ -63,7 +64,7 @@ today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
   Shared code lives only in `voice_common/`. Enforced by the architecture test.
 - **~80% reusable foundation.** Wrapping Gradium STT/TTS as Pipecat services + the
   frame/telemetry model carries forward to streaming; only the batch aggregation is
-  transitional. Design the services so Sprint 5 = "emit partials" (additive), not a
+  transitional. Design the services so Sprint 6 = "emit partials" (additive), not a
   rewrite.
 
 ## Target Batch Pipeline (server-side, in-memory transport)
@@ -156,11 +157,11 @@ once validated (per the repository branching strategy).
 
 | Ticket / Item | Reason |
 |---|---|
-| TASK-STT-010 (streaming STT) | Latency optimization — **Sprint 5**, built with the WebRTC transport. |
-| TASK-WEB-004 (streaming TTS) | Incremental playback (time-to-first-audio) — **Sprint 5**. |
-| TASK-STT-012 (streaming VAD end-of-turn) | Real-time turn detection — **Sprint 5**, prerequisite of the streaming path. |
-| SmallWebRTCTransport + Pipecat JS client | The real-time transport is coupled with streaming — **Sprint 5**; this sprint keeps the HTTP boundary and browser unchanged. |
-| TASK-WEB-003 (backend bridge) | Real LLM/RAG answer — needs a backend; this sprint keeps the echo/stub text. |
+| TASK-STT-010 (streaming STT) | Latency optimization — **Sprint 6**, built with the WebRTC transport. |
+| TASK-WEB-004 (streaming TTS) | Incremental playback (time-to-first-audio) — **Sprint 6**. |
+| TASK-STT-012 (streaming VAD end-of-turn) | Real-time turn detection — **Sprint 6**, prerequisite of the streaming path. |
+| SmallWebRTCTransport + Pipecat JS client | The real-time transport is coupled with streaming — **Sprint 6**; this sprint keeps the HTTP boundary and browser unchanged. |
+| TASK-WEB-003 (backend bridge) | Real LLM/RAG answer — needs a backend; **Sprint 5** (contract-first stub); this sprint keeps the echo/stub text. |
 | US-020 (quick acknowledgement), US-021 (barge-in) | Depend on streaming and/or backend orchestration. |
 
 ## Sprint Acceptance Criteria
@@ -194,7 +195,7 @@ Scenario: STT and TTS stay independent in the pipeline
 - **`pipecat-ai` version pinned:** `pipecat-ai>=1.5,<2` (spiked on 1.5.0). Batch driving
   uses `PipelineTask` + `PipelineRunner` (the `PipelineWorker`/`WorkerRunner` path hung
   when frames were queued before the runner went live); the deprecation warning is
-  suppressed locally pending the Sprint 5 streaming migration. Frame/runner contract is
+  suppressed locally pending the Sprint 6 streaming migration. Frame/runner contract is
   locked in [`docs/qa/pipecat-batch-contract.md`](../../docs/qa/pipecat-batch-contract.md).
 - **Default runtime flipped to `pipecat`** (`--runtime {stdlib,pipecat}`, env
   `VOICE_RUNTIME`); `stdlib` stays selectable as the fallback/comparison path.
