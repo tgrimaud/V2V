@@ -15,10 +15,23 @@ from stt_validation.pipeline_timing import (  # noqa: E402
     PipelineTimingReport,
 )
 from stt_validation.telemetry import Span  # noqa: E402
+from tts_synthesis import FixtureTtsProvider  # noqa: E402
+from voice_common.telemetry import TelemetryRecorder  # noqa: E402
+from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
+from voice_pipeline.pipeline import run_batch_turn  # noqa: E402
 
 
 def _span(name: str, duration_ms: float) -> Span:
     return Span(name=name, duration_ms=duration_ms, attributes={})
+
+
+class _StubSttProvider:
+    """Minimal STT provider: returns a canned transcript for any audio file."""
+
+    name = "stub-stt"
+
+    def transcribe(self, audio_path) -> str:  # noqa: ANN001 - matches SttProvider
+        return "bonjour"
 
 
 class PipelineTimingReportTest(unittest.TestCase):
@@ -153,6 +166,44 @@ class PipelineTimingReportTest(unittest.TestCase):
         self.assertIsNone(tts["latency"])
         self.assertNotIn("TASK-WEB-002", tts["note"])
         self.assertIn("voice.tts.first_audio", tts["note"])
+
+
+class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):
+    """The Pipecat batch pipeline must keep the US-036 slices measured (ST-5).
+
+    Because the Pipecat services delegate to the same WebVoiceIngress / WebVoiceEgress
+    with the shared TelemetryRecorder, a full turn through run_batch_turn (plus the
+    transport's record_egress) emits the exact same spans the stdlib path does, so
+    PipelineTimingReport measures the same slices.
+    """
+
+    async def test_full_turn_through_pipeline_measures_the_pipeline_slices(self) -> None:
+        # GIVEN the real STT ingress + TTS egress wired with one telemetry recorder
+        telemetry = TelemetryRecorder()
+        ingress = WebVoiceIngress(_StubSttProvider())
+        egress = WebVoiceEgress(FixtureTtsProvider())
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-bridge")
+
+        # WHEN a whole-utterance turn runs through the Pipecat batch pipeline
+        result = await run_batch_turn(
+            b"\x01\x02\x03\x04\x05\x06\x07\x08",
+            envelope,
+            ingress=ingress,
+            egress=egress,
+            telemetry=telemetry,
+            received_ms=3.0,
+        )
+        # AND the transport reports the audio sent (owns the egress span)
+        egress.record_egress(result.tts_response, envelope, telemetry, sent_ms=2.0)
+
+        # THEN the four pipeline slices are measured from the emitted spans
+        report = PipelineTimingReport.from_spans(telemetry.spans())
+        by_slice = {s.slice: s for s in report.slices}
+        for name in (CHANNEL_INGRESS, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+            self.assertTrue(by_slice[name].measured, f"{name} slice not measured")
+        # AND the loop echoed the transcript end to end
+        self.assertEqual(result.transcript_result.transcript, "bonjour")
+        self.assertTrue(result.audio)
 
 
 if __name__ == "__main__":
