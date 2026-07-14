@@ -64,7 +64,7 @@ natural batch pattern) leaves the `EndFrame` unconsumed and the worker idle-hang
 Decision for Sprint 4 (batch): use `PipelineTask` / `PipelineRunner` (which support
 "queue everything up front, run to completion" directly), pin `pipecat-ai<2`, and
 silence only their `DeprecationWarning` at our call site. Revisit the runner API in
-**Sprint 5**, where a real streaming transport makes the live/worker model natural.
+**Sprint 6**, where a real streaming transport makes the live/worker model natural.
 
 ## Verified
 

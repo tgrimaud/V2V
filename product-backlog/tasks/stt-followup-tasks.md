@@ -4,7 +4,7 @@ Follow-up tickets created from non-blocking adversarial-review findings recorded
 in `product-backlog/review-findings.md`. They were out of the Sprint 1 (STT
 validation) scope and have now been scheduled: **TASK-STT-005/006/007/009/011 are
 in Sprint 2 (STT hardening)** — see `sprints/sprint-2-stt-hardening.md`.
-**TASK-STT-010 (streaming STT) is deferred to Sprint 5** (latency optimization),
+**TASK-STT-010 (streaming STT) is deferred to Sprint 6** (latency optimization),
 where it is built alongside streaming TTS (TASK-WEB-004).
 
 ## TASK-STT-005 - Redact Bare Sensitive Identifiers In Failure Sanitization
@@ -360,7 +360,7 @@ Scenario: End-of-turn is detected and measured as its own slice
 For the V1 batch web path the **trailing-silence window** over the captured PCM16
 is authoritative, with an **explicit client stop** as the fallback when the buffer
 ends before a full window. A streaming **VAD** is the future drop-in replacement
-(ticketed as **TASK-STT-012**, Sprint 5): `EndOfTurnDetector` is injected into
+(ticketed as **TASK-STT-012**, Sprint 6): `EndOfTurnDetector` is injected into
 `WebVoiceIngress`, so it can be swapped without touching the ingress, span or
 pipeline wiring.
 
@@ -388,7 +388,7 @@ pipeline wiring.
 **Depends on:** TASK-STT-008 (Gradium provider)
 **Pairs with:** TASK-WEB-004 (streaming TTS voice-out) — the two form the low-latency voice loop
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 5 (latency optimization, paired with streaming TTS TASK-WEB-004)
+**Status:** Planned — Sprint 6 (latency optimization, paired with streaming TTS TASK-WEB-004)
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-STT-010-streaming-stt`
 
@@ -533,7 +533,7 @@ Scenario: Formatting differences do not count as transcription errors
 **Builds on:** TASK-STT-009 (batch end-of-turn detector + `voice.end_of_turn` span)
 **Pairs with:** TASK-STT-010 (streaming STT) — real-time turn detection is a prerequisite for the streaming path
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 5 (latency optimization, paired with streaming STT/TTS)
+**Status:** Planned — Sprint 6 (latency optimization, paired with streaming STT/TTS)
 **Priority:** Medium
 **Branch:** `task/TASK-STT-012-streaming-vad-end-of-turn`
 

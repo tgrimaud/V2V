@@ -52,4 +52,4 @@ verified contract the `GradiumTtsProvider` (ST-3) is built against.
 - The server sends non-audio `text` messages interleaved — the provider must filter to
   `type=="audio"` and stop on `type=="end_of_stream"`.
 - Batch strategy for Sprint 3: collect all `audio` chunks until `end_of_stream`, then
-  play once. Streaming (play on first chunk) is Sprint 5 / TASK-WEB-004.
+  play once. Streaming (play on first chunk) is Sprint 6 / TASK-WEB-004.

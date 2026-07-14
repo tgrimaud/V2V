@@ -229,7 +229,7 @@ QA step.
 
 The web voice batch loop (STT → echo → TTS) runs through a **Pipecat pipeline**,
 aligning the runtime with the ADR-0002 target while keeping behaviour identical
-(this is a migration in batch parity — no WebRTC/streaming yet; that is Sprint 5).
+(this is a migration in batch parity — no WebRTC/streaming yet; that is Sprint 6).
 Both runtimes coexist and are selected at startup:
 
 ```bash

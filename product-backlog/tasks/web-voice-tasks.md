@@ -14,7 +14,7 @@ owns conversation intelligence.
 |---|---|---|---|
 | STT ingress (voice in) | TASK-WEB-001 | STT | GradiumSttProvider (TASK-STT-008) |
 | Voice response (voice out) | TASK-WEB-002 | TTS | TASK-WEB-001 |
-| Backend/LLM orchestration | TASK-WEB-003 | middle | TASK-WEB-001, backend availability |
+| Backend/LLM orchestration | TASK-WEB-003 (A…G) | middle | TASK-WEB-001, TASK-WEB-002 — no external backend required (contract-first stub, Sprint 5) |
 
 ---
 
@@ -258,64 +258,194 @@ remain the only other shared surfaces.
 
 **Parent:** EPIC-006
 **Related story:** US-019 (middle orchestration), US-036 (feeds the `backend_first_token` slice)
-**Related decision:** DEC-007 (backend owns conversation intelligence)
+**Related decision:** DEC-007 (backend owns conversation intelligence), DEC-005
+(providers/answer engine replaceable behind adapters), DEC-002 (LLM must not guess amounts)
 **Classification:** V1 core
-**Status:** Draft
+**Status:** Planned — Sprint 5 (`sprints/sprint-5-backend-bridge.md`)
 **Priority:** High
-**Branch:** `us/US-019-web-voice-chat`
+**Sprint branch:** `feat/sprint-5-backend-bridge`
 
 ### Objective
 
-Close the US-019 loop: route the STT transcript to the Java backend (conversation
-intelligence / RAG), get a response text, and hand it to the TTS slice so the web
-page answers by voice. This is the middle of the Voice2Voice journey.
+Close the US-019 loop: route the STT transcript to a backend conversation surface,
+get a response text, and hand it to the TTS slice so the web page **answers by
+voice** (instead of echoing). This is the middle of the Voice2Voice journey.
+
+### Backend Shape (decided — Option A)
+
+The Java billing/RAG backend does not exist yet on this branch. This task uses a
+**contract-first port + adapters** approach (locked with the user, Sprint 5):
+a `BackendAnswerPort` seam in the voice runtime with a deterministic **stub**
+adapter (default, offline/dev + tests) and an **HTTP** adapter (calls a real
+conversation endpoint), selectable via `--backend {stub,http}` (env `VOICE_BACKEND`).
+The real Java backend later implements the same contract without touching the runtime.
 
 ### Dependencies
 
-- Requires the STT ingress (TASK-WEB-001) and TTS playback (TASK-WEB-002).
-- Requires a backend answer surface. Until the billing/RAG backend exists, this
-  slice may target a minimal backend conversation endpoint or a documented stub,
-  keeping the boundary from `US-003` intact (backend owns the answer, runtime
-  owns media).
+- Requires the STT ingress (TASK-WEB-001) and TTS playback (TASK-WEB-002) — both Done.
+- The `US-003` boundary stays intact: the backend owns the answer, the runtime owns
+  the media.
 
-### Scope
+### Business Rules
 
-- Transcript -> backend conversation call (channel envelope, correlation id
-  propagated end-to-end).
-- Backend response text -> TTS slice.
-- End-to-end OpenTelemetry trace across ingress -> STT -> backend -> TTS with a
-  single correlation id, enabling per-slice latency (feeds US-036). Register the
-  backend span name in `voice_common/pipeline_timing.py`
-  (`_SLICE_SPAN_NAMES[BACKEND_FIRST_TOKEN]`) so US-036 measures that slice.
-- Degraded-mode handling when the backend is unavailable or not confident.
+- The stub **never invents an amount or invoice content** (DEC-002); it returns a
+  neutral, generic response. Real billing answers are gated by identity (OQ-001) and
+  BSS availability (OQ-003) and stay out of Sprint 5.
+- Backend unavailable / low confidence → a **safe spoken fallback**, no invented
+  content, sanitized error, degraded outcome attribute. No Genesys handoff (EPIC-007
+  out of scope); the real confidence threshold is gated by OQ-002.
+- Ingress stays unauthenticated (RF-006 / RF-014 remain gated by OQ-001).
 
-### Out Of Scope
+### Sub-Tickets (Sprint 5 execution)
 
-- Full billing reasoning quality (owned by the billing epics).
-- Genesys handoff (EPIC-007).
+Each sub-ticket is one branch and one `implement → test → commit` slice with an
+adversarial review, mirroring the Sprint 3/4 discipline.
 
-### Acceptance Criteria
+| Ticket | Title | Role | Status |
+|---|---|---|---|
+| TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Planned |
+| TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Planned |
+| TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
+| TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Planned |
+| TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Planned |
+| TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Planned |
+| TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | Planned |
 
+Delivery order: A → B → D → E → F → C → G (C may precede D if the HTTP path is needed
+earlier; D-before-C makes the answering loop visible ASAP on the stub).
+
+### TASK-WEB-003-A — Conversation Contract + `BackendAnswerPort`
+
+**Objective:** Define the runtime-side conversation contract and the port protocol,
+with no provider implementation yet.
+
+**Scope:**
+- Request shape: transcript, channel envelope (`channel=web_voice`,
+  `conversation_id`, `external_session_id`, `correlation_id`).
+- Response shape: response text, outcome (success / degraded / unavailable),
+  confidence or degraded reason.
+- `BackendAnswerPort` protocol (`name`, `answer(request) -> AnswerResult`) mirroring
+  the `SttProvider` / `TtsProvider` pattern; shared cross-cutting code stays in
+  `voice_common/`.
+
+**Acceptance Criteria:**
 ```gherkin
-Scenario: End-to-end web Voice2Voice loop
-  Given the customer asks a question by voice on the web page
-  When the transcript is sent to the backend and a response is produced
-  Then the response is spoken back to the customer
-  And the page can display the relevant synthesis when available
-  And the full turn is traceable per pipeline slice via one correlation id
+Scenario: The conversation contract is defined without a provider
+  Given the backend answer seam
+  When the contract types are constructed for a transcript and envelope
+  Then a request carries the transcript, envelope and correlation id
+  And a response can express success, degraded or unavailable outcomes
 ```
+**Required Evidence:** developer tests for the contract types (no network); no leak
+of secrets in `to_dict`/serialization.
 
-### Required Evidence
+### TASK-WEB-003-B — Stub Backend Adapter
 
-- Developer/integration tests for the transcript->backend->response wiring.
-- Chrome DevTools MCP notes for the full loop + per-slice latency table.
-- Behave scenario(s) for the end-to-end outcome.
-- OpenTelemetry evidence: one correlation id across all slices.
+**Objective:** A deterministic, offline answer adapter honoring DEC-002 (neutral
+text, no fabricated amounts). Default backend for dev and tests.
+
+**Acceptance Criteria:**
+```gherkin
+Scenario: The stub answers without inventing billing content
+  Given the stub backend adapter
+  When it answers a transcript
+  Then it returns a neutral response text
+  And it never fabricates an amount or invoice detail
+```
+**Required Evidence:** developer tests (deterministic output, no invented amounts,
+success + degraded paths).
+
+### TASK-WEB-003-C — HTTP Backend Adapter + Selection
+
+**Objective:** An HTTP adapter calling a real conversation endpoint, plus runtime
+selection `--backend {stub,http}` (env `VOICE_BACKEND`).
+
+**Acceptance Criteria:**
+```gherkin
+Scenario: The runtime can target a real conversation endpoint
+  Given the http backend adapter with a fake transport
+  When it answers a transcript
+  Then it maps the endpoint response to the conversation contract
+  And transport/timeout errors map to a sanitized degraded outcome
+  And no secret appears in any error, log or telemetry
+```
+**Required Evidence:** fake-transport tests (success + error mapping + no key leak),
+no live backend required.
+
+### TASK-WEB-003-D — Wire The Bridge Into The Runtime
+
+**Objective:** Insert the backend answer step between STT and TTS so the loop
+**answers** instead of echoing, on **both** runtimes (stdlib + pipecat). The echo
+processor is retired or repurposed as the answer step.
+
+**Acceptance Criteria:**
+```gherkin
+Scenario: The web voice loop answers instead of echoing
+  Given the runtime is started with the stub backend
+  When the customer records a phrase on the web page
+  Then the phrase is transcribed, answered by the backend and spoken back
+  And the behaviour is equivalent on the stdlib and pipecat runtimes
+```
+**Required Evidence:** developer tests for the wired loop on both runtimes; behave
+coverage; confirmation the TTS input is the backend answer, not the transcript.
+
+### TASK-WEB-003-E — End-To-End Telemetry (closes US-036 gap)
+
+**Objective:** Emit a backend span and register the missing US-036 slice.
+
+**Scope:**
+- Emit `backend.request` / `backend.first_token` with correlation id, outcome and
+  duration.
+- Register the span name in `voice_common/pipeline_timing.py`
+  (`_SLICE_SPAN_NAMES[BACKEND_FIRST_TOKEN]`) so US-036 measures the slice.
+- One correlation id across ingress → STT → backend → TTS → egress.
+
+**Acceptance Criteria:**
+```gherkin
+Scenario: The backend slice becomes measured
+  Given a full web voice turn through the backend bridge
+  When the pipeline timing report is produced
+  Then backend_first_token is reported measured (no longer a gap)
+  And every slice shares one correlation id
+```
+**Required Evidence:** telemetry tests; a full-turn pipeline-timing sample showing
+`backend_first_token` measured; no remaining implemented-slice gap in US-036.
+
+### TASK-WEB-003-F — Degraded Mode
+
+**Objective:** Safe behaviour when the backend is unavailable or not confident.
+
+**Acceptance Criteria:**
+```gherkin
+Scenario: Safe fallback when the backend cannot answer
+  Given the backend is unavailable or not confident
+  When the turn is processed
+  Then no billing content is invented
+  And a safe spoken fallback is rendered to the customer
+  And the degraded outcome is observable without leaking secrets
+```
+**Required Evidence:** developer tests for unavailable + low-confidence paths;
+sanitized error contract; degraded outcome attribute in telemetry.
+
+### TASK-WEB-003-G — QA, Behave, Latency, Docs, ADR
+
+**Objective:** Close the sprint with QA evidence and documentation.
+
+**Scope:**
+- Behave scenarios: end-to-end answer loop + degraded fallback.
+- Per-slice latency table for the full turn (feeds US-036).
+- Docs: `voice-agent/README.md` (`--backend` flag), `docs/observability/voice-journey-timing.md`,
+  and a new **ADR for the conversation contract** under `docs/architecture/adrs/`.
+- Chrome DevTools MCP note re-validating the live answering loop (manual QA step,
+  needs a live mic + Gradium key).
+
+**Acceptance Criteria:** behave green (answer + degraded); `backend_first_token`
+shown measured; docs + ADR updated.
 
 ### Notes
 
-- When all three tasks pass QA and the user validates the loop, US-019 moves to
-  Done and RF-002 can be closed (real ingress span replaced the scaffold analog).
+- When all sub-tickets pass QA and the user validates the loop, **US-019 moves to
+  Done** and RF-002 can be closed (real ingress span replaced the scaffold analog).
 - Per-slice timing produced here is the input US-036 reports on.
 
 ---

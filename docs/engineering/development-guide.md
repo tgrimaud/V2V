@@ -8,7 +8,8 @@
 > STT validation (Sprint 1/2), TTS voice-out (Sprint 3, TASK-WEB-002) and, since
 > Sprint 4 (TASK-WEB-005), a **Pipecat batch runtime** selectable via
 > `--runtime {stdlib,pipecat}` (default `pipecat`). There is still no backend/LLM
-> answer (echo only) and no streaming/WebRTC (Sprint 5). The "Working On This Branch"
+> answer (echo only; the answer bridge TASK-WEB-003 is Sprint 5) and no
+> streaming/WebRTC (Sprint 6). The "Working On This Branch"
 > section below is accurate for this branch. Everything from "## Target V1 Stack"
 > onward describes the target stack (reference on `main`) and does **not** run here —
 > do not follow those `mvn` / `npm` / `docker compose` / `agent.bot` steps against

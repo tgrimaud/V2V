@@ -20,8 +20,8 @@ Accepted
 > `--runtime {stdlib,pipecat}` (env `VOICE_RUNTIME`, default `pipecat`); the stdlib
 > HTTP path stays as the fallback/comparison runtime (ADR-0016). This is a
 > **pipeline-only, batch-parity** migration: still **no WebRTC transport and no
-> streaming** (those, plus barge-in and server-side VAD, are Sprint 5), and no
-> backend/LLM answer yet (TASK-WEB-003). Both runtimes delegate to the same runners,
+> streaming** (those, plus barge-in and server-side VAD, are Sprint 6), and no
+> backend/LLM answer yet (the answer bridge TASK-WEB-003 is Sprint 5). Both runtimes delegate to the same runners,
 > so output is byte-identical (`scripts/ab_parity.py`).
 
 ## Context
