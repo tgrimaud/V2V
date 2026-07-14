@@ -80,13 +80,14 @@ against the new empty-codebase plan.
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category (closes RF-003, RF-005) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | Done (STT sprint scope) | High |
 | TASK-STT-009 | Detect and instrument end-of-turn for the voice journey (US-036 `end_of_turn` slice) | V1 pilot gate | ✅ Done (Sprint 2, 2026-07-13) | Medium |
-| TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Planned (Sprint 4) | High |
+| TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Planned (Sprint 5) | High |
 | TASK-STT-011 | Normalize transcripts (case/punctuation/accents) before WER scoring (closes RF-008) | V1 pilot gate | Done (Sprint 2) | Medium |
-| TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 4) | Medium |
+| TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 5) | Medium |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | Done (merged) | High |
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, merged → `feat/restart-from-scratch`) | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
-| TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Draft | High |
+| TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Planned (Sprint 5) | High |
+| TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Planned (Sprint 4) | High |
 
 ## Planned Sprints
 
@@ -95,7 +96,8 @@ against the new empty-codebase plan.
 | SPRINT-STT | STT Validation | ✅ Done (2026-07-10) | Validate fixture-based speech-to-text transcription, timing, OpenTelemetry evidence and QA readiness |
 | SPRINT-2-STT-HARDENING | STT Hardening | ✅ Done (2026-07-13) | Make the WER quality gate usable (normalization) and complete STT observability (fixtures, sanitization, UNAVAILABLE outcome, end-of-turn) — `sprints/sprint-2-stt-hardening.md` |
 | SPRINT-3-TTS | TTS / Voice-out (batch) | ✅ Done (2026-07-13, merged → `feat/restart-from-scratch`) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
-| SPRINT-4-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) for the low-latency voice loop |
+| SPRINT-4-PIPECAT | Pipecat runtime migration (batch parity) | Planned | Run the web voice batch loop (STT → echo → TTS) through a Pipecat pipeline (pipeline-only, no WebRTC/streaming), selectable via `--runtime` and shipped as the default at sprint exit, with the stdlib path kept as fallback/comparison (TASK-WEB-005) — `sprints/sprint-4-pipecat-batch.md` |
+| SPRINT-5-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) + WebRTC transport for the low-latency voice loop |
 
 ## Restart Delivery Notes
 

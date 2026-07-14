@@ -376,3 +376,95 @@ Scenario: The bot response audio starts before full synthesis
 - Chrome DevTools MCP notes + time-to-first-audio vs full-clip comparison.
 - Behave scenario for the streaming playback outcome.
 - OpenTelemetry evidence for the `tts_first_audio` slice.
+
+---
+
+## TASK-WEB-005 - Introduce The Pipecat Batch Runtime (Pipeline Parity)
+
+**Parent:** EPIC-006 (+ EPIC-010 for observability)
+**Related story:** US-019 (voice runtime), US-036 (per-slice timing preserved)
+**Related decision:** DEC-005 / ADR-0002 (Pipecat is the target voice path), ADR-0012
+(modular pipeline), ADR-0016 (legacy path kept as fallback/comparison)
+**Depends on:** TASK-WEB-001 (STT ingress), TASK-WEB-002 (TTS voice-out)
+**Classification:** V1 enabler
+**Status:** Planned — Sprint 4 (`sprints/sprint-4-pipecat-batch.md`)
+**Priority:** High
+**Branch:** `task/TASK-WEB-005-pipecat-batch` (from `feat/sprint-4-pipecat-batch`)
+
+### Objective
+
+Run the existing web voice **batch** loop (STT → echo → TTS) through a **Pipecat
+pipeline** with **no user-visible change**, aligning the runtime with the ADR-0002
+target and de-risking the framework migration **before** streaming (Sprint 5). This
+is a migration / de-risking task, **not** a latency task: batch-on-Pipecat is not
+expected to beat batch-on-stdlib; the value is isolating the runtime swap from the
+streaming changes and stopping the target-vs-real drift (the code has zero Pipecat
+today).
+
+### Scope
+
+- Wrap the existing Gradium STT and TTS paths as **Pipecat frame processors**,
+  delegating to the current `SttValidationRunner` / `TtsSynthesisRunner` (no fork,
+  no behaviour change).
+- Assemble an in-memory Pipecat pipeline (`source → stt → echo → tts → sink`) driven
+  server-side (no WebRTC transport, no browser change).
+- **Dual runtime:** introduce a `VoiceTurnProcessor` seam in the web server so the
+  legacy stdlib path and the new Pipecat path both exist and are selectable via
+  `--runtime {stdlib,pipecat}` (env fallback `VOICE_RUNTIME`). Ship the sprint with
+  the default flipped to `pipecat`; keep `stdlib` as the fallback/comparison path.
+- Preserve the exact contract of the two legacy endpoints (`POST /api/voice/stt`
+  PCM in, `POST /api/voice/tts` WAV out, sanitized JSON errors, correlation id) on
+  both runtimes.
+- Add `POST /api/voice/turn` (full audio → STT → echo → TTS → WAV in one server-side
+  call) exercising the whole pipeline; the browser stays on the two legacy endpoints.
+- Preserve the US-036 pipeline slices (`web.voice.ingress`, `voice.stt.*`,
+  `voice.tts.first_audio`, `web.voice.egress`) via the shared `voice_common`
+  telemetry so timing reporting is unchanged.
+- Keep the hard STT/TTS separation: the STT service must not import `tts_synthesis`
+  and the TTS service must not import `stt_validation` (shared code stays in
+  `voice_common/`); enforced by the architecture test.
+
+### Out Of Scope
+
+- Streaming STT (TASK-STT-010), streaming TTS (TASK-WEB-004), streaming VAD
+  (TASK-STT-012), WebRTC transport + Pipecat JS client — all **Sprint 5**.
+- Barge-in (US-021), backend/LLM answer (TASK-WEB-003).
+- Any frontend change (the browser keeps its current two-call echo loop).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The web voice batch loop runs through the Pipecat pipeline
+  Given the voice runtime is started with --runtime pipecat
+  When the customer records a phrase on the web page
+  Then the phrase is transcribed, echoed and spoken back exactly as before
+  And the same pipeline slices are observable via OpenTelemetry
+```
+
+```gherkin
+Scenario: Both runtimes are selectable and behaviour-equivalent
+  Given the same input audio
+  When it is processed with --runtime stdlib and with --runtime pipecat
+  Then both produce identical WAV output
+  And switching runtime requires no code change, only the startup flag
+```
+
+```gherkin
+Scenario: STT and TTS stay independent in the pipeline
+  Given the Pipecat STT service and TTS service
+  When the architecture separation test runs
+  Then the STT service does not import tts_synthesis and vice versa
+  And shared code lives only in voice_common
+```
+
+### Required Evidence
+
+- Developer tests for the Pipecat STT/TTS frame processors (fake provider/transport,
+  no live call) and for the in-memory batch pipeline runner.
+- A/B parity harness comparing `stdlib` vs `pipecat` output on the same input
+  (identical WAV) plus a per-slice latency report.
+- Behave scenarios green through **both** runtimes (or a dedicated parity scenario).
+- Architecture separation test extended to the new `voice_pipeline/` services.
+- Chrome DevTools MCP note re-validating the echo loop on the default (`pipecat`)
+  runtime (unchanged UX + timing).
+- Confirmation no API key, raw audio or filesystem path is logged.
