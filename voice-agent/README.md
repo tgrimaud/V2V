@@ -224,3 +224,43 @@ The voice-out contract is covered by `tests/test_tts_providers.py`,
 `tests/test_web_voice_egress.py` and `features/tts_synthesis.feature`. Live
 browser validation (echo playback + time-to-first-audio) is a Chrome DevTools MCP
 QA step.
+
+## Voice runtime: stdlib vs Pipecat (TASK-WEB-005)
+
+The web voice batch loop (STT → echo → TTS) runs through a **Pipecat pipeline**,
+aligning the runtime with the ADR-0002 target while keeping behaviour identical
+(this is a migration in batch parity — no WebRTC/streaming yet; that is Sprint 5).
+Both runtimes coexist and are selected at startup:
+
+```bash
+# default: pipecat runtime (ADR-0002 target, batch parity)
+python3 -m web_voice.server --provider fixture
+# fallback / comparison runtime (pre-Sprint-4 path, ADR-0016)
+python3 -m web_voice.server --provider fixture --runtime stdlib
+# env override: VOICE_RUNTIME=stdlib python3 -m web_voice.server ...
+```
+
+- `--runtime {stdlib,pipecat}` (env `VOICE_RUNTIME`) selects the runtime; **default
+  is `pipecat`**. `stdlib` calls `WebVoiceIngress`/`WebVoiceEgress` directly and stays
+  as the fallback/comparison path.
+- The server drives a `VoiceTurnProcessor` seam (`web_voice/runtime.py`); both
+  runtimes delegate to the same STT/TTS runners, so they produce **byte-identical**
+  WAV for the same input.
+- `voice_pipeline/` wraps the STT and TTS halves as Pipecat `FrameProcessor`s
+  (`stt_service`, `tts_service`) composed into an in-memory batch pipeline
+  (`pipeline.py`) via an injected ingress/egress, so the services keep the hard
+  STT/TTS separation (enforced by `tests/test_architecture_separation.py`).
+- `POST /api/voice/turn` runs the whole loop server-side in one call (PCM16 in →
+  WAV out); the two legacy endpoints (`/api/voice/stt`, `/api/voice/tts`) keep their
+  exact contract on both runtimes. The browser is unchanged this sprint.
+- The four US-036 slices (`web.voice.ingress`, `stt.request`, `voice.tts.first_audio`,
+  `web.voice.egress`) stay measured through the pipeline because the services thread
+  the same `TelemetryRecorder` into the runners.
+- Pipecat API notes (frame types, runner choice, deprecation) are locked in
+  `docs/qa/pipecat-batch-contract.md`. `scripts/ab_parity.py` is a repeatable
+  stdlib-vs-pipecat parity + latency check.
+
+Coverage: `tests/test_stt_service.py`, `tests/test_tts_service.py`,
+`tests/test_pipeline.py`, `tests/test_voice_runtime.py`, `tests/test_ab_parity.py`,
+the pipeline slice bridge in `tests/test_pipeline_timing.py`, and the two Pipecat
+scenarios in `features/web_voice.feature`.

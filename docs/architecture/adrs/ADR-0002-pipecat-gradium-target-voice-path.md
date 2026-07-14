@@ -12,8 +12,17 @@ Accepted
 > (TASK-WEB-002) — the TTS voice-out slice (`voice-agent/web_voice/`,
 > `stt_validation/`, `tts_synthesis/`): the browser posts PCM16 audio and gets a
 > Gradium transcript, then posts the echo text and gets a Gradium-synthesized WAV
-> back. Still **no Pipecat** (this is a batch HTTP echo loop, not the streaming
-> target path) and no backend/LLM answer.
+> back.
+>
+> **Sprint 4 update (2026-07-14, TASK-WEB-005):** Pipecat is now present as the
+> **default batch runtime**. The web voice loop (STT → echo → TTS) runs through a
+> Pipecat pipeline (`voice-agent/voice_pipeline/`), selected via
+> `--runtime {stdlib,pipecat}` (env `VOICE_RUNTIME`, default `pipecat`); the stdlib
+> HTTP path stays as the fallback/comparison runtime (ADR-0016). This is a
+> **pipeline-only, batch-parity** migration: still **no WebRTC transport and no
+> streaming** (those, plus barge-in and server-side VAD, are Sprint 5), and no
+> backend/LLM answer yet (TASK-WEB-003). Both runtimes delegate to the same runners,
+> so output is byte-identical (`scripts/ab_parity.py`).
 
 ## Context
 

@@ -3,7 +3,16 @@ from pathlib import Path
 from behave import given, then, when
 
 from stt_validation import SttOutcome, TelemetryRecorder
-from web_voice import ChannelEnvelope, WebVoiceIngress
+from stt_validation.pipeline_timing import (
+    CHANNEL_EGRESS,
+    CHANNEL_INGRESS,
+    STT,
+    TTS_FIRST_AUDIO,
+    PipelineTimingReport,
+)
+from tts_synthesis import FixtureTtsProvider
+from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
+from web_voice.runtime import PipecatTurnProcessor, StdlibTurnProcessor
 
 SECRET_PATH = "/private/customer/invoice-9931.pcm"
 
@@ -86,3 +95,60 @@ def step_no_path_in_reason(context):
     reason = context.result.error_reason or ""
     assert "/" not in reason and "\\" not in reason, reason
     assert SECRET_PATH not in reason
+
+
+@given("a web voice turn processed by the pipecat runtime")
+def step_pipecat_runtime(context):
+    context.telemetry = TelemetryRecorder()
+    ingress = WebVoiceIngress(_StubProvider(transcript="bonjour je paye trop cher ce mois"))
+    egress = WebVoiceEgress(FixtureTtsProvider())
+    context.processor = PipecatTurnProcessor(ingress, egress)
+    context.audio = b"\x11\x22" * 320
+    context.envelope = ChannelEnvelope.for_web_turn(correlation_id="qa-web-pipecat")
+
+
+@when("the runtime runs the full voice turn")
+def step_run_full_turn(context):
+    context.turn = context.processor.run_turn(context.audio, context.envelope, context.telemetry)
+    context.processor.record_egress(context.turn.tts_response, context.envelope, context.telemetry, sent_ms=1.0)
+
+
+@then("the phrase is transcribed, echoed and spoken back")
+def step_echoed_and_spoken(context):
+    assert context.turn.transcript_result.outcome is SttOutcome.SUCCESS, context.turn.transcript_result.outcome
+    assert context.turn.tts_response is not None and context.turn.tts_response.wav, "expected spoken WAV"
+    assert context.turn.tts_response.wav[:4] == b"RIFF"
+
+
+@then("the pipeline slices are observable via telemetry")
+def step_pipeline_slices_observable(context):
+    report = PipelineTimingReport.from_spans(context.telemetry.spans())
+    by_slice = {s.slice: s for s in report.slices}
+    for name in (CHANNEL_INGRESS, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+        assert by_slice[name].measured, f"{name} slice not measured"
+
+
+def _runtime_wav(processor_cls, audio, envelope) -> bytes:
+    ingress = WebVoiceIngress(_StubProvider(transcript="bonjour"))
+    egress = WebVoiceEgress(FixtureTtsProvider())
+    processor = processor_cls(ingress, egress)
+    result = processor.run_turn(audio, envelope, TelemetryRecorder())
+    return result.tts_response.wav
+
+
+@given("the same captured audio for both runtimes")
+def step_same_audio_both_runtimes(context):
+    context.audio = b"\x05\x06" * 320
+    context.envelope = ChannelEnvelope.for_web_turn(correlation_id="qa-web-parity")
+
+
+@when("the turn is processed by the stdlib and pipecat runtimes")
+def step_process_both_runtimes(context):
+    context.stdlib_wav = _runtime_wav(StdlibTurnProcessor, context.audio, context.envelope)
+    context.pipecat_wav = _runtime_wav(PipecatTurnProcessor, context.audio, context.envelope)
+
+
+@then("both runtimes produce identical WAV output")
+def step_identical_wav(context):
+    assert context.stdlib_wav == context.pipecat_wav, "runtimes diverged"
+    assert context.stdlib_wav and context.stdlib_wav[:4] == b"RIFF"

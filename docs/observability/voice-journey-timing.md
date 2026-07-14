@@ -98,10 +98,22 @@ drive turns through `WebVoiceIngress` and (for the voice-out slices)
 | TTS first audio + channel egress measured (TASK-WEB-002) | `voice.tts.first_audio` span from `TtsSynthesisRunner`, `web.voice.egress` span from `WebVoiceEgress`; both slices report p50/p95/p99 over a full-turn sample |
 | Latency gaps are visible, not hidden | The remaining deferred slice (`backend_first_token`) is reported `"measured": false` with a reason |
 
+## Pipecat runtime (Sprint 4, TASK-WEB-005)
+
+The slices are runtime-agnostic. Under the `pipecat` runtime the Pipecat frame
+processors (`voice-agent/voice_pipeline/`) delegate to the same
+`WebVoiceIngress`/`WebVoiceEgress` and thread the **same `TelemetryRecorder`**, so
+the identical spans (`web.voice.ingress`, `stt.request`, `voice.tts.first_audio`,
+`web.voice.egress`) are emitted and the same four slices are measured. A full turn
+through `/api/voice/turn` emits all four in a single request. This is verified by
+`PipelineTelemetryBridgeTest` in `tests/test_pipeline_timing.py` and the Pipecat
+scenario in `features/web_voice.feature`.
+
 ## Tests
 
 - `tests/test_pipeline_timing.py` (unit: slice order, percentiles, gap flags,
-  ingress span precedence, end-of-turn measured when its span is present).
+  ingress span precedence, end-of-turn measured when its span is present; plus the
+  Pipecat pipeline telemetry-bridge integration test).
 - `tests/test_end_of_turn.py` (unit: silence-window vs client-stop signal,
   no invented boundary on silence/empty audio, threshold/config).
 - `tests/test_web_voice_ingress.py` (end-of-turn span emission + absent event).

@@ -15,7 +15,7 @@ today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
 
 ## Status
 
-**Status:** Planned
+**Status:** Done (2026-07-14)
 **Created:** 2026-07-14
 **Predecessor:** [`sprint-3-tts-voice-out.md`](sprint-3-tts-voice-out.md) (Sprint 3 — Done, 2026-07-13)
 **Working branch:** `feat/sprint-4-pipecat-batch` (from `feat/restart-from-scratch`)
@@ -29,7 +29,7 @@ today). Streaming STT/TTS/VAD and the WebRTC transport are **Sprint 5**.
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | ✅ Done (merged → `feat/restart-from-scratch`) |
-| **Sprint 4** | **Pipecat runtime migration (batch parity, pipeline-only) — this sprint** | Planned |
+| **Sprint 4** | **Pipecat runtime migration (batch parity, pipeline-only) — this sprint** | ✅ Done |
 | Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) + WebRTC transport | Planned |
 
 ## Included Tickets
@@ -94,46 +94,46 @@ WebVoiceHTTPServer (--runtime)
 Each ST is one commit (`implement → test → commit`), independently testable, with an
 adversarial review, mirroring the Sprint 3 discipline.
 
-- [ ] **ST-1 — Pipecat spike + dependency pin.** Add `pipecat-ai` to
+- [x] **ST-1 — Pipecat spike + dependency pin.** Add `pipecat-ai` to
   `voice-agent/requirements.txt` (pin an upper bound, like the `websockets` pin). A
   throwaway script under `voice-agent/scripts/` runs a minimal `Pipeline` +
   `PipelineRunner`/`PipelineTask` with an in-memory source → passthrough → sink; lock
   the exact frame/runner API we depend on (frame types for audio/transcript/text/
   tts-audio, `EndFrame`, how to drive a pipeline to completion off a transport).
   Findings note in `docs/`.
-- [ ] **ST-2 — Gradium STT as a Pipecat service (batch).** `voice_pipeline/stt_service.py`:
+- [x] **ST-2 — Gradium STT as a Pipecat service (batch).** `voice_pipeline/stt_service.py`:
   a `FrameProcessor` consuming a whole-utterance audio frame, delegating to
   `SttValidationRunner` (no fork), emitting a transcription frame. Imports
   `stt_validation` + `voice_common` only. Fake-provider tests.
-- [ ] **ST-3 — Gradium TTS as a Pipecat service (batch).** `voice_pipeline/tts_service.py`:
+- [x] **ST-3 — Gradium TTS as a Pipecat service (batch).** `voice_pipeline/tts_service.py`:
   a `FrameProcessor` consuming a text frame, delegating to `TtsSynthesisRunner`,
   emitting audio frame(s). Imports `tts_synthesis` + `voice_common` only.
   Fake-transport tests.
-- [ ] **ST-4 — Echo processor + pipeline assembly + in-memory runner.**
+- [x] **ST-4 — Echo processor + pipeline assembly + in-memory runner.**
   `voice_pipeline/echo.py` (transcript → text, reproduces the current echo stub) and
   `voice_pipeline/pipeline.py` composing `source → stt → echo → tts → sink` plus a
   `run_batch_turn(audio_bytes, correlation_id) → wav_bytes` helper. Unit test asserts
   parity of the echo WAV vs the current path.
-- [ ] **ST-5 — Telemetry bridge (pipeline slices).** Ensure the services surface
+- [x] **ST-5 — Telemetry bridge (pipeline slices).** Ensure the services surface
   `voice.stt.*` / `web.voice.ingress` / `voice.tts.first_audio` / `web.voice.egress`
   into `voice_common/pipeline_timing.py` so US-036 measures the same slices unchanged.
   Extend `tests/test_pipeline_timing.py`.
-- [ ] **ST-6 — Runtime seam + `--runtime` switch + `/api/voice/turn`.** Extract a
+- [x] **ST-6 — Runtime seam + `--runtime` switch + `/api/voice/turn`.** Extract a
   `VoiceTurnProcessor` protocol in `web_voice/server.py`; add `StdlibTurnProcessor`
   (wraps the untouched ingress/egress) and `PipecatTurnProcessor` (drives the
   pipeline); `main()` adds `--runtime {stdlib,pipecat}` (env fallback `VOICE_RUNTIME`).
   Both legacy endpoints keep the exact contract on either runtime. Add
   `POST /api/voice/turn` (full pipeline in one call). No frontend edits. Intermediate
   default stays `stdlib`; the shipped default is flipped in ST-9.
-- [ ] **ST-7 — Architecture separation test extended.** Extend
+- [x] **ST-7 — Architecture separation test extended.** Extend
   `tests/test_architecture_separation.py`: `voice_pipeline/stt_service.py` must not
   import `tts_synthesis`, `voice_pipeline/tts_service.py` must not import
   `stt_validation`; the composing `pipeline.py` may import both.
-- [ ] **ST-8 — A/B parity harness (stdlib vs pipecat).** A comparison script/test
+- [x] **ST-8 — A/B parity harness (stdlib vs pipecat).** A comparison script/test
   runs the same input through both runtimes, asserts identical WAV output and reports
   both runtimes' slice latencies (repeatable comparison artifact; supports the
   ADR-0016 comparison-path role).
-- [ ] **ST-9 — Flip default to `pipecat` + QA + behave + docs.** Flip the shipped
+- [x] **ST-9 — Flip default to `pipecat` + QA + behave + docs.** Flip the shipped
   default runtime to `pipecat` (stdlib stays selectable). Behave features green through
   **both** runtimes (parameterized or a dedicated parity scenario). Chrome DevTools MCP
   re-validate the echo loop on the default (`pipecat`) runtime + record latency (expect
@@ -150,7 +150,7 @@ once validated (per the repository branching strategy).
 
 | Ticket | Branch | Status |
 |---|---|---|
-| TASK-WEB-005 | `task/TASK-WEB-005-pipecat-batch` | Planned |
+| TASK-WEB-005 | `task/TASK-WEB-005-pipecat-batch` | ✅ Done |
 
 ## Out Of Sprint
 
@@ -189,8 +189,24 @@ Scenario: STT and TTS stay independent in the pipeline
   And shared code lives only in voice_common
 ```
 
-## Open Questions (to resolve during the sprint)
+## Delivery Notes (resolved)
 
-- **Exact `pipecat-ai` frame/runner API** for driving a pipeline to completion off a
-  transport (in-memory source/sink) — locked in ST-1.
-- **`pipecat-ai` version** to pin (latest stable + upper bound) — decided at ST-1.
+- **`pipecat-ai` version pinned:** `pipecat-ai>=1.5,<2` (spiked on 1.5.0). Batch driving
+  uses `PipelineTask` + `PipelineRunner` (the `PipelineWorker`/`WorkerRunner` path hung
+  when frames were queued before the runner went live); the deprecation warning is
+  suppressed locally pending the Sprint 5 streaming migration. Frame/runner contract is
+  locked in [`docs/qa/pipecat-batch-contract.md`](../../docs/qa/pipecat-batch-contract.md).
+- **Default runtime flipped to `pipecat`** (`--runtime {stdlib,pipecat}`, env
+  `VOICE_RUNTIME`); `stdlib` stays selectable as the fallback/comparison path.
+- **New endpoint `POST /api/voice/turn`** runs the full loop server-side; the two legacy
+  endpoints (`/api/voice/stt`, `/api/voice/tts`) keep their exact contract on both
+  runtimes. Frontend untouched.
+- **Verification:** unit tests + behave green on both runtimes (parity + Pipecat
+  scenarios), architecture separation extended to `voice_pipeline/{stt,tts}_service.py`,
+  offline A/B parity harness ([`scripts/ab_parity.py`](../../voice-agent/scripts/ab_parity.py))
+  asserts byte-identical WAV across runtimes, and a live boot smoke test confirmed both
+  runtimes serve `/` and route `/api/voice/turn` identically.
+- **Manual QA remaining:** full Chrome DevTools MCP echo-loop re-validation on the
+  `pipecat` default requires a live mic and a real Gradium key, so it stays a manual QA
+  step (as in Sprint 3); the automated tests cover byte-identical output and telemetry
+  slice parity.

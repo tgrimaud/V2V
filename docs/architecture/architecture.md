@@ -16,11 +16,15 @@
 > WAV → playback), closing a voice-in → voice-out **echo** loop. Cross-cutting
 > utilities (telemetry, sanitization, per-slice pipeline timing) live in a neutral
 > `voice_common/` package; the two halves never import each other (enforced by an
-> architecture test). No Java backend, no Pipecat agent, no React frontend, no
-> RAG/pgvector, no backend/LLM answer (echo only, TASK-WEB-003), no streaming
-> (TASK-WEB-004), no billing, no Genesys. See `voice-agent/README.md`,
-> `product-backlog/sprints/sprint-stt-validation.md` and
-> `product-backlog/sprints/sprint-3-tts-voice-out.md`.
+> architecture test). Since **Sprint 4 (TASK-WEB-005)** this loop runs through a
+> **Pipecat pipeline** by default (`voice-agent/voice_pipeline/`, selected via
+> `--runtime {stdlib,pipecat}`), but in **batch parity only** — still no WebRTC
+> transport and no streaming (Sprint 5). No Java backend, no Pipecat WebRTC agent,
+> no React frontend, no RAG/pgvector, no backend/LLM answer (echo only,
+> TASK-WEB-003), no streaming (TASK-WEB-004), no billing, no Genesys. See
+> `voice-agent/README.md`, `product-backlog/sprints/sprint-stt-validation.md`,
+> `product-backlog/sprints/sprint-3-tts-voice-out.md` and
+> `product-backlog/sprints/sprint-4-pipecat-batch.md`.
 
 ## Overview
 
