@@ -1,17 +1,23 @@
 # Development Guide
 
-> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** this branch is a
-> deliberate restart. The Java backend, React frontend, Pipecat agent (`agent/bot.py`)
-> and legacy bridge (`bridge_server.py`) were removed (preserved on `main`). The
-> **only runnable code here is the Python STT-validation slice** under `voice-agent/`.
-> The "Working On This Branch" section below is accurate for this branch. Everything
-> from "## Target V1 Stack" onward describes the target stack (reference on `main`)
-> and does **not** run here — do not follow those `mvn` / `npm` / `docker compose` /
-> `agent.bot` steps against this checkout.
+> **Branch state (`feat/restart-from-scratch`, updated 2026-07-14):** this branch is a
+> deliberate restart. The Java backend, React frontend, target Pipecat agent
+> (`agent/bot.py`) and legacy bridge (`bridge_server.py`) were removed (preserved on
+> `main`). The **only runnable code here is the Python voice slice** under
+> `voice-agent/`, which now covers the full **voice-in → echo → voice-out** loop:
+> STT validation (Sprint 1/2), TTS voice-out (Sprint 3, TASK-WEB-002) and, since
+> Sprint 4 (TASK-WEB-005), a **Pipecat batch runtime** selectable via
+> `--runtime {stdlib,pipecat}` (default `pipecat`). There is still no backend/LLM
+> answer (echo only) and no streaming/WebRTC (Sprint 5). The "Working On This Branch"
+> section below is accurate for this branch. Everything from "## Target V1 Stack"
+> onward describes the target stack (reference on `main`) and does **not** run here —
+> do not follow those `mvn` / `npm` / `docker compose` / `agent.bot` steps against
+> this checkout.
 
-## Working On This Branch (STT validation — the only runnable code)
+## Working On This Branch (Python voice slice — the only runnable code)
 
-All code lives under `voice-agent/` (Python 3, standard library + `behave` for BDD).
+All code lives under `voice-agent/` (Python 3, standard library + `pipecat-ai` for the
+batch runtime + `behave` for BDD).
 Configuration comes from a repo-root `.env` (no `.env.example` is committed):
 
 ```bash
@@ -43,10 +49,22 @@ export $(grep -v '^#' ../.env | xargs) && \
 # Per-pipeline-slice latency report (US-036)
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium
 
-# Web voice ingress: browser mic -> 16 kHz PCM16 -> Gradium transcript
+# Web voice echo loop: browser mic -> STT -> echo -> TTS -> playback
 python3 -m web_voice.server --provider gradium   # then open http://127.0.0.1:8090/
 python3 -m web_voice.server --provider fixture   # offline plumbing check (no key)
+
+# Select the runtime (default is pipecat; stdlib is the fallback/comparison path)
+python3 -m web_voice.server --provider fixture --runtime pipecat
+python3 -m web_voice.server --provider fixture --runtime stdlib
+VOICE_RUNTIME=stdlib python3 -m web_voice.server --provider fixture
+
+# A/B parity harness: same input through both runtimes (identical WAV + latency)
+python3 scripts/ab_parity.py --iterations 20
 ```
+
+Endpoints: `POST /api/voice/stt` (PCM16 in → transcript JSON), `POST /api/voice/tts`
+(`?text=` → WAV), and `POST /api/voice/turn` (PCM16 in → full STT → echo → TTS → WAV
+in one call). All three keep the same contract on both runtimes.
 
 Troubleshooting (current branch):
 

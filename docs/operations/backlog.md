@@ -77,15 +77,20 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 ### V2V1. Phone And Web Voice2Voice Journeys
 
 - **Classification:** V1 core
-- **Status:** In progress (STT-in half only, on this branch)
+- **Status:** In progress (voice-in → echo → voice-out loop on this branch; no backend/LLM answer yet)
 - **Product links:** EPIC-004, EPIC-005
 - **Objective:** deliver oral question -> oral answer on phone and web voice.
-- **Current state (this branch):** only the STT-in half is delivered — the web
-  voice ingress captures the mic and returns a Gradium transcript (`web_voice/`).
-  There is no voice OUT (TTS), no LLM/backend bridge, and no Pipecat agent here.
-  Pipecat + Gradium remains the V1 **target** path (ADR-0011/0012); the custom
-  bridge is target fallback/comparison only.
-- **Remaining product need:** rebuild the backend/TTS path, then validate that
+- **Current state (this branch):** the full **voice-in → echo → voice-out** loop is
+  delivered — the web voice ingress captures the mic and returns a Gradium transcript
+  (Sprint 1/2), and the egress synthesizes the echo back to speech (Sprint 3,
+  TASK-WEB-002). Since Sprint 4 (TASK-WEB-005) this batch loop runs through a
+  **Pipecat pipeline** by default (`voice_pipeline/`, `--runtime {stdlib,pipecat}`),
+  in **batch parity only** — still no WebRTC transport and no streaming (Sprint 5).
+  There is still **no LLM/backend answer** (echo only, TASK-WEB-003). Pipecat +
+  Gradium is the V1 **target** path (ADR-0002/0011/0012); the stdlib path is kept as
+  fallback/comparison (ADR-0016).
+- **Remaining product need:** bridge the transcript to a real backend answer
+  (TASK-WEB-003), add the streaming/WebRTC path (Sprint 5), then validate that
   billing explanations and escalation behave correctly on both channels.
 
 ### V2V2. Phone Telephony Validation

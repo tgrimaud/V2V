@@ -27,7 +27,7 @@ answer (TASK-WEB-003), no streaming playback (TASK-WEB-004, Sprint 5), no barge-
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | **Sprint 3** | **TTS / voice-out (batch, non-streaming) → first end-to-end voice loop (this sprint)** | ✅ Done (merged → `feat/restart-from-scratch`) |
-| Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | Planned |
+| Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
 | Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) | Planned |
 
 ## Included Tickets

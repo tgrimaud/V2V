@@ -326,3 +326,38 @@ Delivered the **voice-out half** of US-019: turn response text into speech via a
 - `voice-agent/fixtures/tts/reference-texts.txt`; `voice-agent/scripts/gradium_tts_spike.py`
 - Docs: `docs/qa/gradium-tts-contract.md`, `docs/observability/voice-journey-timing.md`, `voice-agent/README.md`
 - Planning: `product-backlog/sprints/sprint-3-tts-voice-out.md`, `product-backlog/tasks/web-voice-tasks.md`, `product-backlog/backlog-index.md`
+
+## 2026-07-14 — Sprint 4: Pipecat batch runtime migration (TASK-WEB-005)
+
+**Summary:**
+
+Ran the existing web voice **batch** loop (STT → echo → TTS) through a **Pipecat pipeline**, aligning the runtime with the ADR-0002 target and de-risking the framework migration **before** streaming (Sprint 5). Migration / de-risking sprint, **not** a latency sprint: batch-on-Pipecat is not expected to beat batch-on-stdlib. User-visible behaviour is unchanged (the browser keeps its two-call echo loop) and the same US-036 slices stay observable. Streaming STT/TTS/VAD + the WebRTC transport are Sprint 5.
+
+### What shipped (ST-1 → ST-9, each committed)
+- **ST-1 — Pipecat spike + dependency pin:** `pipecat-ai>=1.5,<2` pinned; a throwaway `scripts/pipecat_spike.py` locked the batch frame/runner API (frame types, `EndFrame`, driving a pipeline to completion off a transport). Findings in `docs/qa/pipecat-batch-contract.md`. Locked the deprecated `PipelineTask`/`PipelineRunner` pair (the newer `WorkerRunner` hung on frames queued before it went live) with the DeprecationWarning suppressed locally, pending the Sprint 5 streaming migration.
+- **ST-2 — Gradium STT as a Pipecat service:** `voice_pipeline/stt_service.py` — `SttFrameProcessor` consuming a whole-utterance `InputAudioRawFrame`, delegating to an injected STT ingress (duck-typed `SttIngress`), emitting a `TranscriptionFrame`. Never invents a transcript on non-success. Imports `stt_validation` + pipecat only.
+- **ST-3 — Gradium TTS as a Pipecat service:** `voice_pipeline/tts_service.py` — `TtsFrameProcessor` consuming a plain `TextFrame`, delegating to an injected egress, emitting a `TTSAudioRawFrame`; forwards `TranscriptionFrame` (a `TextFrame` subclass) untouched. Imports `tts_synthesis` + pipecat only.
+- **ST-4 — Echo processor + in-memory batch pipeline:** `voice_pipeline/echo.py` (transcript → plain text, domain-neutral) and `voice_pipeline/pipeline.py` composing `stt → echo → tts → capture-sink` with `run_batch_turn` / `run_stt_turn` / `run_tts_turn` helpers driven in memory (no transport).
+- **ST-5 — Telemetry bridge:** the Pipecat services thread the same `TelemetryRecorder` into the same `WebVoiceIngress`/`WebVoiceEgress`, so the four US-036 slices (`web.voice.ingress`, `stt.request`, `voice.tts.first_audio`, `web.voice.egress`) stay measured. `PipelineTelemetryBridgeTest` in `test_pipeline_timing.py` proves it end to end.
+- **ST-6 — Runtime seam + `--runtime` + `POST /api/voice/turn`:** `VoiceTurnProcessor` protocol in `web_voice/runtime.py` with `StdlibTurnProcessor` (direct ingress/egress) and `PipecatTurnProcessor` (drives the pipeline); `main()` adds `--runtime {stdlib,pipecat}` (env `VOICE_RUNTIME`). New `POST /api/voice/turn` runs the whole loop server-side in one call. Both legacy endpoints keep their exact contract on either runtime. Frontend untouched.
+- **ST-7 — Architecture separation extended:** `test_architecture_separation.py` now asserts `voice_pipeline/stt_service.py` never imports `tts_synthesis`, `tts_service.py` never imports `stt_validation`, neither pulls `web_voice`, and `echo.py` stays domain-neutral.
+- **ST-8 — A/B parity harness:** `scripts/ab_parity.py` runs the same input through both runtimes (providers held constant), asserts byte-identical WAV and reports per-runtime latency (Pipecat adds ~2 ms p50 steady-state overhead, as expected for batch).
+- **ST-9 — Flipped default to `pipecat` + behave both runtimes + docs/ADR:** `DEFAULT_RUNTIME = PIPECAT` (stdlib stays selectable); behave scenarios exercise the Pipecat path + cross-runtime parity; updated `README`, `docs/observability/voice-journey-timing.md`, ADR-0002 branch note and the `architecture.md` caveat.
+
+### Adversarial review (retroactive, full-diff)
+- Ran the project `adversarial-code-review` skill over the whole TASK-WEB-005 diff (it had been skipped per-ST). **Verdict Proceed, 94/100, QA gate Pass**, no blocking findings.
+- Closed the one test gap by adding an HTTP-layer 502 test for `/api/voice/turn` (fails closed with JSON + correlation id, no WAV, on both runtimes).
+- Logged non-blocking findings: **RF-012** (`asyncio.run` per request — gated to the Sprint 5 async transport), **RF-013** (raw provider `error_reason` echoed in the 502 body → ticketed **TASK-WEB-006**), **RF-014** (`/turn` extends the unauthenticated ingress surface — same gating as RF-006).
+
+### Tests + merge
+- **156 unit tests green; 4 behave features / 14 scenarios green.** Live boot smoke test confirmed both runtimes serve `/` and route `/api/voice/turn` identically. Full browser MCP echo-loop re-validation stays a manual QA step (needs a live mic + Gradium key).
+- **Merged (fast-forward) into `feat/sprint-4-pipecat-batch` then `feat/restart-from-scratch`**, both pushed to origin.
+
+### Key files
+- `voice-agent/voice_pipeline/` — `__init__.py`, `stt_service.py`, `tts_service.py`, `echo.py`, `pipeline.py`
+- `voice-agent/web_voice/runtime.py` (seam) + edits to `web_voice/server.py` (`--runtime`, `/api/voice/turn`)
+- `voice-agent/requirements.txt` (`pipecat-ai>=1.5,<2`); `voice-agent/scripts/pipecat_spike.py`, `scripts/ab_parity.py`
+- `voice-agent/tests/` — `test_stt_service.py`, `test_tts_service.py`, `test_pipeline.py`, `test_voice_runtime.py`, `test_ab_parity.py`, extended `test_pipeline_timing.py` + `test_architecture_separation.py`
+- `voice-agent/features/web_voice.feature` + `steps/web_voice_steps.py`
+- Docs: `docs/qa/pipecat-batch-contract.md`, `docs/observability/voice-journey-timing.md`, `docs/architecture/architecture.md`, `docs/architecture/adrs/ADR-0002-...md`, `voice-agent/README.md`
+- Planning: `product-backlog/sprints/sprint-4-pipecat-batch.md`, `product-backlog/tasks/web-voice-tasks.md` (TASK-WEB-005 Done, TASK-WEB-006 opened), `product-backlog/backlog-index.md`, `product-backlog/review-findings.md`

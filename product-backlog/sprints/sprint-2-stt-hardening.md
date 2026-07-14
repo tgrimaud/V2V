@@ -26,8 +26,8 @@ reviews and QA run.
 |---|---|---|
 | Sprint 1 | STT validation (fixtures → Gradium transcript, timing, QA) | ✅ Done |
 | **Sprint 2** | **STT hardening (this sprint)** | ✅ Done |
-| Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | Planned |
-| Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | Planned |
+| Sprint 3 | TTS / voice-out (batch, non-streaming) → first end-to-end voice loop | ✅ Done |
+| Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
 | Sprint 5 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) | Planned |
 
 ## Included Tickets
