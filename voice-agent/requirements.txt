@@ -3,5 +3,11 @@
 # Approved dependency; upper bound pinned for reproducibility (tested with 16.1).
 websockets>=13,<17
 
+# Voice runtime framework (Sprint 4 / TASK-WEB-005): Pipecat drives the batch
+# STT -> echo -> TTS pipeline in-memory (no WebRTC/streaming yet). Upper bound pinned
+# below 2.0 because the batch PipelineTask/PipelineRunner API we rely on is deprecated
+# there (see docs/qa/pipecat-batch-contract.md). Tested with 1.5.0.
+pipecat-ai>=1.5,<2
+
 # Dev / test
 behave>=1.2
