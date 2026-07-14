@@ -18,10 +18,11 @@ Runner-API note: pipecat 1.5.0 deprecates `PipelineTask`/`PipelineRunner`, but t
 """
 
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame, TTSAudioRawFrame
+from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame, TextFrame, TTSAudioRawFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -61,6 +62,34 @@ class _AudioCaptureSink(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+async def _drive(processors: Sequence[FrameProcessor], input_frames: Sequence[Frame]) -> None:
+    """Run a finite pipeline to completion: queue the input frames + EndFrame."""
+    pipeline = Pipeline(list(processors))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r".*deprecated.*", category=DeprecationWarning)
+        # Imported inside the suppression window because importing the deprecated
+        # classes and constructing/running them both emit DeprecationWarnings.
+        from pipecat.pipeline.runner import PipelineRunner
+        from pipecat.pipeline.task import PipelineParams, PipelineTask
+
+        task = PipelineTask(
+            pipeline,
+            params=PipelineParams(),
+            enable_rtvi=False,
+            enable_turn_tracking=False,
+            cancel_on_idle_timeout=False,
+            check_dangling_tasks=False,
+        )
+        await task.queue_frames([*input_frames, EndFrame()])
+        # handle_sigint=False is required when driving off the main thread (HTTP server).
+        runner = PipelineRunner(handle_sigint=False)
+        await runner.run(task)
+
+
+def _audio_frame(audio: bytes, sample_rate: int, num_channels: int) -> InputAudioRawFrame:
+    return InputAudioRawFrame(audio=audio, sample_rate=sample_rate, num_channels=num_channels)
+
+
 async def run_batch_turn(
     audio: bytes,
     envelope: Any,
@@ -77,35 +106,38 @@ async def run_batch_turn(
     echo = EchoProcessor()
     tts = TtsFrameProcessor(egress, envelope, telemetry)
     sink = _AudioCaptureSink()
-    pipeline = Pipeline([stt, echo, tts, sink])
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=r".*deprecated.*", category=DeprecationWarning)
-        # Imported inside the suppression window because importing the deprecated
-        # classes and constructing/running them both emit DeprecationWarnings.
-        from pipecat.pipeline.runner import PipelineRunner
-        from pipecat.pipeline.task import PipelineParams, PipelineTask
-
-        task = PipelineTask(
-            pipeline,
-            params=PipelineParams(),
-            enable_rtvi=False,
-            enable_turn_tracking=False,
-            cancel_on_idle_timeout=False,
-            check_dangling_tasks=False,
-        )
-        await task.queue_frames(
-            [
-                InputAudioRawFrame(audio=audio, sample_rate=sample_rate, num_channels=num_channels),
-                EndFrame(),
-            ]
-        )
-        # handle_sigint=False is required when driving off the main thread (HTTP server).
-        runner = PipelineRunner(handle_sigint=False)
-        await runner.run(task)
-
+    await _drive([stt, echo, tts, sink], [_audio_frame(audio, sample_rate, num_channels)])
     return BatchTurnResult(
         transcript_result=stt.result,
         tts_response=tts.response,
         audio=bytes(sink.audio),
     )
+
+
+async def run_stt_turn(
+    audio: bytes,
+    envelope: Any,
+    *,
+    ingress: SttIngress,
+    telemetry: Any = None,
+    received_ms: float | None = None,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    num_channels: int = DEFAULT_NUM_CHANNELS,
+) -> Any:
+    """Run only the STT stage through Pipecat; return the TranscriptResult."""
+    stt = SttFrameProcessor(ingress, envelope, telemetry, received_ms=received_ms)
+    await _drive([stt], [_audio_frame(audio, sample_rate, num_channels)])
+    return stt.result
+
+
+async def run_tts_turn(
+    text: str,
+    envelope: Any,
+    *,
+    egress: TtsEgress,
+    telemetry: Any = None,
+) -> Any:
+    """Run only the TTS stage through Pipecat; return the VoiceResponse-like object."""
+    tts = TtsFrameProcessor(egress, envelope, telemetry)
+    await _drive([tts], [TextFrame(text=text)])
+    return tts.response

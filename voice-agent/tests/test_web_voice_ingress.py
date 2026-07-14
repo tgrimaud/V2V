@@ -23,6 +23,7 @@ def _speech_then_silence(speech_ms: float, silence_ms: float, sample_rate: int =
     if sys.byteorder == "big":
         data.byteswap()
     return data.tobytes()
+from web_voice.runtime import StdlibTurnProcessor  # noqa: E402
 from web_voice.server import (  # noqa: E402
     STT_ROUTE,
     WebVoiceHTTPServer,
@@ -169,7 +170,8 @@ class EnvelopeFromQueryTest(unittest.TestCase):
 class WebVoiceServerTest(unittest.TestCase):
     def _serve(self, ingress: WebVoiceIngress) -> tuple[WebVoiceHTTPServer, int]:
         egress = WebVoiceEgress(FixtureTtsProvider())
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(ingress, egress))
+        processor = StdlibTurnProcessor(ingress, egress)
+        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)

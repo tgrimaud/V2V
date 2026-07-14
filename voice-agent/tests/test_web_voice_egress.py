@@ -17,6 +17,7 @@ from web_voice import (  # noqa: E402
     WebVoiceIngress,
     pcm_to_wav,
 )
+from web_voice.runtime import StdlibTurnProcessor  # noqa: E402
 from web_voice.server import (  # noqa: E402
     TTS_ROUTE,
     WebVoiceHTTPServer,
@@ -107,7 +108,8 @@ class WebVoiceTtsServerTest(unittest.TestCase):
     def _serve(self) -> int:
         ingress = WebVoiceIngress(_StubStt())
         egress = WebVoiceEgress(FixtureTtsProvider())
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(ingress, egress))
+        processor = StdlibTurnProcessor(ingress, egress)
+        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)

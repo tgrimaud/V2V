@@ -1,14 +1,19 @@
-"""Minimal web voice ingress server (TASK-WEB-001).
+"""Minimal web voice runtime server (TASK-WEB-001, TASK-WEB-005).
 
-Serves the mic-capture page and exposes `POST /api/voice/stt`, which accepts raw
-PCM16 mono 16 kHz audio and returns the transcript (or a sanitized failure). It
-uses only the Python standard library so the voice runtime needs no new
-dependency; the STT provider is selected at runtime (`--provider`), defaulting to
-Gradium for live capture with a fixture fallback for offline development.
+Serves the mic-capture page and exposes the voice endpoints:
+- `POST /api/voice/stt`  PCM16 mono 16 kHz audio in -> transcript JSON out.
+- `POST /api/voice/tts`  `?text=` in -> WAV audio out.
+- `POST /api/voice/turn` PCM16 audio in -> full STT -> echo -> TTS loop -> WAV out.
+
+The runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
+the server drives a `VoiceTurnProcessor` seam, so the stdlib and Pipecat runtimes
+coexist and produce identical output. The STT/TTS provider is selected with
+`--provider`, defaulting to Gradium with a fixture fallback for offline development.
 """
 
 import argparse
 import json
+import os
 import socketserver
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,10 +30,18 @@ from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 from .egress import WebVoiceEgress  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
+from .runtime import (  # noqa: E402
+    DEFAULT_RUNTIME,
+    RUNTIME_NAMES,
+    VoiceTurnProcessor,
+    build_turn_processor,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STT_ROUTE = "/api/voice/stt"
 TTS_ROUTE = "/api/voice/tts"
+TURN_ROUTE = "/api/voice/turn"
+RUNTIME_ENV_VAR = "VOICE_RUNTIME"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # guard against oversized uploads (~13 min PCM16 16k)
 MAX_TTS_TEXT_CHARS = 5000  # guard against oversized synthesis requests
 _STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
@@ -51,7 +64,7 @@ class WebVoiceHTTPServer(ThreadingHTTPServer):
         self.server_port = port
 
 
-def build_handler(ingress: WebVoiceIngress, egress: WebVoiceEgress) -> type[BaseHTTPRequestHandler]:
+def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
@@ -68,6 +81,8 @@ def build_handler(ingress: WebVoiceIngress, egress: WebVoiceEgress) -> type[Base
                 self._handle_stt()
             elif path == TTS_ROUTE:
                 self._handle_tts()
+            elif path == TURN_ROUTE:
+                self._handle_turn()
             else:
                 self._send_json(404, {"error": "not_found"})
 
@@ -80,7 +95,7 @@ def build_handler(ingress: WebVoiceIngress, egress: WebVoiceEgress) -> type[Base
                 return
             envelope = _envelope_from_query(urlparse(self.path).query)
             telemetry = TelemetryRecorder()
-            result = ingress.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
+            result = processor.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
             _log_turn(telemetry)
             status = 200 if result.outcome is SttOutcome.SUCCESS else 502
             self._send_json(status, result.to_dict())
@@ -93,14 +108,39 @@ def build_handler(ingress: WebVoiceIngress, egress: WebVoiceEgress) -> type[Base
                 return
             envelope = _envelope_from_query(query)
             telemetry = TelemetryRecorder()
-            response = egress.synthesize_turn(text, envelope, telemetry)
+            response = processor.synthesize_turn(text, envelope, telemetry)
             if response.wav is None:
                 _log_turn(telemetry)
                 self._send_json(502, response.result.to_dict())
                 return
             send = Timer()
             self._send_wav(response.wav)
-            egress.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
+            processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
+            _log_turn(telemetry)
+
+        def _handle_turn(self) -> None:
+            receive = Timer()
+            audio = self._read_body()
+            received_ms = receive.elapsed_ms()
+            if audio is None:
+                self._send_json(413, {"error": "audio_too_large"})
+                return
+            envelope = _envelope_from_query(urlparse(self.path).query)
+            telemetry = TelemetryRecorder()
+            result = processor.run_turn(audio, envelope, telemetry, received_ms=received_ms)
+            transcript = result.transcript_result
+            if transcript is None or transcript.outcome is not SttOutcome.SUCCESS:
+                _log_turn(telemetry)
+                self._send_json(502, transcript.to_dict() if transcript else {"error": "no_transcript"})
+                return
+            response = result.tts_response
+            if response is None or response.wav is None:
+                _log_turn(telemetry)
+                self._send_json(502, response.result.to_dict() if response else {"error": "no_audio"})
+                return
+            send = Timer()
+            self._send_wav(response.wav)
+            processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
 
         def _read_body(self) -> bytes | None:
@@ -168,8 +208,13 @@ def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
     egress = WebVoiceEgress(build_tts_provider(args.provider))
-    server = WebVoiceHTTPServer((args.host, args.port), build_handler(ingress, egress))
-    print(f"Web voice server on http://{args.host}:{args.port} (provider={args.provider})", file=sys.stderr)
+    processor = build_turn_processor(args.runtime, ingress, egress)
+    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor))
+    print(
+        f"Web voice server on http://{args.host}:{args.port} "
+        f"(provider={args.provider}, runtime={args.runtime})",
+        file=sys.stderr,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -178,10 +223,16 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the web voice STT ingress server")
+    parser = argparse.ArgumentParser(description="Run the web voice runtime server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--provider", choices=PROVIDER_NAMES, default=GRADIUM)
+    parser.add_argument(
+        "--runtime",
+        choices=RUNTIME_NAMES,
+        default=os.environ.get(RUNTIME_ENV_VAR, DEFAULT_RUNTIME),
+        help="voice runtime: 'pipecat' (default) or 'stdlib' (fallback/comparison)",
+    )
     return parser.parse_args()
 
 
