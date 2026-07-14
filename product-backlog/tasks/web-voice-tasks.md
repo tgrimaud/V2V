@@ -387,7 +387,7 @@ Scenario: The bot response audio starts before full synthesis
 (modular pipeline), ADR-0016 (legacy path kept as fallback/comparison)
 **Depends on:** TASK-WEB-001 (STT ingress), TASK-WEB-002 (TTS voice-out)
 **Classification:** V1 enabler
-**Status:** Planned — Sprint 4 (`sprints/sprint-4-pipecat-batch.md`)
+**Status:** Done — Sprint 4 (`sprints/sprint-4-pipecat-batch.md`); adversarial review 94/100 Pass (RF-012/013/014 logged)
 **Priority:** High
 **Branch:** `task/TASK-WEB-005-pipecat-batch` (from `feat/sprint-4-pipecat-batch`)
 
@@ -468,3 +468,71 @@ Scenario: STT and TTS stay independent in the pipeline
 - Chrome DevTools MCP note re-validating the echo loop on the default (`pipecat`)
   runtime (unchanged UX + timing).
 - Confirmation no API key, raw audio or filesystem path is logged.
+
+## TASK-WEB-006 - Genericize Voice Error Responses (Do Not Echo Raw Provider Error Text)
+
+**Parent:** EPIC-006 (+ EPIC-010 for observability)
+**Related story:** US-019 (voice runtime)
+**Related decision:** ADR-0016 (fallback/comparison path); mirrors the Java backend
+`GlobalExceptionHandler` `ERR_UPSTREAM` pattern
+**Depends on:** TASK-WEB-005 (voice endpoints + `VoiceTurnProcessor` seam)
+**Classification:** V1 hardening
+**Status:** Planned
+**Priority:** Low
+**Branch:** `task/TASK-WEB-006-generic-voice-errors` (from the active sprint branch)
+**Source finding:** RF-013 (`product-backlog/review-findings.md`)
+
+### Objective
+
+On a non-success turn, the STT/TTS `error_reason` currently echoes the raw provider
+exception text verbatim into the `502` JSON body of `POST /api/voice/stt`,
+`/api/voice/tts` and `/api/voice/turn`. Sanitization already redacts paths, UUIDs,
+secret prefixes, filenames and long digit runs (RF-001 / RF-009), but generic free
+text from a real provider exception can still reach the client. Return a generic,
+client-safe `error_reason` (plus the correlation id) at the HTTP boundary while
+keeping the full reason server-side in the structured logs — the same trade-off the
+Java backend already makes with `ERR_UPSTREAM` + correlation id.
+
+### Scope
+
+- Introduce a client-facing error shape for the voice endpoints that carries a
+  stable `error_code` + a generic message + the `correlation_id`, and omits the raw
+  provider `error_reason` from the HTTP body.
+- Keep the full `error_reason` in the server-side structured log line (already
+  emitted via `_log_turn`) so operators can still diagnose via the correlation id.
+- Apply uniformly to all three routes (`/stt`, `/tts`, `/turn`) and to both runtimes
+  (the seam already routes both through the same handler).
+- Keep the existing sanitization (paths/ids/secrets) as defense in depth.
+
+### Out Of Scope
+
+- Changing outcome semantics (FAILED / UNAVAILABLE stay as-is).
+- Frontend changes beyond reading the new field name if it is renamed (the browser
+  only surfaces a generic failure today).
+- Authentication / identity gating (RF-006 / RF-014, gated by OQ-001 + TASK-WEB-003).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A failing provider does not leak its raw error text to the client
+  Given a voice endpoint whose STT or TTS provider raises an exception
+  When a client posts a turn and receives a 502
+  Then the JSON body carries a stable error_code and the correlation id
+  And it does not contain the raw provider exception message
+  And the full reason is still present in the server-side structured log
+```
+
+```gherkin
+Scenario: Both runtimes return the same client-safe error contract
+  Given the stdlib and pipecat runtimes
+  When the same failing input is posted to /api/voice/turn on each
+  Then both return the identical generic error body (modulo correlation id)
+```
+
+### Required Evidence
+
+- Developer test asserting the 502 body for `/stt`, `/tts`, `/turn` contains the
+  `error_code` + correlation id and NOT the raw provider message, on both runtimes
+  (extends `test_voice_runtime.py::test_turn_endpoint_fails_closed_with_json_when_stt_fails`).
+- Confirmation the raw reason still appears in the server-side log line.
+- Closes RF-013.

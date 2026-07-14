@@ -87,7 +87,8 @@ against the new empty-codebase plan.
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, merged → `feat/restart-from-scratch`) | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) | V1 core | Draft | High |
 | TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Planned (Sprint 5) | High |
-| TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Planned (Sprint 4) | High |
+| TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Done (Sprint 4) | High |
+| TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned | Low |
 
 ## Planned Sprints
 
