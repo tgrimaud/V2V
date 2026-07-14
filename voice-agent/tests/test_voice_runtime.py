@@ -1,5 +1,6 @@
 """Tests for the voice runtime seam + /api/voice/turn endpoint (TASK-WEB-005, ST-6)."""
 
+import json
 import sys
 import threading
 import unittest
@@ -28,8 +29,21 @@ class _StubStt:
         return "bonjour"
 
 
+class _FailingStt:
+    """STT provider that raises so the runner yields a non-SUCCESS outcome."""
+
+    name = "failing-stt"
+
+    def transcribe(self, audio_path) -> str:  # noqa: ANN001
+        raise RuntimeError("provider unavailable")
+
+
 def _ingress() -> WebVoiceIngress:
     return WebVoiceIngress(_StubStt())
+
+
+def _failing_ingress() -> WebVoiceIngress:
+    return WebVoiceIngress(_FailingStt())
 
 
 def _egress() -> WebVoiceEgress:
@@ -70,8 +84,8 @@ class TurnProcessorParityTest(unittest.TestCase):
 
 
 class VoiceTurnEndpointTest(unittest.TestCase):
-    def _serve(self, runtime: str) -> int:
-        processor = build_turn_processor(runtime, _ingress(), _egress())
+    def _serve(self, runtime: str, ingress: WebVoiceIngress | None = None) -> int:
+        processor = build_turn_processor(runtime, ingress or _ingress(), _egress())
         server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -107,6 +121,22 @@ class VoiceTurnEndpointTest(unittest.TestCase):
         _s2, _c2, pipecat_wav = self._post_turn(pipecat_port, b"\x03\x04" * 200)
         # THEN both runtimes produce byte-identical audio
         self.assertEqual(stdlib_wav, pipecat_wav)
+
+    def test_turn_endpoint_fails_closed_with_json_when_stt_fails(self) -> None:
+        # GIVEN both runtimes wired to an STT provider that fails
+        for runtime in (STDLIB, PIPECAT):
+            with self.subTest(runtime=runtime):
+                port = self._serve(runtime, _failing_ingress())
+                # WHEN a phrase is posted to the full-pipeline endpoint
+                status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
+                # THEN the turn fails closed: a 502 JSON error, never a WAV
+                self.assertEqual(status, 502)
+                self.assertEqual(content_type, "application/json")
+                self.assertNotEqual(payload[:4], b"RIFF")
+                # AND the failed outcome is carried with a correlation id (observable)
+                body = json.loads(payload)
+                self.assertEqual(body["outcome"], "failed")
+                self.assertTrue(body["correlation_id"])
 
 
 if __name__ == "__main__":
