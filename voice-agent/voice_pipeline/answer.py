@@ -16,7 +16,19 @@ from typing import Any
 from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from conversation_backend import AnswerOutcome, AnswerRequest, BackendAnswerPort, EmptyTranscriptError
+from conversation_backend import (
+    BACKEND_UNAVAILABLE_REASON,
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    EMPTY_ANSWER_REASON,
+    LOW_CONFIDENCE_REASON,
+    AnswerOutcome,
+    AnswerRequest,
+    AnswerResult,
+    BackendAnswerPort,
+    EmptyTranscriptError,
+    degraded_answer,
+)
+from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import TelemetryRecorder, Timer
 
 # The backend latency slice (US-036, registered in voice_common/pipeline_timing.py).
@@ -30,31 +42,101 @@ def answer_with_telemetry(
     backend: BackendAnswerPort,
     request: AnswerRequest,
     telemetry: TelemetryRecorder | None,
-) -> Any:
-    """Call the backend, timing it and emitting the backend spans + outcome event.
+    *,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+) -> AnswerResult:
+    """Call the backend, applying the degraded-mode policy and emitting telemetry.
 
     Emits both `backend.first_token` and `backend.request`. This backend is batch
     (non-streaming): the single answer arrives at once, so first-token latency equals
     the total request latency. A future streaming backend (HTTP, TASK-WEB-003-C) would
     stamp `backend.first_token` at the first chunk and `backend.request` at completion.
-    Only lengths are exposed (never the raw transcript or answer text), matching the
-    privacy rule of the conversation contract's `to_dict`.
+
+    Degraded mode (TASK-WEB-003-F): a backend failure never crashes the turn and a
+    low-confidence or empty answer is never spoken as-is. Both are replaced by the safe
+    fallback (a DEGRADED result) so the customer always hears something safe and no
+    content is invented. Only lengths and sanitized reasons are exposed (never the raw
+    transcript, answer text or provider error string).
     """
     timer = Timer()
-    result = backend.answer(request)
+    try:
+        result = backend.answer(request)
+    except EmptyTranscriptError:
+        # Nothing to answer (empty transcript): not a failure; the caller stays silent.
+        raise
+    except Exception as exc:  # noqa: BLE001 - any adapter fault degrades to a safe reply
+        result = _unavailable_fallback(backend, request, exc)
+    else:
+        result = _apply_confidence_policy(request, result, confidence_threshold)
     duration_ms = timer.elapsed_ms()
-    if telemetry is not None:
-        attrs = {
-            "correlation_id": request.correlation_id,
-            "channel": request.channel,
-            "provider": backend.name,
-            "outcome": result.outcome.value,
-            "answer_chars": len(result.text),
-        }
-        telemetry.span(BACKEND_FIRST_TOKEN_SPAN, duration_ms, **attrs)
-        telemetry.span(BACKEND_REQUEST_SPAN, duration_ms, **attrs)
-        telemetry.record("voice.backend.answered", backend_request_ms=round(duration_ms, 3), **attrs)
+    _emit_backend_telemetry(backend, request, result, duration_ms, telemetry)
     return result
+
+
+def _unavailable_fallback(backend: BackendAnswerPort, request: AnswerRequest, exc: Exception) -> AnswerResult:
+    sanitized = sanitize_error(exc, domain="backend")
+    return degraded_answer(
+        request,
+        provider=backend.name,
+        degraded_reason=BACKEND_UNAVAILABLE_REASON,
+        error_code=sanitized.reason_code,
+        error_reason=sanitized.reason,
+    )
+
+
+def _apply_confidence_policy(request: AnswerRequest, result: AnswerResult, threshold: float) -> AnswerResult:
+    if result.outcome is AnswerOutcome.UNAVAILABLE:
+        return result  # nothing to answer; never fabricate a spoken turn
+    if result.confidence is not None and result.confidence < threshold:
+        return degraded_answer(
+            request, provider=result.provider, degraded_reason=LOW_CONFIDENCE_REASON, confidence=result.confidence
+        )
+    if not result.text.strip():
+        # A confident but empty answer is unusable: speak the safe fallback instead.
+        return degraded_answer(
+            request,
+            provider=result.provider,
+            degraded_reason=result.degraded_reason or EMPTY_ANSWER_REASON,
+            confidence=result.confidence,
+            error_code=result.error_code,
+            error_reason=result.error_reason,
+        )
+    return result
+
+
+def _emit_backend_telemetry(
+    backend: BackendAnswerPort,
+    request: AnswerRequest,
+    result: AnswerResult,
+    duration_ms: float,
+    telemetry: TelemetryRecorder | None,
+) -> None:
+    if telemetry is None:
+        return
+    attrs = _backend_attributes(backend, request, result)
+    telemetry.span(BACKEND_FIRST_TOKEN_SPAN, duration_ms, **attrs)
+    telemetry.span(BACKEND_REQUEST_SPAN, duration_ms, **attrs)
+    telemetry.record("voice.backend.answered", backend_request_ms=round(duration_ms, 3), **attrs)
+    if result.outcome is AnswerOutcome.DEGRADED:
+        telemetry.log("warning", "backend degraded fallback served", **attrs)
+
+
+def _backend_attributes(backend: BackendAnswerPort, request: AnswerRequest, result: AnswerResult) -> dict[str, Any]:
+    attrs: dict[str, Any] = {
+        "correlation_id": request.correlation_id,
+        "channel": request.channel,
+        "provider": result.provider or backend.name,
+        "outcome": result.outcome.value,
+        "answer_chars": len(result.text),
+        "degraded": result.outcome is AnswerOutcome.DEGRADED,
+    }
+    if result.degraded_reason:
+        attrs["degraded_reason"] = result.degraded_reason
+    if result.error_code:
+        attrs["error_code"] = result.error_code
+    if result.error_reason:
+        attrs["error_reason"] = result.error_reason
+    return attrs
 
 
 class AnswerProcessor(FrameProcessor):

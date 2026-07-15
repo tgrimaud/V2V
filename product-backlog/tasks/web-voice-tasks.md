@@ -308,7 +308,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
 | TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Implemented — review 93/100, merge-ready (pending user validation) |
 | TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Validated by user 2026-07-15 (checks re-run: 182 unit + 15 behave green) — merge-ready (merge on explicit request) |
-| TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Planned |
+| TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Implemented — merge-ready (pending user validation); resolves RF-020 |
 | TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | Planned |
 
 Delivery order: A → B → D → E → F → C → G (C may precede D if the HTTP path is needed
@@ -492,6 +492,32 @@ Scenario: Safe fallback when the backend cannot answer
 ```
 **Required Evidence:** developer tests for unavailable + low-confidence paths;
 sanitized error contract; degraded outcome attribute in telemetry.
+
+**Status:** Implemented on `task/TASK-WEB-003-F-degraded-mode` (from
+`task/TASK-WEB-003-E-backend-telemetry`); merge-ready, pending user validation.
+The safe fallback lives in the neutral contract (`conversation_backend/degraded.py`):
+`DEGRADED_FALLBACK_TEXT` (no digit / amount, DEC-002), `DEFAULT_CONFIDENCE_THRESHOLD`
+(0.5) and the `degraded_answer(...)` builder. The **policy** lives in the shared
+answer step (`voice_pipeline/answer.py`), so both runtimes behave identically:
+`answer_with_telemetry` now (1) catches any backend fault (except
+`EmptyTranscriptError`, which stays UNAVAILABLE / silent) and returns a DEGRADED
+result carrying the safe fallback + a **sanitized** `error_code`/`error_reason`
+(`sanitize_error(domain="backend")`), (2) replaces a below-threshold-confidence
+SUCCESS answer with the safe fallback (`low_confidence`), and (3) replaces a
+confident-but-empty answer (`empty_answer`). A DEGRADED result is spoken (has text,
+not UNAVAILABLE), so the customer always hears something safe and the turn never
+crashes or 502s. Telemetry: both `backend.first_token` / `backend.request` spans and
+the `voice.backend.answered` event carry `outcome=degraded`, `degraded=true`,
+`degraded_reason` and the sanitized error (lengths only for text); a `warning` log is
+emitted on degrade. `/turn` returns the spoken WAV (200) with
+`X-Answer-Outcome: degraded` + `X-Answer-Degraded-Reason`; the web page shows a
+degraded badge. Tests: `test_answer_processor.py` (6 degraded cases: failure→fallback,
+sanitized no-leak, degraded telemetry, low-confidence replacement, high-confidence
+kept, fallback has no digit) + AnswerProcessor degraded frame; `test_voice_runtime.py`
+(both runtimes speak the fallback; `/turn` degraded WAV + headers). Behave:
+`web_voice.feature` "Safe fallback when the backend cannot answer". Full suite 191
+unit + 16 behave green. **Resolves RF-020** (no more generic `no_audio` 502 when the
+backend cannot answer).
 
 ### TASK-WEB-003-G — QA, Behave, Latency, Docs, ADR
 

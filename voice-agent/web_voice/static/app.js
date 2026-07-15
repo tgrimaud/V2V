@@ -114,6 +114,12 @@ function renderTurnMeta(headers) {
   if (answer) parts.push("answer: <code>" + escapeHtml(answer) + "</code>");
   const provider = headers.get("X-Answer-Provider");
   if (provider) parts.push("backend: <code>" + escapeHtml(provider) + "</code>");
+  // A degraded turn still speaks a safe fallback; flag it so the user knows the
+  // backend could not answer confidently (TASK-WEB-003-F).
+  if ((headers.get("X-Answer-Outcome") || "") === "degraded") {
+    const reason = headers.get("X-Answer-Degraded-Reason") || "degraded";
+    parts.push("<span class=\"degraded\">degraded: " + escapeHtml(reason) + "</span>");
+  }
   const corr = headers.get("X-Correlation-Id");
   if (corr) parts.push("corr: <code>" + escapeHtml(corr) + "</code>");
   metaEl.innerHTML = parts.join(" · ");

@@ -17,6 +17,7 @@ from pipecat.frames.frames import TextFrame, TranscriptionFrame  # noqa: E402
 from pipecat.tests.utils import run_test  # noqa: E402
 
 from conversation_backend import (  # noqa: E402
+    DEGRADED_FALLBACK_TEXT,
     AnswerOutcome,
     AnswerRequest,
     AnswerResult,
@@ -58,6 +59,40 @@ class _RaisingBackend:
 
     def answer(self, request: AnswerRequest) -> AnswerResult:
         raise EmptyTranscriptError("nothing to answer")
+
+
+class _UnavailableBackend:
+    """Backend that fails with a fault carrying a secret-looking token in its message."""
+
+    name = "http-backend"
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        raise RuntimeError("connection refused to /srv/secret-customer.wav token sk-abcdef123456")
+
+
+class _LowConfidenceBackend:
+    name = "unsure-backend"
+
+    def __init__(self, confidence: float) -> None:
+        self._confidence = confidence
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        return AnswerResult(
+            text="votre facture est de 42 euros",
+            provider=self.name,
+            outcome=AnswerOutcome.SUCCESS,
+            correlation_id=request.correlation_id,
+            confidence=self._confidence,
+        )
+
+
+def _request() -> AnswerRequest:
+    return AnswerRequest(
+        transcript="pourquoi ma facture augmente",
+        correlation_id="corr-1",
+        conversation_id="conv-1",
+        channel="web_voice",
+    )
 
 
 class AnswerProcessorTest(unittest.IsolatedAsyncioTestCase):
@@ -102,6 +137,20 @@ class AnswerProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plain, [])
         self.assertIsNone(processor.result)
 
+    async def test_backend_failure_speaks_the_safe_fallback(self) -> None:
+        # GIVEN a backend that fails (unavailable), not an empty transcript
+        processor = AnswerProcessor(_UnavailableBackend(), _envelope())
+        # WHEN a transcription flows through
+        down, _up = await run_test(
+            processor,
+            frames_to_send=[TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")],
+        )
+        # THEN the safe fallback is spoken (degraded), never a crash and never invented content
+        plain = [f for f in down if isinstance(f, TextFrame) and not isinstance(f, TranscriptionFrame)]
+        self.assertEqual(len(plain), 1)
+        self.assertEqual(plain[0].text, DEGRADED_FALLBACK_TEXT)
+        self.assertIs(processor.result.outcome, AnswerOutcome.DEGRADED)
+
 
 class AnswerTelemetryTest(unittest.TestCase):
     def test_emits_backend_span_and_event_with_lengths_only(self) -> None:
@@ -137,6 +186,68 @@ class AnswerTelemetryTest(unittest.TestCase):
         result = answer_with_telemetry(_FakeBackend(text="ok"), request, None)
         # THEN it still returns the answer without raising
         self.assertEqual(result.text, "ok")
+
+
+class DegradedModeTest(unittest.TestCase):
+    def test_backend_failure_returns_safe_fallback_never_raises(self) -> None:
+        # GIVEN a backend that raises an unexpected fault
+        telemetry = TelemetryRecorder()
+        # WHEN the helper is called
+        result = answer_with_telemetry(_UnavailableBackend(), _request(), telemetry)
+        # THEN a DEGRADED result carrying the safe fallback text is returned (no raise)
+        self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+        self.assertEqual(result.text, DEGRADED_FALLBACK_TEXT)
+        self.assertEqual(result.degraded_reason, "backend_unavailable")
+        self.assertEqual(result.provider, "http-backend")
+
+    def test_backend_failure_sanitizes_the_error_and_leaks_no_secret(self) -> None:
+        # GIVEN a backend whose fault message carries a path, filename and secret token
+        telemetry = TelemetryRecorder()
+        # WHEN the helper degrades
+        result = answer_with_telemetry(_UnavailableBackend(), _request(), telemetry)
+        # THEN the error is sanitized: a stable code + a redacted reason, no raw secret
+        self.assertEqual(result.error_code, "backend_error")
+        blob = result.error_reason + str([s.attributes for s in telemetry.spans()])
+        self.assertNotIn("secret-customer.wav", blob)
+        self.assertNotIn("sk-abcdef123456", blob)
+        self.assertNotIn("/srv/", blob)
+
+    def test_degraded_telemetry_is_observable_with_lengths_only(self) -> None:
+        # GIVEN a failing backend and a recorder
+        telemetry = TelemetryRecorder()
+        # WHEN the helper degrades
+        answer_with_telemetry(_UnavailableBackend(), _request(), telemetry)
+        # THEN both backend spans carry the degraded outcome + flag, and a warning log is emitted
+        span = next(s for s in telemetry.spans() if s.name == BACKEND_REQUEST_SPAN)
+        self.assertEqual(span.attributes["outcome"], "degraded")
+        self.assertTrue(span.attributes["degraded"])
+        self.assertEqual(span.attributes["degraded_reason"], "backend_unavailable")
+        self.assertEqual(span.attributes["answer_chars"], len(DEGRADED_FALLBACK_TEXT))
+        self.assertTrue(any(log.level == "warning" for log in telemetry.logs()))
+
+    def test_low_confidence_answer_is_replaced_by_the_safe_fallback(self) -> None:
+        # GIVEN a confident-looking answer with a low confidence score (below threshold)
+        telemetry = TelemetryRecorder()
+        # WHEN the helper applies the confidence policy
+        result = answer_with_telemetry(_LowConfidenceBackend(confidence=0.2), _request(), telemetry)
+        # THEN the low-confidence content (with an amount!) is never spoken; the fallback is
+        self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+        self.assertEqual(result.text, DEGRADED_FALLBACK_TEXT)
+        self.assertEqual(result.degraded_reason, "low_confidence")
+        self.assertNotIn("42", result.text)
+
+    def test_high_confidence_answer_is_kept(self) -> None:
+        # GIVEN an answer whose confidence is above the threshold
+        # WHEN the helper applies the confidence policy
+        result = answer_with_telemetry(_LowConfidenceBackend(confidence=0.9), _request(), None)
+        # THEN the real answer is kept (not degraded)
+        self.assertIs(result.outcome, AnswerOutcome.SUCCESS)
+        self.assertEqual(result.text, "votre facture est de 42 euros")
+
+    def test_safe_fallback_text_contains_no_digit(self) -> None:
+        # GIVEN the safe fallback text (DEC-002: never state a fabricated amount)
+        # THEN it carries no digit or currency figure
+        self.assertFalse(any(ch.isdigit() for ch in DEGRADED_FALLBACK_TEXT))
 
 
 if __name__ == "__main__":
