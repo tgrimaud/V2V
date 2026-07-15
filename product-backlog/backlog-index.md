@@ -44,7 +44,7 @@ against the new empty-codebase plan.
 | US-016 | Explain the billing rule behind a delta | V1 core | Draft | Medium |
 | US-017 | Disclose when no reliable explanation can be produced | V1 core | Draft | High |
 | US-018 | Call the bot for a spoken invoice explanation | V1 core | Draft | High |
-| US-019 | Ask from a web voice chat | V1 core | In progress | High |
+| US-019 | Ask from a web voice chat | V1 core | Done (Sprint 5, 2026-07-15; full Voice2Voice loop: STT → backend answer → TTS, stub + http backends) | High |
 | US-020 | Receive a quick spoken acknowledgement during long analysis | V1 core | Draft | Medium |
 | US-021 | Interrupt the bot during a spoken answer | V1 core | Draft | Medium |
 | US-022 | Use text to complement a voice question | V1 enabler | Draft | Low |
@@ -85,7 +85,7 @@ against the new empty-codebase plan.
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 6) | Medium |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | Done (merged) | High |
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, merged → `feat/restart-from-scratch`) | High |
-| TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) — split A…G | V1 core | In progress (Sprint 5; A–G implemented and merged into sprint branch, pending user validation) | High |
+| TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) — split A…G | V1 core | Done (Sprint 5, 2026-07-15; A–G merged into `feat/restart-from-scratch`) | High |
 | TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | V1 core | Merged into sprint (2026-07-15; review 96/100) | High |
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | V1 core | Merged into sprint (2026-07-15; review 96/100; RF-017/RF-018) | High |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection | V1 core | Merged into sprint (2026-07-15; review 93/100; resolves RF-016) | High |
@@ -106,7 +106,7 @@ against the new empty-codebase plan.
 | SPRINT-2-STT-HARDENING | STT Hardening | ✅ Done (2026-07-13) | Make the WER quality gate usable (normalization) and complete STT observability (fixtures, sanitization, UNAVAILABLE outcome, end-of-turn) — `sprints/sprint-2-stt-hardening.md` |
 | SPRINT-3-TTS | TTS / Voice-out (batch) | ✅ Done (2026-07-13, merged → `feat/restart-from-scratch`) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
 | SPRINT-4-PIPECAT | Pipecat runtime migration (batch parity) | ✅ Done (2026-07-14, merged → `feat/restart-from-scratch`) | Run the web voice batch loop (STT → echo → TTS) through a Pipecat pipeline (pipeline-only, no WebRTC/streaming), selectable via `--runtime` and shipped as the default, with the stdlib path kept as fallback/comparison (TASK-WEB-005) — `sprints/sprint-4-pipecat-batch.md` |
-| SPRINT-5-BACKEND-BRIDGE | Backend answer bridge (US-019 close) | In progress | Turn the echo loop into a real answer loop: transcript → `BackendAnswerPort` (stub default + HTTP) → response text → TTS, one correlation id end to end, closing US-019 and the US-036 `backend_first_token` gap (TASK-WEB-003 A…G) — `sprints/sprint-5-backend-bridge.md` |
+| SPRINT-5-BACKEND-BRIDGE | Backend answer bridge (US-019 close) | ✅ Done (2026-07-15) | Turn the echo loop into a real answer loop: transcript → `BackendAnswerPort` (stub default + HTTP) → response text → TTS, one correlation id end to end, closing US-019 and the US-036 `backend_first_token` gap (TASK-WEB-003 A…G) — `sprints/sprint-5-backend-bridge.md` |
 | SPRINT-6-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) + WebRTC transport for the low-latency voice loop |
 
 ## Restart Delivery Notes

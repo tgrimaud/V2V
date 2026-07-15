@@ -15,7 +15,7 @@ Voice2Voice loop with a real, replaceable answer seam.
 
 ## Status
 
-**Status:** In progress (A–G implemented and merged into the sprint branch; pending user validation before sprint close)
+**Status:** ✅ Done (closed 2026-07-15) — A–G implemented, reviewed, tested and merged into `feat/restart-from-scratch`; user validated the live loop (real Gradium STT/TTS + stub and http backend).
 **Created:** 2026-07-14
 **Predecessor:** [`sprint-4-pipecat-batch.md`](sprint-4-pipecat-batch.md) (Sprint 4 — Done, 2026-07-14)
 **Working branch:** `feat/sprint-5-backend-bridge` (from `feat/restart-from-scratch`)
@@ -30,7 +30,7 @@ Voice2Voice loop with a real, replaceable answer seam.
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch) → first end-to-end voice loop | ✅ Done |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
-| **Sprint 5** | **Backend answer bridge (echo → real answer, US-019 close) — this sprint** | In progress |
+| **Sprint 5** | **Backend answer bridge (echo → real answer, US-019 close) — this sprint** | ✅ Done (closed 2026-07-15) |
 | Sprint 6 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) + WebRTC transport | Planned |
 
 ## Included Tickets

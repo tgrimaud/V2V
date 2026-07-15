@@ -361,3 +361,34 @@ Ran the existing web voice **batch** loop (STT → echo → TTS) through a **Pip
 - `voice-agent/features/web_voice.feature` + `steps/web_voice_steps.py`
 - Docs: `docs/qa/pipecat-batch-contract.md`, `docs/observability/voice-journey-timing.md`, `docs/architecture/architecture.md`, `docs/architecture/adrs/ADR-0002-...md`, `voice-agent/README.md`
 - Planning: `product-backlog/sprints/sprint-4-pipecat-batch.md`, `product-backlog/tasks/web-voice-tasks.md` (TASK-WEB-005 Done, TASK-WEB-006 opened), `product-backlog/backlog-index.md`, `product-backlog/review-findings.md`
+
+## 2026-07-15 — Sprint 5: Backend answer bridge (TASK-WEB-003, US-019 close) + sprint closure
+
+**Summary:**
+
+Turned the web voice **echo** loop into a real **answer** loop: the STT transcript is routed to a replaceable conversation backend, the response text is spoken back through TTS, all under one correlation id from ingress to egress. Closes **US-019** and the last **US-036** gap (`backend_first_token`). The `US-003` boundary is preserved — the backend owns the answer, the voice runtime owns the media. Not a billing-reasoning sprint (the answer engine is a placeholder gated by OQ-007) and not a latency sprint (streaming stays Sprint 6).
+
+### What shipped (sub-tickets A–G, adversarial review + commit each)
+- **A — Conversation contract + `BackendAnswerPort`** (review 96/100): neutral `conversation_backend/` package — `BackendAnswerPort`, `AnswerRequest`/`AnswerResult`, `AnswerOutcome`, `EmptyTranscriptError`; privacy-safe `to_dict` (lengths only, never raw text). Stays isolated from `stt_validation`/`tts_synthesis`/`web_voice`.
+- **B — Stub backend adapter** (review 96/100): deterministic, digit/currency-free answer (DEC-002), default for dev/tests.
+- **C — HTTP backend adapter + `--backend {stub,http}`** (review 93/100, resolves RF-016): `HttpBackendAdapter` posts JSON to `VOICE_BACKEND_URL` with an injectable transport (stdlib `urllib` default); maps `text`/`answer` + optional `confidence`; every fault → sanitized degraded; API key lives only in `x-api-key`. Selection via `build_backend` / env `VOICE_BACKEND`.
+- **D — Wire the bridge** (review 93/100): the answer step replaces the echo on both runtimes (stdlib + pipecat), byte-identical output.
+- **E — End-to-end telemetry** (review 95/100, user-validated): `backend.request` + `backend.first_token` spans registered as the US-036 `BACKEND_FIRST_TOKEN` slice; one correlation id ingress→stt→backend→tts→egress.
+- **F — Degraded mode** (resolves RF-020): backend unavailable / low confidence (`< 0.5`) / empty answer → a fixed, digit-free safe spoken fallback and a `degraded` outcome; only an empty transcript stays silent. One policy in `voice_pipeline/answer.py` for both runtimes.
+- **G — QA + docs + ADR + latency** (review 95/100): documented the two previously code-only contracts and added QA/latency evidence.
+
+### Live validation (user)
+- Ran the app with the real Gradium key from `.env`: real Gradium **STT + TTS**, `runtime=pipecat`, first with **`--backend stub`**, then with **`--backend http`** against a throwaway local mock conversation endpoint (ADR-0021 wire shape). User validated the full Voice2Voice loop and the degraded outcomes (`low_confidence`, `empty_answer`, `backend_unavailable`). The mock was a `/tmp` dev aid, not committed. Live browser JS re-validation (RF-019) remains a manual step.
+
+### Tests + closure
+- **211 unit tests green; 5 behave features / 17 scenarios green.** Repeatable full-turn per-slice sample (`scripts/turn_latency_sample.py`) measures all six US-036 slices on success and degraded paths (offline/fixture numbers; live latency gated on the real endpoint).
+- **Merged (fast-forward) into `feat/restart-from-scratch`** and pushed. Sprint status flipped to ✅ Done in the sprint file, roadmap and `backlog-index.md` registry; US-019 + TASK-WEB-003 marked Done.
+- Non-blocking findings gated: **RF-015** (confidence not range-validated → OQ-002), **RF-019** (no frontend JS test → manual QA), **RF-021** (`first_token`==`request` until a streaming backend), **RF-006/RF-014** (unauthenticated ingress → OQ-001).
+
+### Key files
+- `voice-agent/conversation_backend/` — `port.py`, `models.py`, `stub_backend.py`, `http_backend.py`, `degraded.py`, `backend_factory.py`
+- `voice-agent/voice_pipeline/answer.py` (shared answer step + degraded policy + telemetry); edits to `web_voice/server.py` (`--backend`, `/api/voice/turn` answer + `X-Answer-*` headers) and `web_voice/runtime.py`
+- `voice-agent/scripts/turn_latency_sample.py`; `voice-agent/tests/` — `test_conversation_backend_contract.py`, `test_answer_processor.py`, `test_stub_backend_adapter.py`, `test_http_backend.py`, `test_backend_factory.py`, `test_turn_latency_sample.py`
+- `voice-agent/features/` — `conversation_backend.feature` + steps; answer/degraded/parity scenarios in `web_voice.feature`
+- Docs: `docs/architecture/voice-runtime-http-contract.md`, `docs/architecture/adrs/ADR-0021-conversation-backend-answer-contract.md`, `docs/qa/web-voice-backend-bridge-qa-report.md`, `docs/observability/voice-journey-timing.md`, `docs/README.md`, `voice-agent/README.md`
+- Planning: `product-backlog/sprints/sprint-5-backend-bridge.md`, `product-backlog/backlog-index.md`, `product-backlog/review-findings.md`
