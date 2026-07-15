@@ -272,7 +272,8 @@ python3 -m web_voice.server --provider fixture --runtime stdlib
   STT/TTS separation (enforced by `tests/test_architecture_separation.py`).
 - `POST /api/voice/turn` runs the whole loop server-side in one call (PCM16 in →
   WAV out); the two legacy endpoints (`/api/voice/stt`, `/api/voice/tts`) keep their
-  exact contract on both runtimes. The browser is unchanged this sprint.
+  exact contract on both runtimes. (Since Sprint 5 the browser posts to
+  `/api/voice/turn` for the full STT → backend answer → TTS loop.)
 - The four US-036 slices (`web.voice.ingress`, `stt.request`, `voice.tts.first_audio`,
   `web.voice.egress`) stay measured through the pipeline because the services thread
   the same `TelemetryRecorder` into the runners.

@@ -2,8 +2,9 @@
 
 Delivery slices for **US-019 - Ask From A Web Voice Chat**. US-019 is a full
 Voice2Voice journey (voice in, voice out) and is too large for a single slice, so
-it is decomposed into three tasks. US-019 stays `In progress` until all three are
-delivered and the user validates the end-to-end web voice loop.
+it is decomposed into tasks. **US-019 is Done** (Sprint 5, 2026-07-15): all slices
+(STT ingress, TTS voice-out, and the backend answer bridge TASK-WEB-003 A–G) are
+delivered and the end-to-end web voice loop was validated by the user.
 
 The slices follow the `US-003` channel/identity boundary
 (`docs/architecture/channel-identity-boundary.md`): the web channel + voice

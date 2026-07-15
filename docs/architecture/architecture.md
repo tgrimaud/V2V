@@ -7,25 +7,24 @@
 > `main` reference implementation, not to code runnable on this branch.** The
 > former executable implementation remains on `main` as backup/reference.
 >
-> **What is actually built on this branch today** are two symmetric voice slices
-> in Python under `voice-agent/`: **STT validation** (`stt_validation/` — fixture
-> + real Gradium STT providers, WER quality, OpenTelemetry-style telemetry) and
-> **TTS voice-out** (`tts_synthesis/` — fixture + real Gradium TTS providers, a
-> synthesis runner). `web_voice/` wires both over HTTP (browser mic → 16 kHz
-> PCM16 → `POST /api/voice/stt` → Gradium transcript → `POST /api/voice/tts` →
-> WAV → playback), closing a voice-in → voice-out **echo** loop. Cross-cutting
-> utilities (telemetry, sanitization, per-slice pipeline timing) live in a neutral
-> `voice_common/` package; the two halves never import each other (enforced by an
-> architecture test). Since **Sprint 4 (TASK-WEB-005)** this loop runs through a
-> **Pipecat pipeline** by default (`voice-agent/voice_pipeline/`, selected via
-> `--runtime {stdlib,pipecat}`), but in **batch parity only** — still no WebRTC
-> transport and no streaming (Sprint 6). No Java backend, no Pipecat WebRTC agent,
-> no React frontend, no RAG/pgvector, no backend/LLM answer (echo only; the answer
-> bridge TASK-WEB-003 is Sprint 5), no streaming (TASK-WEB-004), no billing, no
-> Genesys. See
-> `voice-agent/README.md`, `product-backlog/sprints/sprint-stt-validation.md`,
-> `product-backlog/sprints/sprint-3-tts-voice-out.md` and
-> `product-backlog/sprints/sprint-4-pipecat-batch.md`.
+> **What is actually built on this branch today** is a full **web Voice2Voice
+> loop** in Python under `voice-agent/`: **STT** (`stt_validation/` — fixture + real
+> Gradium STT), **TTS** (`tts_synthesis/` — fixture + real Gradium TTS), a neutral
+> **answer seam** (`conversation_backend/` — `BackendAnswerPort` with a deterministic
+> `stub` default and an `http` adapter, plus a safe degraded-mode fallback), and the
+> HTTP server (`web_voice/`) + batch pipeline (`voice_pipeline/`). `POST
+> /api/voice/turn` runs the whole loop server-side (browser mic → 16 kHz PCM16 →
+> STT → backend answer → TTS → WAV → playback); `/api/voice/stt` and `/api/voice/tts`
+> remain available. Cross-cutting utilities (telemetry, sanitization, per-slice
+> pipeline timing) live in a neutral `voice_common/` package; the STT and TTS halves
+> never import each other (enforced by an architecture test). Since **Sprint 4
+> (TASK-WEB-005)** the loop runs through a **Pipecat pipeline** by default (selected
+> via `--runtime {stdlib,pipecat}`), with `--provider {fixture,gradium}` and
+> `--backend {stub,http}` selectable at startup — but in **batch parity only**:
+> still no WebRTC transport and no streaming (Sprint 6). Not built yet: Java backend,
+> Pipecat WebRTC agent, React frontend, RAG/pgvector, streaming/barge-in
+> (TASK-WEB-004/008), billing comparison, Genesys. See `voice-agent/README.md` and
+> `product-backlog/backlog-index.md` for sprint status.
 
 ## Overview
 

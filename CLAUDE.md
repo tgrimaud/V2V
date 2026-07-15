@@ -31,8 +31,10 @@
 | Integration docs | `docs/integrations/` | Galaxion/BSS contracts and missing inputs |
 | Knowledge base | `knowledge-base/` | Billing/support/commercial content for future RAG |
 
-The former executable layout (`backend/`, `voice-agent/`, `frontend/`,
-`docker-compose.yml`) exists on `main`, not on the restart branch.
+The `voice-agent/` directory is **rebuilt from scratch on this branch** and is the
+only runnable code here (full web Voice2Voice loop, Sprints 1–5). The other former
+executable directories (`backend/`, `frontend/`, the old `agent/bot.py` and
+`bridge_server.py`, `docker-compose.yml`) exist on `main`, not on the restart branch.
 
 ## Product scope V1
 
@@ -133,18 +135,16 @@ The former executable layout (`backend/`, `voice-agent/`, `frontend/`,
 
 ## Testing commands
 
-No application test command exists on `feat/restart-from-scratch` until the new
-backend, frontend and voice runtime scaffolds are created. Use `git diff --check`
-for documentation-only changes.
-
-Voice runtime tests (use the venv — the full suite needs `pipecat-ai` + `behave`;
-a bare system `python3` fails with `ModuleNotFoundError: No module named 'pipecat'`):
+The runnable code on `feat/restart-from-scratch` is the Python voice runtime under
+`voice-agent/`. Run its tests through the venv (the full suite needs `pipecat-ai` +
+`behave`; a bare system `python3` fails with `ModuleNotFoundError: No module named
+'pipecat'`). For documentation-only changes, `git diff --check` is enough.
 
 ```bash
 cd voice-agent
 python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt   # first time
-./.venv/bin/python -m unittest discover tests   # 165 tests
-./.venv/bin/behave                              # 4 features / 14 scenarios
+./.venv/bin/python -m unittest discover tests   # 211 tests
+./.venv/bin/behave                              # 5 features / 17 scenarios / 78 steps
 ```
 
 ## Issues historically hit (and fixes)
@@ -189,4 +189,4 @@ python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt   # first t
 | Batch STT latency looked like a fixed cost but scales with audio length | Gradium processes the whole clip after upload: ~1.1 s for 1 s silence, ~2.3 s for 3.4 s, ~2.7 s for 4.3 s. Streaming/partial transcription (TASK-STT-010) is the real latency lever, not tuning the batch call. |
 | US-036 pipeline timing report could hide un-instrumented slices | `PipelineTimingReport` always emits all six canonical journey slices in flow order; slices with no span are reported `"measured": false` + a reason/ticket, never omitted — a missing measurement must not look like a fast one. Per slice, the first present candidate span name wins so a web run (`web.voice.ingress`) and a fixture run (`stt.audio.accept`) never mix into one distribution. |
 | Failure sanitization only redacted path-separated tokens | `_redact_token` now also redacts bare filenames (`<redacted-file>`) and identifier-like tokens (`<redacted-id>`: UUID, secret prefixes, ≥7-digit runs, mixed ids); a `_SAFE_TOKENS` allowlist keeps technical tokens (`pcm_16000`, `audio/pcm`) readable. Words/dates preserved; `error_code` + 160-char cap kept (TASK-STT-005 / RF-009). |
-| `voice-agent` tests error with `ModuleNotFoundError: No module named 'pipecat'` | The full suite (since Sprint 4) needs `pipecat-ai` + `behave`, which live in `voice-agent/.venv`, not the system `python3`. Run tests via the venv: `python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt`, then `./.venv/bin/python -m unittest discover tests` (165 tests) and `./.venv/bin/behave` (4 features/14 scenarios). System `python3` only sees stdlib-only tests and silently reports fewer tests + 8 pipecat import errors. |
+| `voice-agent` tests error with `ModuleNotFoundError: No module named 'pipecat'` | The full suite (since Sprint 4) needs `pipecat-ai` + `behave`, which live in `voice-agent/.venv`, not the system `python3`. Run tests via the venv: `python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt`, then `./.venv/bin/python -m unittest discover tests` (211 tests) and `./.venv/bin/behave` (5 features/17 scenarios/78 steps). System `python3` only sees stdlib-only tests and silently reports fewer tests + pipecat import errors. |

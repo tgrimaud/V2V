@@ -142,7 +142,7 @@ the sprint branch and merged back once validated.
 | TASK-WEB-003-D | `task/TASK-WEB-003-D-wire-bridge` | Merged into sprint 2026-07-15 (review 93/100) |
 | TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Validated by user 2026-07-15; merged into sprint 2026-07-15 (review 95/100) |
 | TASK-WEB-003-F | `task/TASK-WEB-003-F-degraded-mode` | Merged into sprint 2026-07-15 (resolves RF-020) |
-| TASK-WEB-003-G | `task/TASK-WEB-003-G-qa-docs` | Implemented (review 95/100; merge-ready, pending user validation) |
+| TASK-WEB-003-G | `task/TASK-WEB-003-G-qa-docs` | ✅ Done (Sprint 5, 2026-07-15; review 95/100) |
 
 ## Out Of Sprint
 
