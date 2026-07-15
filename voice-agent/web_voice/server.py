@@ -202,6 +202,10 @@ def _answer_headers(transcript, answer) -> dict[str, str]:
         headers["X-Voice-Answer"] = quote(answer.text)
         headers["X-Answer-Provider"] = answer.provider
         headers["X-Answer-Outcome"] = answer.outcome.value
+        # Degraded reason is a stable, non-sensitive code (e.g. backend_unavailable)
+        # so the client/QA can see *why* a safe fallback was spoken (TASK-WEB-003-F).
+        if answer.degraded_reason:
+            headers["X-Answer-Degraded-Reason"] = answer.degraded_reason
     return headers
 
 

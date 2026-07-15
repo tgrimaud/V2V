@@ -10,6 +10,14 @@ import the neutral voice_common package. Enforced by
 tests/test_architecture_separation.py.
 """
 
+from .degraded import (
+    BACKEND_UNAVAILABLE_REASON,
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEGRADED_FALLBACK_TEXT,
+    EMPTY_ANSWER_REASON,
+    LOW_CONFIDENCE_REASON,
+    degraded_answer,
+)
 from .models import AnswerOutcome, AnswerRequest, AnswerResult, ConversationEnvelope
 from .port import BackendAnswerPort, EmptyTranscriptError
 from .stub_backend import STUB_ANSWER_TEXT, StubBackendAdapter
@@ -18,9 +26,15 @@ __all__ = [
     "AnswerOutcome",
     "AnswerRequest",
     "AnswerResult",
+    "BACKEND_UNAVAILABLE_REASON",
     "BackendAnswerPort",
     "ConversationEnvelope",
+    "DEFAULT_CONFIDENCE_THRESHOLD",
+    "DEGRADED_FALLBACK_TEXT",
+    "EMPTY_ANSWER_REASON",
     "EmptyTranscriptError",
+    "LOW_CONFIDENCE_REASON",
     "STUB_ANSWER_TEXT",
     "StubBackendAdapter",
+    "degraded_answer",
 ]

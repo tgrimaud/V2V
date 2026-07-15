@@ -27,6 +27,14 @@ Feature: Web voice STT ingress
     And the spoken reply is the backend answer, not the transcript
     And the pipeline slices are observable via telemetry
 
+  # TASK-WEB-003-F / US-019 - safe spoken fallback when the backend cannot answer
+  Scenario: Safe fallback when the backend cannot answer
+    Given a web voice turn whose backend is unavailable
+    When the runtime runs the full voice turn
+    Then no billing content is invented in the reply
+    And a safe spoken fallback is rendered to the customer
+    And the degraded outcome is observable without leaking secrets
+
   # TASK-WEB-005 / TASK-WEB-003-D - both runtimes are behaviour-equivalent (identical output)
   Scenario: Both voice runtimes produce identical audio
     Given the same captured audio for both runtimes

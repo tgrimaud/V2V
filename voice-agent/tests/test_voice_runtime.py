@@ -10,7 +10,13 @@ from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, StubBackendAdapter  # noqa: E402
+from conversation_backend import (  # noqa: E402
+    DEGRADED_FALLBACK_TEXT,
+    AnswerOutcome,
+    AnswerRequest,
+    AnswerResult,
+    StubBackendAdapter,
+)
 from stt_validation.models import SttOutcome  # noqa: E402
 from tts_synthesis import FixtureTtsProvider, TtsOutcome  # noqa: E402
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
@@ -36,6 +42,15 @@ class _FakeBackend:
             outcome=AnswerOutcome.SUCCESS,
             correlation_id=request.correlation_id,
         )
+
+
+class _UnavailableBackend:
+    """Backend that always fails, to exercise the degraded (safe fallback) path."""
+
+    name = "unavailable-backend"
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        raise RuntimeError("backend endpoint unreachable")
 
 
 class _CapturingEgress:
@@ -127,6 +142,22 @@ class TurnProcessorParityTest(unittest.TestCase):
                 self.assertEqual(egress.texts, ["ANSWER:bonjour"])
                 self.assertNotIn("bonjour", [t for t in egress.texts if t == "bonjour"])
 
+    def test_both_runtimes_speak_the_safe_fallback_when_the_backend_fails(self) -> None:
+        # GIVEN both runtimes wired to a backend that is unavailable
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-degraded")
+        for runtime_cls in (StdlibTurnProcessor, PipecatTurnProcessor):
+            with self.subTest(runtime=runtime_cls.__name__):
+                egress = _CapturingEgress()
+                processor = runtime_cls(_ingress(), egress, _UnavailableBackend())
+                # WHEN a full turn runs
+                result = processor.run_turn(b"\x01\x02" * 100, envelope)
+                # THEN the safe fallback (degraded) is synthesized, not a failed/empty turn
+                self.assertIs(result.answer_result.outcome, AnswerOutcome.DEGRADED)
+                self.assertEqual(result.answer_result.text, DEGRADED_FALLBACK_TEXT)
+                self.assertEqual(egress.texts, [DEGRADED_FALLBACK_TEXT])
+                self.assertIs(result.tts_response.result.outcome, TtsOutcome.SUCCESS)
+                self.assertTrue(result.audio)
+
     def test_default_backend_is_the_stub(self) -> None:
         # GIVEN a processor built without an explicit backend
         processor = build_turn_processor(STDLIB, _ingress(), _egress())
@@ -139,8 +170,8 @@ class TurnProcessorParityTest(unittest.TestCase):
 
 
 class VoiceTurnEndpointTest(unittest.TestCase):
-    def _serve(self, runtime: str, ingress: WebVoiceIngress | None = None) -> int:
-        processor = build_turn_processor(runtime, ingress or _ingress(), _egress())
+    def _serve(self, runtime: str, ingress: WebVoiceIngress | None = None, backend=None) -> int:
+        processor = build_turn_processor(runtime, ingress or _ingress(), _egress(), backend)
         server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
@@ -196,6 +227,26 @@ class VoiceTurnEndpointTest(unittest.TestCase):
         self.assertNotEqual(answer, transcript)  # the reply is the answer, not an echo
         self.assertEqual(provider, "stub-backend")
         self.assertTrue(correlation)
+
+    def test_turn_endpoint_speaks_a_degraded_wav_when_the_backend_fails(self) -> None:
+        # GIVEN both runtimes wired to an unavailable backend (STT still succeeds)
+        for runtime in (STDLIB, PIPECAT):
+            with self.subTest(runtime=runtime):
+                port = self._serve(runtime, backend=_UnavailableBackend())
+                conn = HTTPConnection("127.0.0.1", port, timeout=10)
+                conn.request("POST", TURN_ROUTE, body=b"\x01\x02" * 200)
+                response = conn.getresponse()
+                payload = response.read()
+                outcome = response.getheader("X-Answer-Outcome")
+                reason = response.getheader("X-Answer-Degraded-Reason")
+                answer = unquote(response.getheader("X-Voice-Answer") or "")
+                conn.close()
+                # THEN the turn still returns a spoken WAV (never a 502) flagged degraded
+                self.assertEqual(response.status, 200)
+                self.assertEqual(payload[:4], b"RIFF")
+                self.assertEqual(outcome, "degraded")
+                self.assertEqual(reason, "backend_unavailable")
+                self.assertEqual(answer, DEGRADED_FALLBACK_TEXT)
 
     def test_turn_endpoint_fails_closed_with_json_when_stt_fails(self) -> None:
         # GIVEN both runtimes wired to an STT provider that fails

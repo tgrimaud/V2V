@@ -2,6 +2,7 @@ from pathlib import Path
 
 from behave import given, then, when
 
+from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, DEGRADED_FALLBACK_TEXT
 from stt_validation import SttOutcome, TelemetryRecorder
 from stt_validation.pipeline_timing import (
     CHANNEL_EGRESS,
@@ -15,6 +16,16 @@ from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
 from web_voice.runtime import PipecatTurnProcessor, StdlibTurnProcessor
 
 SECRET_PATH = "/private/customer/invoice-9931.pcm"
+BACKEND_SECRET = "token sk-abcdef123456 at /srv/secret-customer.wav"
+
+
+class _UnavailableBackend:
+    """Backend that fails with a secret-carrying fault, to drive the degraded path."""
+
+    name = "http-backend"
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        raise RuntimeError(f"connection refused {BACKEND_SECRET}")
 
 
 class _StubProvider:
@@ -135,6 +146,39 @@ def step_pipeline_slices_observable(context):
     by_slice = {s.slice: s for s in report.slices}
     for name in (CHANNEL_INGRESS, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
         assert by_slice[name].measured, f"{name} slice not measured"
+
+
+@given("a web voice turn whose backend is unavailable")
+def step_backend_unavailable(context):
+    context.telemetry = TelemetryRecorder()
+    ingress = WebVoiceIngress(_StubProvider(transcript="pourquoi ma facture augmente ce mois"))
+    egress = WebVoiceEgress(FixtureTtsProvider())
+    context.processor = StdlibTurnProcessor(ingress, egress, _UnavailableBackend())
+    context.audio = b"\x11\x22" * 320
+    context.envelope = ChannelEnvelope.for_web_turn(correlation_id="qa-web-degraded")
+
+
+@then("no billing content is invented in the reply")
+def step_no_invented_billing(context):
+    answer = context.turn.answer_result
+    assert answer is not None and answer.outcome is AnswerOutcome.DEGRADED, answer
+    assert not any(ch.isdigit() for ch in answer.text), "a degraded reply must state no amount (DEC-002)"
+
+
+@then("a safe spoken fallback is rendered to the customer")
+def step_safe_fallback_spoken(context):
+    assert context.turn.answer_result.text == DEGRADED_FALLBACK_TEXT
+    assert context.turn.tts_response is not None and context.turn.tts_response.wav, "expected spoken fallback WAV"
+    assert context.turn.tts_response.wav[:4] == b"RIFF"
+
+
+@then("the degraded outcome is observable without leaking secrets")
+def step_degraded_observable_no_leak(context):
+    span = next(s for s in context.telemetry.spans() if s.name == "backend.request")
+    assert span.attributes["outcome"] == "degraded"
+    assert span.attributes["degraded_reason"] == "backend_unavailable"
+    blob = str([s.attributes for s in context.telemetry.spans()])
+    assert "sk-abcdef123456" not in blob and "/srv/" not in blob, "sanitized telemetry leaked a secret"
 
 
 def _runtime_wav(processor_cls, audio, envelope) -> bytes:
