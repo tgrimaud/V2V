@@ -45,15 +45,17 @@ Make "run the tests" reproducible: one documented virtualenv, created from
 Scenario: A fresh clone can run the whole voice-agent suite
   Given a developer follows the documented environment setup
   When they create the venv from requirements.txt and run the tests through it
-  Then the full unittest suite passes (165 tests)
-  And the behave suite passes (4 features / 14 scenarios)
+  Then the full unittest suite passes (211 tests as of Sprint 5)
+  And the behave suite passes (5 features / 17 scenarios / 78 steps as of Sprint 5)
   And no pipecat ModuleNotFoundError occurs
 ```
 
 ### Delivery Evidence
 
 - Verified in the existing `voice-agent/.venv` (pipecat-ai 1.5.0, behave 1.3.3,
-  websockets 16.1): `./.venv/bin/python -m unittest discover tests` → **165 tests OK**;
-  `./.venv/bin/behave` → **4 features / 14 scenarios / 62 steps passed**.
+  websockets 16.1): at delivery the suite was **165 tests / 4 features / 14 scenarios
+  / 62 steps**; re-verified after Sprint 5 it is **211 tests OK** and
+  **5 features / 17 scenarios / 78 steps passed** (the venv standardization still
+  holds as the suite grows).
 - Docs updated: `voice-agent/README.md`, `CLAUDE.md`. `.venv/` is git-ignored.
 - OpenTelemetry: **not applicable** (documentation / tooling only, no runtime change).

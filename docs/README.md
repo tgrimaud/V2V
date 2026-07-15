@@ -2,9 +2,10 @@
 
 > **Branch state (`feat/restart-from-scratch`):** most docs here describe the
 > **target** V1 (and the `main` reference implementation). The **only runnable
-> code on this branch** is the Python STT-validation slice under `voice-agent/`
-> (`stt_validation/` + `web_voice/`). For what actually runs, start at
-> `voice-agent/README.md` and `product-backlog/sprints/sprint-stt-validation.md`.
+> code on this branch** is the Python web Voice2Voice loop under `voice-agent/`
+> (STT → backend answer → TTS via `POST /api/voice/turn`, Sprints 1–5). For what
+> actually runs, start at `voice-agent/README.md` and
+> `product-backlog/backlog-index.md`.
 
 ## Structure
 

@@ -1,15 +1,16 @@
 # Development Guide
 
-> **Branch state (`feat/restart-from-scratch`, updated 2026-07-14):** this branch is a
+> **Branch state (`feat/restart-from-scratch`, updated 2026-07-15):** this branch is a
 > deliberate restart. The Java backend, React frontend, target Pipecat agent
 > (`agent/bot.py`) and legacy bridge (`bridge_server.py`) were removed (preserved on
 > `main`). The **only runnable code here is the Python voice slice** under
-> `voice-agent/`, which now covers the full **voice-in → echo → voice-out** loop:
-> STT validation (Sprint 1/2), TTS voice-out (Sprint 3, TASK-WEB-002) and, since
-> Sprint 4 (TASK-WEB-005), a **Pipecat batch runtime** selectable via
-> `--runtime {stdlib,pipecat}` (default `pipecat`). There is still no backend/LLM
-> answer (echo only; the answer bridge TASK-WEB-003 is Sprint 5) and no
-> streaming/WebRTC (Sprint 6). The "Working On This Branch"
+> `voice-agent/`, which now covers the full **voice-in → backend answer → voice-out**
+> loop: STT validation (Sprint 1/2), TTS voice-out (Sprint 3, TASK-WEB-002), a
+> **Pipecat batch runtime** since Sprint 4 (TASK-WEB-005, selectable via
+> `--runtime {stdlib,pipecat}`, default `pipecat`) and, since Sprint 5
+> (TASK-WEB-003 A–G), a real **backend answer bridge** (`--backend {stub,http}`,
+> default `stub`) with a safe degraded-mode fallback. There is no streaming/WebRTC
+> or barge-in yet (Sprint 6). The "Working On This Branch"
 > section below is accurate for this branch. Everything from "## Target V1 Stack"
 > onward describes the target stack (reference on `main`) and does **not** run here —
 > do not follow those `mvn` / `npm` / `docker compose` / `agent.bot` steps against
@@ -19,14 +20,14 @@
 
 All code lives under `voice-agent/` (Python 3, standard library + `pipecat-ai` for the
 batch runtime + `behave` for BDD).
-Configuration comes from a repo-root `.env` (no `.env.example` is committed):
+Configuration comes from a repo-root `.env` (copy `.env.example` as a starting point):
 
 ```bash
 # voice-support-bot/.env
 GRADIUM_API_KEY=...          # never commit a real key
 GRADIUM_LANGUAGE=fr
 GRADIUM_INPUT_FORMAT=pcm_16000
-GRADIUM_VOICE_ID=default
+GRADIUM_VOICE_ID=default     # "default" is auto-resolved to the real FR catalog voice
 ```
 
 Common tasks (run from `voice-agent/`):
@@ -50,9 +51,13 @@ export $(grep -v '^#' ../.env | xargs) && \
 # Per-pipeline-slice latency report (US-036)
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium
 
-# Web voice echo loop: browser mic -> STT -> echo -> TTS -> playback
+# Web voice loop: browser mic -> STT -> backend answer -> TTS -> playback
 python3 -m web_voice.server --provider gradium   # then open http://127.0.0.1:8090/
 python3 -m web_voice.server --provider fixture   # offline plumbing check (no key)
+
+# Select the conversation backend (default is the offline stub; http targets VOICE_BACKEND_URL)
+python3 -m web_voice.server --provider fixture --backend stub
+VOICE_BACKEND_URL=http://127.0.0.1:8080/answer python3 -m web_voice.server --provider gradium --backend http
 
 # Select the runtime (default is pipecat; stdlib is the fallback/comparison path)
 python3 -m web_voice.server --provider fixture --runtime pipecat
@@ -64,8 +69,9 @@ python3 scripts/ab_parity.py --iterations 20
 ```
 
 Endpoints: `POST /api/voice/stt` (PCM16 in → transcript JSON), `POST /api/voice/tts`
-(`?text=` → WAV), and `POST /api/voice/turn` (PCM16 in → full STT → echo → TTS → WAV
-in one call). All three keep the same contract on both runtimes.
+(`?text=` → WAV), and `POST /api/voice/turn` (PCM16 in → full STT → backend answer →
+TTS → WAV in one call, with the transcript + spoken answer returned as `X-Voice-*`
+headers). All three keep the same contract on both runtimes.
 
 Troubleshooting (current branch):
 

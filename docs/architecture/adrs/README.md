@@ -35,3 +35,4 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0018](ADR-0018-voice-latency-targets-and-slo-measurement.md) | Accepted | Voice latency uses a shared taxonomy: ~700 ms experience target, p95 < 800 ms pilot criterion, production SLO deferred until observability gates are met. |
 | [ADR-0019](ADR-0019-escalation-rules-and-handoff-contract.md) | Accepted | Escalation decisions stay in the backend and future contact-center handoff uses a shared payload. |
 | [ADR-0020](ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md) | Accepted | Genesys advisor handoff is V1 scope; full Genesys Audio Connector routing remains optional unless the pilot requires it. |
+| [ADR-0021](ADR-0021-conversation-backend-answer-contract.md) | Accepted | The voice runtime talks to the conversation backend through a neutral `BackendAnswerPort` answer contract (stub + HTTP adapters), keeping providers replaceable. |

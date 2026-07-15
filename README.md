@@ -26,21 +26,32 @@ This branch intentionally removes (the previous full V1 stack, preserved on `mai
 
 ## What Actually Runs On This Branch Today
 
-Since the reset, one slice has been rebuilt from scratch: **STT (speech-to-text)
-validation**. It is the only runnable code here, all in Python under `voice-agent/`:
+Since the reset, a full **web Voice2Voice loop** has been rebuilt from scratch
+(Sprints 1–5). It is the only runnable code here, all in Python under `voice-agent/`:
 
-- `voice-agent/stt_validation/` — STT validation harness: fixture + real **Gradium**
-  providers, WER quality scoring, OpenTelemetry-style telemetry + latency report,
-  per-pipeline-slice timing (US-036), and CLIs.
-- `voice-agent/web_voice/` — a small HTTP server: browser mic → 16 kHz PCM16 →
-  `POST /api/voice/stt` → Gradium transcript. No LLM, no TTS, no backend in this slice.
+- `voice-agent/stt_validation/` — STT (voice-in): fixture + real **Gradium**
+  providers, WER quality scoring, OpenTelemetry-style telemetry, per-slice timing
+  (US-036), and CLIs.
+- `voice-agent/tts_synthesis/` — TTS (voice-out): fixture + real **Gradium**
+  providers and a synthesis runner (mirror of the STT half).
+- `voice-agent/conversation_backend/` — neutral answer seam (`BackendAnswerPort`)
+  with a deterministic **stub** (default, offline) and an **HTTP** adapter
+  (`VOICE_BACKEND_URL`), plus the safe **degraded-mode** fallback.
+- `voice-agent/voice_pipeline/` + `voice-agent/web_voice/` — the HTTP server and
+  the batch loop: browser mic → 16 kHz PCM16 → `POST /api/voice/turn` →
+  STT → backend answer → TTS → WAV playback. The loop runs through a **Pipecat**
+  pipeline by default (`--runtime {stdlib,pipecat}`), with `--provider {fixture,gradium}`
+  and `--backend {stub,http}` selectable at startup.
+- `voice-agent/voice_common/` — neutral shared telemetry, sanitization and per-slice
+  timing (the STT/TTS halves never import each other; enforced by an architecture test).
 - `voice-agent/fixtures/`, `voice-agent/tests/` (unittest), `voice-agent/features/` (Behave).
 
-Delivered capability = audio in → transcript out, with per-slice latency evidence.
+Delivered capability = **audio in → transcript → answer → spoken answer out**, with
+a single correlation id and per-slice latency evidence end to end.
 **Not yet built** (target only): billing/invoice comparison, RAG, multi-agent
-routing, guardrails, TTS / voice response, phone Voice2Voice, Genesys handoff.
-See `voice-agent/README.md` to run it and `product-backlog/sprints/sprint-stt-validation.md`
-for the sprint status.
+routing, guardrails, phone Voice2Voice, Genesys handoff, and streaming/WebRTC +
+barge-in (Sprint 6). See `voice-agent/README.md` to run it and
+`product-backlog/backlog-index.md` for sprint status.
 
 ## V1 Product Outcome
 
