@@ -74,6 +74,42 @@ class PipelineTimingReportTest(unittest.TestCase):
             self.assertIsNone(by_slice[name].report)
             self.assertTrue(by_slice[name].note)
 
+    def test_backend_slice_is_measured_from_first_token_span(self) -> None:
+        # GIVEN a reviewed sample carrying the backend first-token span (TASK-WEB-003-E)
+        spans = [_span("backend.first_token", float(value)) for value in range(1, 21)]
+
+        # WHEN
+        report = PipelineTimingReport.from_spans(spans)
+        backend = next(s for s in report.slices if s.slice == BACKEND_FIRST_TOKEN)
+
+        # THEN the backend slice is measured with percentiles, no longer a gap
+        self.assertTrue(backend.measured)
+        self.assertEqual(backend.report.count, 20)
+        self.assertEqual(backend.report.p50_ms, 10.0)
+
+    def test_backend_slice_falls_back_to_request_span(self) -> None:
+        # GIVEN a batch sample with only the total backend.request span (no first_token)
+        report = PipelineTimingReport.from_spans([_span("backend.request", 8.0)])
+        backend = next(s for s in report.slices if s.slice == BACKEND_FIRST_TOKEN)
+
+        # THEN the request span still measures the backend slice
+        self.assertTrue(backend.measured)
+        self.assertEqual(backend.report.count, 1)
+        self.assertEqual(backend.report.p50_ms, 8.0)
+
+    def test_backend_slice_prefers_first_token_over_request(self) -> None:
+        # GIVEN both backend spans in the sample
+        spans = [_span("backend.first_token", 3.0), _span("backend.request", 999.0)]
+
+        # WHEN
+        report = PipelineTimingReport.from_spans(spans)
+        backend = next(s for s in report.slices if s.slice == BACKEND_FIRST_TOKEN)
+
+        # THEN only the first-token span feeds the distribution (no mixing)
+        self.assertTrue(backend.measured)
+        self.assertEqual(backend.report.count, 1)
+        self.assertEqual(backend.report.p50_ms, 3.0)
+
     def test_tts_first_audio_slice_is_measured_when_its_span_is_present(self) -> None:
         # GIVEN a reviewed sample carrying the TTS first-audio span (TASK-WEB-002)
         spans = [_span("voice.tts.first_audio", float(value)) for value in range(1, 21)]
@@ -196,11 +232,14 @@ class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):
         # AND the transport reports the audio sent (owns the egress span)
         egress.record_egress(result.tts_response, envelope, telemetry, sent_ms=2.0)
 
-        # THEN the four pipeline slices are measured from the emitted spans
+        # THEN every US-036 slice is measured from the emitted spans, backend included
         report = PipelineTimingReport.from_spans(telemetry.spans())
         by_slice = {s.slice: s for s in report.slices}
-        for name in (CHANNEL_INGRESS, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+        for name in (CHANNEL_INGRESS, STT, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
             self.assertTrue(by_slice[name].measured, f"{name} slice not measured")
+        # AND the whole journey shares one correlation id (ingress -> ... -> egress)
+        correlations = {s.attributes["correlation_id"] for s in telemetry.spans()}
+        self.assertEqual(correlations, {"corr-bridge"})
         # AND the loop answered the transcript end to end (spoken reply produced)
         self.assertEqual(result.transcript_result.transcript, "bonjour")
         self.assertTrue(result.audio)

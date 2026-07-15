@@ -11,9 +11,17 @@ Feature: Voice journey timing by pipeline slice
     And the instrumented slices expose p50, p95 and p99 for the reviewed sample
     And the not-yet-instrumented slices are flagged as latency gaps to close
 
-  # TASK-WEB-002 / US-036 - the voice-out slices become measurable once egress runs
-  Scenario: Voice-out slices are measurable once the egress runs
-    Given a reviewed sample of full web voice turns with a spoken reply
+  # TASK-WEB-003-E / US-036 - the full answering loop measures every slice, backend included
+  Scenario: The full answering loop measures every slice including backend
+    Given a reviewed sample of full web voice turns through the backend bridge
     When the pipeline timing report is built for the sample
     Then the TTS first audio and channel egress slices expose p50, p95 and p99 for the reviewed sample
-    And only the backend slice remains a latency gap to close
+    And the backend slice is reported measured, no longer a latency gap
+    And no implemented slice remains a latency gap to close
+
+  # TASK-WEB-003-E / US-036 - one correlation id flows across the whole journey
+  Scenario: The backend slice becomes measured with one correlation id end to end
+    Given a full web voice turn through the backend bridge
+    When the pipeline timing report is built for the sample
+    Then the backend slice is reported measured, no longer a latency gap
+    And every recorded slice shares one correlation id
