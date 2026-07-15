@@ -401,8 +401,8 @@ Scenario: The runtime can target a real conversation endpoint
 no live backend required.
 
 **Status:** Implemented on `task/TASK-WEB-003-C-http-backend` (from
-`feat/sprint-5-backend-bridge`, which already carries E+F); merge-ready, pending user
-validation. New `conversation_backend/http_backend.py` (`HttpBackendAdapter`,
+`feat/sprint-5-backend-bridge`, which already carries E+F); adversarial review 93/100
+(QA gate Pass), merge-ready, pending user validation. New `conversation_backend/http_backend.py` (`HttpBackendAdapter`,
 `BackendAnswerPort`) with an **injectable transport** (default stdlib `urllib`, so
 unit tests never hit the network). `answer` posts `{transcript, conversation_id,
 correlation_id, channel}` as JSON and maps a 2xx response's `text` (alias `answer`) +
