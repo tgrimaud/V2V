@@ -101,6 +101,8 @@ against the new empty-codebase plan.
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned (Sprint 6) | Low |
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |
+| TASK-WEB-010 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | Gated (OQ-002 + billing answer engine) | Medium |
+| TASK-WEB-011 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | Planned (opportunistic) | Low |
 
 ## Planned Sprints
 
