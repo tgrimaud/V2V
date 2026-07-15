@@ -16,6 +16,7 @@ from voice_common.pipeline_timing import (
 )
 from voice_common.telemetry import TelemetryRecorder
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
+from web_voice.runtime import StdlibTurnProcessor
 
 _INSTRUMENTED = (CHANNEL_INGRESS, END_OF_TURN, STT)
 _DEFERRED = (BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS)
@@ -51,17 +52,26 @@ def step_reviewed_sample(context):
         ingress.transcribe_turn(audio, envelope, context.telemetry)
 
 
-@given("a reviewed sample of full web voice turns with a spoken reply")
+@given("a reviewed sample of full web voice turns through the backend bridge")
 def step_full_turn_sample(context):
     context.telemetry = TelemetryRecorder()
-    ingress = WebVoiceIngress(_SampleProvider())
-    egress = WebVoiceEgress(FixtureTtsProvider())
+    processor = StdlibTurnProcessor(WebVoiceIngress(_SampleProvider()), WebVoiceEgress(FixtureTtsProvider()))
     for index in range(5):
         envelope = ChannelEnvelope.for_web_turn(correlation_id=f"qa-full-{index}")
         audio = _turn_audio(speech_ms=150 + index * 20, silence_ms=500)
-        result = ingress.transcribe_turn(audio, envelope, context.telemetry)
-        response = egress.synthesize_turn(result.transcript, envelope, context.telemetry)
-        egress.record_egress(response, envelope, context.telemetry, sent_ms=1.0 + index * 0.5)
+        result = processor.run_turn(audio, envelope, context.telemetry, received_ms=1.0 + index * 0.5)
+        processor.record_egress(result.tts_response, envelope, context.telemetry, sent_ms=1.0 + index * 0.5)
+
+
+@given("a full web voice turn through the backend bridge")
+def step_single_full_turn(context):
+    context.telemetry = TelemetryRecorder()
+    context.correlation_id = "qa-backend-e2e"
+    processor = StdlibTurnProcessor(WebVoiceIngress(_SampleProvider()), WebVoiceEgress(FixtureTtsProvider()))
+    envelope = ChannelEnvelope.for_web_turn(correlation_id=context.correlation_id)
+    audio = _turn_audio(speech_ms=200, silence_ms=500)
+    result = processor.run_turn(audio, envelope, context.telemetry, received_ms=1.0)
+    processor.record_egress(result.tts_response, envelope, context.telemetry, sent_ms=2.0)
 
 
 @when("the pipeline timing report is built for the sample")
@@ -105,9 +115,20 @@ def step_voice_out_percentiles(context):
         assert report.p50_ms is not None and report.p95_ms is not None and report.p99_ms is not None
 
 
-@then("only the backend slice remains a latency gap to close")
-def step_only_backend_gap(context):
-    assert not context.by_slice[BACKEND_FIRST_TOKEN].measured
-    assert context.by_slice[BACKEND_FIRST_TOKEN].note
-    for name in (CHANNEL_INGRESS, END_OF_TURN, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
+@then("the backend slice is reported measured, no longer a latency gap")
+def step_backend_measured(context):
+    backend = context.by_slice[BACKEND_FIRST_TOKEN]
+    assert backend.measured, "backend slice should be measured once the bridge is wired"
+    assert backend.report is not None and backend.report.count >= 1
+
+
+@then("no implemented slice remains a latency gap to close")
+def step_no_implemented_gap(context):
+    for name in (CHANNEL_INGRESS, END_OF_TURN, STT, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
         assert context.by_slice[name].measured, name
+
+
+@then("every recorded slice shares one correlation id")
+def step_single_correlation_id(context):
+    correlations = {s.attributes["correlation_id"] for s in context.telemetry.spans()}
+    assert correlations == {context.correlation_id}, correlations

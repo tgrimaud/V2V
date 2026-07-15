@@ -19,9 +19,10 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from conversation_backend import AnswerOutcome, AnswerRequest, BackendAnswerPort, EmptyTranscriptError
 from voice_common.telemetry import TelemetryRecorder, Timer
 
-# The backend latency slice. TASK-WEB-003-E registers this span name in
-# voice_common/pipeline_timing.py so US-036 measures the slice; here it is already
-# emitted with the correlation id, provider, outcome and duration.
+# The backend latency slice (US-036, registered in voice_common/pipeline_timing.py).
+# `backend.first_token` is the time-to-first-token slice; `backend.request` is the
+# total answer duration. Both carry the correlation id, provider, outcome and length.
+BACKEND_FIRST_TOKEN_SPAN = "backend.first_token"
 BACKEND_REQUEST_SPAN = "backend.request"
 
 
@@ -30,8 +31,12 @@ def answer_with_telemetry(
     request: AnswerRequest,
     telemetry: TelemetryRecorder | None,
 ) -> Any:
-    """Call the backend, timing it and emitting a backend span + outcome event.
+    """Call the backend, timing it and emitting the backend spans + outcome event.
 
+    Emits both `backend.first_token` and `backend.request`. This backend is batch
+    (non-streaming): the single answer arrives at once, so first-token latency equals
+    the total request latency. A future streaming backend (HTTP, TASK-WEB-003-C) would
+    stamp `backend.first_token` at the first chunk and `backend.request` at completion.
     Only lengths are exposed (never the raw transcript or answer text), matching the
     privacy rule of the conversation contract's `to_dict`.
     """
@@ -46,6 +51,7 @@ def answer_with_telemetry(
             "outcome": result.outcome.value,
             "answer_chars": len(result.text),
         }
+        telemetry.span(BACKEND_FIRST_TOKEN_SPAN, duration_ms, **attrs)
         telemetry.span(BACKEND_REQUEST_SPAN, duration_ms, **attrs)
         telemetry.record("voice.backend.answered", backend_request_ms=round(duration_ms, 3), **attrs)
     return result

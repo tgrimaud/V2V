@@ -23,7 +23,12 @@ from conversation_backend import (  # noqa: E402
     EmptyTranscriptError,
 )
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
-from voice_pipeline.answer import BACKEND_REQUEST_SPAN, AnswerProcessor, answer_with_telemetry  # noqa: E402
+from voice_pipeline.answer import (  # noqa: E402
+    BACKEND_FIRST_TOKEN_SPAN,
+    BACKEND_REQUEST_SPAN,
+    AnswerProcessor,
+    answer_with_telemetry,
+)
 
 
 def _envelope() -> SimpleNamespace:
@@ -111,7 +116,10 @@ class AnswerTelemetryTest(unittest.TestCase):
         # WHEN the backend is called through the telemetry helper
         result = answer_with_telemetry(_FakeBackend(text="reponse"), request, telemetry)
 
-        # THEN a backend.request span is emitted with correlation id, provider and outcome
+        # THEN both backend spans are emitted with correlation id, provider and outcome
+        span_names = {s.name for s in telemetry.spans()}
+        self.assertIn(BACKEND_FIRST_TOKEN_SPAN, span_names)
+        self.assertIn(BACKEND_REQUEST_SPAN, span_names)
         span = next(s for s in telemetry.spans() if s.name == BACKEND_REQUEST_SPAN)
         self.assertEqual(span.attributes["correlation_id"], "corr-1")
         self.assertEqual(span.attributes["provider"], "fake-backend")

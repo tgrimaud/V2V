@@ -22,7 +22,7 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | `channel_ingress` | `web.voice.ingress` (web) or `stt.audio.accept` (fixture) | Instrumented |
 | `end_of_turn` | `voice.end_of_turn` (web voice runtime) | Instrumented (TASK-STT-009) |
 | `stt` | `stt.request` | Instrumented |
-| `backend_first_token` | — | Gap: backend orchestration deferred (TASK-WEB-003) |
+| `backend_first_token` | `backend.first_token` (streaming) or `backend.request` (batch) | Instrumented (TASK-WEB-003-D/E) |
 | `tts_first_audio` | `voice.tts.first_audio` (TTS synthesis runner) | Instrumented (TASK-WEB-002) |
 | `channel_egress` | `web.voice.egress` (web voice runtime) | Instrumented (TASK-WEB-002) |
 
@@ -63,11 +63,11 @@ python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json
 ```
 
 Example output (fixture sample, 5 turns). The fixture CLI is a pure STT replay
-(it does not run the web voice runtime), so `end_of_turn`, `tts_first_audio` and
-`channel_egress` are gaps here; they are measured on the **web voice path** — see
-the end-of-turn section above and the `pipeline_timing.feature` scenarios, which
-drive turns through `WebVoiceIngress` and (for the voice-out slices)
-`WebVoiceEgress`:
+(it does not run the web voice runtime), so `end_of_turn`, `backend_first_token`,
+`tts_first_audio` and `channel_egress` are gaps here; they are measured on the
+**web voice path** — see the end-of-turn section above and the
+`pipeline_timing.feature` scenarios, which drive full turns through the runtime
+(`StdlibTurnProcessor.run_turn` → ingress, STT, backend answer, TTS, egress):
 
 ```json
 {
@@ -79,7 +79,7 @@ drive turns through `WebVoiceIngress` and (for the voice-out slices)
     { "slice": "stt", "measured": true,
       "latency": { "count": 5, "p50_ms": 0.027, "p95_ms": 0.03, "p99_ms": 0.03 } },
     { "slice": "backend_first_token", "measured": false,
-      "note": "backend orchestration deferred (TASK-WEB-003)" },
+      "note": "no backend.first_token span in this sample" },
     { "slice": "tts_first_audio", "measured": false,
       "note": "no voice.tts.first_audio span in this sample" },
     { "slice": "channel_egress", "measured": false,
@@ -96,18 +96,20 @@ drive turns through `WebVoiceIngress` and (for the voice-out slices)
 | p50/p95/p99 for the reviewed sample | `LatencyReport` per instrumented slice over the sample's spans |
 | End-of-turn detected and measured as its own slice (TASK-STT-009) | `voice.end_of_turn` span from `WebVoiceIngress`; `end_of_turn` slice reports p50/p95/p99 over the web sample |
 | TTS first audio + channel egress measured (TASK-WEB-002) | `voice.tts.first_audio` span from `TtsSynthesisRunner`, `web.voice.egress` span from `WebVoiceEgress`; both slices report p50/p95/p99 over a full-turn sample |
-| Latency gaps are visible, not hidden | The remaining deferred slice (`backend_first_token`) is reported `"measured": false` with a reason |
+| Backend slice measured (TASK-WEB-003-D/E) | `backend.first_token` + `backend.request` spans from `voice_pipeline/answer.py`; the `backend_first_token` slice reports p50/p95/p99 over a full-turn sample, with one correlation id shared across every slice |
+| Latency gaps are visible, not hidden | Any slice with no span in a given sample is reported `"measured": false` with a reason (e.g. the fixture STT replay above) |
 
 ## Pipecat runtime (Sprint 4, TASK-WEB-005)
 
 The slices are runtime-agnostic. Under the `pipecat` runtime the Pipecat frame
 processors (`voice-agent/voice_pipeline/`) delegate to the same
-`WebVoiceIngress`/`WebVoiceEgress` and thread the **same `TelemetryRecorder`**, so
-the identical spans (`web.voice.ingress`, `stt.request`, `voice.tts.first_audio`,
-`web.voice.egress`) are emitted and the same four slices are measured. A full turn
-through `/api/voice/turn` emits all four in a single request. This is verified by
-`PipelineTelemetryBridgeTest` in `tests/test_pipeline_timing.py` and the Pipecat
-scenario in `features/web_voice.feature`.
+`WebVoiceIngress`/`WebVoiceEgress` and the `AnswerProcessor` shares the **same
+`TelemetryRecorder`**, so the identical spans (`web.voice.ingress`, `stt.request`,
+`backend.first_token` + `backend.request`, `voice.tts.first_audio`,
+`web.voice.egress`) are emitted and the same slices are measured. A full turn
+through `/api/voice/turn` emits them in a single request under one correlation id.
+This is verified by `PipelineTelemetryBridgeTest` in `tests/test_pipeline_timing.py`
+and the scenarios in `features/web_voice.feature` / `features/pipeline_timing.feature`.
 
 ## Tests
 
@@ -120,5 +122,6 @@ scenario in `features/web_voice.feature`.
 - `tests/test_tts_runner.py` / `tests/test_web_voice_egress.py` (`voice.tts.first_audio`
   and `web.voice.egress` span emission for the voice-out slices).
 - `features/pipeline_timing.feature` (US-036 acceptance scenarios over a reviewed
-  sample of web voice turns — the STT-only sample, plus a full-turn sample where
-  the `tts_first_audio` and `channel_egress` slices become measured).
+  sample of web voice turns — the STT-only sample, plus full-turn samples through
+  the backend bridge where the `backend_first_token`, `tts_first_audio` and
+  `channel_egress` slices become measured under one correlation id).

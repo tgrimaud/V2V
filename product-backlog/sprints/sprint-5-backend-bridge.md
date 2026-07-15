@@ -140,7 +140,7 @@ the sprint branch and merged back once validated.
 | TASK-WEB-003-B | `task/TASK-WEB-003-B-stub-backend` | Validated by user 2026-07-15 (review 96/100; merge-ready, merge on request) |
 | TASK-WEB-003-C | `task/TASK-WEB-003-C-http-backend` | Planned |
 | TASK-WEB-003-D | `task/TASK-WEB-003-D-wire-bridge` | Implemented (review 93/100; merge-ready, pending user validation) |
-| TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Planned |
+| TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Implemented (review 95/100; merge-ready, pending user validation) |
 | TASK-WEB-003-F | `task/TASK-WEB-003-F-degraded-mode` | Planned |
 | TASK-WEB-003-G | `task/TASK-WEB-003-G-qa-docs` | Planned |
 

@@ -307,7 +307,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Validated by user (2026-07-15) — review 96/100, merge-ready (merge on request) |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
 | TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Implemented — review 93/100, merge-ready (pending user validation) |
-| TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Planned |
+| TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Implemented — review 95/100, merge-ready (pending user validation) |
 | TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Planned |
 | TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | Planned |
 
@@ -457,6 +457,23 @@ Scenario: The backend slice becomes measured
 ```
 **Required Evidence:** telemetry tests; a full-turn pipeline-timing sample showing
 `backend_first_token` measured; no remaining implemented-slice gap in US-036.
+
+**Status:** Implemented on `task/TASK-WEB-003-E-backend-telemetry` (from
+`feat/sprint-5-backend-bridge`). `answer_with_telemetry` now emits **both**
+`backend.first_token` and `backend.request` spans (batch: equal duration; a future
+streaming backend diverges them) plus the `voice.backend.answered` event — lengths
+only, no raw text. `voice_common/pipeline_timing.py` registers
+`_SLICE_SPAN_NAMES[BACKEND_FIRST_TOKEN] = ("backend.first_token", "backend.request")`
+and drops the "deferred" note, so US-036 measures the backend slice. Tests:
+`test_pipeline_timing.py` (backend measured from first_token, request fallback,
+first_token-precedence; bridge test asserts all six slices measured + a single
+correlation id `corr-bridge`), `test_answer_processor.py` (both spans emitted).
+Behave: `pipeline_timing.feature` full-loop scenarios drive `StdlibTurnProcessor.run_turn`
+so backend/TTS/egress are all measured, with an explicit "one correlation id end to
+end" scenario. Full suite 182 tests + 15 behave green. Docs
+`docs/observability/voice-journey-timing.md` updated (backend slice now
+instrumented). Adversarial review 95/100 (QA gate Pass); non-blocking RF-021 (batch
+`backend.first_token` equals `backend.request` until a streaming backend exists).
 
 ### TASK-WEB-003-F — Degraded Mode
 

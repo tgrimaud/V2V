@@ -43,6 +43,10 @@ _SLICE_SPAN_NAMES: dict[str, tuple[str, ...]] = {
     CHANNEL_INGRESS: ("web.voice.ingress", "stt.audio.accept"),
     END_OF_TURN: ("voice.end_of_turn",),
     STT: ("stt.request",),
+    # backend.first_token wins when present (streaming backends); backend.request
+    # (total answer duration) is the batch fallback. Both are emitted by
+    # voice_pipeline/answer.py (TASK-WEB-003-D/E).
+    BACKEND_FIRST_TOKEN: ("backend.first_token", "backend.request"),
     TTS_FIRST_AUDIO: ("voice.tts.first_audio",),
     CHANNEL_EGRESS: ("web.voice.egress",),
 }
@@ -52,7 +56,7 @@ _UNMEASURED_NOTES: dict[str, str] = {
     CHANNEL_INGRESS: "no channel-ingress span in this sample",
     END_OF_TURN: "no end-of-turn span in this sample",
     STT: "no stt.request span in this sample",
-    BACKEND_FIRST_TOKEN: "backend orchestration deferred (TASK-WEB-003)",
+    BACKEND_FIRST_TOKEN: "no backend.first_token span in this sample",
     TTS_FIRST_AUDIO: "no voice.tts.first_audio span in this sample",
     CHANNEL_EGRESS: "no web.voice.egress span in this sample",
 }
