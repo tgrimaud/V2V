@@ -304,7 +304,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 | Ticket | Title | Role | Status |
 |---|---|---|---|
 | TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Implemented — review 96/100, merge-ready (pending user validation) |
-| TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Planned |
+| TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Implemented — review 96/100, merge-ready (pending user validation) |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
 | TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Planned |
 | TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Planned |
@@ -368,6 +368,18 @@ Scenario: The stub answers without inventing billing content
 ```
 **Required Evidence:** developer tests (deterministic output, no invented amounts,
 success + degraded paths).
+
+**Status:** Implemented on `task/TASK-WEB-003-B-stub-backend` (branched from
+`feat/sprint-5-backend-bridge`). `StubBackendAdapter` in
+`conversation_backend/stub_backend.py`: constant `STUB_ANSWER_TEXT` (digit- and
+currency-free, DEC-002), `SUCCESS` + correlation-id passthrough, empty/whitespace
+transcript → `EmptyTranscriptError`. 6 unit tests in
+`tests/test_stub_backend_adapter.py` (neutral text, no digit/`€`, deterministic,
+correlation id, empty→error, port compliance). Full suite 171 tests + 14 behave
+scenarios green. Adversarial review 96/100 (QA gate Pass); non-blocking RF-017
+(digit-free invariant guarded by test only) and RF-018 (`confidence=None` must be
+read as "not provided" by the F degraded rule). OTel/QA-latency N/A — pure adapter,
+not wired into a runtime path (instrumentation is TASK-WEB-003-E's scope).
 
 ### TASK-WEB-003-C — HTTP Backend Adapter + Selection
 
