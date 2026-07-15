@@ -201,7 +201,7 @@ class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):
         by_slice = {s.slice: s for s in report.slices}
         for name in (CHANNEL_INGRESS, STT, TTS_FIRST_AUDIO, CHANNEL_EGRESS):
             self.assertTrue(by_slice[name].measured, f"{name} slice not measured")
-        # AND the loop echoed the transcript end to end
+        # AND the loop answered the transcript end to end (spoken reply produced)
         self.assertEqual(result.transcript_result.transcript, "bonjour")
         self.assertTrue(result.audio)
 

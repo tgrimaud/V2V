@@ -306,7 +306,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 | TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Implemented — review 96/100, merge-ready (pending user validation) |
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Validated by user (2026-07-15) — review 96/100, merge-ready (merge on request) |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
-| TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Planned |
+| TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Implemented — review 93/100, merge-ready (pending user validation) |
 | TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Planned |
 | TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Planned |
 | TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | Planned |
@@ -416,6 +416,25 @@ Scenario: The web voice loop answers instead of echoing
 ```
 **Required Evidence:** developer tests for the wired loop on both runtimes; behave
 coverage; confirmation the TTS input is the backend answer, not the transcript.
+
+**Status:** Implemented on `task/TASK-WEB-003-D-wire-bridge` (from
+`feat/sprint-5-backend-bridge`). New `voice_pipeline/answer.py` (`AnswerProcessor`
++ `answer_with_telemetry`, span `backend.request`) replaces the echo step; `echo.py`
+retired. `run_batch_turn` and both `StdlibTurnProcessor` / `PipecatTurnProcessor`
+insert the `BackendAnswerPort` between STT and TTS (default `StubBackendAdapter`,
+injectable — `--backend` selection is C). `BatchTurnResult` gains `answer_result`.
+`server.py` wires the stub in `main()` and returns the transcript + spoken answer as
+`X-Voice-Transcript` / `X-Voice-Answer` / `X-Answer-Provider` / `X-Correlation-Id`
+headers on `/turn`; the web page (`app.js`) now calls `/turn` and speaks the answer
+instead of echoing. Tests: `test_answer_processor.py` (new), rewritten
+`test_pipeline.py`, extended `test_voice_runtime.py` (answer-not-echo on both
+runtimes + `/turn` headers) and `test_architecture_separation.py` (answer step stays
+out of the voice halves). Full suite 178 tests + 14 behave green. Adversarial review
+93/100 (QA gate Pass); non-blocking RF-019 (frontend has no CI test → manual QA in G)
+and RF-020 (no-answer path returns generic `no_audio` 502 → safe spoken fallback is
+F). OTel: emits `backend.request` span + `voice.backend.answered` event (correlation
+id, provider, outcome, duration, lengths only); registering the US-036
+`backend_first_token` slice is TASK-WEB-003-E.
 
 ### TASK-WEB-003-E — End-To-End Telemetry (closes US-036 gap)
 

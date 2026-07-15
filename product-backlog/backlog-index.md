@@ -89,7 +89,7 @@ against the new empty-codebase plan.
 | TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | V1 core | Implemented (Sprint 5; review 96/100; contract-only, OTel/QA N/A) — merge-ready, pending user validation | High |
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | V1 core | Validated by user (2026-07-15; review 96/100; RF-017/RF-018) — merge-ready (merge on request) | High |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection | V1 core | Planned (Sprint 5) | High |
-| TASK-WEB-003-D | Wire the bridge (transcript → backend answer → TTS) on both runtimes | V1 core | Planned (Sprint 5) | High |
+| TASK-WEB-003-D | Wire the bridge (transcript → backend answer → TTS) on both runtimes | V1 core | Implemented (Sprint 5; review 93/100; RF-019/RF-020) — merge-ready, pending user validation | High |
 | TASK-WEB-003-E | End-to-end backend telemetry + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | V1 pilot gate | Planned (Sprint 5) | High |
 | TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | V1 core | Planned (Sprint 5) | High |
 | TASK-WEB-003-G | QA + behave + latency table + docs + conversation-contract ADR | V1 core | Planned (Sprint 5) | High |

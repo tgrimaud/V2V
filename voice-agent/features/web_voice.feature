@@ -19,14 +19,15 @@ Feature: Web voice STT ingress
     And a stable error code and sanitized reason are exposed
     And the sanitized reason contains no filesystem path
 
-  # TASK-WEB-005 / US-019 - the batch loop runs through the Pipecat runtime
-  Scenario: The web voice batch loop runs through the Pipecat runtime
+  # TASK-WEB-003-D / US-019 - the loop answers (backend) instead of echoing
+  Scenario: The web voice loop answers instead of echoing
     Given a web voice turn processed by the pipecat runtime
     When the runtime runs the full voice turn
-    Then the phrase is transcribed, echoed and spoken back
+    Then the phrase is transcribed, answered by the backend and spoken back
+    And the spoken reply is the backend answer, not the transcript
     And the pipeline slices are observable via telemetry
 
-  # TASK-WEB-005 - both runtimes are behaviour-equivalent (identical output)
+  # TASK-WEB-005 / TASK-WEB-003-D - both runtimes are behaviour-equivalent (identical output)
   Scenario: Both voice runtimes produce identical audio
     Given the same captured audio for both runtimes
     When the turn is processed by the stdlib and pipecat runtimes

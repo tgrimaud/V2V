@@ -16,8 +16,16 @@ layer, so it may reference both halves.
 import asyncio
 from typing import Any, Protocol
 
+from conversation_backend import (
+    AnswerOutcome,
+    AnswerRequest,
+    BackendAnswerPort,
+    EmptyTranscriptError,
+    StubBackendAdapter,
+)
 from stt_validation.models import SttOutcome
 from tts_synthesis.models import TtsOutcome
+from voice_pipeline.answer import answer_with_telemetry
 from voice_pipeline.pipeline import BatchTurnResult, run_batch_turn, run_stt_turn, run_tts_turn
 
 from .egress import VoiceResponse, WebVoiceEgress
@@ -46,9 +54,15 @@ class VoiceTurnProcessor(Protocol):
 class StdlibTurnProcessor:
     """Runs the loop with the stdlib ingress/egress directly (no Pipecat)."""
 
-    def __init__(self, ingress: WebVoiceIngress, egress: WebVoiceEgress) -> None:
+    def __init__(
+        self,
+        ingress: WebVoiceIngress,
+        egress: WebVoiceEgress,
+        backend: BackendAnswerPort | None = None,
+    ) -> None:
         self._ingress = ingress
         self._egress = egress
+        self._backend = backend or StubBackendAdapter()
 
     def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
         return self._ingress.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
@@ -63,17 +77,35 @@ class StdlibTurnProcessor:
         result = self._ingress.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
         if result.outcome is not SttOutcome.SUCCESS:
             return BatchTurnResult(transcript_result=result, tts_response=None, audio=b"")
-        response = self._egress.synthesize_turn(result.transcript, envelope, telemetry)
+        answer = self._answer(result.transcript, envelope, telemetry)
+        if answer is None or not answer.text or answer.outcome is AnswerOutcome.UNAVAILABLE:
+            return BatchTurnResult(transcript_result=result, tts_response=None, audio=b"", answer_result=answer)
+        response = self._egress.synthesize_turn(answer.text, envelope, telemetry)
         audio = response.result.audio if response.result.outcome is TtsOutcome.SUCCESS else b""
-        return BatchTurnResult(transcript_result=result, tts_response=response, audio=audio)
+        return BatchTurnResult(transcript_result=result, tts_response=response, audio=audio, answer_result=answer)
+
+    def _answer(self, transcript, envelope, telemetry):
+        try:
+            request = AnswerRequest.from_envelope(transcript, envelope)
+            return answer_with_telemetry(self._backend, request, telemetry)
+        except EmptyTranscriptError:
+            # STT SUCCESS carries a non-empty transcript; guard the boundary anyway so
+            # a backend that signals "nothing to answer" never fabricates a turn.
+            return None
 
 
 class PipecatTurnProcessor:
     """Runs the loop through the Pipecat pipeline (batch parity)."""
 
-    def __init__(self, ingress: WebVoiceIngress, egress: WebVoiceEgress) -> None:
+    def __init__(
+        self,
+        ingress: WebVoiceIngress,
+        egress: WebVoiceEgress,
+        backend: BackendAnswerPort | None = None,
+    ) -> None:
         self._ingress = ingress
         self._egress = egress
+        self._backend = backend or StubBackendAdapter()
 
     def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
         return asyncio.run(
@@ -94,15 +126,21 @@ class PipecatTurnProcessor:
                 envelope,
                 ingress=self._ingress,
                 egress=self._egress,
+                backend=self._backend,
                 telemetry=telemetry,
                 received_ms=received_ms,
             )
         )
 
 
-def build_turn_processor(runtime: str, ingress: WebVoiceIngress, egress: WebVoiceEgress) -> VoiceTurnProcessor:
+def build_turn_processor(
+    runtime: str,
+    ingress: WebVoiceIngress,
+    egress: WebVoiceEgress,
+    backend: BackendAnswerPort | None = None,
+) -> VoiceTurnProcessor:
     if runtime == PIPECAT:
-        return PipecatTurnProcessor(ingress, egress)
+        return PipecatTurnProcessor(ingress, egress, backend)
     if runtime == STDLIB:
-        return StdlibTurnProcessor(ingress, egress)
+        return StdlibTurnProcessor(ingress, egress, backend)
     raise ValueError(f"unknown voice runtime: {runtime!r} (expected one of {RUNTIME_NAMES})")

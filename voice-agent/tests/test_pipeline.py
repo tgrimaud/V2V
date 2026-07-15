@@ -1,4 +1,5 @@
-"""Tests for the echo processor and the in-memory batch pipeline (TASK-WEB-005, ST-4)."""
+"""Tests for the in-memory batch pipeline with the backend answer step
+(TASK-WEB-005 ST-4; backend answer wired in TASK-WEB-003-D)."""
 
 import sys
 import unittest
@@ -8,12 +9,9 @@ from types import SimpleNamespace
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
-from pipecat.frames.frames import TextFrame, TranscriptionFrame  # noqa: E402
-from pipecat.tests.utils import run_test  # noqa: E402
-
+from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, StubBackendAdapter  # noqa: E402
 from stt_validation.models import SttOutcome, TranscriptResult  # noqa: E402
 from tts_synthesis.models import SynthesisResult, TtsOutcome  # noqa: E402
-from voice_pipeline.echo import EchoProcessor  # noqa: E402
 from voice_pipeline.pipeline import run_batch_turn  # noqa: E402
 
 
@@ -28,6 +26,15 @@ def _transcript(outcome: SttOutcome, text: str = "") -> TranscriptResult:
     )
 
 
+def _envelope() -> SimpleNamespace:
+    return SimpleNamespace(
+        channel="web_voice",
+        conversation_id="conv-1",
+        correlation_id="corr-1",
+        external_session_id="s",
+    )
+
+
 class _FakeIngress:
     def __init__(self, result: TranscriptResult) -> None:
         self._result = result
@@ -38,8 +45,22 @@ class _FakeIngress:
         return self._result
 
 
+class _FakeBackend:
+    """Prefixes the transcript so tests can prove the answer (not the transcript) is spoken."""
+
+    name = "fake-backend"
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        return AnswerResult(
+            text="ANSWERED:" + request.transcript,
+            provider=self.name,
+            outcome=AnswerOutcome.SUCCESS,
+            correlation_id=request.correlation_id,
+        )
+
+
 class _FakeEgress:
-    """Echoes the text into fake PCM so parity is deterministic."""
+    """Encodes the spoken text into fake PCM so parity is deterministic."""
 
     def __init__(self) -> None:
         self.calls: list[tuple] = []
@@ -58,44 +79,41 @@ class _FakeEgress:
         return SimpleNamespace(result=result, wav=b"WAV:" + text.encode("utf-8"))
 
 
-class EchoProcessorTest(unittest.IsolatedAsyncioTestCase):
-    async def test_converts_transcription_frame_into_plain_text_frame(self) -> None:
-        # GIVEN an echo processor and an upstream transcription
-        processor = EchoProcessor()
-        # WHEN a TranscriptionFrame flows through
-        down, _up = await run_test(
-            processor,
-            frames_to_send=[TranscriptionFrame(text="bonjour", user_id="u", timestamp="")],
-        )
-        # THEN a plain TextFrame with the same text is emitted (no transcription frame)
-        self.assertEqual([f for f in down if isinstance(f, TranscriptionFrame)], [])
-        plain = [f for f in down if isinstance(f, TextFrame) and not isinstance(f, TranscriptionFrame)]
-        self.assertEqual(len(plain), 1)
-        self.assertEqual(plain[0].text, "bonjour")
-
-
 class RunBatchTurnTest(unittest.IsolatedAsyncioTestCase):
-    async def test_success_collects_synthesized_audio_end_to_end(self) -> None:
-        # GIVEN an ingress that transcribes and an egress that echoes to PCM
+    async def test_answers_instead_of_echoing_end_to_end(self) -> None:
+        # GIVEN an ingress that transcribes, a backend that answers and an egress to PCM
         ingress = _FakeIngress(_transcript(SttOutcome.SUCCESS, text="hello"))
         egress = _FakeEgress()
-        envelope = SimpleNamespace(external_session_id="s", correlation_id="c")
-        # WHEN a turn runs through the pipeline
-        result = await run_batch_turn(b"\x01\x02", envelope, ingress=ingress, egress=egress)
-        # THEN the transcript is echoed, synthesized and collected as audio
+        # WHEN a turn runs through the pipeline with the backend wired
+        result = await run_batch_turn(b"\x01\x02", _envelope(), ingress=ingress, egress=egress, backend=_FakeBackend())
+        # THEN the backend answer (not the transcript) is what gets synthesized
         self.assertEqual(result.transcript_result.transcript, "hello")
-        self.assertEqual(egress.calls[0][0], "hello")  # echo fed the transcript to TTS
-        self.assertEqual(result.audio, b"AUDIO:hello")
+        self.assertEqual(result.answer_result.text, "ANSWERED:hello")
+        self.assertEqual(egress.calls[0][0], "ANSWERED:hello")
+        self.assertNotEqual(egress.calls[0][0], "hello")  # no longer an echo
+        self.assertEqual(result.audio, b"AUDIO:ANSWERED:hello")
         self.assertIs(result.tts_response.result.outcome, TtsOutcome.SUCCESS)
 
-    async def test_stt_failure_produces_no_audio_and_skips_tts(self) -> None:
+    async def test_defaults_to_the_stub_backend_when_none_is_injected(self) -> None:
+        # GIVEN a successful transcript and no explicit backend
+        ingress = _FakeIngress(_transcript(SttOutcome.SUCCESS, text="hello"))
+        egress = _FakeEgress()
+        # WHEN a turn runs
+        result = await run_batch_turn(b"\x01\x02", _envelope(), ingress=ingress, egress=egress)
+        # THEN the deterministic stub answered (default offline backend)
+        self.assertEqual(result.answer_result.provider, StubBackendAdapter().name)
+        self.assertIs(result.answer_result.outcome, AnswerOutcome.SUCCESS)
+        self.assertEqual(egress.calls[0][0], result.answer_result.text)
+
+    async def test_stt_failure_produces_no_audio_and_skips_backend_and_tts(self) -> None:
         # GIVEN an ingress that fails
         ingress = _FakeIngress(_transcript(SttOutcome.FAILED))
         egress = _FakeEgress()
         # WHEN a turn runs
-        result = await run_batch_turn(b"\x01", SimpleNamespace(), ingress=ingress, egress=egress)
-        # THEN no transcript flows, TTS is never called, and no audio is produced
+        result = await run_batch_turn(b"\x01", _envelope(), ingress=ingress, egress=egress, backend=_FakeBackend())
+        # THEN no transcript flows, neither backend nor TTS run, no audio is produced
         self.assertIs(result.transcript_result.outcome, SttOutcome.FAILED)
+        self.assertIsNone(result.answer_result)
         self.assertEqual(egress.calls, [])
         self.assertIsNone(result.tts_response)
         self.assertEqual(result.audio, b"")
@@ -105,7 +123,7 @@ class RunBatchTurnTest(unittest.IsolatedAsyncioTestCase):
         ingress = _FakeIngress(_transcript(SttOutcome.SUCCESS, text="x"))
         egress = _FakeEgress()
         # WHEN a turn runs with a received window
-        await run_batch_turn(b"\xaa\xbb", SimpleNamespace(), ingress=ingress, egress=egress, received_ms=7.0)
+        await run_batch_turn(b"\xaa\xbb", _envelope(), ingress=ingress, egress=egress, received_ms=7.0)
         # THEN the ingress got the exact audio and window
         audio, _env, _tel, received_ms = ingress.calls[0]
         self.assertEqual(audio, b"\xaa\xbb")

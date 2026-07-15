@@ -23,7 +23,7 @@ CONVERSATION_PACKAGE = "conversation_backend"
 
 PIPELINE_STT_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "stt_service.py"
 PIPELINE_TTS_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "tts_service.py"
-PIPELINE_ECHO = VOICE_AGENT_ROOT / "voice_pipeline" / "echo.py"
+PIPELINE_ANSWER = VOICE_AGENT_ROOT / "voice_pipeline" / "answer.py"
 
 
 def _imported_modules(source: str) -> set[str]:
@@ -117,12 +117,14 @@ class ArchitectureSeparationTest(unittest.TestCase):
         self.assertEqual(_file_crossings(PIPELINE_STT_SERVICE, WEB_VOICE_PACKAGE), set())
         self.assertEqual(_file_crossings(PIPELINE_TTS_SERVICE, WEB_VOICE_PACKAGE), set())
 
-    def test_pipeline_echo_stays_domain_neutral(self) -> None:
-        # GIVEN the echo processor (TASK-WEB-005)
+    def test_pipeline_answer_stays_out_of_the_voice_halves(self) -> None:
+        # GIVEN the backend answer processor (TASK-WEB-003-D), the STT->TTS middle step
         # WHEN its imports are inspected
-        # THEN it depends on neither voice half
-        self.assertEqual(_file_crossings(PIPELINE_ECHO, STT_PACKAGE), set())
-        self.assertEqual(_file_crossings(PIPELINE_ECHO, TTS_PACKAGE), set())
+        # THEN it depends on neither voice half nor the web transport
+        # (it may import only the neutral conversation_backend + voice_common)
+        self.assertEqual(_file_crossings(PIPELINE_ANSWER, STT_PACKAGE), set())
+        self.assertEqual(_file_crossings(PIPELINE_ANSWER, TTS_PACKAGE), set())
+        self.assertEqual(_file_crossings(PIPELINE_ANSWER, WEB_VOICE_PACKAGE), set())
 
     def test_conversation_backend_stays_neutral(self) -> None:
         # GIVEN the conversation backend seam (TASK-WEB-003), the neutral STT↔TTS middle
