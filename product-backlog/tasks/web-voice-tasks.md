@@ -494,7 +494,8 @@ Scenario: Safe fallback when the backend cannot answer
 sanitized error contract; degraded outcome attribute in telemetry.
 
 **Status:** Implemented on `task/TASK-WEB-003-F-degraded-mode` (from
-`task/TASK-WEB-003-E-backend-telemetry`); merge-ready, pending user validation.
+`task/TASK-WEB-003-E-backend-telemetry`); adversarial review 94/100 (QA gate Pass),
+merge-ready, pending user validation.
 The safe fallback lives in the neutral contract (`conversation_backend/degraded.py`):
 `DEGRADED_FALLBACK_TEXT` (no digit / amount, DEC-002), `DEFAULT_CONFIDENCE_THRESHOLD`
 (0.5) and the `degraded_answer(...)` builder. The **policy** lives in the shared
