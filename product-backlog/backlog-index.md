@@ -46,7 +46,7 @@ against the new empty-codebase plan.
 | US-018 | Call the bot for a spoken invoice explanation | V1 core | Draft | High |
 | US-019 | Ask from a web voice chat | V1 core | Done (Sprint 5, 2026-07-15; full Voice2Voice loop: STT → backend answer → TTS, stub + http backends) | High |
 | US-020 | Receive a quick spoken acknowledgement during long analysis | V1 core | Draft | Medium |
-| US-021 | Interrupt the bot during a spoken answer | V1 core | Draft | Medium |
+| US-021 | Interrupt the bot during a spoken answer | V1 core | Planned — Sprint 6 (TASK-WEB-008 barge-in) | Medium |
 | US-022 | Use text to complement a voice question | V1 enabler | Draft | Low |
 | US-023 | Be transferred on explicit request | V1 core | Draft | High |
 | US-024 | Be transferred when the bot lacks enough certainty | V1 core | Draft | High |
@@ -95,8 +95,11 @@ against the new empty-codebase plan.
 | TASK-WEB-003-G | QA + behave + latency table + docs + conversation-contract ADR | V1 core | Implemented (Sprint 5; review 95/100; ADR-0021 + HTTP contract + QA report + latency sample) — merge-ready, pending user validation | High |
 | TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Planned (Sprint 6) | High |
 | TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Done (Sprint 4) | High |
+| TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) driving the pipeline on one long-lived async loop (closes RF-012) | V1 core | Planned (Sprint 6) | High |
+| TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | Planned (Sprint 6) | Medium |
+| TASK-WEB-009 | Streaming QA + `time_to_first_audio` p95 < 800 ms latency report + ADR-0018 evidence (Sprint 6 close) | V1 pilot gate | Planned (Sprint 6) | High |
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | Implemented — merge-ready (pending user validation) | Medium |
-| TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned | Low |
+| TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned (Sprint 6) | Low |
 
 ## Planned Sprints
 
@@ -107,7 +110,7 @@ against the new empty-codebase plan.
 | SPRINT-3-TTS | TTS / Voice-out (batch) | ✅ Done (2026-07-13, merged → `feat/restart-from-scratch`) | Speak the bot response and close the first end-to-end voice loop (no streaming yet) — `sprints/sprint-3-tts-voice-out.md` |
 | SPRINT-4-PIPECAT | Pipecat runtime migration (batch parity) | ✅ Done (2026-07-14, merged → `feat/restart-from-scratch`) | Run the web voice batch loop (STT → echo → TTS) through a Pipecat pipeline (pipeline-only, no WebRTC/streaming), selectable via `--runtime` and shipped as the default, with the stdlib path kept as fallback/comparison (TASK-WEB-005) — `sprints/sprint-4-pipecat-batch.md` |
 | SPRINT-5-BACKEND-BRIDGE | Backend answer bridge (US-019 close) | ✅ Done (2026-07-15) | Turn the echo loop into a real answer loop: transcript → `BackendAnswerPort` (stub default + HTTP) → response text → TTS, one correlation id end to end, closing US-019 and the US-036 `backend_first_token` gap (TASK-WEB-003 A…G) — `sprints/sprint-5-backend-bridge.md` |
-| SPRINT-6-STREAMING | Latency optimization (streaming) | Planned | Streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD end-of-turn (TASK-STT-012) + WebRTC transport for the low-latency voice loop |
+| SPRINT-6-STREAMING | Streaming voice loop & latency (US-019 optimization, US-021) | Planned (scope validated by user 2026-07-15) | WebRTC transport (TASK-WEB-007, closes RF-012) + streaming VAD (TASK-STT-012) + streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + barge-in (TASK-WEB-008 / US-021) + generic voice errors (TASK-WEB-006, closes RF-013) + QA/latency close (TASK-WEB-009), targeting `time_to_first_audio` p95 < 800 ms — `sprints/sprint-6-streaming.md` |
 
 ## Restart Delivery Notes
 

@@ -587,7 +587,7 @@ conversation-contract surface are both documented under `docs/` and linked from
 **Pairs with:** TASK-STT-010 (streaming STT) — the two form the low-latency voice loop
 **Related decision:** DEC-005 (Pipecat streaming voice path; ADR-0002), DEC-010 (per-step latency before any SLO claim)
 **Classification:** V1 core
-**Status:** Draft
+**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-WEB-004-streaming-tts`
 
@@ -736,9 +736,9 @@ Scenario: STT and TTS stay independent in the pipeline
 `GlobalExceptionHandler` `ERR_UPSTREAM` pattern
 **Depends on:** TASK-WEB-005 (voice endpoints + `VoiceTurnProcessor` seam)
 **Classification:** V1 hardening
-**Status:** Planned
+**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
 **Priority:** Low
-**Branch:** `task/TASK-WEB-006-generic-voice-errors` (from the active sprint branch)
+**Branch:** `task/TASK-WEB-006-generic-voice-errors` (from `feat/sprint-6-streaming`)
 **Source finding:** RF-013 (`product-backlog/review-findings.md`)
 
 ### Objective
@@ -795,3 +795,205 @@ Scenario: Both runtimes return the same client-safe error contract
   (extends `test_voice_runtime.py::test_turn_endpoint_fails_closed_with_json_when_stt_fails`).
 - Confirmation the raw reason still appears in the server-side log line.
 - Closes RF-013.
+
+---
+
+## TASK-WEB-007 - WebRTC Transport For The Streaming Voice Loop
+
+**Parent:** EPIC-006 (+ EPIC-010 for observability)
+**Related stories:** US-019 (voice runtime), US-036 (per-slice timing), US-021 (barge-in enabler)
+**Related decision:** DEC-005 / ADR-0002 (Pipecat + WebRTC target voice path), ADR-0012
+(modular pipeline over realtime API), ADR-0016 (batch path kept as fallback), ADR-0018 (latency)
+**Depends on:** TASK-WEB-005 (Pipecat pipeline + `VoiceTurnProcessor` seam)
+**Source finding:** RF-012 (`asyncio.run` per turn → single long-lived async loop)
+**Classification:** V1 core (latency enabler)
+**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Priority:** High
+**Branch:** `task/TASK-WEB-007-webrtc-transport`
+
+### Objective
+
+Add a **WebRTC full-duplex transport** (Pipecat `SmallWebRTCTransport` + a Pipecat
+JS client in the browser) that drives the existing pipeline (`ingress → stt →
+answer → tts → egress`) on **one long-lived asyncio event loop**, replacing the
+per-turn `asyncio.run(...)` of the batch endpoints for the realtime path. This is
+the foundation the streaming STT/TTS/VAD and barge-in tickets ride on.
+
+### Context (why this is needed)
+
+The Sprint 4/5 loop runs synchronously over HTTP: `PipecatTurnProcessor` spins a
+fresh event loop + `PipelineTask`/`PipelineRunner` per request (RF-012), and audio
+is exchanged as whole buffers. True streaming and barge-in need a persistent,
+bidirectional media channel and an awaited pipeline. The Sprint 4 retro notes the
+pipeline is ~80% reusable for this.
+
+### Scope
+
+- A `SmallWebRTCTransport`-based runtime driving the pipeline on a single
+  long-lived loop; signaling endpoint(s) for the WebRTC handshake.
+- A minimal Pipecat JS client in the browser (mic capture + speaker playback over
+  WebRTC), alongside the existing batch page (kept as fallback/comparison, ADR-0016).
+- Reuse the same STT/TTS runners and the Sprint 5 `BackendAnswerPort`; no fork.
+- Preserve the US-036 slices under one correlation id over the streaming path.
+- Safe failure (transport drop, ICE failure) — no secret leak, graceful teardown.
+- **A spike opens the ticket** (lock the transport + JS client handshake, the
+  single-loop drive, frame types and version pins) → findings in `docs/qa/`.
+
+### Out Of Scope
+
+- Streaming STT/TTS/VAD partial semantics (TASK-STT-010 / TASK-WEB-004 / TASK-STT-012);
+  this ticket carries whole-utterance frames until those land.
+- Barge-in behaviour (TASK-WEB-008).
+- Identity/auth on the signaling path (OQ-001 / RF-006 / RF-014, gated).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The voice loop runs over a WebRTC transport on one async loop
+  Given the streaming runtime with the WebRTC transport
+  When the customer speaks a question in the browser
+  Then audio flows in and out over WebRTC
+  And the pipeline is awaited on a single long-lived event loop (no per-turn asyncio.run)
+  And the US-036 slices are observable under one correlation id
+```
+
+```gherkin
+Scenario: The batch endpoints remain as a fallback
+  Given the WebRTC transport is added
+  When the batch HTTP endpoints are used
+  Then POST /api/voice/stt|tts|turn keep their exact contract
+```
+
+### Required Evidence
+
+- Spike note in `docs/qa/` (transport + JS client handshake, single-loop drive,
+  version pins, TURN/STUN needs).
+- Developer tests for the single-loop pipeline drive with a fake transport (no real
+  ICE), and for graceful teardown on transport drop.
+- Chrome DevTools MCP note: live WebRTC round trip (audio in/out) + correlation id.
+- OpenTelemetry evidence: US-036 slices measured over the WebRTC path.
+- **Closes RF-012.** No API key / raw audio / path leak.
+
+---
+
+## TASK-WEB-008 - Barge-In During A Spoken Answer (US-021)
+
+**Parent:** EPIC-006, EPIC-010
+**Related story:** US-021 (interrupt the bot), US-019 (voice runtime)
+**Related decision:** DEC-005 / ADR-0002 (streaming voice path), ADR-0018 (latency)
+**Depends on:** TASK-WEB-007 (WebRTC full-duplex), TASK-WEB-004 (streaming/incremental
+playback to cancel), TASK-STT-012 (streaming VAD to detect speech onset)
+**Classification:** V1 core
+**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-008-barge-in`
+
+### Objective
+
+Let the customer **interrupt the bot while it is speaking**: when the streaming VAD
+detects customer speech onset during playback, stop the outgoing TTS playback
+promptly and start a new turn, so the conversation feels natural (US-021).
+
+### Context (why this is needed)
+
+Barge-in is the user-visible payoff of the streaming sprint. It requires full-duplex
+media (TASK-WEB-007), a detector that fires on speech onset during playback
+(TASK-STT-012) and cancellable incremental playback (TASK-WEB-004) — none of which
+exist in the batch loop. The frontend already learned the "stop the current
+`AudioBufferSourceNode` on clear" pitfall (Sprint 3), which this reuses.
+
+### Scope
+
+- Detect customer speech onset during bot playback via the streaming VAD.
+- Cancel in-flight TTS synthesis/playback and flush the audio queue promptly;
+  begin capturing the new turn.
+- Emit a barge-in OpenTelemetry event/span (correlation id, time-to-stop) for pilot
+  review; register any new span name if it feeds a slice.
+- Safe behaviour: no barge-in on the bot's own audio / echo; configurable onset
+  threshold; no invented turn on spurious noise (reuse the TASK-STT-012 guarantee).
+
+### Out Of Scope
+
+- Streaming STT/TTS/VAD themselves (their own tickets); this consumes them.
+- Backend cancellation semantics beyond stopping playback (the answer engine is the
+  stub/http backend).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Customer interrupts the assistant mid-answer
+  Given the assistant is playing a spoken answer over the streaming loop
+  When the customer starts speaking
+  Then the assistant stops playback promptly
+  And a new turn begins from the customer's speech
+  And the barge-in outcome (and time-to-stop) is observable for pilot review
+```
+
+```gherkin
+Scenario: The bot does not interrupt itself
+  Given the assistant is playing its own audio
+  When only the bot's audio is present (no customer speech)
+  Then no barge-in is triggered
+```
+
+### Required Evidence
+
+- Developer tests: VAD-onset-during-playback triggers cancellation; no self-barge-in;
+  time-to-stop measured.
+- Behave scenario for the barge-in outcome.
+- Chrome DevTools MCP note: live interrupt stops playback; timing captured.
+- OpenTelemetry evidence: barge-in event + time-to-stop under the turn correlation id.
+- When validated live by the user, **US-021 → Done**.
+
+---
+
+## TASK-WEB-009 - Streaming QA, Latency SLO Report And ADR Update (Sprint 6 Close)
+
+**Parent:** EPIC-010 (+ EPIC-006)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop), US-021 (barge-in)
+**Related decision:** ADR-0018 (latency taxonomy: pilot `p95 < 800 ms`), DEC-010
+(per-step latency before any SLO claim), ADR-0010 (industrialization gates)
+**Depends on:** TASK-WEB-007, TASK-STT-012, TASK-STT-010, TASK-WEB-004, TASK-WEB-008
+**Classification:** V1 pilot gate
+**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Priority:** High
+**Branch:** `task/TASK-WEB-009-streaming-qa-latency`
+
+### Objective
+
+Close the sprint with the consolidated QA + latency evidence: measure and publish
+`time_to_first_audio` and every per-slice distribution over the streaming WebRTC
+path (warm, web channel), confirm the ADR-0018 **pilot acceptance criterion
+`p95 < 800 ms`**, and update the docs/ADR evidence.
+
+### Scope
+
+- Behave scenarios: end-to-end streaming loop (partials + first-audio) + barge-in.
+- A repeatable latency sample over the streaming path (extends
+  `scripts/turn_latency_sample.py`) reporting `time_to_first_partial`,
+  `time_to_final`, streamed `tts_first_audio`, `time_to_first_audio` and the full
+  per-slice p50/p95/p99 (sample size, min/max/mean, warm/cold, provider config).
+- QA report `docs/qa/streaming-voice-qa-report.md` (functional + latency +
+  go/no-go), comparing against the Sprint 1–5 batch baseline.
+- Update `docs/observability/voice-journey-timing.md`,
+  `docs/architecture/voice-runtime-http-contract.md` (WebRTC signaling surface) and
+  the **ADR-0018 evidence** (measured `p95 < 800 ms` or the honest gap if not met).
+- Live Chrome DevTools MCP re-validation of the streaming loop + barge-in (manual QA;
+  closes the streaming half of RF-019).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The streaming loop meets the pilot latency acceptance criterion
+  Given a warm streaming WebRTC session on the web channel
+  When a reviewed sample of turns is measured
+  Then time_to_first_audio p95 is reported below 800 ms (or the gap is stated honestly)
+  And every pipeline slice is measured (p50/p95/p99) under one correlation id
+```
+
+### Required Evidence
+
+- Behave green (streaming + barge-in); per-slice + `time_to_first_audio` report.
+- QA report published; docs + ADR-0018 evidence updated; no code-only contract for
+  the new WebRTC surface.
+- Go/no-go recommendation for the streaming voice pilot.
