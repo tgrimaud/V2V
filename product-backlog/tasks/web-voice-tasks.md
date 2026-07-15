@@ -450,11 +450,23 @@ sanitized error contract; degraded outcome attribute in telemetry.
 - Per-slice latency table for the full turn (feeds US-036).
 - Docs: `voice-agent/README.md` (`--backend` flag), `docs/observability/voice-journey-timing.md`,
   and a new **ADR for the conversation contract** under `docs/architecture/adrs/`.
+- **API contract documentation** (single source of truth for the sprint's contracts),
+  because both are currently code-only:
+  - **Voice runtime HTTP API** — `POST /api/voice/stt`, `/tts`, `/turn`: request/response
+    JSON, status codes, the sanitized error shape (`error_code` + correlation id, RF-013)
+    and the `--backend {stub,http}` selection. New page under `docs/` (e.g.
+    `docs/architecture/voice-runtime-http-contract.md`), linked from `docs/README.md`.
+  - **Conversation contract surface** — `BackendAnswerPort` + `AnswerRequest` /
+    `AnswerResult` / `AnswerOutcome` / `EmptyTranscriptError` (fields, privacy rule:
+    only lengths in `to_dict`, `confidence`/`degraded_reason`/`error_reason` semantics).
+    Captured in the conversation-contract ADR above.
 - Chrome DevTools MCP note re-validating the live answering loop (manual QA step,
   needs a live mic + Gradium key).
 
 **Acceptance Criteria:** behave green (answer + degraded); `backend_first_token`
-shown measured; docs + ADR updated.
+shown measured; docs + ADR updated; the voice runtime HTTP API contract and the
+conversation-contract surface are both documented under `docs/` and linked from
+`docs/README.md` (no code-only contract remains for this sprint).
 
 ### Notes
 

@@ -110,6 +110,12 @@ Slices after this sprint (all measured):
   live backend required.
 - **TASK-WEB-003-G — QA + behave + latency + docs + ADR.** End-to-end and degraded
   behave scenarios, per-slice latency table, docs and a conversation-contract ADR.
+  Also documents the sprint's two **currently code-only** contracts under `docs/`
+  (linked from `docs/README.md`): the **voice runtime HTTP API**
+  (`POST /api/voice/stt|tts|turn` — bodies, status codes, sanitized error shape,
+  `--backend` selection) and the **conversation-contract surface**
+  (`BackendAnswerPort` / `AnswerRequest` / `AnswerResult`). No code-only contract
+  remains at sprint close.
 
 ## Runtime Selection
 
