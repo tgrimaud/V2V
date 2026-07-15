@@ -113,11 +113,20 @@ def step_run_full_turn(context):
     context.processor.record_egress(context.turn.tts_response, context.envelope, context.telemetry, sent_ms=1.0)
 
 
-@then("the phrase is transcribed, echoed and spoken back")
-def step_echoed_and_spoken(context):
+@then("the phrase is transcribed, answered by the backend and spoken back")
+def step_answered_and_spoken(context):
     assert context.turn.transcript_result.outcome is SttOutcome.SUCCESS, context.turn.transcript_result.outcome
+    assert context.turn.answer_result is not None, "expected a backend answer"
+    assert context.turn.answer_result.text.strip(), "expected a non-empty answer"
     assert context.turn.tts_response is not None and context.turn.tts_response.wav, "expected spoken WAV"
     assert context.turn.tts_response.wav[:4] == b"RIFF"
+
+
+@then("the spoken reply is the backend answer, not the transcript")
+def step_reply_is_answer(context):
+    transcript = context.turn.transcript_result.transcript
+    answer = context.turn.answer_result.text
+    assert answer != transcript, "the reply must be the backend answer, not an echo of the transcript"
 
 
 @then("the pipeline slices are observable via telemetry")

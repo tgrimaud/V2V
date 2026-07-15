@@ -6,9 +6,11 @@ import threading
 import unittest
 from http.client import HTTPConnection
 from pathlib import Path
+from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, StubBackendAdapter  # noqa: E402
 from stt_validation.models import SttOutcome  # noqa: E402
 from tts_synthesis import FixtureTtsProvider, TtsOutcome  # noqa: E402
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
@@ -20,6 +22,35 @@ from web_voice.runtime import (  # noqa: E402
     build_turn_processor,
 )
 from web_voice.server import TURN_ROUTE, WebVoiceHTTPServer, build_handler  # noqa: E402
+
+
+class _FakeBackend:
+    """Answers with a marker prefix so tests can prove the answer is spoken, not the transcript."""
+
+    name = "fake-backend"
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        return AnswerResult(
+            text="ANSWER:" + request.transcript,
+            provider=self.name,
+            outcome=AnswerOutcome.SUCCESS,
+            correlation_id=request.correlation_id,
+        )
+
+
+class _CapturingEgress:
+    """Wraps the fixture egress and records the text handed to TTS."""
+
+    def __init__(self) -> None:
+        self._egress = WebVoiceEgress(FixtureTtsProvider())
+        self.texts: list[str] = []
+
+    def synthesize_turn(self, text, envelope, telemetry=None):
+        self.texts.append(text)
+        return self._egress.synthesize_turn(text, envelope, telemetry)
+
+    def record_egress(self, response, envelope, telemetry, *, sent_ms=None) -> None:
+        self._egress.record_egress(response, envelope, telemetry, sent_ms=sent_ms)
 
 
 class _StubStt:
@@ -82,6 +113,30 @@ class TurnProcessorParityTest(unittest.TestCase):
         self.assertEqual(stdlib_result.audio, pipecat_result.audio)
         self.assertTrue(stdlib_result.audio)
 
+    def test_both_runtimes_speak_the_backend_answer_not_the_transcript(self) -> None:
+        # GIVEN both runtimes wired to the same fake backend + a capturing egress
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-answer")
+        for runtime_cls in (StdlibTurnProcessor, PipecatTurnProcessor):
+            with self.subTest(runtime=runtime_cls.__name__):
+                egress = _CapturingEgress()
+                processor = runtime_cls(_ingress(), egress, _FakeBackend())
+                # WHEN a full turn runs (stub STT transcribes "bonjour")
+                result = processor.run_turn(b"\x01\x02" * 100, envelope)
+                # THEN the backend answer (not the transcript) is what was synthesized
+                self.assertEqual(result.answer_result.text, "ANSWER:bonjour")
+                self.assertEqual(egress.texts, ["ANSWER:bonjour"])
+                self.assertNotIn("bonjour", [t for t in egress.texts if t == "bonjour"])
+
+    def test_default_backend_is_the_stub(self) -> None:
+        # GIVEN a processor built without an explicit backend
+        processor = build_turn_processor(STDLIB, _ingress(), _egress())
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-default")
+        # WHEN a full turn runs
+        result = processor.run_turn(b"\x01\x02" * 100, envelope)
+        # THEN the deterministic stub answered
+        self.assertEqual(result.answer_result.provider, StubBackendAdapter().name)
+        self.assertIs(result.answer_result.outcome, AnswerOutcome.SUCCESS)
+
 
 class VoiceTurnEndpointTest(unittest.TestCase):
     def _serve(self, runtime: str, ingress: WebVoiceIngress | None = None) -> int:
@@ -121,6 +176,26 @@ class VoiceTurnEndpointTest(unittest.TestCase):
         _s2, _c2, pipecat_wav = self._post_turn(pipecat_port, b"\x03\x04" * 200)
         # THEN both runtimes produce byte-identical audio
         self.assertEqual(stdlib_wav, pipecat_wav)
+
+    def test_turn_endpoint_exposes_transcript_and_answer_headers(self) -> None:
+        # GIVEN the server on the pipecat runtime (stub STT transcribes "bonjour")
+        port = self._serve(PIPECAT)
+        conn = HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("POST", TURN_ROUTE, body=b"\x01\x02" * 200)
+        response = conn.getresponse()
+        response.read()
+        # WHEN the reply headers are read
+        transcript = unquote(response.getheader("X-Voice-Transcript") or "")
+        answer = unquote(response.getheader("X-Voice-Answer") or "")
+        provider = response.getheader("X-Answer-Provider")
+        correlation = response.getheader("X-Correlation-Id")
+        conn.close()
+        # THEN the transcript, spoken answer and provider are exposed to the client
+        self.assertEqual(transcript, "bonjour")
+        self.assertTrue(answer)
+        self.assertNotEqual(answer, transcript)  # the reply is the answer, not an echo
+        self.assertEqual(provider, "stub-backend")
+        self.assertTrue(correlation)
 
     def test_turn_endpoint_fails_closed_with_json_when_stt_fails(self) -> None:
         # GIVEN both runtimes wired to an STT provider that fails

@@ -1,9 +1,11 @@
-"""Batch voice pipeline assembly + in-memory runner (Sprint 4 / TASK-WEB-005, ST-4).
+"""Batch voice pipeline assembly + in-memory runner (Sprint 4 / TASK-WEB-005, ST-4;
+backend answer step added in Sprint 5 / TASK-WEB-003-D).
 
-Composes the Pipecat batch loop `STT -> echo -> TTS -> capture-sink` and drives it
-to completion in memory (no transport, no streaming): the caller passes the whole
-utterance audio, the runner queues it plus an `EndFrame` and collects the synthesized
-audio at the sink.
+Composes the Pipecat batch loop `STT -> backend answer -> TTS -> capture-sink` and
+drives it to completion in memory (no transport, no streaming): the caller passes the
+whole utterance audio, the runner queues it plus an `EndFrame` and collects the
+synthesized audio at the sink. The answer step replaced the echo step so the loop
+answers instead of speaking the transcript back.
 
 This is the composing layer, so it may reference both halves via the injected
 `ingress` / `egress` collaborators. It still avoids importing `web_voice` (whose
@@ -26,7 +28,9 @@ from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame, TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from .echo import EchoProcessor
+from conversation_backend import BackendAnswerPort, StubBackendAdapter
+
+from .answer import AnswerProcessor
 from .stt_service import SttFrameProcessor, SttIngress
 from .tts_service import TtsEgress, TtsFrameProcessor
 
@@ -39,13 +43,16 @@ class BatchTurnResult:
     """Outcome of one batch turn through the Pipecat pipeline.
 
     `transcript_result` is the STT `TranscriptResult` (or None if no audio was
-    processed); `tts_response` is the egress `VoiceResponse`-like object (or None if
-    synthesis never ran); `audio` is the synthesized PCM collected at the sink.
+    processed); `answer_result` is the backend `AnswerResult` (or None if the loop
+    never reached the backend); `tts_response` is the egress `VoiceResponse`-like
+    object (or None if synthesis never ran); `audio` is the synthesized PCM collected
+    at the sink.
     """
 
     transcript_result: Any
     tts_response: Any
     audio: bytes
+    answer_result: Any = None
 
 
 class _AudioCaptureSink(FrameProcessor):
@@ -96,21 +103,28 @@ async def run_batch_turn(
     *,
     ingress: SttIngress,
     egress: TtsEgress,
+    backend: BackendAnswerPort | None = None,
     telemetry: Any = None,
     received_ms: float | None = None,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     num_channels: int = DEFAULT_NUM_CHANNELS,
 ) -> BatchTurnResult:
-    """Run one whole-utterance turn (audio -> STT -> echo -> TTS -> PCM) in memory."""
+    """Run one whole-utterance turn (audio -> STT -> backend answer -> TTS -> PCM) in memory.
+
+    The backend defaults to the deterministic stub (offline dev/tests); the runtime
+    injects the selected adapter (TASK-WEB-003-C adds `--backend`).
+    """
+    backend = backend or StubBackendAdapter()
     stt = SttFrameProcessor(ingress, envelope, telemetry, received_ms=received_ms)
-    echo = EchoProcessor()
+    answer = AnswerProcessor(backend, envelope, telemetry)
     tts = TtsFrameProcessor(egress, envelope, telemetry)
     sink = _AudioCaptureSink()
-    await _drive([stt, echo, tts, sink], [_audio_frame(audio, sample_rate, num_channels)])
+    await _drive([stt, answer, tts, sink], [_audio_frame(audio, sample_rate, num_channels)])
     return BatchTurnResult(
         transcript_result=stt.result,
         tts_response=tts.response,
         audio=bytes(sink.audio),
+        answer_result=answer.result,
     )
 
 

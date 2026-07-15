@@ -2,8 +2,9 @@
 
 // Gradium web/PCM input contract: mono, 16 kHz, signed 16-bit little-endian.
 const TARGET_SAMPLE_RATE = 16000;
-const STT_ENDPOINT = "/api/voice/stt";
-const TTS_ENDPOINT = "/api/voice/tts";
+// Full server-side loop: audio in -> STT -> backend answer -> TTS -> WAV out.
+// The transcript and spoken answer come back as X-Voice-* response headers.
+const TURN_ENDPOINT = "/api/voice/turn";
 
 const recordButton = document.getElementById("record");
 const statusEl = document.getElementById("status");
@@ -78,31 +79,57 @@ async function stopRecording() {
 }
 
 async function sendAudio(pcmBuffer) {
+  setStatus("Thinking…");
+  const started = performance.now();
+  let response;
   try {
-    const response = await fetch(STT_ENDPOINT, {
+    response = await fetch(TURN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "audio/pcm" },
       body: pcmBuffer,
     });
-    const result = await response.json();
-    renderResult(result);
   } catch (err) {
     renderError("network_error", "Could not reach the voice runtime: " + err.message);
+    return;
   }
+
+  const contentType = response.headers.get("Content-Type") || "";
+  if (!response.ok || !contentType.includes("audio/wav")) {
+    await renderTurnError(response);
+    return;
+  }
+
+  renderTurnMeta(response.headers);
+  await playReply(await response.arrayBuffer(), started);
 }
 
-function renderResult(result) {
-  if (result && result.outcome === "success" && result.transcript) {
-    transcriptEl.className = "transcript";
-    transcriptEl.textContent = result.transcript;
-    setStatus("Done.");
-    metaEl.innerHTML = buildMeta(result);
-    // Echo loop: speak the transcript back through the TTS egress route.
-    void playEcho(result.transcript, result.correlation_id);
-  } else {
-    renderError(result.error_code || "stt_error", result.error_reason || "No transcript produced.");
-    metaEl.innerHTML = buildMeta(result);
+// The /turn reply carries the transcript and the spoken answer as headers so the
+// page can show both alongside playing the answer audio.
+function renderTurnMeta(headers) {
+  const transcript = decodeHeader(headers.get("X-Voice-Transcript"));
+  const answer = decodeHeader(headers.get("X-Voice-Answer"));
+  transcriptEl.className = "transcript";
+  transcriptEl.textContent = transcript || "(no transcript)";
+  const parts = [];
+  if (answer) parts.push("answer: <code>" + escapeHtml(answer) + "</code>");
+  const provider = headers.get("X-Answer-Provider");
+  if (provider) parts.push("backend: <code>" + escapeHtml(provider) + "</code>");
+  const corr = headers.get("X-Correlation-Id");
+  if (corr) parts.push("corr: <code>" + escapeHtml(corr) + "</code>");
+  metaEl.innerHTML = parts.join(" · ");
+}
+
+async function renderTurnError(response) {
+  let code = "turn_error";
+  let reason = "No answer produced.";
+  try {
+    const err = await response.json();
+    code = err.error_code || err.error || code;
+    reason = err.error_reason || reason;
+  } catch (_e) {
+    // non-JSON error body; keep defaults
   }
+  renderError(code, reason);
 }
 
 function renderError(code, reason) {
@@ -112,13 +139,13 @@ function renderError(code, reason) {
   metaEl.innerHTML = "error code: <code>" + escapeHtml(code) + "</code>";
 }
 
-function buildMeta(result) {
-  if (!result) return "";
-  const parts = [];
-  if (result.provider) parts.push("provider: <code>" + escapeHtml(result.provider) + "</code>");
-  if (typeof result.stt_request_ms === "number") parts.push("stt: <code>" + result.stt_request_ms + " ms</code>");
-  if (result.correlation_id) parts.push("corr: <code>" + escapeHtml(result.correlation_id) + "</code>");
-  return parts.join(" · ");
+function decodeHeader(value) {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch (_e) {
+    return value;
+  }
 }
 
 // Stop and release the currently playing reply, if any. Emptying/replacing the
@@ -139,34 +166,14 @@ function stopPlayback() {
   playbackSource = null;
 }
 
-async function playEcho(text, correlationId) {
-  stopPlayback();
-  setStatus("Synthesizing reply…");
-  const started = performance.now();
-  let response;
+async function playReply(wav, started) {
   try {
-    const params = new URLSearchParams({ text });
-    if (correlationId) params.set("correlation_id", correlationId);
-    response = await fetch(TTS_ENDPOINT + "?" + params.toString(), { method: "POST" });
-  } catch (err) {
-    appendPlaybackError("tts_network_error", "Could not reach the voice runtime: " + err.message);
-    return;
-  }
-
-  const contentType = response.headers.get("Content-Type") || "";
-  if (!response.ok || !contentType.includes("audio/wav")) {
-    await appendPlaybackErrorFromResponse(response);
-    return;
-  }
-
-  try {
-    const wav = await response.arrayBuffer();
     if (!playbackContext || playbackContext.state === "closed") {
       playbackContext = new AudioContext();
     }
     if (playbackContext.state === "suspended") await playbackContext.resume();
     const buffer = await playbackContext.decodeAudioData(wav);
-    const firstAudioMs = Math.round(performance.now() - started);
+    const replyMs = Math.round(performance.now() - started);
 
     stopPlayback();
     playbackSource = playbackContext.createBufferSource();
@@ -177,23 +184,10 @@ async function playEcho(text, correlationId) {
     };
     playbackSource.start();
     setStatus("Playing reply…");
-    metaEl.innerHTML += " · tts first audio: <code>" + firstAudioMs + " ms</code>";
+    metaEl.innerHTML += " · reply: <code>" + replyMs + " ms</code>";
   } catch (err) {
-    appendPlaybackError("tts_decode_error", "Could not play the reply: " + err.message);
+    appendPlaybackError("reply_decode_error", "Could not play the reply: " + err.message);
   }
-}
-
-async function appendPlaybackErrorFromResponse(response) {
-  let code = "tts_error";
-  let reason = "No audio produced.";
-  try {
-    const err = await response.json();
-    code = err.error_code || code;
-    reason = err.error_reason || reason;
-  } catch (_e) {
-    // non-JSON error body; keep defaults
-  }
-  appendPlaybackError(code, reason);
 }
 
 function appendPlaybackError(code, reason) {

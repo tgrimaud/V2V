@@ -3,7 +3,8 @@
 Serves the mic-capture page and exposes the voice endpoints:
 - `POST /api/voice/stt`  PCM16 mono 16 kHz audio in -> transcript JSON out.
 - `POST /api/voice/tts`  `?text=` in -> WAV audio out.
-- `POST /api/voice/turn` PCM16 audio in -> full STT -> echo -> TTS loop -> WAV out.
+- `POST /api/voice/turn` PCM16 audio in -> full STT -> backend answer -> TTS loop ->
+  WAV out (transcript + answer text returned as `X-Voice-*` headers).
 
 The runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
 the server drives a `VoiceTurnProcessor` seam, so the stdlib and Pipecat runtimes
@@ -18,10 +19,11 @@ import socketserver
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conversation_backend import StubBackendAdapter  # noqa: E402
 from stt_validation.models import SttOutcome  # noqa: E402
 from stt_validation.provider_factory import GRADIUM, PROVIDER_NAMES, build_provider  # noqa: E402
 from tts_synthesis.provider_factory import build_provider as build_tts_provider  # noqa: E402
@@ -139,7 +141,7 @@ def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]
                 self._send_json(502, response.result.to_dict() if response else {"error": "no_audio"})
                 return
             send = Timer()
-            self._send_wav(response.wav)
+            self._send_wav(response.wav, _answer_headers(transcript, result.answer_result))
             processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
 
@@ -169,10 +171,12 @@ def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_wav(self, wav: bytes) -> None:
+        def _send_wav(self, wav: bytes, extra_headers: dict[str, str] | None = None) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "audio/wav")
             self.send_header("Content-Length", str(len(wav)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(wav)
 
@@ -180,6 +184,25 @@ def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]
             return
 
     return WebVoiceHandler
+
+
+def _answer_headers(transcript, answer) -> dict[str, str]:
+    """Expose the transcript + spoken answer to the same client on a `/turn` reply.
+
+    The `/turn` body is the answer WAV; these headers let the page still show what was
+    asked and what is being said, plus the correlation id, without a second request.
+    Text is percent-encoded (UTF-8) so accented characters are header-safe; it is sent
+    only to the requesting client and never written to server logs.
+    """
+    headers: dict[str, str] = {}
+    if transcript is not None:
+        headers["X-Correlation-Id"] = transcript.correlation_id
+        headers["X-Voice-Transcript"] = quote(transcript.transcript)
+    if answer is not None:
+        headers["X-Voice-Answer"] = quote(answer.text)
+        headers["X-Answer-Provider"] = answer.provider
+        headers["X-Answer-Outcome"] = answer.outcome.value
+    return headers
 
 
 def _envelope_from_query(query: str) -> ChannelEnvelope:
@@ -208,11 +231,14 @@ def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
     egress = WebVoiceEgress(build_tts_provider(args.provider))
-    processor = build_turn_processor(args.runtime, ingress, egress)
+    # The deterministic stub is the default answer backend (offline dev/tests).
+    # TASK-WEB-003-C adds `--backend {stub,http}` to select a real conversation endpoint.
+    backend = StubBackendAdapter()
+    processor = build_turn_processor(args.runtime, ingress, egress, backend)
     server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor))
     print(
         f"Web voice server on http://{args.host}:{args.port} "
-        f"(provider={args.provider}, runtime={args.runtime})",
+        f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name})",
         file=sys.stderr,
     )
     try:
