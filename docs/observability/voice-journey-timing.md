@@ -58,9 +58,19 @@ reviewed sample, so percentiles sharpen as the sample grows.
 
 ```bash
 cd voice-agent
-# Per-slice report over a reviewed sample (fixture manifest)
+# STT-only replay: runtime slices are reported as explicit gaps (fixture manifest)
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json
+# Full-turn sample: ALL SIX slices measured, incl. backend (TASK-WEB-003, US-036)
+python3 scripts/turn_latency_sample.py --iterations 30            # success path
+python3 scripts/turn_latency_sample.py --iterations 30 --degraded # safe-fallback path
 ```
+
+The `backend_first_token` slice is measured for both the `stub` and `http`
+backends (the span comes from `voice_pipeline/answer.py`, not the adapter), and a
+degraded turn still measures backend + TTS + egress because the safe fallback is
+transcribed → answered → spoken. The HTTP surface that drives these turns is
+documented in
+[`voice-runtime-http-contract.md`](../architecture/voice-runtime-http-contract.md).
 
 Example output (fixture sample, 5 turns). The fixture CLI is a pure STT replay
 (it does not run the web voice runtime), so `end_of_turn`, `backend_first_token`,
