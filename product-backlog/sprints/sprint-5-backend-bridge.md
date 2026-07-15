@@ -131,7 +131,7 @@ the sprint branch and merged back once validated.
 | Ticket | Branch | Status |
 |---|---|---|
 | TASK-WEB-003-A | `task/TASK-WEB-003-A-conversation-contract` | Implemented (review 96/100; merge-ready, pending user validation) |
-| TASK-WEB-003-B | `task/TASK-WEB-003-B-stub-backend` | Implemented (review 96/100; merge-ready, pending user validation) |
+| TASK-WEB-003-B | `task/TASK-WEB-003-B-stub-backend` | Validated by user 2026-07-15 (review 96/100; merge-ready, merge on request) |
 | TASK-WEB-003-C | `task/TASK-WEB-003-C-http-backend` | Planned |
 | TASK-WEB-003-D | `task/TASK-WEB-003-D-wire-bridge` | Planned |
 | TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Planned |
