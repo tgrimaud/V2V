@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from conversation_backend import StubBackendAdapter  # noqa: E402
+from conversation_backend import BACKEND_NAMES, STUB, build_backend  # noqa: E402
 from stt_validation.models import SttOutcome  # noqa: E402
 from stt_validation.provider_factory import GRADIUM, PROVIDER_NAMES, build_provider  # noqa: E402
 from tts_synthesis.provider_factory import build_provider as build_tts_provider  # noqa: E402
@@ -44,6 +44,7 @@ STT_ROUTE = "/api/voice/stt"
 TTS_ROUTE = "/api/voice/tts"
 TURN_ROUTE = "/api/voice/turn"
 RUNTIME_ENV_VAR = "VOICE_RUNTIME"
+BACKEND_ENV_VAR = "VOICE_BACKEND"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # guard against oversized uploads (~13 min PCM16 16k)
 MAX_TTS_TEXT_CHARS = 5000  # guard against oversized synthesis requests
 _STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
@@ -235,9 +236,9 @@ def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
     egress = WebVoiceEgress(build_tts_provider(args.provider))
-    # The deterministic stub is the default answer backend (offline dev/tests).
-    # TASK-WEB-003-C adds `--backend {stub,http}` to select a real conversation endpoint.
-    backend = StubBackendAdapter()
+    # `stub` (default) is the deterministic offline answer; `http` targets a real
+    # conversation endpoint configured via VOICE_BACKEND_URL (TASK-WEB-003-C).
+    backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor))
     print(
@@ -262,6 +263,12 @@ def _parse_args() -> argparse.Namespace:
         choices=RUNTIME_NAMES,
         default=os.environ.get(RUNTIME_ENV_VAR, DEFAULT_RUNTIME),
         help="voice runtime: 'pipecat' (default) or 'stdlib' (fallback/comparison)",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=BACKEND_NAMES,
+        default=os.environ.get(BACKEND_ENV_VAR, STUB),
+        help="conversation backend: 'stub' (default, offline) or 'http' (VOICE_BACKEND_URL)",
     )
     return parser.parse_args()
 
