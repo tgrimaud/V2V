@@ -303,7 +303,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Planned |
+| TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Implemented — review 96/100, merge-ready (pending user validation) |
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Planned |
 | TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
 | TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Planned |
@@ -338,6 +338,20 @@ Scenario: The conversation contract is defined without a provider
 ```
 **Required Evidence:** developer tests for the contract types (no network); no leak
 of secrets in `to_dict`/serialization.
+
+**Delivery evidence:** new neutral package `voice-agent/conversation_backend/`
+(`models.py` = `AnswerOutcome` {success,degraded,unavailable}, `AnswerRequest`
++ `from_envelope`/`to_dict`, `AnswerResult` + `is_success`/`to_dict`,
+`ConversationEnvelope` structural Protocol; `port.py` = `BackendAnswerPort` Protocol
++ `EmptyTranscriptError`). Tests: `tests/test_conversation_backend_contract.py`
+(8 tests, GIVEN/WHEN/THEN, incl. transcript/text never serialized) + architecture
+neutrality added to `tests/test_architecture_separation.py`
+(`conversation_backend` imports neither `stt_validation`, `tts_synthesis` nor
+`web_voice`). 9 new tests green; full non-pipecat suite green (the 8 pre-existing
+suite errors are `pipecat` not installed in this env, unrelated to this ticket).
+OpenTelemetry: **not applicable** (contract types only, no runtime behaviour).
+Adversarial review 96/100, QA gate Pass; non-blocking RF-015 (confidence not
+range-validated → E) and RF-016 (`error_reason` free text → sanitize in C/F) logged.
 
 ### TASK-WEB-003-B — Stub Backend Adapter
 

@@ -19,6 +19,7 @@ STT_PACKAGE = "stt_validation"
 TTS_PACKAGE = "tts_synthesis"
 SHARED_PACKAGE = "voice_common"
 WEB_VOICE_PACKAGE = "web_voice"
+CONVERSATION_PACKAGE = "conversation_backend"
 
 PIPELINE_STT_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "stt_service.py"
 PIPELINE_TTS_SERVICE = VOICE_AGENT_ROOT / "voice_pipeline" / "tts_service.py"
@@ -122,6 +123,17 @@ class ArchitectureSeparationTest(unittest.TestCase):
         # THEN it depends on neither voice half
         self.assertEqual(_file_crossings(PIPELINE_ECHO, STT_PACKAGE), set())
         self.assertEqual(_file_crossings(PIPELINE_ECHO, TTS_PACKAGE), set())
+
+    def test_conversation_backend_stays_neutral(self) -> None:
+        # GIVEN the conversation backend seam (TASK-WEB-003), the neutral STT↔TTS middle
+        # WHEN its imports are inspected against both halves and the web transport
+        stt_offenders = _forbidden_imports(CONVERSATION_PACKAGE, STT_PACKAGE)
+        tts_offenders = _forbidden_imports(CONVERSATION_PACKAGE, TTS_PACKAGE)
+        web_offenders = _forbidden_imports(CONVERSATION_PACKAGE, WEB_VOICE_PACKAGE)
+        # THEN it depends on none of them (it may only import the neutral voice_common)
+        self.assertEqual(stt_offenders, {}, f"conversation_backend must not import stt_validation: {stt_offenders}")
+        self.assertEqual(tts_offenders, {}, f"conversation_backend must not import tts_synthesis: {tts_offenders}")
+        self.assertEqual(web_offenders, {}, f"conversation_backend must not import web_voice: {web_offenders}")
 
     def test_relative_imports_are_not_flagged_as_cross_package(self) -> None:
         # GIVEN in-package relative imports and a shared voice_common import
