@@ -27,6 +27,7 @@
   epics, user stories, product decisions and open questions.
 - Architecture: [`architecture/architecture.md`](architecture/architecture.md)
 - Channel and identity boundary: [`architecture/channel-identity-boundary.md`](architecture/channel-identity-boundary.md)
+- Voice runtime HTTP API contract: [`architecture/voice-runtime-http-contract.md`](architecture/voice-runtime-http-contract.md)
 - Architecture decisions: [`architecture/adrs/`](architecture/adrs/)
 - Documentation coherence review: [`architecture/documentation-coherence-review-2026-07-08.md`](architecture/documentation-coherence-review-2026-07-08.md)
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)

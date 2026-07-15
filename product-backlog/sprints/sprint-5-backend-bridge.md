@@ -15,7 +15,7 @@ Voice2Voice loop with a real, replaceable answer seam.
 
 ## Status
 
-**Status:** Planned
+**Status:** In progress (A–G implemented and merged into the sprint branch; pending user validation before sprint close)
 **Created:** 2026-07-14
 **Predecessor:** [`sprint-4-pipecat-batch.md`](sprint-4-pipecat-batch.md) (Sprint 4 — Done, 2026-07-14)
 **Working branch:** `feat/sprint-5-backend-bridge` (from `feat/restart-from-scratch`)
@@ -30,7 +30,7 @@ Voice2Voice loop with a real, replaceable answer seam.
 | Sprint 2 | STT hardening (quality gate, sanitization, UNAVAILABLE, end-of-turn) | ✅ Done |
 | Sprint 3 | TTS / voice-out (batch) → first end-to-end voice loop | ✅ Done |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
-| **Sprint 5** | **Backend answer bridge (echo → real answer, US-019 close) — this sprint** | Planned |
+| **Sprint 5** | **Backend answer bridge (echo → real answer, US-019 close) — this sprint** | In progress |
 | Sprint 6 | Latency optimization: streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + streaming VAD (TASK-STT-012) + WebRTC transport | Planned |
 
 ## Included Tickets
@@ -136,13 +136,13 @@ the sprint branch and merged back once validated.
 
 | Ticket | Branch | Status |
 |---|---|---|
-| TASK-WEB-003-A | `task/TASK-WEB-003-A-conversation-contract` | Implemented (review 96/100; merge-ready, pending user validation) |
-| TASK-WEB-003-B | `task/TASK-WEB-003-B-stub-backend` | Validated by user 2026-07-15 (review 96/100; merge-ready, merge on request) |
-| TASK-WEB-003-C | `task/TASK-WEB-003-C-http-backend` | Implemented (merge-ready, pending user validation) |
-| TASK-WEB-003-D | `task/TASK-WEB-003-D-wire-bridge` | Implemented (review 93/100; merge-ready, pending user validation) |
-| TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Validated by user 2026-07-15 (review 95/100; merge-ready, merge on request) |
-| TASK-WEB-003-F | `task/TASK-WEB-003-F-degraded-mode` | Implemented (merge-ready, pending user validation; resolves RF-020) |
-| TASK-WEB-003-G | `task/TASK-WEB-003-G-qa-docs` | Planned |
+| TASK-WEB-003-A | `task/TASK-WEB-003-A-conversation-contract` | Merged into sprint 2026-07-15 (review 96/100) |
+| TASK-WEB-003-B | `task/TASK-WEB-003-B-stub-backend` | Merged into sprint 2026-07-15 (review 96/100) |
+| TASK-WEB-003-C | `task/TASK-WEB-003-C-http-backend` | Merged into sprint 2026-07-15 (review 93/100; resolves RF-016) |
+| TASK-WEB-003-D | `task/TASK-WEB-003-D-wire-bridge` | Merged into sprint 2026-07-15 (review 93/100) |
+| TASK-WEB-003-E | `task/TASK-WEB-003-E-backend-telemetry` | Validated by user 2026-07-15; merged into sprint 2026-07-15 (review 95/100) |
+| TASK-WEB-003-F | `task/TASK-WEB-003-F-degraded-mode` | Merged into sprint 2026-07-15 (resolves RF-020) |
+| TASK-WEB-003-G | `task/TASK-WEB-003-G-qa-docs` | Implemented (review 95/100; merge-ready, pending user validation) |
 
 ## Out Of Sprint
 

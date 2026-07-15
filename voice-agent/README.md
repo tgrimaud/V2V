@@ -78,15 +78,19 @@ Evidence samples and acceptance-criteria coverage are documented in
 `voice_common/pipeline_timing.py` (a neutral, shared aggregator; run via the
 `stt_validation.pipeline_timing_cli` wrapper) aggregates spans into the six
 canonical journey slices (channel ingress → end-of-turn → STT → backend first
-token → TTS first audio → channel egress) with p50/p95/p99 per slice. The
-instrumented slices are `channel_ingress`, `end_of_turn` (TASK-STT-009, web voice
-runtime), `stt`, and — since Sprint 3 (TASK-WEB-002) — `tts_first_audio` and
-`channel_egress` on the web voice path. Only `backend_first_token` remains a gap
-(TASK-WEB-003); it is reported explicitly as `"measured": false` with the ticket
-that will close it, so a gap is never mistaken for a fast slice.
+token → TTS first audio → channel egress) with p50/p95/p99 per slice. Since
+Sprint 5 (TASK-WEB-003-D/E) **all six slices are instrumented** on the web voice
+path: `channel_ingress`, `end_of_turn` (TASK-STT-009), `stt`,
+`backend_first_token` (`stub` or `http` backend), `tts_first_audio` and
+`channel_egress` (TASK-WEB-002). A slice with no span in a given sample is still
+reported `"measured": false` with a reason, so a gap is never mistaken for a fast
+slice (e.g. the STT-only fixture CLI below leaves the runtime slices as gaps).
 
 ```bash
+# STT-only fixture replay (runtime slices reported as explicit gaps)
 python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json --provider gradium
+# full-turn sample (all six slices measured): see the backend bridge section
+python3 scripts/turn_latency_sample.py --iterations 30
 ```
 
 Details and acceptance coverage: `docs/observability/voice-journey-timing.md`.
@@ -242,8 +246,9 @@ QA step.
 
 ## Voice runtime: stdlib vs Pipecat (TASK-WEB-005)
 
-The web voice batch loop (STT → echo → TTS) runs through a **Pipecat pipeline**,
-aligning the runtime with the ADR-0002 target while keeping behaviour identical
+The web voice batch loop (STT → backend answer → TTS, see the backend bridge
+section below) runs through a **Pipecat pipeline**, aligning the runtime with the
+ADR-0002 target while keeping behaviour identical
 (this is a migration in batch parity — no WebRTC/streaming yet; that is Sprint 6).
 Both runtimes coexist and are selected at startup:
 
@@ -279,3 +284,54 @@ Coverage: `tests/test_stt_service.py`, `tests/test_tts_service.py`,
 `tests/test_pipeline.py`, `tests/test_voice_runtime.py`, `tests/test_ab_parity.py`,
 the pipeline slice bridge in `tests/test_pipeline_timing.py`, and the two Pipecat
 scenarios in `features/web_voice.feature`.
+
+## Web voice backend bridge (US-019 answering loop, TASK-WEB-003)
+
+`conversation_backend` is the neutral middle of the Voice2Voice loop: it takes the
+transcript and returns a response text to speak, behind a replaceable
+`BackendAnswerPort`. `POST /api/voice/turn` runs the whole loop (STT → backend
+answer → TTS) and returns the spoken answer as `audio/wav`.
+
+```bash
+# offline: deterministic stub backend (default), fixture STT/TTS
+python3 -m web_voice.server --provider fixture --backend stub
+
+# real conversation endpoint (the Java backend)
+export VOICE_BACKEND_URL=...        # required for http
+export VOICE_BACKEND_API_KEY=...    # optional; sent as x-api-key, never logged
+python3 -m web_voice.server --provider gradium --backend http
+```
+
+- `--backend {stub,http}` (env `VOICE_BACKEND`, default `stub`) selects the answer
+  engine via `build_backend`. `StubBackendAdapter` is deterministic and digit-free;
+  `HttpBackendAdapter` posts JSON to `VOICE_BACKEND_URL` with an **injectable
+  transport** (default stdlib `urllib`), so unit tests exercise success, non-2xx,
+  timeout, unparsable and empty responses with no network and assert the API key
+  never leaks.
+- **Degraded mode:** if the backend is unavailable, not confident enough
+  (below `DEFAULT_CONFIDENCE_THRESHOLD`), or returns an empty answer, the turn does
+  **not** fail — it speaks a fixed, digit-free safe fallback (DEC-002) and returns
+  `200` with `X-Answer-Outcome: degraded` + a sanitized `X-Answer-Degraded-Reason`.
+  Only an empty transcript (nothing to answer) stays silent.
+- The shared answer step `voice_pipeline/answer.py` owns the degraded policy and
+  emits `backend.first_token` + `backend.request` spans (closing the US-036
+  `backend_first_token` slice) under the turn's correlation id; `to_dict` exposes
+  only text/transcript **lengths**, never the raw content.
+
+Contracts (single source of truth):
+`docs/architecture/voice-runtime-http-contract.md` (HTTP endpoints, headers, error
+shape, flags) and `docs/architecture/adrs/ADR-0021-conversation-backend-answer-contract.md`
+(port, models, degraded policy, privacy). QA + latency:
+`docs/qa/web-voice-backend-bridge-qa-report.md`.
+
+```bash
+# repeatable full-turn per-slice latency sample (all six US-036 slices measured)
+python3 scripts/turn_latency_sample.py --iterations 30            # success path
+python3 scripts/turn_latency_sample.py --iterations 30 --degraded # safe-fallback path
+```
+
+Coverage: `tests/test_conversation_backend_contract.py`,
+`tests/test_answer_processor.py`, `tests/test_stub_backend_adapter.py`,
+`tests/test_http_backend.py`, `tests/test_backend_factory.py`,
+`tests/test_turn_latency_sample.py`, `features/conversation_backend.feature`, and
+the answer/degraded/parity scenarios in `features/web_voice.feature`.
