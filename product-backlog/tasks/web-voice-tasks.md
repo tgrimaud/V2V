@@ -807,7 +807,14 @@ Scenario: Both runtimes return the same client-safe error contract
 **Depends on:** TASK-WEB-005 (Pipecat pipeline + `VoiceTurnProcessor` seam)
 **Source finding:** RF-012 (`asyncio.run` per turn → single long-lived async loop)
 **Classification:** V1 core (latency enabler)
-**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Status:** In progress — Sprint 6 (`sprints/sprint-6-streaming.md`). **Spike delivered**
+(`docs/qa/webrtc-transport-spike.md`): transport/signaling API locked, single-loop
+driver seam (`web_voice/streaming_runtime.py`) + fake-transport tests green, dep guard
+(`web_voice/webrtc_support.py`) + `scripts/webrtc_spike.py`. **Remaining (gated on
+`pip install "pipecat-ai[webrtc]"` in a networked env — corporate index is offline here
+and Python 3.14 wheels for aiortc/av/opencv must be verified):** signaling routes on the
+stdlib server, Pipecat JS page, live WebRTC round trip + Chrome DevTools MCP evidence,
+and the ADR for the WebRTC dependency footprint + TURN/STUN infra.
 **Priority:** High
 **Branch:** `task/TASK-WEB-007-webrtc-transport`
 
