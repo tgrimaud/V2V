@@ -305,7 +305,7 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 |---|---|---|---|
 | TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Implemented — review 96/100, merge-ready (pending user validation) |
 | TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Validated by user (2026-07-15) — review 96/100, merge-ready (merge on request) |
-| TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Planned |
+| TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Implemented — merge-ready (pending user validation) |
 | TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Implemented — review 93/100, merge-ready (pending user validation) |
 | TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Validated by user 2026-07-15 (checks re-run: 182 unit + 15 behave green) — merge-ready (merge on explicit request) |
 | TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Implemented — merge-ready (pending user validation); resolves RF-020 |
@@ -399,6 +399,30 @@ Scenario: The runtime can target a real conversation endpoint
 ```
 **Required Evidence:** fake-transport tests (success + error mapping + no key leak),
 no live backend required.
+
+**Status:** Implemented on `task/TASK-WEB-003-C-http-backend` (from
+`feat/sprint-5-backend-bridge`, which already carries E+F); adversarial review 93/100
+(QA gate Pass), merge-ready, pending user validation. New `conversation_backend/http_backend.py` (`HttpBackendAdapter`,
+`BackendAnswerPort`) with an **injectable transport** (default stdlib `urllib`, so
+unit tests never hit the network). `answer` posts `{transcript, conversation_id,
+correlation_id, channel}` as JSON and maps a 2xx response's `text` (alias `answer`) +
+optional `confidence` onto `AnswerResult(SUCCESS)`. An empty transcript raises
+`EmptyTranscriptError` before any call (stays UNAVAILABLE, never fabricates). Any
+transport fault, timeout, non-2xx status, unparsable body or empty answer maps to a
+**sanitized DEGRADED** result (safe fallback text + `sanitize_error(domain="backend")`
+→ `backend_error` / `backend_timeout`), reusing the TASK-WEB-003-F `degraded_answer`.
+The API key lives only in the `x-api-key` request header — never in an exception, log,
+result or telemetry attribute. New `conversation_backend/backend_factory.py`
+(`build_backend(name)`, `STUB` default / `HTTP`) builds the HTTP adapter from env
+(`VOICE_BACKEND_URL`, `VOICE_BACKEND_API_KEY`, `VOICE_BACKEND_TIMEOUT_S`);
+`server.py` adds `--backend {stub,http}` (env `VOICE_BACKEND`, default `stub`) and
+logs the selected backend. Tests: `test_http_backend.py` (mapping success, `answer`
+alias, request/header shape, empty-transcript, all degraded paths, no key leak, +
+low-confidence degrade via `answer_with_telemetry`), `test_backend_factory.py`
+(stub default / http from env / missing URL / unknown). Behave:
+`conversation_backend.feature`. Full suite 208 unit + 17 behave green. The
+request/response field names are provisional; **TASK-WEB-003-G**'s conversation-contract
+ADR formalizes them.
 
 ### TASK-WEB-003-D — Wire The Bridge Into The Runtime
 
