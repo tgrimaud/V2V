@@ -243,12 +243,35 @@ Server: `python -m web_voice.server --provider fixture --backend stub --webrtc o
   Chrome DevTools MCP browser has no microphone, so `getUserMedia` stays at
   "Requesting microphone…" (no console error) — a headless limitation, not a bug.
   UI evidence: `docs/qa/assets/webrtc-streaming-page.png`.
-- **US-036 slices over WebRTC with a real transcript** need a real STT: the fixture
-  provider only matches known fixtures and no `GRADIUM_API_KEY` is set in this env, so
-  a silent/arbitrary WebRTC stream flushes no utterance (telemetry correctly stays
-  empty — no fabricated turn). The pipeline reuses the same STT/answer/TTS processors
-  as batch, so the slices are identical; the definitive spoken-answer capture runs with
-  `--provider gradium` + `GRADIUM_API_KEY` on the VPN (final QA gate).
+- **US-036 slices over WebRTC with a real Gradium transcript (QA gate PASSED).**
+  `--provider gradium --backend stub`, streaming a French clip via
+  `scripts/webrtc_live_client.py --audio q.wav --hold 14`. All slices recorded under
+  one correlation id (`46184407-…`):
+
+  | Slice | span | duration |
+  |------|------|---------:|
+  | ingress | `web.voice.ingress` | 0.001 ms |
+  | end-of-turn | `voice.end_of_turn` (silence_window, trailing 519 ms) | 500 ms |
+  | STT accept | `stt.audio.accept` | 0.025 ms |
+  | **STT (Gradium)** | `stt.request` | **2775 ms** |
+  | backend | `backend.request` (stub, 161 chars) | 0.045 ms |
+  | **TTS (Gradium)** | `voice.tts.first_audio` (330 KB) | **4112 ms** |
+
+  Confirms the WebRTC path emits the same US-036 decomposition as the batch path, on
+  the single long-lived loop, with a real transcript.
+
+### Finding: Opus DTX vs. energy-based end-of-turn
+
+The end-of-turn detector needs sub-threshold "silence" frames to fill its trailing
+window. **Pure digital silence triggers Opus DTX** (discontinuous transmission): the
+sender emits no packets, so the aggregator never sees the silence and never flushes.
+A real microphone emits an ambient noise floor → packets keep flowing → it works.
+Two consequences captured in code/tooling:
+- `web_voice/utterance_aggregator.py` documents the ambient-noise dependency.
+- File-based WebRTC test clips must pad the tail with **low-amplitude noise**
+  (peak ≪ the speech threshold), never zeros. Also, the bot output track sends silence
+  keepalive immediately, so a headless client cannot gate hangup on "first bot frame" —
+  hold the call open a fixed window (`--hold`).
 
 ## Delivered in TASK-WEB-007
 
@@ -274,8 +297,9 @@ Server: `python -m web_voice.server --provider fixture --backend stub --webrtc o
 - Tests: aggregator segmentation, real in-process WebRTC handshake reaching
   `connected`. Live evidence via `scripts/webrtc_live_client.py`.
 
-**Remaining (final QA gate, needs VPN + provider key):**
-- Spoken-answer round trip with `--provider gradium` + `GRADIUM_API_KEY` to capture
-  the US-036 slices over the WebRTC path with a real transcript.
-- Trickle ICE + TURN for non-localhost/corporate NAT (see ADR).
-- ADR for the WebRTC dependency footprint + TURN/STUN infra (`ADR-0022`).
+**Done:** spoken-answer round trip with `--provider gradium` captured the US-036
+slices over WebRTC with a real Gradium transcript (see "Live validation" above);
+ADR-0022 written.
+
+**Remaining (infra, not code):**
+- Trickle ICE + TURN (coturn) for non-localhost/corporate NAT (see ADR-0022).

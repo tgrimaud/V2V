@@ -15,6 +15,12 @@ consistent with the batch `/turn` path.
 Scope guard: no barge-in (TASK-WEB-008) — while the bot speaks, incoming mic frames
 are still buffered; controlled demos use headphones to avoid the bot echoing into
 its own aggregator.
+
+End-of-turn depends on receiving sub-threshold "silence" frames: a real microphone
+emits an ambient noise floor, so Opus keeps sending packets and the trailing-silence
+window fills. **Pure digital silence triggers Opus DTX** (no packets), so a synthetic
+file-based test clip must pad the tail with low-amplitude noise (peak << the speech
+threshold), never zeros, or no end-of-turn is ever detected.
 """
 
 from typing import Any

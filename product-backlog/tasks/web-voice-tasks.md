@@ -816,11 +816,13 @@ persistent single loop (`web_voice/async_loop.py`, closes RF-012); signaling rou
 (`web_voice/webrtc_signaling.py`); browser page `/webrtc.html`; interim utterance
 aggregator (`web_voice/utterance_aggregator.py`, reuses TASK-STT-009 thresholds); tests
 (aggregator + real in-process handshake reaching `connected`); ADR-0022; spike +
-findings (`docs/qa/webrtc-transport-spike.md`). Live round trip validated with a
-headless client (connected + correlation id + bidirectional audio). **Remaining (final
-QA gate, needs VPN + key):** spoken-answer round trip with `--provider gradium` +
-`GRADIUM_API_KEY` to capture US-036 slices over WebRTC with a real transcript; trickle
-ICE + TURN for corporate NAT.
+findings (`docs/qa/webrtc-transport-spike.md`). **QA gate PASSED:** live spoken-answer
+round trip with `--provider gradium` captured the full US-036 slice decomposition over
+WebRTC under one correlation id (ingress → end_of_turn 500ms → STT/Gradium 2775ms →
+backend → TTS/Gradium 4112ms). Finding logged: Opus DTX suppresses pure-silence
+packets, so end-of-turn relies on a real mic's ambient noise (test clips pad with
+low-amplitude noise). **Remaining (infra, not code):** trickle ICE + TURN (coturn) for
+corporate NAT.
 **Priority:** High
 **Branch:** `task/TASK-WEB-007-webrtc-transport`
 

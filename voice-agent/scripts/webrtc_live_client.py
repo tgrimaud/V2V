@@ -40,7 +40,7 @@ def _post_offer(url: str, sdp: str, sdp_type: str) -> dict:
         return json.loads(resp.read())
 
 
-async def run(url: str, audio: str | None) -> int:
+async def run(url: str, audio: str | None, hold: float = 12.0) -> int:
     from aiortc import RTCPeerConnection, RTCSessionDescription
     from aiortc.contrib.media import MediaPlayer
     from aiortc.mediastreams import AudioStreamTrack
@@ -71,11 +71,12 @@ async def run(url: str, audio: str | None) -> int:
             break
         await asyncio.sleep(0.1)
     print("connection_state:", pc.connectionState)
-    try:
-        await asyncio.wait_for(got_audio.wait(), timeout=8)
-        print("received_bot_audio: True")
-    except asyncio.TimeoutError:
-        print("received_bot_audio: False (no utterance flushed / silent source)")
+    # Hold the session open so the whole clip streams, the aggregator flushes the
+    # utterance, and STT->answer->TTS completes before we hang up. (The bot output
+    # track sends silence keepalive immediately, so we cannot gate the close on
+    # "first bot frame"; we hold for a fixed window instead.)
+    await asyncio.sleep(hold)
+    print("received_bot_audio:", got_audio.is_set())
     await pc.close()
     return 0 if pc.connectionState == "connected" else 1
 
@@ -84,8 +85,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Live WebRTC evidence client")
     parser.add_argument("--url", default="http://127.0.0.1:8090")
     parser.add_argument("--audio", default=None, help="optional WAV to stream as mic input")
+    parser.add_argument("--hold", type=float, default=12.0, help="seconds to keep the call open")
     args = parser.parse_args()
-    return asyncio.run(run(args.url, args.audio))
+    return asyncio.run(run(args.url, args.audio, args.hold))
 
 
 if __name__ == "__main__":
