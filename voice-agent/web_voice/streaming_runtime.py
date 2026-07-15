@@ -16,6 +16,7 @@ the conversation contract, degraded fallback and US-036 telemetry carry over.
 """
 
 import warnings
+from collections.abc import Sequence
 from typing import Any, Protocol
 
 from pipecat.pipeline.pipeline import Pipeline
@@ -55,6 +56,7 @@ class StreamingVoiceSession:
         envelope: Any,
         backend: BackendAnswerPort | None = None,
         telemetry: Any = None,
+        pre_stt: Sequence[FrameProcessor] = (),
     ) -> None:
         self._transport = transport
         self._ingress = ingress
@@ -62,6 +64,10 @@ class StreamingVoiceSession:
         self._envelope = envelope
         self._backend = backend or StubBackendAdapter()
         self._telemetry = telemetry
+        # Processors inserted between transport.input() and STT. A continuous
+        # transport (WebRTC) needs an utterance aggregator here to turn streamed
+        # audio into whole-utterance frames; the batch fake transport passes none.
+        self._pre_stt = list(pre_stt)
         self._task: Any = None
         # Number of times the runner was awaited; the single-loop guarantee is
         # `run_count == 1` for a whole session (asserted by the tests, RF-012).
@@ -72,7 +78,14 @@ class StreamingVoiceSession:
         answer = AnswerProcessor(self._backend, self._envelope, self._telemetry)
         tts = TtsFrameProcessor(self._egress, self._envelope, self._telemetry)
         return Pipeline(
-            [self._transport.input(), stt, answer, tts, self._transport.output()]
+            [
+                self._transport.input(),
+                *self._pre_stt,
+                stt,
+                answer,
+                tts,
+                self._transport.output(),
+            ]
         )
 
     async def run(self) -> None:

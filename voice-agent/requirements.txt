@@ -9,14 +9,14 @@ websockets>=13,<17
 # there (see docs/qa/pipecat-batch-contract.md). Tested with 1.5.0.
 pipecat-ai>=1.5,<2
 
-# Streaming voice loop (Sprint 6 / TASK-WEB-007): WebRTC media plane. Optional extra
-# kept commented — `SmallWebRTCTransport` is import-guarded (web_voice/webrtc_support.py)
-# so the base suite runs without these heavy C-extension wheels. Install with
-# `pip install "pipecat-ai[webrtc]"` in a network-enabled env before enabling the
-# WebRTC runtime. Pins below match pipecat-ai[webrtc]; verify Python 3.14 wheels first
-# (see docs/qa/webrtc-transport-spike.md). onnxruntime (Silero VAD) is already present.
-# aiortc>=1.14,<2
-# opencv-python>=4.11,<5   # required by the SmallWebRTCTransport import (cv2)
+# Streaming voice loop (Sprint 6 / TASK-WEB-007): WebRTC media plane. `SmallWebRTCTransport`
+# is import-guarded (web_voice/webrtc_support.py) so the base suite still runs if these
+# are absent, but the WebRTC runtime requires them. Equivalent to `pipecat-ai[webrtc]`.
+# Python 3.14 wheels verified present (aiortc 1.15.0, av 17.1.0, opencv 4.13.0.92).
+# See docs/qa/webrtc-transport-spike.md. onnxruntime (Silero VAD) is already present.
+aiortc>=1.14,<2
+opencv-python>=4.11,<5   # required by the SmallWebRTCTransport import (cv2/RawVideoTrack)
+# av (PyAV) is pulled transitively by aiortc.
 
 # Dev / test
 behave>=1.2

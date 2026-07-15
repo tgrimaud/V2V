@@ -36,24 +36,39 @@ only for `cv2`/`RawVideoTrack` although V1 is audio-only. Two options for the AD
 Recommendation: **option 1** for the spike/first cut; revisit headless in the ADR if
 image size matters for the deployment target.
 
-## ⚠️ Environment risk found during the spike (blocks a live handshake here)
+## Environment risk (found, then RESOLVED)
 
-The live in-process offer/answer smoke could **not** run in this session:
+The live in-process offer/answer smoke initially could not run, then was unblocked:
 
 - The workstation's active pip index is the corporate Artifactory
-  (`jfrog-artifactory.steelhome.internal`), which is **unresolvable offline / off-VPN**
-  (`NameResolutionError`). `aiortc`/`av`/`opencv-python` are therefore not installable
-  in the current shell.
-- **Python 3.14 wheel availability** for `aiortc`, `av`, `opencv-python` must be
-  verified on a networked machine before committing the pins — these are C-extension
-  wheels and 3.14 is recent. If a wheel is missing, either fall back to Python 3.12
-  for the voice-agent venv or wait for the wheel.
+  (`jfrog-artifactory.steelhome.internal`, internal IP `10.195.57.226`), reachable
+  **only on the corporate network / VPN**. During the first attempt the host was
+  off-VPN → DNS `NameResolutionError` → pip (which knows *only* that index) reported
+  `No matching distribution found`. This was **not** WebRTC-specific: any package
+  would have failed at that moment.
+- Once back on the network, `pip install "pipecat-ai[webrtc]"` succeeded and the
+  **Python 3.14 wheels exist**: `aiortc 1.15.0`, `av 17.1.0`, `opencv-python
+  4.13.0.92` (plus `aioice`, `pylibsrtp`, `cryptography`, `google-crc32c`/`cffi` in
+  `cp314`). The in-process offer/answer smoke prints `SMOKE OK` (audio m-line present).
 
-**Consequence for this ticket:** the offline-validatable parts (single-loop driver
-seam, fake-transport tests, teardown) are delivered and green now; the **live WebRTC
-round trip** (real ICE, browser mic/speaker) is gated on installing
-`pipecat-ai[webrtc]` in a network-enabled env and is captured as the remaining
-Chrome DevTools MCP evidence step in the ticket.
+So the pins in `requirements.txt` are confirmed installable on this Python 3.14 venv.
+The remaining constraint is operational: **installs require the VPN** (or a mirror
+that carries these wheels).
+
+## Two integration findings from the real install
+
+1. **`SmallWebRTCRequestHandler` imports FastAPI** (`from fastapi import HTTPException`
+   at module top). Our runtime is a stdlib `http.server`, not FastAPI. To avoid
+   dragging in FastAPI+uvicorn, the signaling is reimplemented directly on
+   `SmallWebRTCConnection` (`.initialize(sdp, type)` → `.get_answer()` →
+   `{sdp,type,pc_id}`), mirroring the reference `handle_web_request` sequence. See
+   `web_voice/webrtc_signaling.py`.
+2. **`av` and `opencv-python` ship duplicate `libavdevice` dylibs** → macOS logs
+   `objc[...]: Class AVFFrameReceiver is implemented in both ...av/.dylibs... and
+   ...cv2/.dylibs...`. It is a warning (not a crash) but flags a real footprint
+   smell: opencv is pulled only for `cv2`/`RawVideoTrack` in an audio-only V1. The
+   ADR should weigh `opencv-python-headless` or a slimmer transport. Track for the
+   deployment image.
 
 ## Transport API (locked from source)
 
@@ -211,19 +226,56 @@ Keep the transport behind an **import guard** so the base test suite (STT/TTS/ba
 bridge) still runs without the heavy WebRTC wheels — see
 `voice-agent/web_voice/webrtc_support.py` and `scripts/webrtc_spike.py`.
 
-## What the spike delivered (offline) vs. what remains (networked)
+## Live validation (server running, `pipecat-ai[webrtc]` installed)
 
-**Delivered + green now (no aiortc):**
-- Single-loop driver seam that awaits the runner **once** and reuses STT/answer/TTS.
-- Fake in-memory transport + developer tests: one-loop drive and graceful teardown on
-  transport drop (no real ICE).
-- Import guard so the suite stays green without the WebRTC extra.
-- `scripts/webrtc_spike.py`: prints the resolved API + missing-dep guidance; when
-  `aiortc` is present it runs an in-process offer/answer smoke.
+Server: `python -m web_voice.server --provider fixture --backend stub --webrtc on`.
 
-**Remaining (needs `pip install "pipecat-ai[webrtc]"` on a networked machine):**
-- Signaling routes on the stdlib server (`/api/voice/webrtc/offer` + `/ice`).
-- Pipecat JS browser page.
-- Live WebRTC round trip + Chrome DevTools MCP evidence (audio in/out + correlation
-  id) and US-036 slices over the WebRTC path.
-- ADR for the WebRTC dependency footprint + TURN/STUN infra.
+- **Signaling route works live.** `scripts/webrtc_live_client.py` (a headless `aiortc`
+  peer) POSTs a real SDP offer to `/api/voice/webrtc/offer` and gets an answer:
+  ```
+  correlation_id: c9e292e9-dffc-433c-9516-9907e2be66e0
+  connection_state: connected
+  received_bot_audio: True
+  ```
+  → the full-duplex media plane establishes over WebRTC and the bot's audio track
+  flows back, on the single long-lived loop, with one correlation id (US-036 AC).
+- **Browser page** (`/webrtc.html`) renders and drives the same flow; the automated
+  Chrome DevTools MCP browser has no microphone, so `getUserMedia` stays at
+  "Requesting microphone…" (no console error) — a headless limitation, not a bug.
+  UI evidence: `docs/qa/assets/webrtc-streaming-page.png`.
+- **US-036 slices over WebRTC with a real transcript** need a real STT: the fixture
+  provider only matches known fixtures and no `GRADIUM_API_KEY` is set in this env, so
+  a silent/arbitrary WebRTC stream flushes no utterance (telemetry correctly stays
+  empty — no fabricated turn). The pipeline reuses the same STT/answer/TTS processors
+  as batch, so the slices are identical; the definitive spoken-answer capture runs with
+  `--provider gradium` + `GRADIUM_API_KEY` on the VPN (final QA gate).
+
+## Delivered in TASK-WEB-007
+
+**Foundation (green with or without aiortc):**
+- Single-loop driver seam (`web_voice/streaming_runtime.py`) awaiting the runner
+  **once** and reusing STT/answer/TTS (closes RF-012).
+- Fake in-memory transport + developer tests: one-loop drive, graceful teardown.
+- Import guard (`web_voice/webrtc_support.py`) so the base suite stays green without
+  the WebRTC extra; `scripts/webrtc_spike.py` in-process offer/answer smoke.
+
+**Streaming runtime (needs `pipecat-ai[webrtc]`):**
+- Real `SmallWebRTCTransport` wired into the session with a 16 kHz audio in/out
+  `TransportParams`.
+- `web_voice/utterance_aggregator.py`: energy-based end-of-turn segmentation (reuses
+  TASK-STT-009 thresholds) so continuous WebRTC audio becomes whole-utterance frames
+  for the batch STT — interim until streaming STT/VAD (TASK-STT-010 / TASK-STT-012).
+- `web_voice/async_loop.py`: one persistent asyncio loop on a daemon thread; the
+  threaded stdlib server submits coroutines to it.
+- `web_voice/webrtc_signaling.py` + `POST /api/voice/webrtc/offer` route (no FastAPI):
+  offer→answer on `SmallWebRTCConnection`, one envelope + correlation id per call.
+- Browser page `/webrtc.html` + `webrtc.js` (mic + speaker, non-trickle offer),
+  additive to the batch page (ADR-0016).
+- Tests: aggregator segmentation, real in-process WebRTC handshake reaching
+  `connected`. Live evidence via `scripts/webrtc_live_client.py`.
+
+**Remaining (final QA gate, needs VPN + provider key):**
+- Spoken-answer round trip with `--provider gradium` + `GRADIUM_API_KEY` to capture
+  the US-036 slices over the WebRTC path with a real transcript.
+- Trickle ICE + TURN for non-localhost/corporate NAT (see ADR).
+- ADR for the WebRTC dependency footprint + TURN/STUN infra (`ADR-0022`).

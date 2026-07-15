@@ -19,6 +19,7 @@ import socketserver
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -43,8 +44,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 STT_ROUTE = "/api/voice/stt"
 TTS_ROUTE = "/api/voice/tts"
 TURN_ROUTE = "/api/voice/turn"
+WEBRTC_OFFER_ROUTE = "/api/voice/webrtc/offer"
 RUNTIME_ENV_VAR = "VOICE_RUNTIME"
 BACKEND_ENV_VAR = "VOICE_BACKEND"
+WEBRTC_ENV_VAR = "VOICE_WEBRTC"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # guard against oversized uploads (~13 min PCM16 16k)
 MAX_TTS_TEXT_CHARS = 5000  # guard against oversized synthesis requests
 _STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
@@ -67,7 +70,9 @@ class WebVoiceHTTPServer(ThreadingHTTPServer):
         self.server_port = port
 
 
-def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]:
+def build_handler(
+    processor: VoiceTurnProcessor, signaling: Any = None
+) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
@@ -86,8 +91,26 @@ def build_handler(processor: VoiceTurnProcessor) -> type[BaseHTTPRequestHandler]
                 self._handle_tts()
             elif path == TURN_ROUTE:
                 self._handle_turn()
+            elif path == WEBRTC_OFFER_ROUTE:
+                self._handle_webrtc_offer()
             else:
                 self._send_json(404, {"error": "not_found"})
+
+        def _handle_webrtc_offer(self) -> None:
+            if signaling is None:
+                self._send_json(503, {"error": "webrtc_unavailable"})
+                return
+            body = self._read_body()
+            if body is None:
+                self._send_json(413, {"error": "audio_too_large"})
+                return
+            try:
+                offer = json.loads(body or b"{}")
+                answer = signaling.handle_offer(offer)
+            except Exception:  # noqa: BLE001 - never leak SDP/session detail to the client
+                self._send_json(502, {"error": "webrtc_negotiation_failed"})
+                return
+            self._send_json(200, answer)
 
         def _handle_stt(self) -> None:
             receive = Timer()
@@ -232,6 +255,32 @@ def _log_turn(telemetry: TelemetryRecorder) -> None:
     print(json.dumps(payload, sort_keys=True), file=sys.stderr)
 
 
+def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
+    """Build the WebRTC signaling service + its background loop, or (None, None).
+
+    `--webrtc off` disables it; `auto` (default) enables it only when the extra is
+    importable; `on` requires it. Returns (signaling, loop) so main() can shut down.
+    """
+    if args.webrtc == "off":
+        return None, None
+    from .webrtc_support import probe_webrtc_support
+
+    if not probe_webrtc_support().available:
+        if args.webrtc == "on":
+            raise SystemExit('WebRTC requested but unavailable: pip install "pipecat-ai[webrtc]"')
+        return None, None
+    from .async_loop import BackgroundEventLoop
+    from .webrtc_signaling import WebRtcSignalingService
+
+    loop = BackgroundEventLoop()
+    loop.start()
+    ice = [s for s in (args.stun or "").split(",") if s]
+    signaling = WebRtcSignalingService(
+        ingress=ingress, egress=egress, backend=backend, loop=loop, ice_servers=ice
+    )
+    return signaling, loop
+
+
 def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
@@ -240,16 +289,23 @@ def main() -> int:
     # conversation endpoint configured via VOICE_BACKEND_URL (TASK-WEB-003-C).
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
-    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor))
+    signaling, loop = _build_signaling(args, ingress, egress, backend)
+    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
     print(
         f"Web voice server on http://{args.host}:{args.port} "
-        f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name})",
+        f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name}, "
+        f"webrtc={'on' if signaling else 'off'})",
         file=sys.stderr,
     )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         server.shutdown()
+    finally:
+        if signaling is not None:
+            signaling.close()
+        if loop is not None:
+            loop.stop()
     return 0
 
 
@@ -269,6 +325,17 @@ def _parse_args() -> argparse.Namespace:
         choices=BACKEND_NAMES,
         default=os.environ.get(BACKEND_ENV_VAR, STUB),
         help="conversation backend: 'stub' (default, offline) or 'http' (VOICE_BACKEND_URL)",
+    )
+    parser.add_argument(
+        "--webrtc",
+        choices=("auto", "on", "off"),
+        default=os.environ.get(WEBRTC_ENV_VAR, "auto"),
+        help="WebRTC streaming runtime: 'auto' (on if installed), 'on' (require), 'off'",
+    )
+    parser.add_argument(
+        "--stun",
+        default=os.environ.get("VOICE_STUN", ""),
+        help="comma-separated STUN/TURN URLs for the WebRTC ICE servers (optional)",
     )
     return parser.parse_args()
 

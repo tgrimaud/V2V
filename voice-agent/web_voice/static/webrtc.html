@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web Voice Chat — WebRTC streaming (TASK-WEB-007)</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --error: #f87171;
+        --ok: #4ade80;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        width: min(640px, 92vw);
+        background: var(--panel);
+        border-radius: 16px;
+        padding: 28px 32px 32px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      p.subtitle { margin: 0 0 24px; color: var(--muted); font-size: 0.9rem; }
+      .controls { display: flex; gap: 12px; align-items: center; }
+      button {
+        font: inherit;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #04263a;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.stop { background: var(--error); color: #3b0a0a; }
+      .status { margin-top: 20px; font-size: 0.9rem; color: var(--muted); }
+      .status .dot {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        background: var(--muted); margin-right: 8px; vertical-align: middle;
+      }
+      .status.live .dot { background: var(--ok); }
+      .status.error .dot { background: var(--error); }
+      code { color: var(--accent); word-break: break-all; }
+      .hint { margin-top: 16px; font-size: 0.8rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Voice2Voice — WebRTC streaming</h1>
+      <p class="subtitle">
+        Full-duplex mic + speaker over one WebRTC media channel (TASK-WEB-007).
+        Speak a question, pause, and the bot answers over the same connection.
+      </p>
+      <div class="controls">
+        <button id="start">Start call</button>
+        <button id="stop" class="stop" disabled>Hang up</button>
+      </div>
+      <p class="status" id="status"><span class="dot"></span><span id="statusText">Idle</span></p>
+      <p class="hint">
+        Correlation id: <code id="corr">—</code><br />
+        Use headphones: there is no echo cancellation on the bot's own audio yet
+        (barge-in is TASK-WEB-008).
+      </p>
+      <audio id="remote" autoplay></audio>
+    </main>
+    <script src="webrtc.js"></script>
+  </body>
+</html>
