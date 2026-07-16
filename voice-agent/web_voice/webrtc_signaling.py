@@ -47,6 +47,7 @@ def _log_telemetry(telemetry: TelemetryRecorder) -> None:
     payload = {
         "spans": [span.__dict__ for span in telemetry.spans()],
         "events": [event.__dict__ for event in telemetry.events()],
+        "metrics": [metric.__dict__ for metric in telemetry.metrics()],
     }
     print(json.dumps(payload, sort_keys=True), file=sys.stderr)
 
