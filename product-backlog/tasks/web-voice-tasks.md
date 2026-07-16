@@ -1061,20 +1061,32 @@ open. This is the customer-facing counterpart to barge-in on the conversation
 lifecycle. It reuses the existing streaming STT final transcript, TTS for the
 closing message, and the drain/teardown machinery already in place.
 
+### Decisions (2026-07-16, user)
+
+- **Hybrid detection** (DEC-041-b): a config-tunable FR closing-phrase list + an
+  anti-false-positive guard (standalone phrase, word-boundary match, reject
+  negations like "non, pas au revoir"). No LLM intent classifier in V1.
+- **Confirmation step** (DEC-041-a): on a detected closing, the bot asks
+  "Souhaitez-vous autre chose ?" and ends only on a positive confirmation / silence.
+- **Unscheduled**: kept in backlog, not attached to Sprint 6 (off the latency theme).
+
 ### Scope
 
-- Detect a customer closing intent on a **final** transcript (not partials).
-- **False-positive protection (BR-041-1):** do not end on a closing word embedded
-  in a longer request or a negation ("non, pas au revoir"). Mirror the barge-in
-  echo lesson: naive `contains()` matching is fragile — prefer standalone-phrase /
-  intent detection with a confirmation guard (see open questions).
-- Speak a short closing message via TTS before ending (BR-041-2).
-- Terminate the streaming session gracefully after the closing message drains.
+- Detect a customer closing on a **final** transcript (not partials) via a
+  config-tunable FR closing-phrase list.
+- **False-positive protection (BR-041-1):** word-boundary match, reject closing
+  words embedded in a longer request or negated ("non, pas au revoir"). Mirror the
+  barge-in echo lesson: naive `contains()` matching is fragile.
+- **Confirmation turn (BR-041-2):** speak "Souhaitez-vous autre chose ?", then end
+  the call only on a positive confirmation of being done (or silence); otherwise
+  continue the conversation.
+- Speak a short closing message via TTS, then terminate the streaming session
+  gracefully after the closing message drains (reuse the TASK-WEB-008 drain path).
 - **Telemetry (BR-041-3):** record the end-of-call reason as a distinct value
   (e.g. `customer_farewell`) vs manual/`client_stop` vs error/drop, under the turn
   correlation id; emit an OpenTelemetry event/span for pilot review.
-- FR closing formulas in V1 (BR-041-4); make the phrase set/config externalizable
-  (env-tunable), consistent with the barge-in thresholds pattern.
+- FR closing formulas in V1 (BR-041-4); phrase set externalizable (env-tunable),
+  consistent with the barge-in thresholds pattern.
 
 ### Out Of Scope
 
@@ -1088,6 +1100,8 @@ closing message, and the drain/teardown machinery already in place.
 Scenario: Customer says a closing formula and the call ends cleanly
   Given the streaming voice loop is active and the customer has their answer
   When the customer clearly says a closing formula (for example "au revoir")
+  Then the bot asks whether they need anything else
+  And when the customer confirms they are done (or stays silent)
   Then the bot plays a short spoken closing
   And the streaming session ends gracefully
   And the end-of-call reason is recorded as customer_farewell for pilot review
@@ -1112,10 +1126,8 @@ Scenario: A closing word inside a longer request does not end the call
   spoken closing; embedded closing word does not.
 - When validated live by the user, **US-041 → Done**.
 
-### Open Questions (must be resolved before implementation)
+### Open Questions
 
-- OQ-041-a: immediate end after the closing message vs a confirmation step
-  ("Souhaitez-vous autre chose ?").
-- OQ-041-b: curated phrase list vs intent classification vs hybrid.
-- OQ-041-c: include silence-timeout end of call, or keep it a separate story.
-- OQ-041-d: confirm the V1 channel boundary (web session close only).
+- OQ-041-a / OQ-041-b: **resolved** (see Decisions above).
+- OQ-041-c: silence-timeout end of call — kept as a separate future story.
+- OQ-041-d: V1 channel boundary = web session close only (phone/Genesys deferred).

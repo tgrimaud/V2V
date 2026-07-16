@@ -1000,7 +1000,7 @@ closes naturally.
 | ID | Rule |
 |----|------|
 | BR-041-1 | The bot must not end the call while the customer still needs help — a closing word inside a longer request (or a negation such as "non, pas au revoir") must not terminate the call. |
-| BR-041-2 | Before ending, the bot gives a short spoken closing so the ending is never abrupt. |
+| BR-041-2 | On a detected closing, the bot asks a short confirmation ("Souhaitez-vous autre chose ?") and ends only on a positive confirmation of being done (or silence); it never ends abruptly on the first closing word. |
 | BR-041-3 | The end-of-call reason must be observable for pilot review, distinct from a manual hangup or an error/drop. |
 | BR-041-4 | V1 covers French closing formulas; broader language coverage is deferred. |
 
@@ -1010,6 +1010,8 @@ closes naturally.
 Scenario: Customer says a closing formula and the call ends cleanly
   Given the customer has received their answer
   When the customer clearly signals they are done (for example "au revoir")
+  Then the bot asks whether they need anything else
+  And when the customer confirms they are done (or stays silent)
   Then the bot gives a short spoken closing
   And the call ends cleanly without the customer having to hang up
   And the end-of-call reason is observable for pilot review
@@ -1023,15 +1025,18 @@ Scenario: A closing word inside a longer request does not end the call
   And the conversation continues normally
 ```
 
+### Decisions (2026-07-16, user)
+
+- DEC-041-a: **Confirmation step** — on a detected closing the bot asks
+  "Souhaitez-vous autre chose ?" and ends only on positive confirmation / silence
+  (resolves OQ-041-a).
+- DEC-041-b: **Hybrid detection** — a config-tunable FR closing-phrase list plus an
+  anti-false-positive guard (standalone phrase, no negation such as "non, pas au
+  revoir"); no LLM intent classifier in V1 (resolves OQ-041-b).
+
 ### Open Questions
 
-- OQ-041-a: On a clear standalone closing, does the bot end immediately after its
-  closing message, or first ask a confirmation ("Souhaitez-vous autre chose ?")
-  and end only on confirmation / silence? (UX vs false-positive trade-off.)
-- OQ-041-b: Detection basis — a curated closing-phrase list, or intent
-  classification (more robust to phrasing), or a hybrid? (Decision owner: Product
-  + Architecture. The barge-in lesson showed keyword-only matching is fragile.)
-- OQ-041-c: Timeout-based end of call (prolonged customer silence) — in scope with
-  farewell detection, or a separate story?
-- OQ-041-d: Web session close in V1; phone/Genesys hangup semantics deferred to
-  the contact-center integration — confirm the V1 channel boundary.
+- OQ-041-c: Timeout-based end of call (prolonged customer silence) — kept as a
+  **separate future story**, not in this ticket.
+- OQ-041-d: V1 channel boundary = **web session close only**; phone/Genesys hangup
+  semantics deferred to the contact-center integration.
