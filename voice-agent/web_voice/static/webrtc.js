@@ -35,11 +35,21 @@ async function waitForIceGathering(peer) {
   });
 }
 
+// Browser audio processing is mandatory for barge-in (TASK-WEB-008): without echo
+// cancellation the bot's own answer is played out the speaker, re-enters the mic, and
+// the energy VAD treats it as speech -> the bot interrupts itself. noiseSuppression +
+// autoGainControl further reduce false onsets from ambient noise / gain swings.
+const AUDIO_CONSTRAINTS = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+
 async function startCall() {
   startBtn.disabled = true;
   setStatus("Requesting microphone…");
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
     pc = new RTCPeerConnection();
     pc.addEventListener("track", (event) => {
       remoteAudio.srcObject = event.streams[0];
