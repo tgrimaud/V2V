@@ -16,6 +16,7 @@ starts flowing once the pipeline `StartFrame` triggers `connection.connect()`.
 """
 
 import json
+import os
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -33,6 +34,27 @@ from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
 
 DEFAULT_SAMPLE_RATE = 16000
+
+
+def _barge_in_config() -> dict[str, int]:
+    """Read the optional anti-echo barge-in overrides from the environment.
+
+    Returns only the keys that are set so the `StreamingSttProcessor` defaults apply
+    otherwise. Invalid values are ignored (defaults win) rather than crashing a call.
+    """
+    config: dict[str, int] = {}
+    for env_var, kwarg in (
+        ("VOICE_BARGE_IN_THRESHOLD", "barge_in_amplitude_threshold"),
+        ("VOICE_BARGE_IN_FRAMES", "barge_in_confirm_frames"),
+    ):
+        raw = os.environ.get(env_var)
+        if raw is None:
+            continue
+        try:
+            config[kwarg] = int(raw)
+        except ValueError:
+            continue
+    return config
 
 
 @dataclass
@@ -151,6 +173,11 @@ class WebRtcSignalingService:
             envelope,
             telemetry,
             provider_name=self._streaming_provider.name,
+            # Anti-echo barge-in gate, tunable without a code change (TASK-WEB-008): raise
+            # VOICE_BARGE_IN_THRESHOLD on echoey speaker setups so the bot's own residual
+            # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset
+            # count. Unset -> the processor defaults apply.
+            **_barge_in_config(),
         )
         return StreamingVoiceSession(
             transport,

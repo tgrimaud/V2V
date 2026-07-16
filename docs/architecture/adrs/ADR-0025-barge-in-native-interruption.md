@@ -98,6 +98,22 @@ our existing VAD for the policy.
    the real time-to-first-audio (never total elapsed), so barge-in turns never skew
    the `tts_first_audio` p95 the sprint measures.
 
+7. **Anti-echo gate on the onset (added after live testing).** Live full-stack
+   validation (2026-07-16) confirmed barge-in works with headphones, but **without**
+   headphones the bot self-interrupted: browser `echoCancellation` attenuates but does
+   not fully remove the bot's own audio leaking back through the speaker → mic, and the
+   energy detector read the residual as speech. Because that echo is *continuous*, an
+   N-frame confirmation alone cannot distinguish it — the discriminating lever is
+   **amplitude**: residual echo after AEC sits below direct-voice level. So a real
+   barge-in now requires the incoming frame to exceed a **barge-in amplitude threshold**
+   (higher than the STT speech-onset threshold) **and** stay above it for a **confirmed
+   run of N frames** (rejects brief spikes), before `broadcast_interruption()` fires.
+   Both are tunable via env (`VOICE_BARGE_IN_THRESHOLD`, `VOICE_BARGE_IN_FRAMES`) so an
+   echoey speaker setup can be tuned without a code change. The STT session still opens
+   on normal onset (the barge-in utterance is captured either way); only the *cut* is
+   gated. Live re-validation with the gate: no self-interruption on speakers, real
+   barge-in still cuts.
+
 ## Consequences
 
 **Positive**
@@ -143,7 +159,8 @@ our existing VAD for the policy.
 - **Fire barge-in on every speech onset (ungated):** rejected — interrupting when the
   bot is not speaking disrupts normal turns and adds telemetry noise; gate on
   `_bot_speaking`.
-- **Gate onset with an N-frame confirmation before interrupting:** deferred — a
-  possible false-trigger hardening; start with the single-frame onset (fast cut) and
-  rely on echo cancellation + amplitude threshold, add confirmation only if live
-  testing needs it.
+- **Gate onset with an N-frame confirmation before interrupting:** **implemented**
+  (decision point 7) — live testing without headphones showed browser echo cancellation
+  alone was insufficient, so the barge-in cut is now gated on a raised amplitude
+  threshold **plus** an N-frame sustained-onset confirmation (both env-tunable). The
+  single-frame onset still opens the STT session; only the cut waits for confirmation.

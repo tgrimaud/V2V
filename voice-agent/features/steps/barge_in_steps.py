@@ -208,7 +208,8 @@ def _has_barge_in(context):
 def step_bot_speaking(context):
     _build(context, _GatedTtsSession())
     context.head = [BotStartedSpeakingFrame(), TextFrame(text="voici votre explication de facture")]
-    context.tail = [_speech_frame()] * 3 + [_silence_frame()] * 10
+    # 6 loud frames clear the anti-echo 4-frame confirmation gate (TASK-WEB-008).
+    context.tail = [_speech_frame()] * 6 + [_silence_frame()] * 10
 
 
 @given("the bot is idle on the streaming voice loop")
@@ -217,7 +218,7 @@ def step_bot_idle(context):
     # No BotStartedSpeakingFrame: the bot is not speaking. The previous answer already
     # finished playing (plain session completes), then the customer speaks a normal turn.
     context.head = [TextFrame(text="reponse precedente")]
-    context.tail = [_speech_frame()] * 3 + [_silence_frame()] * 10
+    context.tail = [_speech_frame()] * 6 + [_silence_frame()] * 10
 
 
 @when("the customer starts speaking while the bot is speaking")

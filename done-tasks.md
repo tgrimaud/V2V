@@ -419,8 +419,14 @@ mechanism for the cut (ADR-0025). Silero deferred as a drop-in verdict upgrade.
 - **ADR-0025** created (barge-in: native `InterruptionFrame` + existing VAD gated by bot-speaking; Silero deferred; echo cancellation required before live validation). Fixed ADR index drift (added ADR-0022..0025 rows).
 - Full code + documentation review (2026-07-16): no blocking findings; verified statically that pipecat 1.5.0's base output transport pushes `BotStartedSpeakingFrame` **upstream** (the barge-in pivot).
 
-### Remaining before ticket close
-- **User live full-stack validation** (the only remaining gate): confirm the answer actually stops when the customer speaks, and watch for false barge-ins from residual echo (fallback: Silero verdict upgrade, deferred per ADR-0025).
+### Live validation + anti-echo gate (2026-07-16)
+- **User live full-stack validation: PASS.** With headphones, barge-in cut the answer cleanly and resumed the new turn; telemetry showed `voice.barge_in.detected` ↔ `tts.interrupted` 1:1, a non-interrupted turn played fully, and the interrupted `voice.tts.first_audio` spans carried the real time-to-first-audio (310/452 ms), not total elapsed — the p95 fix held in live.
+- **Bug found live (without headphones): self-interruption from acoustic echo.** Browser `echoCancellation` (slice 3) attenuates but does not remove the bot's own speaker→mic echo, and the energy VAD read the residual as speech. Because the echo is *continuous*, N-frame confirmation alone can't reject it — the discriminating lever is **amplitude**.
+- **Fix — anti-echo barge-in gate** (`StreamingSttProcessor`): the cut now requires the incoming frame to exceed a **barge-in amplitude threshold** (default 2500, above the 1000 STT onset threshold) **and** stay above it for a **confirmed run of N frames** (default 4, rejects brief spikes). Both env-tunable (`VOICE_BARGE_IN_THRESHOLD`, `VOICE_BARGE_IN_FRAMES`) via the signaling wiring — no code change to tune an echoey speaker setup. The STT session still opens on normal onset (utterance always captured); only the cut is gated. **Re-validated live by the user: no self-interruption on speakers, real barge-in still cuts.** ADR-0025 updated (decision point 7).
+- Tests: +2 anti-echo unit tests (residual echo below threshold → no barge-in; brief spike < N frames → no barge-in). Full suite green: **271 unit + behave 9 features / 25 scenarios / 114 steps**.
+
+### Status
+- **Validated by user (2026-07-16); merge-ready on `task/TASK-WEB-008-barge-in` (unmerged — merge on explicit request).**
 
 ### Files changed
 - `voice-agent/web_voice/streaming_stt_processor.py` — bot-speaking tracking + onset-gated `broadcast_interruption()` + barge-in telemetry

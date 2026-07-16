@@ -55,7 +55,7 @@ and barge-in.
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | Turn detection | Medium | Merged into `feat/sprint-6-streaming` (2026-07-16, ff) — validated (review 93/100 + QA Go) |
 | TASK-STT-010 | Streaming STT (partial + final transcripts) | STT | High | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming`; live tail 818 ms vs ~3.4 s batch; RF-007 closed |
 | TASK-WEB-004 | Streaming TTS (incremental playback, time-to-first-audio) | TTS | High | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming`; live first-audio 363 ms vs ~1.59 s batch; review 96/100 (open()/allowlist/timeout hardening) |
-| TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | Planned |
+| TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | ✅ Validated by user (2026-07-16) — live full-stack: barge-in cuts the answer, resumes the new turn; anti-echo gate (amplitude threshold + N-frame confirmation) fixed without-headphones self-interruption. On `task/TASK-WEB-008-barge-in`, merge-ready (unmerged) |
 | TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | Planned |
 | TASK-WEB-009 | Streaming QA + `p95 < 800 ms` latency report + ADR update (sprint close) | QA / Docs | High | Planned |
 
@@ -205,6 +205,6 @@ back once validated.
 | TASK-STT-012 | `task/TASK-STT-012-streaming-vad-end-of-turn` | ✅ Merged into `feat/sprint-6-streaming` (2026-07-16, ff; branch deleted) |
 | TASK-STT-010 | `task/TASK-STT-010-streaming-stt` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-004 | `task/TASK-WEB-004-streaming-tts` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
-| TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | Planned |
+| TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | ✅ Validated by user (2026-07-16) — merge-ready (unmerged; awaiting explicit merge request) |
 | TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | Planned |
 | TASK-WEB-009 | `task/TASK-WEB-009-streaming-qa-latency` | Planned |
