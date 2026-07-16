@@ -533,7 +533,7 @@ Scenario: Formatting differences do not count as transcription errors
 **Builds on:** TASK-STT-009 (batch end-of-turn detector + `voice.end_of_turn` span)
 **Pairs with:** TASK-STT-010 (streaming STT) — real-time turn detection is a prerequisite for the streaming path
 **Classification:** V1 pilot gate
-**Status:** Implemented (Sprint 6, 2026-07-16) — unit + Behave green; pending adversarial review, QA & user validation
+**Status:** Verified (Sprint 6, 2026-07-16) — adversarial review 93/100 (Pass); QA Go (live WebRTC gate, `docs/qa/stt-012-streaming-end-of-turn-qa.md`); pending user validation & merge
 **Priority:** Medium
 **Branch:** `task/TASK-STT-012-streaming-vad-end-of-turn`
 
