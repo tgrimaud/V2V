@@ -80,7 +80,7 @@ against the new empty-codebase plan.
 | TASK-STT-007 | Expand the STT fixture set with multiple samples per category (closes RF-003, RF-005) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-008 | Connect the Gradium STT provider (fresh implementation) | V1 pilot gate | Done (STT sprint scope) | High |
 | TASK-STT-009 | Detect and instrument end-of-turn for the voice journey (US-036 `end_of_turn` slice) | V1 pilot gate | ✅ Done (Sprint 2, 2026-07-13) | Medium |
-| TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | Implemented (Sprint 6, 2026-07-16 — live tail 818 ms; RF-007 closed; pending review + QA) | High |
+| TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | ✅ Validated + merged (Sprint 6, 2026-07-16 — live tail 818 ms; RF-007 closed) | High |
 | TASK-STT-011 | Normalize transcripts (case/punctuation/accents) before WER scoring (closes RF-008) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 6) | Medium |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | Done (merged) | High |

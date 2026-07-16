@@ -53,7 +53,7 @@ and barge-in.
 |---|---|---|---|---|
 | TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) on a single long-lived async loop | Transport/Enabler | High | ✅ Done (merged 2026-07-16) |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | Turn detection | Medium | Merged into `feat/sprint-6-streaming` (2026-07-16, ff) — validated (review 93/100 + QA Go) |
-| TASK-STT-010 | Streaming STT (partial + final transcripts) | STT | High | Merged into `feat/sprint-6-streaming` (2026-07-16) — live tail 818 ms vs ~3.4 s batch; RF-007 closed; pending user validation |
+| TASK-STT-010 | Streaming STT (partial + final transcripts) | STT | High | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming`; live tail 818 ms vs ~3.4 s batch; RF-007 closed |
 | TASK-WEB-004 | Streaming TTS (incremental playback, time-to-first-audio) | TTS | High | Planned |
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | Planned |
 | TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | Planned |
@@ -202,8 +202,8 @@ back once validated.
 | Ticket | Branch | Status |
 |---|---|---|
 | TASK-WEB-007 | `task/TASK-WEB-007-webrtc-transport` | ✅ Done (merged 2026-07-16, branch deleted) |
-| TASK-STT-012 | `task/TASK-STT-012-streaming-vad-end-of-turn` | Merged into `feat/sprint-6-streaming` (2026-07-16, ff) |
-| TASK-STT-010 | `task/TASK-STT-010-streaming-stt` | Merged into `feat/sprint-6-streaming` (2026-07-16, no-ff); pending user validation |
+| TASK-STT-012 | `task/TASK-STT-012-streaming-vad-end-of-turn` | ✅ Merged into `feat/sprint-6-streaming` (2026-07-16, ff; branch deleted) |
+| TASK-STT-010 | `task/TASK-STT-010-streaming-stt` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-004 | `task/TASK-WEB-004-streaming-tts` | Planned |
 | TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | Planned |
 | TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | Planned |
