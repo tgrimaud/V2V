@@ -1,10 +1,12 @@
-# Voice Runtime HTTP API Contract (Sprint 5)
+# Voice Runtime HTTP API Contract (Sprint 5–6)
 
 **Scope:** the HTTP surface exposed by the Python voice runtime
-(`voice-agent/web_voice/server.py`) for the Voice2Voice web loop (US-019).
-**Status:** current on `feat/sprint-5-backend-bridge`. Single source of truth for
-these endpoints — no code-only contract remains for the sprint.
+(`voice-agent/web_voice/server.py`): the batch Voice2Voice loop (US-019, Sprint 5)
+and the streaming WebRTC signaling surface (Sprint 6, TASK-WEB-007/009).
+**Status:** current through `feat/sprint-6-streaming`. Single source of truth for
+these endpoints — no code-only contract remains for the streaming surface.
 **Related:** [conversation contract ADR-0021](adrs/ADR-0021-conversation-backend-answer-contract.md),
+[target voice path ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md),
 [voice journey timing](../observability/voice-journey-timing.md).
 
 ## Server
@@ -15,7 +17,10 @@ python3 -m web_voice.server \
   --host 127.0.0.1 --port 8090 \
   --provider {fixture|gradium} \
   --runtime {pipecat|stdlib} \
-  --backend {stub|http}
+  --backend {stub|http} \
+  --webrtc {auto|on|off} \
+  --stt-mode {streaming|batch} \
+  --tts-mode {streaming|batch}
 ```
 
 | Flag | Env | Default | Meaning |
@@ -23,6 +28,13 @@ python3 -m web_voice.server \
 | `--provider` | — | `gradium` | STT/TTS provider: `fixture` (offline) or `gradium` (live) |
 | `--runtime` | `VOICE_RUNTIME` | `pipecat` | Voice runtime: `pipecat` (ADR-0002 target) or `stdlib` (fallback/comparison, ADR-0016) |
 | `--backend` | `VOICE_BACKEND` | `stub` | Conversation backend: `stub` (deterministic offline) or `http` (real endpoint, see below) |
+| `--webrtc` | — | `auto` | Streaming WebRTC signaling: `auto` (enable when the WebRTC runtime is importable), `on` (require it), `off` (disable). See the WebRTC section below. |
+| `--stt-mode` | — | `streaming` | Streaming STT processor (partials + low-latency finalize) vs `batch` (aggregator + one-shot). Gradium only. |
+| `--tts-mode` | — | `streaming` | Streaming TTS processor (incremental first-chunk playback) vs `batch` (whole-clip synthesis). Gradium only. |
+
+Barge-in tuning (TASK-WEB-008) is env-only: `VOICE_BARGE_IN_THRESHOLD` (amplitude)
+and `VOICE_BARGE_IN_FRAMES` (sustained-onset frame count); unset → processor
+defaults apply.
 
 `http` backend configuration (TASK-WEB-003-C):
 
@@ -132,12 +144,60 @@ content, DEC-002) and returns **200** with `X-Answer-Outcome: degraded` and a
 sanitized `X-Answer-Degraded-Reason`. Only an empty transcript (nothing to answer)
 stays silent by design. See ADR-0021.
 
+## `POST /api/voice/webrtc/offer` — streaming WebRTC signaling (Sprint 6)
+
+The streaming Voice2Voice loop (ADR-0002 target) runs over a WebRTC media session
+instead of the batch `/turn` request. This endpoint is the SDP offer→answer
+signaling seam; media (audio in/out, 16 kHz Opus) then flows over the peer
+connection, not over HTTP. Signaling is driven directly on `SmallWebRTCConnection`
+(`web_voice/webrtc_signaling.py`) so the stdlib HTTP server needs no FastAPI.
+
+- **Request:** JSON body from the browser/headless client:
+
+```json
+{ "sdp": "v=0…", "type": "offer", "pc_id": "…", "restart_pc": false }
+```
+
+`pc_id` + `restart_pc` are present only on renegotiation of an existing peer
+connection; a first offer omits them.
+
+- **200:** the SDP answer plus the session correlation id:
+
+```json
+{ "sdp": "v=0…", "type": "answer", "correlation_id": "…" }
+```
+
+- One `ChannelEnvelope` + one `TelemetryRecorder` are created **per connection**, so
+  every turn in a call shares **one correlation id** (TASK-WEB-007). Media only
+  starts once the pipeline `StartFrame` triggers `connection.connect()`.
+- **Availability:** requires the WebRTC runtime (`pipecat` + `aiortc` / small-webrtc
+  extras). With `--webrtc auto` the route is registered only when the runtime is
+  importable; `--webrtc off` disables it; `--webrtc on` fails startup if unavailable.
+- Static browser client: `web_voice/static/webrtc.html` + `webrtc.js`.
+
+**Streaming turn behavior:** end-of-turn is detected frame-by-frame
+(`StreamingEndOfTurnDetector`); partial transcripts stream during speech; the answer
+audio starts on the first synthesized chunk; a barge-in (customer speaks while the
+bot speaks) cancels playback via an `InterruptionFrame` (TASK-WEB-008). On call end
+or drop a trailing partial utterance is drained before teardown.
+
 ## Telemetry
 
-Every call emits OpenTelemetry-style spans on a per-request `TelemetryRecorder`
-sharing one correlation id: `web.voice.ingress`, `voice.end_of_turn`,
-`stt.request`, `backend.first_token` + `backend.request`, `voice.tts.first_audio`,
-`web.voice.egress`. These feed the six US-036 slices
+Every batch call emits OpenTelemetry-style spans on a per-request
+`TelemetryRecorder` sharing one correlation id: `web.voice.ingress`,
+`voice.end_of_turn`, `stt.request`, `backend.first_token` + `backend.request`,
+`voice.tts.first_audio`, `web.voice.egress`. These feed the six US-036 slices
 (see [voice-journey-timing](../observability/voice-journey-timing.md)). Degraded
 turns carry `outcome=degraded`, `degraded=true` and the sanitized
 `degraded_reason`/`error_code` (lengths only for any text).
+
+**Streaming WebRTC calls** emit their telemetry differently: there is no HTTP
+response per turn, so on session teardown the runtime prints one JSON telemetry
+line (`{"spans": [...], "events": [...], "metrics": [...]}`) to stderr for the whole
+call. On this path `web.voice.ingress` / `web.voice.egress` are not emitted (batch
+HTTP only); the streaming turns carry `voice.end_of_turn`, `stt.request`,
+`backend.first_token` + `backend.request` and `voice.tts.first_audio`, plus the
+`stt.time_to_first_partial_ms` / `stt.time_to_final_ms` /
+`tts.time_to_first_audio_ms` / `tts.time_to_last_audio_ms` metrics and
+`voice.barge_in.count`. `scripts/streaming_latency_report.py` aggregates these into
+the per-slice + `time_to_first_audio` composite report (TASK-WEB-009).

@@ -90,6 +90,36 @@ nothing flows downstream. Selected with `server --tts-mode streaming` (Gradium o
 default); `--tts-mode batch` keeps the batch processor. See ADR-0024 and
 `docs/qa/web-004-streaming-tts-qa.md`.
 
+### Streaming loop composite: `time_to_first_audio` (TASK-WEB-009)
+
+ADR-0018 defines the pilot acceptance metric `time_to_first_audio` as the latency
+from the moment the runtime **accepts the end of the user's turn** to the **first
+playable audio frame** emitted back to the same channel. On the streaming WebRTC
+path the `voice.end_of_turn` span *ends* at that acceptance point, so the composite
+is the sum of the sequential post-end-of-turn slices that lead to the first audio
+frame:
+
+```
+time_to_first_audio = stt (post-EOT finalize tail)
+                    + backend_first_token (answer)
+                    + tts_first_audio (time-to-first-audio)
+```
+
+`voice_common.pipeline_timing.time_to_first_audio_report(spans)` computes it
+per-turn: within each correlation group the three component spans are
+positional-zipped (the k-th of each = turn k), and a turn missing any component
+(e.g. a barge-in turn with no final answer) is skipped rather than contributing a
+truncated value. It reports p50/p95/p99 over the sample and the ADR-0018 gate
+(`p95 < 800 ms`).
+
+**WebRTC-path measurement gap:** `channel_ingress` (`web.voice.ingress`) and
+`channel_egress` (`web.voice.egress`) are emitted only on the batch HTTP path, not
+on the WebRTC transport, so they are reported as explicit gaps for streaming runs.
+The composite therefore covers end-of-turn → first synthesized audio; the residual
+WebRTC channel-egress transport add-on (first frame emitted → playable at the
+browser) is not yet instrumented and is called out in the QA report rather than
+folded silently into the number.
+
 ## How it works
 
 `PipelineTimingReport.from_spans(spans)` groups recorded `Span` durations by
@@ -107,6 +137,37 @@ python3 -m stt_validation.pipeline_timing_cli fixtures/manifest.json
 python3 scripts/turn_latency_sample.py --iterations 30            # success path
 python3 scripts/turn_latency_sample.py --iterations 30 --degraded # safe-fallback path
 ```
+
+### Streaming WebRTC path (TASK-WEB-009)
+
+The streaming loop cannot be driven in-process like the batch turn (it needs a real
+transport + live STT/TTS). Its telemetry is emitted **server-side**: on each call
+teardown `WebRtcSignalingService` prints one JSON line
+(`{"spans": [...], "events": [...], "metrics": [...]}`) to stderr. Capture a warm
+sample of streaming calls, then aggregate with the streaming report:
+
+```bash
+cd voice-agent
+# 1) start the streaming server (Gradium, streaming STT + TTS defaults), capturing stderr
+set -a && source ../.env && set +a
+python3 -m web_voice.server --host 127.0.0.1 --port 8090 \
+  --provider gradium --backend stub --runtime pipecat \
+  --webrtc auto --stt-mode streaming --tts-mode streaming 2> /tmp/streaming-telemetry.jsonl
+
+# 2) run N warm streaming calls (browser at /static/webrtc.html, or the headless client)
+python3 scripts/webrtc_live_client.py --url http://127.0.0.1:8090 --audio speech.wav --hold 12
+
+# 3) aggregate per-slice + time_to_first_audio p50/p95/p99 + the ADR-0018 gate
+python3 scripts/streaming_latency_report.py \
+  --input /tmp/streaming-telemetry.jsonl \
+  --channel web --provider gradium-streaming --warm
+```
+
+The report flags `channel_ingress`/`channel_egress` as gaps on the WebRTC path (see
+the streaming composite section above) and prints the pilot-acceptance gate
+(`p95 < 800 ms`). The published baseline lives in
+[`docs/qa/streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md) and the
+ADR-0018 evidence section.
 
 The `backend_first_token` slice is measured for both the `stub` and `http`
 backends (the span comes from `voice_pipeline/answer.py`, not the adapter), and a
@@ -151,6 +212,7 @@ Example output (fixture sample, 5 turns). The fixture CLI is a pure STT replay
 | TTS first audio + channel egress measured (TASK-WEB-002) | `voice.tts.first_audio` span from `TtsSynthesisRunner`, `web.voice.egress` span from `WebVoiceEgress`; both slices report p50/p95/p99 over a full-turn sample |
 | Backend slice measured (TASK-WEB-003-D/E) | `backend.first_token` + `backend.request` spans from `voice_pipeline/answer.py`; the `backend_first_token` slice reports p50/p95/p99 over a full-turn sample, with one correlation id shared across every slice |
 | Latency gaps are visible, not hidden | Any slice with no span in a given sample is reported `"measured": false` with a reason (e.g. the fixture STT replay above) |
+| `time_to_first_audio` composite measured, ADR-0018 pilot gate applied (TASK-WEB-009) | `time_to_first_audio_report` sums the post-EOT slices per turn; `scripts/streaming_latency_report.py` reports p50/p95/p99 + the `p95 < 800 ms` gate over a warm streaming sample |
 
 ## Pipecat runtime (Sprint 4, TASK-WEB-005)
 

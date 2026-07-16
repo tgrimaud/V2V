@@ -63,6 +63,54 @@ available.
 - **Keep both 700 ms and 800 ms without distinction**: rejected because it caused
   the documentation drift this ADR resolves.
 
+## Evidence (TASK-WEB-009, Sprint 6 close)
+
+The streaming WebRTC voice path is now instrumented end to end, so the pilot
+acceptance criterion is measurable. This section records how it is measured and the
+measured baseline.
+
+### How `time_to_first_audio` is measured
+
+On the streaming path the `voice.end_of_turn` span ends at end-of-turn acceptance,
+so the composite (acceptance → first playable frame) is the sum of the sequential
+post-end-of-turn slices:
+
+```
+time_to_first_audio = stt (post-EOT finalize tail)
+                    + backend_first_token (answer)
+                    + tts_first_audio (time-to-first-audio)
+```
+
+`voice_common.pipeline_timing.time_to_first_audio_report` computes it per turn
+(positional zip within a correlation group; turns missing a component are skipped),
+and `scripts/streaming_latency_report.py` reports p50/p95/p99 and the
+`p95 < 800 ms` gate over a warm streaming sample parsed from the server telemetry
+dumps. **Known gap:** `channel_ingress` / `channel_egress` are emitted only on the
+batch HTTP path, so the WebRTC channel-egress transport add-on (first frame emitted
+→ playable at the browser) is not yet folded into the number — it is reported
+separately, not silently included. Reproduction commands and the full breakdown are
+in [`docs/qa/streaming-voice-qa-report.md`](../../qa/streaming-voice-qa-report.md)
+and [`docs/observability/voice-journey-timing.md`](../../observability/voice-journey-timing.md).
+
+### Measured baseline — web channel (streaming WebRTC)
+
+| Field | Value |
+|---|---|
+| Metric | `time_to_first_audio` (end-of-turn → first playable frame) |
+| Channel | web (streaming WebRTC) |
+| Provider config | Gradium streaming STT + streaming TTS, stub backend, `pipecat` runtime |
+| Environment | co-located dev host, warm (server process pre-warmed) |
+| Sample size (turns) | _to be filled by the warm live run_ |
+| p50 / p95 / p99 (ms) | _to be filled by the warm live run_ |
+| min / max / mean (ms) | _to be filled by the warm live run_ |
+| Pilot gate (`p95 < 800 ms`) | _to be filled by the warm live run_ |
+
+Per-slice p50/p95/p99 (`stt`, `backend_first_token`, `tts_first_audio`; the
+`channel_ingress` / `channel_egress` gaps) are published alongside the composite in
+the QA report. The measured baseline above is the honest gate outcome (pass, or the
+stated gap) once the warm live sample is collected; until then it is an explicit
+pending measurement, not an assumed pass.
+
 ## Related Documents
 
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`
