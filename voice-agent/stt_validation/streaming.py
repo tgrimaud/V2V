@@ -96,9 +96,12 @@ class GradiumStreamingSttProvider:
 class GradiumStreamingSession:
     """A single streaming turn: push audio, receive partials, finalize on end-of-turn.
 
-    Iterate the session (`async for msg in session`) to receive `PartialTranscript`
-    fragments as they arrive and a single terminal `FinalTranscript`. `send_audio`
-    pushes raw PCM chunks; `finish` flushes and closes the turn.
+    A background receiver consumes server messages: `poll_partials()` drains the
+    `PartialTranscript` fragments seen so far (non-blocking, so the caller can push
+    them as they stream while it keeps feeding audio), and `wait_final()` blocks
+    until the terminal `FinalTranscript` (or raises `StreamingSttError` on a server
+    error / mid-turn transport drop). `send_audio` pushes raw PCM; `finish` flushes
+    and signals end-of-stream so the final transcript lands.
     """
 
     def __init__(
@@ -116,8 +119,11 @@ class GradiumStreamingSession:
             "input_format": input_format,
             "json_config": {"language": language},
         }
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self._pending: list[PartialTranscript] = []
         self._parts: list[str] = []
+        self._final: FinalTranscript | None = None
+        self._error: StreamingSttError | None = None
+        self._done = asyncio.Event()
         self._flush_id = 0
         self._receiver: asyncio.Task | None = None
 
@@ -135,58 +141,61 @@ class GradiumStreamingSession:
         await self._ws.send(json.dumps({"type": "flush", "flush_id": self._flush_id}))
         await self._ws.send(json.dumps({"type": "end_of_stream"}))
 
+    def poll_partials(self) -> list[PartialTranscript]:
+        """Drain the partials received since the last poll (non-blocking)."""
+        drained, self._pending = self._pending, []
+        return drained
+
+    @property
+    def done(self) -> bool:
+        return self._done.is_set()
+
+    async def wait_final(self) -> FinalTranscript:
+        await self._done.wait()
+        if self._error is not None:
+            raise self._error
+        return self._final or FinalTranscript("")
+
     async def aclose(self) -> None:
         if self._receiver is not None:
             self._receiver.cancel()
         await self._ws.close()
 
-    def __aiter__(self) -> "GradiumStreamingSession":
-        return self
-
-    async def __anext__(self) -> PartialTranscript | FinalTranscript:
-        item = await self._queue.get()
-        if item is None:
-            raise StopAsyncIteration
-        if isinstance(item, BaseException):
-            raise item
-        return item
-
     async def _receive_loop(self) -> None:
         try:
-            while True:
-                if await self._handle_message(await self._ws.recv()):
-                    return
+            while not self._handle_message(await self._ws.recv()):
+                pass
         except asyncio.CancelledError:
             raise
-        except Exception:  # transport drop mid-turn -> surface via the queue, don't hang
-            await self._queue.put(StreamingSttError("Streaming STT connection failed"))
-            await self._queue.put(None)
+        except StreamingSttError as exc:  # unparsable server frame
+            self._fail(exc)
+        except Exception:  # transport drop mid-turn -> surface, don't hang
+            self._fail(StreamingSttError("Streaming STT connection failed"))
 
-    async def _handle_message(self, raw: str) -> bool:
+    def _handle_message(self, raw: str) -> bool:
         """Route one server message; return True when the stream is terminal."""
         message = _parse_message(raw)
         kind = message.get("type")
         if kind == "text":
-            await self._emit_partial(message)
+            self._add_partial(message)
         elif kind == "end_of_stream":
-            await self._emit_final()
+            self._final = FinalTranscript(" ".join(p for p in self._parts if p).strip())
+            self._done.set()
             return True
         elif kind == "error":
-            await self._queue.put(StreamingSttError("Streaming STT reported an error"))
-            await self._queue.put(None)
+            self._fail(StreamingSttError("Streaming STT reported an error"))
             return True
         return False
 
-    async def _emit_partial(self, message: dict) -> None:
+    def _add_partial(self, message: dict) -> None:
         text = str(message.get("text", ""))
         if text:
             self._parts.append(text)
-            await self._queue.put(PartialTranscript(text, message.get("start_s")))
+            self._pending.append(PartialTranscript(text, message.get("start_s")))
 
-    async def _emit_final(self) -> None:
-        transcript = " ".join(part for part in self._parts if part).strip()
-        await self._queue.put(FinalTranscript(transcript))
-        await self._queue.put(None)
+    def _fail(self, error: StreamingSttError) -> None:
+        self._error = error
+        self._done.set()
 
 
 def _parse_message(raw: str) -> dict:

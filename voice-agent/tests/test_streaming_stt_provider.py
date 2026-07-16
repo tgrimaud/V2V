@@ -74,11 +74,10 @@ async def _open(server_frames, *, raise_after=False, captured=None):
     return websocket, session
 
 
-async def _drain(session) -> list:
-    messages = []
-    async for message in session:
-        messages.append(message)
-    return messages
+async def _collect(session) -> tuple[list, FinalTranscript]:
+    """Wait for the terminal final, then drain every partial the receiver queued."""
+    final = await session.wait_final()
+    return session.poll_partials(), final
 
 
 class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
@@ -91,12 +90,12 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
             {"type": "end_of_stream"},
         ]
         _, session = await _open(frames)
-        # WHEN the client iterates the session
-        messages = await _drain(session)
+        # WHEN the client waits for the final and drains partials
+        partials, final = await _collect(session)
         # THEN partials arrive in order and the final is the joined parts
-        self.assertEqual(messages[0], PartialTranscript("bonjour", 0.5))
-        self.assertEqual(messages[1], PartialTranscript("le monde", 1.0))
-        self.assertEqual(messages[-1], FinalTranscript("bonjour le monde"))
+        self.assertEqual(partials[0], PartialTranscript("bonjour", 0.5))
+        self.assertEqual(partials[1], PartialTranscript("le monde", 1.0))
+        self.assertEqual(final, FinalTranscript("bonjour le monde"))
 
     async def test_setup_sent_first_without_key(self):
         # GIVEN a minimal successful stream
@@ -104,7 +103,7 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
         websocket, session = await _open(
             [{"type": "end_of_stream"}], captured=captured
         )
-        await _drain(session)
+        await session.wait_final()
         # THEN the first client message is the setup with format/language, no key
         setup = websocket.sent[0]
         self.assertEqual(setup["type"], "setup")
@@ -116,7 +115,7 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
         # GIVEN the connector records its headers
         captured: dict = {}
         _, session = await _open([{"type": "end_of_stream"}], captured=captured)
-        await _drain(session)
+        await session.wait_final()
         # THEN the key is in the header and nowhere in the sent frames
         self.assertEqual(captured["headers"], {"x-api-key": "secret-key"})
 
@@ -126,7 +125,7 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
         # WHEN the client sends PCM and finishes the turn
         await session.send_audio(b"\x01\x02\x03\x04")
         await session.finish()
-        await _drain(session)
+        await session.wait_final()
         # THEN the audio frame is base64 and finish emits flush then end_of_stream
         audio_frames = [m for m in websocket.sent if m.get("type") == "audio"]
         self.assertEqual(audio_frames[0]["audio"], "AQIDBA==")
@@ -141,33 +140,32 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
             {"type": "end_of_stream"},
         ]
         _, session = await _open(frames)
-        messages = await _drain(session)
+        partials, final = await _collect(session)
         # THEN only the non-empty fragment is emitted and joined
-        partials = [m for m in messages if isinstance(m, PartialTranscript)]
         self.assertEqual(partials, [PartialTranscript("facture", None)])
-        self.assertEqual(messages[-1], FinalTranscript("facture"))
+        self.assertEqual(final, FinalTranscript("facture"))
 
     async def test_server_error_surfaces_as_streaming_error(self):
         # GIVEN the server reports an error mid-turn
         frames = [{"type": "text", "text": "hi"}, {"type": "error", "message": "boom"}]
         _, session = await _open(frames)
-        # THEN iterating raises a safe StreamingSttError
+        # THEN waiting for the final raises a safe StreamingSttError
         with self.assertRaises(StreamingSttError):
-            await _drain(session)
+            await session.wait_final()
 
     async def test_transport_drop_surfaces_as_streaming_error(self):
         # GIVEN the socket drops before end_of_stream
         _, session = await _open([{"type": "text", "text": "hi"}], raise_after=True)
         # THEN the drop surfaces as StreamingSttError, not a hang
         with self.assertRaises(StreamingSttError):
-            await asyncio.wait_for(_drain(session), timeout=2.0)
+            await asyncio.wait_for(session.wait_final(), timeout=2.0)
 
     async def test_unparsable_message_surfaces_error(self):
         # GIVEN the server sends a non-JSON frame
         _, session = await _open(["not-json"])
         # THEN it surfaces as a StreamingSttError
         with self.assertRaises(StreamingSttError):
-            await _drain(session)
+            await session.wait_final()
 
     async def test_empty_api_key_rejected(self):
         # GIVEN no API key

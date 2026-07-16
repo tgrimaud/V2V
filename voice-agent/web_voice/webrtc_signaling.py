@@ -27,6 +27,7 @@ from .egress import WebVoiceEgress
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 from .streaming_runtime import StreamingVoiceSession
+from .streaming_stt_processor import StreamingSttProcessor
 from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
 
@@ -63,6 +64,7 @@ class WebRtcSignalingService:
         ice_servers: list[str] | None = None,
         telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
         log: Callable[[TelemetryRecorder], None] = _log_telemetry,
+        streaming_provider: Any = None,
     ) -> None:
         support = probe_webrtc_support()
         if not support.available:
@@ -76,6 +78,10 @@ class WebRtcSignalingService:
         self._ice_servers = ice_servers or []
         self._telemetry_factory = telemetry_factory
         self._log = log
+        # When set (TASK-STT-010), each session uses the streaming STT processor
+        # (partials during speech, low-latency finalize) instead of the batch
+        # utterance aggregator + one-shot transcription.
+        self._streaming_provider = streaming_provider
         self._sessions: dict[str, _Session] = {}
 
     def handle_offer(self, body: dict, *, timeout: float = 30.0) -> dict:
@@ -114,6 +120,30 @@ class WebRtcSignalingService:
 
     def _build_session(self, connection, envelope, telemetry) -> StreamingVoiceSession:
         transport = self._build_transport(connection)
+        if self._streaming_provider is not None:
+            return self._build_streaming_session(transport, envelope, telemetry)
+        return self._build_batch_session(transport, envelope, telemetry)
+
+    def _build_streaming_session(self, transport, envelope, telemetry) -> StreamingVoiceSession:
+        stt = StreamingSttProcessor(
+            self._streaming_provider,
+            envelope,
+            telemetry,
+            provider_name=self._streaming_provider.name,
+        )
+        return StreamingVoiceSession(
+            transport,
+            ingress=self._ingress,
+            egress=self._egress,
+            envelope=envelope,
+            backend=self._backend,
+            telemetry=telemetry,
+            # The streaming STT processor consumes continuous audio, owns end-of-turn
+            # detection + its span and emits the final transcript itself.
+            stt_processor=stt,
+        )
+
+    def _build_batch_session(self, transport, envelope, telemetry) -> StreamingVoiceSession:
         aggregator = UtteranceAggregator(
             sample_rate_hz=DEFAULT_SAMPLE_RATE,
             telemetry=telemetry,

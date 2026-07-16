@@ -58,6 +58,7 @@ class StreamingVoiceSession:
         telemetry: Any = None,
         pre_stt: Sequence[FrameProcessor] = (),
         stt_detects_end_of_turn: bool = True,
+        stt_processor: FrameProcessor | None = None,
     ) -> None:
         self._transport = transport
         self._ingress = ingress
@@ -65,6 +66,11 @@ class StreamingVoiceSession:
         self._envelope = envelope
         self._backend = backend or StubBackendAdapter()
         self._telemetry = telemetry
+        # When set (streaming STT path, TASK-STT-010), this processor is the STT
+        # stage: it consumes continuous audio, streams to the provider and emits the
+        # final TranscriptionFrame itself, so the batch SttFrameProcessor + utterance
+        # aggregator are not built.
+        self._stt_processor = stt_processor
         # False when a pre-STT utterance aggregator owns incremental end-of-turn
         # detection (streaming path, TASK-STT-012); the batch detector in the
         # ingress is then skipped so the voice.end_of_turn span is not duplicated.
@@ -79,7 +85,7 @@ class StreamingVoiceSession:
         self.run_count = 0
 
     def _build_pipeline(self) -> Pipeline:
-        stt = SttFrameProcessor(
+        stt = self._stt_processor or SttFrameProcessor(
             self._ingress,
             self._envelope,
             self._telemetry,

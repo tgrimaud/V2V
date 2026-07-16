@@ -178,6 +178,15 @@ class StreamingEndOfTurnDetector:
             return _NO_DECISION
         return self._terminate(SIGNAL_CLIENT_STOP, self._trailing_silence_ms)
 
+    @property
+    def has_speech(self) -> bool:
+        """True once speech has been observed in the current (not-yet-terminated) turn.
+
+        Lets the streaming STT path open the provider connection only when the
+        customer actually starts speaking, instead of streaming inter-turn silence.
+        """
+        return self._has_speech
+
     def reset(self) -> None:
         self._elapsed_ms = 0.0
         self._speech_ms = 0.0

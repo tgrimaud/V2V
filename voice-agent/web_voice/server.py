@@ -26,7 +26,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conversation_backend import BACKEND_NAMES, STUB, build_backend  # noqa: E402
 from stt_validation.models import SttOutcome  # noqa: E402
-from stt_validation.provider_factory import GRADIUM, PROVIDER_NAMES, build_provider  # noqa: E402
+from stt_validation.provider_factory import (  # noqa: E402
+    GRADIUM,
+    PROVIDER_NAMES,
+    build_provider,
+    build_streaming_provider,
+)
 from tts_synthesis.provider_factory import build_provider as build_tts_provider  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
@@ -276,9 +281,25 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     loop.start()
     ice = [s for s in (args.stun or "").split(",") if s]
     signaling = WebRtcSignalingService(
-        ingress=ingress, egress=egress, backend=backend, loop=loop, ice_servers=ice
+        ingress=ingress,
+        egress=egress,
+        backend=backend,
+        loop=loop,
+        ice_servers=ice,
+        streaming_provider=_build_streaming_provider(args),
     )
     return signaling, loop
+
+
+def _build_streaming_provider(args) -> Any:
+    """Build the streaming STT provider for the WebRTC path, or None (batch fallback).
+
+    Streaming STT (TASK-STT-010) is Gradium-only; any other provider or an explicit
+    `--stt-mode batch` keeps the batch utterance-aggregator path.
+    """
+    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+        return None
+    return build_streaming_provider(args.provider)
 
 
 def main() -> int:
@@ -294,7 +315,7 @@ def main() -> int:
     print(
         f"Web voice server on http://{args.host}:{args.port} "
         f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name}, "
-        f"webrtc={'on' if signaling else 'off'})",
+        f"webrtc={'on' if signaling else 'off'}, stt_mode={args.stt_mode})",
         file=sys.stderr,
     )
     try:
@@ -336,6 +357,12 @@ def _parse_args() -> argparse.Namespace:
         "--stun",
         default=os.environ.get("VOICE_STUN", ""),
         help="comma-separated STUN/TURN URLs for the WebRTC ICE servers (optional)",
+    )
+    parser.add_argument(
+        "--stt-mode",
+        choices=("streaming", "batch"),
+        default=os.environ.get("VOICE_STT_MODE", "streaming"),
+        help="WebRTC STT path: 'streaming' (default, Gradium WS partials) or 'batch'",
     )
     return parser.parse_args()
 
