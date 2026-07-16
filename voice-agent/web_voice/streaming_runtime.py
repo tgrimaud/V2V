@@ -57,6 +57,7 @@ class StreamingVoiceSession:
         backend: BackendAnswerPort | None = None,
         telemetry: Any = None,
         pre_stt: Sequence[FrameProcessor] = (),
+        stt_detects_end_of_turn: bool = True,
     ) -> None:
         self._transport = transport
         self._ingress = ingress
@@ -64,6 +65,10 @@ class StreamingVoiceSession:
         self._envelope = envelope
         self._backend = backend or StubBackendAdapter()
         self._telemetry = telemetry
+        # False when a pre-STT utterance aggregator owns incremental end-of-turn
+        # detection (streaming path, TASK-STT-012); the batch detector in the
+        # ingress is then skipped so the voice.end_of_turn span is not duplicated.
+        self._stt_detects_end_of_turn = stt_detects_end_of_turn
         # Processors inserted between transport.input() and STT. A continuous
         # transport (WebRTC) needs an utterance aggregator here to turn streamed
         # audio into whole-utterance frames; the batch fake transport passes none.
@@ -74,7 +79,12 @@ class StreamingVoiceSession:
         self.run_count = 0
 
     def _build_pipeline(self) -> Pipeline:
-        stt = SttFrameProcessor(self._ingress, self._envelope, self._telemetry)
+        stt = SttFrameProcessor(
+            self._ingress,
+            self._envelope,
+            self._telemetry,
+            detect_end_of_turn=self._stt_detects_end_of_turn,
+        )
         answer = AnswerProcessor(self._backend, self._envelope, self._telemetry)
         tts = TtsFrameProcessor(self._egress, self._envelope, self._telemetry)
         return Pipeline(

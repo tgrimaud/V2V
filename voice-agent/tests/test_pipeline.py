@@ -40,7 +40,7 @@ class _FakeIngress:
         self._result = result
         self.calls: list[tuple] = []
 
-    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
+    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None, detect_end_of_turn=True):
         self.calls.append((audio, envelope, telemetry, received_ms))
         return self._result
 

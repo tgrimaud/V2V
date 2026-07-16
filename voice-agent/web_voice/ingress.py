@@ -32,6 +32,10 @@ class WebVoiceIngress:
         self._audio_format = audio_format
         self._end_of_turn_detector = end_of_turn_detector or EndOfTurnDetector()
 
+    @property
+    def provider_name(self) -> str:
+        return self._provider.name
+
     def transcribe_turn(
         self,
         audio: bytes,
@@ -39,10 +43,15 @@ class WebVoiceIngress:
         telemetry: TelemetryRecorder | None = None,
         *,
         received_ms: float | None = None,
+        detect_end_of_turn: bool = True,
     ) -> TranscriptResult:
         telemetry = telemetry or TelemetryRecorder()
         self._record_ingress(audio, envelope, telemetry, received_ms)
-        self._detect_end_of_turn(audio, envelope, telemetry)
+        # The streaming path detects end-of-turn incrementally in the utterance
+        # aggregator (TASK-STT-012) and already emitted the span, so the batch
+        # detector is skipped there to avoid a duplicate voice.end_of_turn span.
+        if detect_end_of_turn:
+            self._detect_end_of_turn(audio, envelope, telemetry)
         audio_path = _write_temp_audio(audio)
         try:
             runner = SttValidationRunner(self._provider, telemetry)

@@ -27,7 +27,9 @@ WEBRTC = probe_webrtc_support().available
 
 
 class _FakeIngress:
-    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
+    provider_name = "fake-stt"
+
+    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None, detect_end_of_turn=True):
         return TranscriptResult(
             transcript="bonjour", provider="fake-stt", outcome=SttOutcome.SUCCESS,
             duration_ms=1.0, stt_request_ms=1.0, correlation_id="c",

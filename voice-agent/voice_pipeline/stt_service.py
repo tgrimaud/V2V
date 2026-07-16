@@ -30,6 +30,7 @@ class SttIngress(Protocol):
         telemetry: Any = None,
         *,
         received_ms: float | None = None,
+        detect_end_of_turn: bool = True,
     ) -> TranscriptResult: ...
 
 
@@ -43,12 +44,16 @@ class SttFrameProcessor(FrameProcessor):
         telemetry: Any = None,
         *,
         received_ms: float | None = None,
+        detect_end_of_turn: bool = True,
     ) -> None:
         super().__init__()
         self._ingress = ingress
         self._envelope = envelope
         self._telemetry = telemetry
         self._received_ms = received_ms
+        # False on the streaming path, where the utterance aggregator owns
+        # incremental end-of-turn detection and its span (TASK-STT-012).
+        self._detect_end_of_turn = detect_end_of_turn
         # Last transcription outcome, read by the turn processor to build the
         # HTTP response (a non-success turn produces no downstream frame).
         self.result: TranscriptResult | None = None
@@ -69,6 +74,7 @@ class SttFrameProcessor(FrameProcessor):
             self._envelope,
             self._telemetry,
             received_ms=self._received_ms,
+            detect_end_of_turn=self._detect_end_of_turn,
         )
         self.result = result
         if result.outcome is SttOutcome.SUCCESS:

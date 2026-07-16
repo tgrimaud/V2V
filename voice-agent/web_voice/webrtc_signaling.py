@@ -114,6 +114,12 @@ class WebRtcSignalingService:
 
     def _build_session(self, connection, envelope, telemetry) -> StreamingVoiceSession:
         transport = self._build_transport(connection)
+        aggregator = UtteranceAggregator(
+            sample_rate_hz=DEFAULT_SAMPLE_RATE,
+            telemetry=telemetry,
+            envelope=envelope,
+            provider_name=self._ingress.provider_name,
+        )
         return StreamingVoiceSession(
             transport,
             ingress=self._ingress,
@@ -121,7 +127,10 @@ class WebRtcSignalingService:
             envelope=envelope,
             backend=self._backend,
             telemetry=telemetry,
-            pre_stt=[UtteranceAggregator(sample_rate_hz=DEFAULT_SAMPLE_RATE)],
+            pre_stt=[aggregator],
+            # The aggregator owns incremental end-of-turn detection + its span on the
+            # streaming path, so the batch detector in the ingress is skipped here.
+            stt_detects_end_of_turn=False,
         )
 
     def _build_transport(self, connection):

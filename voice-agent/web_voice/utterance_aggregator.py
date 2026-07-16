@@ -1,16 +1,18 @@
-"""Utterance aggregator for the streaming WebRTC path (Sprint 6 / TASK-WEB-007).
+"""Utterance aggregator for the streaming WebRTC path (Sprint 6).
 
 The WebRTC transport emits continuous small `InputAudioRawFrame` chunks, but the
 Sprint 4/5 STT stage is *batch* (one whole-utterance frame per turn). This processor
-bridges the two **without** pulling in streaming STT (TASK-STT-010) or the Silero VAD
-ticket (TASK-STT-012): it buffers incoming PCM and, using the project's existing
-energy-based end-of-turn thresholds (TASK-STT-009, `end_of_turn.py`), flushes one
-whole-utterance `InputAudioRawFrame` downstream when the speaker pauses.
+bridges the two: it buffers incoming PCM and flushes one whole-utterance
+`InputAudioRawFrame` downstream when a `StreamingEndOfTurnDetector` (TASK-STT-012)
+fires an end-of-turn.
 
-It is an interim segmenter, exactly the "drop-in replacement" the `EndOfTurnDetector`
-docstring anticipates: TASK-STT-012 will replace this energy heuristic with a real
-streaming VAD and its own telemetry. The thresholds are reused so behaviour stays
-consistent with the batch `/turn` path.
+Turn detection is delegated to the frame-incremental `StreamingEndOfTurnDetector`,
+which is the streaming sibling of the batch `EndOfTurnDetector` and owns the
+`voice.end_of_turn` span for this path (TASK-STT-012 replaces the interim
+WEB-007 energy heuristic that lived inline here). The aggregator only owns the
+audio buffer and emits the span/event when the detector reports a turn, so the
+US-036 `end_of_turn` slice is measured at the real streaming moment instead of
+being re-derived by the batch detector inside the ingress.
 
 Scope guard: no barge-in (TASK-WEB-008) — while the bot speaks, incoming mic frames
 are still buffered; controlled demos use headphones to avoid the bot echoing into
@@ -25,24 +27,28 @@ threshold), never zeros, or no end-of-turn is ever detected.
 
 from typing import Any
 
-from pipecat.frames.frames import Frame, InputAudioRawFrame
+from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .end_of_turn import (
     DEFAULT_AMPLITUDE_THRESHOLD,
+    DEFAULT_MIN_UTTERANCE_MS,
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_SILENCE_WINDOW_MS,
-    _peak_amplitude,
-    _pcm16_samples,
+    END_OF_TURN_SPAN,
+    EndOfTurnResult,
+    StreamingEndOfTurnDetector,
 )
+
+DEFAULT_PROVIDER_NAME = "webrtc"
 
 
 class UtteranceAggregator(FrameProcessor):
     """Buffers streamed PCM and flushes one whole-utterance frame on end-of-turn.
 
-    An utterance is flushed once speech has been seen and a trailing silence of
-    `silence_window_ms` has elapsed. `min_utterance_ms` guards against flushing a
-    single click as a turn.
+    Turn boundaries come from an injected `StreamingEndOfTurnDetector`; when it fires
+    the aggregator records the `voice.end_of_turn` span (if telemetry + envelope were
+    provided) and flushes the buffered utterance downstream.
     """
 
     def __init__(
@@ -51,47 +57,57 @@ class UtteranceAggregator(FrameProcessor):
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
         silence_window_ms: float = DEFAULT_SILENCE_WINDOW_MS,
         amplitude_threshold: int = DEFAULT_AMPLITUDE_THRESHOLD,
-        min_utterance_ms: float = 200.0,
+        min_utterance_ms: float = DEFAULT_MIN_UTTERANCE_MS,
         num_channels: int = 1,
+        detector: StreamingEndOfTurnDetector | None = None,
+        telemetry: Any = None,
+        envelope: Any = None,
+        provider_name: str = DEFAULT_PROVIDER_NAME,
     ) -> None:
         super().__init__()
         self._sample_rate_hz = sample_rate_hz
-        self._silence_window_ms = silence_window_ms
-        self._amplitude_threshold = amplitude_threshold
-        self._min_utterance_ms = min_utterance_ms
         self._num_channels = num_channels
+        self._detector = detector or StreamingEndOfTurnDetector(
+            sample_rate_hz=sample_rate_hz,
+            silence_window_ms=silence_window_ms,
+            amplitude_threshold=amplitude_threshold,
+            min_utterance_ms=min_utterance_ms,
+            num_channels=num_channels,
+        )
+        self._telemetry = telemetry
+        self._envelope = envelope
+        self._provider_name = provider_name
         self._buffer = bytearray()
-        self._has_speech = False
-        self._trailing_silence_ms = 0.0
-        self._speech_ms = 0.0
-        # Optional hook so tests / telemetry can observe each flushed utterance.
+        # Read by tests / telemetry: number of utterances flushed this session.
         self.flush_count = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
             await self._accumulate(frame, direction)
+        elif isinstance(frame, EndFrame):
+            await self._finish(direction)
+            await self.push_frame(frame, direction)
         else:
             await self.push_frame(frame, direction)
 
     async def _accumulate(self, frame: InputAudioRawFrame, direction: FrameDirection) -> None:
-        frame_ms = self._frame_duration_ms(frame.audio)
         self._buffer.extend(frame.audio)
-        if self._is_speech(frame.audio):
-            self._has_speech = True
-            self._speech_ms += frame_ms
-            self._trailing_silence_ms = 0.0
-        elif self._has_speech:
-            self._trailing_silence_ms += frame_ms
-            if self._trailing_silence_ms >= self._silence_window_ms:
-                await self._flush(direction)
+        await self._apply(self._detector.observe(frame.audio), direction)
 
-    async def _flush(self, direction: FrameDirection) -> None:
-        if self._speech_ms < self._min_utterance_ms:
-            self._reset()
-            return
+    async def _finish(self, direction: FrameDirection) -> None:
+        await self._apply(self._detector.finish(), direction)
+
+    async def _apply(self, decision, direction: FrameDirection) -> None:
+        if decision.detection is not None:
+            await self._emit_and_flush(decision.detection, direction)
+        elif decision.discard:
+            self._buffer = bytearray()
+
+    async def _emit_and_flush(self, detection: EndOfTurnResult, direction: FrameDirection) -> None:
+        self._record_end_of_turn(detection)
         utterance = bytes(self._buffer)
-        self._reset()
+        self._buffer = bytearray()
         self.flush_count += 1
         await self.push_frame(
             InputAudioRawFrame(
@@ -102,16 +118,18 @@ class UtteranceAggregator(FrameProcessor):
             direction,
         )
 
-    def _reset(self) -> None:
-        self._buffer = bytearray()
-        self._has_speech = False
-        self._trailing_silence_ms = 0.0
-        self._speech_ms = 0.0
-
-    def _is_speech(self, audio: bytes) -> bool:
-        samples = _pcm16_samples(audio)
-        return bool(samples) and _peak_amplitude(samples) >= self._amplitude_threshold
-
-    def _frame_duration_ms(self, audio: bytes) -> float:
-        sample_count = (len(audio) // 2) // max(1, self._num_channels)
-        return sample_count / self._sample_rate_hz * 1000
+    def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:
+        if self._telemetry is None or self._envelope is None or detection.slice_ms is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "end_of_turn_signal": detection.signal,
+            "trailing_silence_ms": round(detection.trailing_silence_ms, 3),
+            "speech_end_ms": round(detection.speech_end_ms, 3)
+            if detection.speech_end_ms is not None
+            else None,
+        }
+        self._telemetry.span(END_OF_TURN_SPAN, detection.slice_ms, **attrs)
+        self._telemetry.record("voice.end_of_turn.detected", **attrs)

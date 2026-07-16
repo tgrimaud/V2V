@@ -10,6 +10,7 @@ import sys
 import unittest
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
@@ -18,6 +19,8 @@ from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame, StartFram
 from pipecat.pipeline.pipeline import Pipeline  # noqa: E402
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
 
+from voice_common.telemetry import TelemetryRecorder  # noqa: E402
+from web_voice.end_of_turn import END_OF_TURN_SPAN, SIGNAL_SILENCE_WINDOW  # noqa: E402
 from web_voice.utterance_aggregator import UtteranceAggregator  # noqa: E402
 
 SAMPLE_RATE = 16000
@@ -108,6 +111,50 @@ class UtteranceAggregatorTest(unittest.IsolatedAsyncioTestCase):
         # THEN nothing is flushed (a click is not a turn)
         self.assertEqual(utterances, [])
         self.assertEqual(agg.flush_count, 0)
+
+    async def test_records_end_of_turn_span_on_flush(self) -> None:
+        # GIVEN an aggregator with telemetry + envelope (streaming path wiring)
+        telemetry = TelemetryRecorder()
+        envelope = SimpleNamespace(correlation_id="corr-42", channel="web_voice")
+        agg = UtteranceAggregator(
+            sample_rate_hz=SAMPLE_RATE,
+            silence_window_ms=100,
+            min_utterance_ms=20,
+            telemetry=telemetry,
+            envelope=envelope,
+            provider_name="gradium-stt",
+        )
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 6
+        # WHEN a turn streams through and end-of-turn fires
+        utterances = await _drive(agg, frames)
+        # THEN one whole-utterance frame is flushed
+        self.assertEqual(len(utterances), 1)
+        # AND exactly one voice.end_of_turn span is recorded with the turn attributes
+        eot_spans = [s for s in telemetry.spans() if s.name == END_OF_TURN_SPAN]
+        self.assertEqual(len(eot_spans), 1)
+        span = eot_spans[0]
+        self.assertEqual(span.attributes["correlation_id"], "corr-42")
+        self.assertEqual(span.attributes["channel"], "web_voice")
+        self.assertEqual(span.attributes["provider"], "gradium-stt")
+        self.assertEqual(span.attributes["end_of_turn_signal"], SIGNAL_SILENCE_WINDOW)
+        # AND the detected event mirrors the span for pilot review
+        self.assertTrue(
+            any(e.name == "voice.end_of_turn.detected" for e in telemetry.events())
+        )
+
+    async def test_no_span_when_stream_has_no_speech(self) -> None:
+        # GIVEN telemetry wiring and a stream that carries only silence
+        telemetry = TelemetryRecorder()
+        envelope = SimpleNamespace(correlation_id="corr-0", channel="web_voice")
+        agg = UtteranceAggregator(
+            sample_rate_hz=SAMPLE_RATE, silence_window_ms=100, telemetry=telemetry, envelope=envelope
+        )
+        frames = [_silence_frame()] * 8
+        # WHEN driven through the pipeline
+        utterances = await _drive(agg, frames)
+        # THEN no turn is invented and no end_of_turn span is recorded
+        self.assertEqual(utterances, [])
+        self.assertEqual([s for s in telemetry.spans() if s.name == END_OF_TURN_SPAN], [])
 
 
 if __name__ == "__main__":

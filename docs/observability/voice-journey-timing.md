@@ -20,7 +20,7 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | Slice | Span source | Status |
 |---|---|---|
 | `channel_ingress` | `web.voice.ingress` (web) or `stt.audio.accept` (fixture) | Instrumented |
-| `end_of_turn` | `voice.end_of_turn` (web voice runtime) | Instrumented (TASK-STT-009) |
+| `end_of_turn` | `voice.end_of_turn` (batch ingress + streaming aggregator) | Instrumented (TASK-STT-009 batch, TASK-STT-012 streaming) |
 | `stt` | `stt.request` | Instrumented |
 | `backend_first_token` | `backend.first_token` (streaming) or `backend.request` (batch) | Instrumented (TASK-WEB-003-D/E) |
 | `tts_first_audio` | `voice.tts.first_audio` (TTS synthesis runner) | Instrumented (TASK-WEB-002) |
@@ -35,9 +35,17 @@ never mix into the same distribution.
 The web voice runtime owns turn detection (`web_voice/end_of_turn.py`). For the
 V1 batch web path the **authoritative signal is a trailing-silence window** over
 the captured PCM16; if the buffer ends before a full window has elapsed the
-detector falls back to an **explicit client stop**. A streaming VAD is a future
-drop-in replacement — the `EndOfTurnDetector` is injected into `WebVoiceIngress`,
-so swapping it changes nothing else.
+detector falls back to an **explicit client stop**.
+
+On the **streaming WebRTC path (TASK-STT-012)** the drop-in replacement has
+landed: `StreamingEndOfTurnDetector` consumes audio **frame by frame** and fires
+the same `EndOfTurnResult` / `voice.end_of_turn` span contract as soon as the
+silence window follows speech — *before* the whole utterance buffer exists — with
+a `client_stop` fallback on stream end (`finish()`). It is driven by the
+`UtteranceAggregator`, which emits the span and flushes the utterance; the batch
+`EndOfTurnDetector` inside `WebVoiceIngress` is then skipped
+(`transcribe_turn(detect_end_of_turn=False)`) so the span is recorded exactly
+once. The batch detector stays the default for the stdlib/fixture path.
 
 The emitted `voice.end_of_turn` span duration is the end-of-turn **slice
 latency**: the confirmation hold after speech ends (the silence window, or the
@@ -128,6 +136,11 @@ and the scenarios in `features/web_voice.feature` / `features/pipeline_timing.fe
   Pipecat pipeline telemetry-bridge integration test).
 - `tests/test_end_of_turn.py` (unit: silence-window vs client-stop signal,
   no invented boundary on silence/empty audio, threshold/config).
+- `tests/test_streaming_end_of_turn.py` (unit: frame-incremental fire, no-speech
+  guarantee, client-stop `finish()`, sub-minimum click discard, per-turn reset).
+- `tests/test_utterance_aggregator.py` (streaming aggregator: `voice.end_of_turn`
+  span emission on flush, no span on a silent stream).
+- `features/streaming_end_of_turn.feature` (streaming end-of-turn outcome + span).
 - `tests/test_web_voice_ingress.py` (end-of-turn span emission + absent event).
 - `tests/test_tts_runner.py` / `tests/test_web_voice_egress.py` (`voice.tts.first_audio`
   and `web.voice.egress` span emission for the voice-out slices).

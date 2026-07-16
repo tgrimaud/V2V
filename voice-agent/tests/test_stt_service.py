@@ -33,8 +33,8 @@ class _FakeIngress:
         self._result = result
         self.calls: list[tuple] = []
 
-    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
-        self.calls.append((audio, envelope, telemetry, received_ms))
+    def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None, detect_end_of_turn=True):
+        self.calls.append((audio, envelope, telemetry, received_ms, detect_end_of_turn))
         return self._result
 
 
@@ -87,11 +87,13 @@ class SttFrameProcessorTest(unittest.IsolatedAsyncioTestCase):
         await run_test(processor, frames_to_send=[_audio_frame(b"\xaa\xbb")])
         # THEN the ingress received the exact audio, envelope, telemetry and window
         self.assertEqual(len(ingress.calls), 1)
-        audio, env, tel, received_ms = ingress.calls[0]
+        audio, env, tel, received_ms, detect_end_of_turn = ingress.calls[0]
         self.assertEqual(audio, b"\xaa\xbb")
         self.assertIs(env, envelope)
         self.assertIs(tel, telemetry)
         self.assertEqual(received_ms, 12.5)
+        # Batch path keeps the ingress end-of-turn detector on by default.
+        self.assertTrue(detect_end_of_turn)
 
 
 if __name__ == "__main__":

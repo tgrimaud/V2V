@@ -98,6 +98,112 @@ class EndOfTurnDetector:
         return sample_count / self._sample_rate_hz * 1000
 
 
+# Default minimum voiced duration for a chunk to count as a turn; guards a single
+# click / cough from being flushed as an utterance in the streaming path.
+DEFAULT_MIN_UTTERANCE_MS = 200.0
+
+
+@dataclass(frozen=True)
+class StreamingTurnDecision:
+    """Per-frame outcome of the streaming detector.
+
+    `detection` present -> end-of-turn fired, flush the buffered utterance now.
+    `discard` -> a sub-`min_utterance_ms` click terminated; drop the buffer, no turn.
+    Both absent -> keep buffering.
+    """
+
+    detection: EndOfTurnResult | None = None
+    discard: bool = False
+
+
+_NO_DECISION = StreamingTurnDecision()
+
+
+class StreamingEndOfTurnDetector:
+    """Frame-incremental sibling of `EndOfTurnDetector` (TASK-STT-012).
+
+    The batch detector inspects a fully captured buffer after the fact; this one
+    consumes audio chunks as they stream and fires the same `EndOfTurnResult` /
+    `voice.end_of_turn` span contract **before** the whole utterance is available,
+    as soon as `silence_window_ms` of trailing silence follows speech. It keeps the
+    TASK-STT-009 guarantee: with no speech it never invents a turn boundary
+    (`observe`/`finish` return no detection).
+
+    State machine per turn (reset after each terminal decision):
+    speech frames extend the utterance; once speech has been seen, accumulated
+    silence >= the window fires the turn. `finish()` is the streaming analog of the
+    batch `client_stop` fallback: on stream end (EndFrame / call drop) it flushes
+    pending speech even if the full window has not elapsed.
+    """
+
+    def __init__(
+        self,
+        *,
+        sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
+        silence_window_ms: float = DEFAULT_SILENCE_WINDOW_MS,
+        amplitude_threshold: int = DEFAULT_AMPLITUDE_THRESHOLD,
+        min_utterance_ms: float = DEFAULT_MIN_UTTERANCE_MS,
+        num_channels: int = 1,
+    ) -> None:
+        if sample_rate_hz <= 0 or num_channels <= 0:
+            raise ValueError("sample_rate_hz and num_channels must be positive")
+        self._sample_rate_hz = sample_rate_hz
+        self._silence_window_ms = silence_window_ms
+        self._amplitude_threshold = amplitude_threshold
+        self._min_utterance_ms = min_utterance_ms
+        self._num_channels = num_channels
+        self.reset()
+
+    def observe(self, audio: bytes) -> StreamingTurnDecision:
+        frame_ms = self._frame_duration_ms(audio)
+        self._elapsed_ms += frame_ms
+        if self._is_speech(audio):
+            self._has_speech = True
+            self._speech_ms += frame_ms
+            self._speech_end_ms = self._elapsed_ms
+            self._trailing_silence_ms = 0.0
+            return _NO_DECISION
+        if not self._has_speech:
+            # Leading silence before any speech -> no boundary to invent yet.
+            return _NO_DECISION
+        self._trailing_silence_ms += frame_ms
+        if self._trailing_silence_ms < self._silence_window_ms:
+            return _NO_DECISION
+        return self._terminate(SIGNAL_SILENCE_WINDOW, self._silence_window_ms)
+
+    def finish(self) -> StreamingTurnDecision:
+        """Stream end (EndFrame / call drop): flush pending speech as a client stop."""
+        if not self._has_speech:
+            self.reset()
+            return _NO_DECISION
+        return self._terminate(SIGNAL_CLIENT_STOP, self._trailing_silence_ms)
+
+    def reset(self) -> None:
+        self._elapsed_ms = 0.0
+        self._speech_ms = 0.0
+        self._speech_end_ms: float | None = None
+        self._trailing_silence_ms = 0.0
+        self._has_speech = False
+
+    def _terminate(self, signal: str, slice_ms: float) -> StreamingTurnDecision:
+        if self._speech_ms < self._min_utterance_ms:
+            self.reset()
+            return StreamingTurnDecision(discard=True)
+        detection = EndOfTurnResult(
+            True, signal, self._speech_end_ms, self._trailing_silence_ms, slice_ms
+        )
+        self.reset()
+        return StreamingTurnDecision(detection=detection)
+
+    def _is_speech(self, audio: bytes) -> bool:
+        samples = _pcm16_samples(audio)
+        return bool(samples) and _peak_amplitude(samples) >= self._amplitude_threshold
+
+    def _frame_duration_ms(self, audio: bytes) -> float:
+        sample_count = (len(audio) // 2) // max(1, self._num_channels)
+        return sample_count / self._sample_rate_hz * 1000
+
+
 def _pcm16_samples(audio: bytes) -> array.array:
     # Drop a trailing odd byte so the 16-bit frame view is always well-formed.
     usable = audio[: len(audio) - (len(audio) % 2)]
