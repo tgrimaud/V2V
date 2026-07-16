@@ -19,7 +19,13 @@ transport after the audio is actually sent (the turn processor calls the egress
 import asyncio
 from typing import Any, Protocol
 
-from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import (
+    Frame,
+    InterimTranscriptionFrame,
+    TextFrame,
+    TranscriptionFrame,
+    TTSAudioRawFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from tts_synthesis.models import TtsOutcome
@@ -49,9 +55,13 @@ class TtsFrameProcessor(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
-        # Synthesize only plain TextFrames; TranscriptionFrame (a TextFrame subclass)
-        # is upstream STT output and is forwarded untouched.
-        if isinstance(frame, TextFrame) and not isinstance(frame, TranscriptionFrame):
+        # Synthesize only the plain answer TextFrame. BOTH TranscriptionFrame and
+        # InterimTranscriptionFrame subclass TextFrame but are upstream STT output
+        # (final + live partials on the streaming-STT path) — forward them untouched
+        # so the bot never speaks the customer's own question back.
+        if isinstance(frame, (TranscriptionFrame, InterimTranscriptionFrame)):
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, TextFrame):
             await self._synthesize(frame, direction)
         else:
             await self.push_frame(frame, direction)

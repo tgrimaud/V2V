@@ -23,6 +23,7 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
 from pipecat.frames.frames import (  # noqa: E402
     Frame,
+    InterimTranscriptionFrame,
     StartFrame,
     TextFrame,
     TranscriptionFrame,
@@ -184,6 +185,25 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.transcripts, ["question"])
         self.assertEqual(session.synthesized_text, "reponse")
         self.assertEqual(sink.audio, [b"\x09"])
+
+    async def test_interim_transcription_frame_is_not_synthesized(self):
+        # GIVEN an interim partial transcript (a TextFrame subclass, live STT output)
+        # followed by the plain answer TextFrame
+        session = FakeSession([AudioChunk(b"\x07")])
+        provider = FakeProvider(session)
+        processor = _processor(provider)
+        # WHEN both flow through
+        sink = await _drive(
+            processor,
+            [
+                InterimTranscriptionFrame(text="ma question", user_id="u", timestamp=""),
+                TextFrame(text="la reponse"),
+            ],
+        )
+        # THEN only the answer is synthesized (the partial is never spoken back)
+        self.assertEqual(provider.open_count, 1)
+        self.assertEqual(session.synthesized_text, "la reponse")
+        self.assertEqual(sink.audio, [b"\x07"])
 
     async def test_empty_text_reports_unavailable_without_audio(self):
         # GIVEN a session that rejects empty text
