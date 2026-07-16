@@ -392,3 +392,36 @@ Turned the web voice **echo** loop into a real **answer** loop: the STT transcri
 - `voice-agent/features/` — `conversation_backend.feature` + steps; answer/degraded/parity scenarios in `web_voice.feature`
 - Docs: `docs/architecture/voice-runtime-http-contract.md`, `docs/architecture/adrs/ADR-0021-conversation-backend-answer-contract.md`, `docs/qa/web-voice-backend-bridge-qa-report.md`, `docs/observability/voice-journey-timing.md`, `docs/README.md`, `voice-agent/README.md`
 - Planning: `product-backlog/sprints/sprint-5-backend-bridge.md`, `product-backlog/backlog-index.md`, `product-backlog/review-findings.md`
+
+## 2026-07-16 — Sprint 6: Barge-in core (TASK-WEB-008, slices 1–2 + adversarial review)
+
+**Summary:**
+
+Implemented barge-in (US-021) so the customer can interrupt the spoken answer, on the
+live streaming WebRTC path. Key architectural finding: in **pipecat 1.5.0** the VAD is
+**not** auto-wired to the transport (no `vad_analyzer` on `TransportParams`, no
+`VADAnalyzer` consumer) — `SileroVADAnalyzer` is a standalone component with the same
+integration effort as our energy detector. So we reuse the existing
+`StreamingEndOfTurnDetector` for onset and Pipecat's **native** `InterruptionFrame`
+mechanism for the cut (ADR-0025). Silero deferred as a drop-in verdict upgrade.
+
+### What shipped
+- **Slice 1 — graceful drain** (committed earlier this branch): `StreamingVoiceSession.drain()` queues an `EndFrame` on a graceful `closed`/`disconnected` event so a trailing partial utterance is finalized instead of dropped; wired from `WebRtcSignalingService` cleanup.
+- **Slice 2 — barge-in core:** `StreamingSttProcessor` tracks bot-speaking from the `BotStarted/StoppedSpeakingFrame` the output transport emits **upstream**; on speech onset while the bot speaks it calls `broadcast_interruption()` (flushes the output buffer + cancels the TTS task) and emits `voice.barge_in.detected` + `voice.barge_in.count`. `StreamingTtsProcessor` made interruptible: on `CancelledError` → `interrupted` outcome (`tts.interrupted`) + guaranteed WebSocket release via `finally`/`_safe_aclose`.
+- **Adversarial review (slice 2):** score 87→~92 after fixes. Blocking finding fixed: an interrupted turn no longer skews the `tts_first_audio` p95 — `voice.tts.first_audio` is emitted with the real time-to-first-audio and only when audio actually played; elapsed moves to the `tts.interrupted` event.
+
+### Tests + docs
+- Full suite green: **269 unit tests + behave 8 features / 23 scenarios / 103 steps.**
+- **ADR-0025** created (barge-in: native `InterruptionFrame` + existing VAD gated by bot-speaking; Silero deferred; echo cancellation required before live validation). Fixed ADR index drift (added ADR-0022..0025 rows).
+
+### Remaining before ticket close
+- Slice 3 — browser `echoCancellation` in the WebRTC client (mandatory before live validation, else the bot self-interrupts on its own echo).
+- Behave e2e barge-in scenario; then user live validation.
+
+### Files changed
+- `voice-agent/web_voice/streaming_stt_processor.py` — bot-speaking tracking + onset-gated `broadcast_interruption()` + barge-in telemetry
+- `voice-agent/web_voice/streaming_tts_processor.py` — interruptible synthesis (`CancelledError` → `interrupted` + `finally` close); TTFA-correct interrupted span
+- `voice-agent/web_voice/streaming_runtime.py`, `web_voice/webrtc_signaling.py` — `drain()` on call end (slice 1)
+- `voice-agent/web_voice/utterance_aggregator.py` — scope-guard comment (barge-in lives on the streaming STT path)
+- `voice-agent/tests/test_streaming_stt_processor.py`, `test_streaming_tts_processor.py` — barge-in fire/no-fire + interruption cleanup + TTFA-span tests
+- `docs/architecture/adrs/ADR-0025-barge-in-native-interruption.md`, `docs/architecture/adrs/README.md`
