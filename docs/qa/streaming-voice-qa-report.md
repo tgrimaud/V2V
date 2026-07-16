@@ -4,19 +4,20 @@
 **Branch:** `task/TASK-WEB-009-streaming-qa-latency`
 **Stories:** US-019 (voice loop), US-036 (per-slice timing), US-021 (barge-in)
 **Decision:** ADR-0018 (pilot criterion `time_to_first_audio` p95 < 800 ms)
-**Run date:** _to be finalized with the warm live run_
+**Run date:** 2026-07-16 (warm live sample)
 
 ## Executive Summary
 - **Overall readiness (functional):** Go — the streaming loop answers end to end
   (partials → answer → incremental first audio), barge-in interrupts playback, and
   error/degraded paths stay safe and observable.
-- **Overall readiness (pilot latency):** **Gap to state honestly.** Indicative warm
-  single-turn measurements put `time_to_first_audio` at **~1.1–1.2 s**, above the
-  ADR-0018 pilot criterion of **p95 < 800 ms**. The dominant cost is the STT
-  post-end-of-turn finalize tail (~0.8 s). The consolidated warm p50/p95/p99 sample
-  is collected in the live run (below) before the go/no-go is final.
-- **Main blockers:** none functional. The pilot latency criterion is not yet met on
-  the current streaming path (documented gap, not a silent pass).
+- **Overall readiness (pilot latency):** **NO-GO on the pilot latency criterion.**
+  The consolidated warm live sample (5 turns) measures `time_to_first_audio`
+  **p50 1310 ms / p95 1698 ms**, ~2.1× over the ADR-0018 criterion of **p95 < 800 ms**
+  (margin −898 ms). The dominant cost is the STT post-end-of-turn finalize tail
+  (p95 ~1389 ms). Note this is with a **stub backend**, so a real BSS/RAG/LLM answer
+  will only add to the composite.
+- **Main blockers:** none functional. The pilot latency criterion is not met on the
+  current streaming path (measured gap, not a silent pass).
 - **Residual risks:** (1) `channel_egress` not instrumented on the WebRTC path, so
   the composite covers EOT → first synthesized audio (not the last transport hop);
   (2) one WebSocket per turn (setup/teardown cost); (3) live numbers depend on
@@ -46,9 +47,10 @@
 | Trailing partial utterance drained on call end | Pass | `webrtc_signaling` drain-and-discard; `test_*` | A mid-speech hangup still yields an end_of_turn + final |
 | Batch HTTP path + stdlib/fixture path unchanged | Pass | full suite green; `--stt-mode/--tts-mode batch` | Fallbacks preserved |
 
-Regression net: **297 unit tests OK**; **Behave 10 features / 26 scenarios /
+Regression net: **298 unit tests OK**; **Behave 10 features / 26 scenarios /
 120 steps** (adds `streaming_loop.feature`, the `time_to_first_audio` composite
-tests, and `streaming_latency_report` tests).
+tests, `streaming_latency_report` tests, and the WebRTC teardown telemetry
+regression test — a hanging `drain()` must stay bounded and still emit the dump).
 
 ## Latency Results
 
@@ -77,18 +79,25 @@ live run below.
 > incremental finalization), already reduced from ~3.4 s (batch) to ~0.8 s by
 > TASK-STT-010.
 
-### Consolidated warm sample (live run)
+### Consolidated warm sample (live run, 2026-07-16)
+
+Gradium streaming STT + streaming TTS, stub backend, `pipecat` runtime, co-located
+dev host, server pre-warmed. 7 warm calls streamed a real speech clip; **5 turns**
+produced an STT finalize + first audio, **2 calls produced no turn telemetry** (see
+Defects). Reproducible sample committed at
+[`streaming-latency-warm-sample.json`](./streaming-latency-warm-sample.json).
 
 | Field | Value |
 |---|---|
-| Sample size (turns) | _to be filled by the warm live run_ |
-| `time_to_first_audio` p50 / p95 / p99 (ms) | _to be filled_ |
-| `time_to_first_audio` min / max / mean (ms) | _to be filled_ |
-| `stt` p50/p95/p99 (ms) | _to be filled_ |
-| `backend_first_token` p50/p95/p99 (ms) | _to be filled_ |
-| `tts_first_audio` p50/p95/p99 (ms) | _to be filled_ |
+| Sample size (turns) | 5 (from 7 warm calls) |
+| `time_to_first_audio` p50 / p95 / p99 (ms) | 1310.4 / 1697.9 / 1697.9 |
+| `time_to_first_audio` min / max / mean (ms) | 961.6 / 1697.9 / 1317.5 |
+| `stt` p50/p95/p99 (ms) | 865.8 / 1388.6 / 1388.6 |
+| `backend_first_token` p50/p95/p99 (ms) | 0.01 / 0.01 / 0.01 (stub) |
+| `tts_first_audio` p50/p95/p99 (ms) | 309.3 / 478.9 / 478.9 |
+| `end_of_turn` (silence hold, before composite start) | 500.0 / 500.0 / 500.0 |
 | `channel_ingress` / `channel_egress` | Gap (batch-HTTP-only on WebRTC) |
-| Pilot gate (`p95 < 800 ms`) | _to be filled — pass or the honest gap_ |
+| Pilot gate (`p95 < 800 ms`) | **FAIL** — measured p95 1697.9 ms, margin −897.9 ms |
 
 Collected with the streaming report over server telemetry dumps:
 
@@ -116,24 +125,28 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
 ## Defects And Gaps
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
-| Medium | Composite `time_to_first_audio` indicatively > 800 ms | Pilot latency criterion not yet met on the current path | QA / Architecture (gap stated) |
+| High | Measured `time_to_first_audio` p95 1698 ms > 800 ms (with stub backend) | Pilot latency criterion not met; STT finalize tail is the lever | QA / Architecture (measured gap) |
+| Medium | 2 of 7 warm calls produced no turn telemetry (empty session) | Reliability/measurement caveat; likely the headless client replaying the same clip in rapid succession rather than a server defect, but unconfirmed | Follow-up (out of sprint) |
 | Info | `channel_egress` not measured on WebRTC | Composite excludes the last transport hop | Follow-up (out of sprint) |
 | Info | One WebSocket per turn | Setup/teardown cost | Backlog (out of sprint) |
 
 ## Open Questions
-- **Product:** is a functional pilot acceptable with `time_to_first_audio` ~1.1–1.2 s
+- **Product:** is a functional pilot acceptable with `time_to_first_audio` p95 ~1.7 s
   while the STT finalize tail is optimized, or is `p95 < 800 ms` a hard pilot gate?
 - **Architecture:** should the WebRTC channel-egress hop be instrumented before the
   pilot, or is the EOT → first-synthesized-audio composite sufficient for V1?
 - **Technical:** target for the STT post-EOT finalize tail (main lever to reach
-  `p95 < 800 ms`).
+  `p95 < 800 ms`); with the tail at p95 ~1.39 s it alone exceeds the whole budget.
 
 ## Recommendation
 - **Functional:** Go — the streaming loop, barge-in and safe-failure paths meet their
   acceptance criteria with unit + Behave regression coverage.
-- **Pilot latency:** decision pending the consolidated warm live sample. Indicative
-  numbers show the `p95 < 800 ms` criterion is **not yet met** (gap driven by the STT
-  finalize tail); the honest gate outcome is recorded here and in ADR-0018 once the
-  live sample is collected.
+- **Pilot latency:** **NO-GO.** The consolidated warm sample measures
+  `time_to_first_audio` p95 1698 ms vs the ADR-0018 criterion `p95 < 800 ms` — a
+  measured miss (~2.1×), driven by the STT post-EOT finalize tail (p95 ~1.39 s), and
+  measured with a **stub backend** (a real answer path only adds time). The lever is
+  the STT finalize tail; treat the `p95 < 800 ms` criterion as open until that is
+  reduced. Sprint 6 delivers the instrumentation and the honest baseline; it does not
+  claim the latency gate.
 - **Required before an SLO claim (ADR-0010):** per-channel/per-step dashboards,
   alerting, degraded-mode and provider-outage tests — out of this sprint.

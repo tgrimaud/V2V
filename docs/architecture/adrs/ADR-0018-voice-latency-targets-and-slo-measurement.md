@@ -100,16 +100,33 @@ and [`docs/observability/voice-journey-timing.md`](../../observability/voice-jou
 | Channel | web (streaming WebRTC) |
 | Provider config | Gradium streaming STT + streaming TTS, stub backend, `pipecat` runtime |
 | Environment | co-located dev host, warm (server process pre-warmed) |
-| Sample size (turns) | _to be filled by the warm live run_ |
-| p50 / p95 / p99 (ms) | _to be filled by the warm live run_ |
-| min / max / mean (ms) | _to be filled by the warm live run_ |
-| Pilot gate (`p95 < 800 ms`) | _to be filled by the warm live run_ |
+| Date | 2026-07-16 |
+| Sample size (turns) | 5 turns with first audio (from 7 warm calls; 2 calls produced no turn telemetry) |
+| p50 / p95 / p99 (ms) | 1310.4 / 1697.9 / 1697.9 |
+| min / max / mean (ms) | 961.6 / 1697.9 / 1317.5 |
+| Pilot gate (`p95 < 800 ms`) | **FAIL** (measured p95 1697.9 ms, margin −897.9 ms) |
 
-Per-slice p50/p95/p99 (`stt`, `backend_first_token`, `tts_first_audio`; the
-`channel_ingress` / `channel_egress` gaps) are published alongside the composite in
-the QA report. The measured baseline above is the honest gate outcome (pass, or the
-stated gap) once the warm live sample is collected; until then it is an explicit
-pending measurement, not an assumed pass.
+Per-slice p50/p95/p99 over the same warm sample:
+
+| Slice | p50 (ms) | p95 (ms) | p99 (ms) | Notes |
+|---|---|---|---|---|
+| `end_of_turn` | 500.0 | 500.0 | 500.0 | trailing-silence window before acceptance — **not** part of the composite (starts at acceptance) |
+| `stt` (post-EOT finalize tail) | 865.8 | 1388.6 | 1388.6 | dominant slice; Gradium WebSocket finalize after end-of-turn |
+| `backend_first_token` | 0.01 | 0.01 | 0.01 | stub backend (no BSS/RAG/LLM) — real backend will add materially here |
+| `tts_first_audio` | 309.3 | 478.9 | 478.9 | Gradium streaming TTS first playable chunk |
+| `channel_ingress` | — | — | — | not measured on WebRTC path (batch-HTTP-only span) |
+| `channel_egress` | — | — | — | not measured on WebRTC path (WebRTC transport egress not folded in) |
+
+**Gate outcome: NO-GO on the pilot latency criterion.** The warm streaming path is
+functionally complete and instrumented, but `time_to_first_audio` p95 (~1.70 s) is
+~2.1× over the 800 ms pilot criterion, dominated by the STT post-EOT finalize tail
+(p95 ~1.39 s). Two caveats keep this an honest, not a flattering, baseline: (1) the
+backend is a stub, so the real BSS/PDF/comparison/RAG/LLM answer time is **not** in
+this number and will only increase the composite; (2) `channel_egress` (WebRTC first
+frame → playable at the browser) is still excluded. Reducing the STT finalize tail
+(streaming-final / partial-commit tuning) is the primary lever and is tracked as a
+Sprint 6 follow-up. The reproducible sample is committed at
+[`docs/qa/streaming-latency-warm-sample.json`](../../qa/streaming-latency-warm-sample.json).
 
 ## Related Documents
 

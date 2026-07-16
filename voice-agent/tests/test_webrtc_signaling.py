@@ -168,6 +168,53 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
         # THEN teardown still proceeds (best-effort flush never blocks discard)
         self.assertNotIn("pc-2", service._sessions)
 
+    async def test_hanging_drain_is_bounded_and_still_logs_telemetry(self) -> None:
+        # GIVEN a session whose drain() never completes: on a closed/disconnected
+        # connection the transport is dead, so the EndFrame queued by drain() can never
+        # reach the output and the coroutine hangs in an uncancellable await. This is the
+        # exact TASK-WEB-009 teardown hang that silently lost every streaming-call
+        # telemetry dump (the only latency evidence for a streaming call).
+        from web_voice.webrtc_signaling import WebRtcSignalingService, _Session
+
+        started = asyncio.Event()
+        run_task_cancelled = asyncio.Event()
+
+        class _HangingSession:
+            async def drain(self) -> None:
+                started.set()
+                await asyncio.Event().wait()  # never returns (dead transport)
+
+        async def _never_ending() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                run_task_cancelled.set()
+                raise
+
+        logged: list = []
+        service = WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=logged.append,
+        )
+        run_task = asyncio.ensure_future(_never_ending())
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc-3"),
+            session=_HangingSession(),
+            envelope=SimpleNamespace(correlation_id="c"),
+            telemetry=SimpleNamespace(),
+            task=run_task,
+        )
+        service._sessions["pc-3"] = record
+        # WHEN teardown drains with a short bound then discards
+        await service._drain(record, timeout=0.05)
+        service._discard("pc-3")
+        # THEN drain started, the wait was bounded (did not hang the teardown), the stuck
+        # run() task was cancelled to avoid a leak, and telemetry was still logged
+        self.assertTrue(started.is_set())
+        await asyncio.sleep(0.01)  # let the fire-and-forget cancellation propagate
+        self.assertTrue(run_task.cancelled() or run_task_cancelled.is_set())
+        self.assertEqual(logged, [record.telemetry])
+
 
 if __name__ == "__main__":
     unittest.main()

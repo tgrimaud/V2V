@@ -72,7 +72,11 @@ def _log_telemetry(telemetry: TelemetryRecorder) -> None:
         "events": [event.__dict__ for event in telemetry.events()],
         "metrics": [metric.__dict__ for metric in telemetry.metrics()],
     }
-    print(json.dumps(payload, sort_keys=True), file=sys.stderr)
+    # flush=True: the per-call telemetry dump is the only latency/QA evidence for a
+    # streaming call (no HTTP response per turn). When stderr is redirected to a file
+    # it is block-buffered, so without an explicit flush the dump can sit unwritten
+    # until the process exits — losing the evidence for TASK-WEB-009 measurement.
+    print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
 
 
 class WebRtcSignalingService:
@@ -228,8 +232,16 @@ class WebRtcSignalingService:
         return SmallWebRTCTransport(connection, params=params)
 
     def _register_cleanup(self, connection) -> None:
+        # SmallWebRTCConnection emits its connection-state name as the event, so a
+        # clean hangup fires "closed" and an abrupt drop fires "disconnected". Register
+        # both so telemetry is emitted on either teardown path; `_drain_and_discard` is
+        # idempotent (the second event finds the session already popped).
         @connection.event_handler("closed")
         async def _on_closed(conn) -> None:  # noqa: ANN001 - pipecat callback signature
+            await self._drain_and_discard(conn.pc_id)
+
+        @connection.event_handler("disconnected")
+        async def _on_disconnected(conn) -> None:  # noqa: ANN001 - pipecat callback signature
             await self._drain_and_discard(conn.pc_id)
 
     async def _drain_and_discard(self, pc_id: str) -> None:
@@ -243,15 +255,27 @@ class WebRtcSignalingService:
             await self._drain(record)
         self._discard(pc_id)
 
-    async def _drain(self, record: _Session) -> None:
+    async def _drain(self, record: _Session, timeout: float = 5.0) -> None:
         import asyncio
 
+        # Best-effort graceful flush that must NEVER block the telemetry dump. On a
+        # `closed`/`disconnected` connection the transport is already dead, so the
+        # EndFrame queued by `drain()` (stop_when_done) can never reach the transport
+        # output and the coroutine hangs — and because it is stuck in an uncancellable
+        # await, `wait_for` would itself hang awaiting the cancellation. So we wait with
+        # `asyncio.wait` (which returns on timeout without awaiting the pending task) and
+        # then cancel fire-and-forget, guaranteeing we always reach `_discard`/telemetry.
+        drain_task = asyncio.ensure_future(record.session.drain())
         try:
-            await record.session.drain()
-            if record.task is not None:
-                await asyncio.wait_for(record.task, timeout=5)
-        except Exception:  # noqa: BLE001 - best-effort flush; teardown must not fail
-            pass
+            _, pending = await asyncio.wait({drain_task}, timeout=timeout)
+        except Exception:  # noqa: BLE001 - teardown must not fail
+            pending = {drain_task}
+        for task in pending:
+            task.cancel()
+        if pending and record.task is not None:
+            # The session run() task is stuck behind the same dead transport; stop it
+            # fire-and-forget so the loop is not leaked (server close() also reaps it).
+            record.task.cancel()
 
     def _discard(self, pc_id: str) -> None:
         record = self._sessions.pop(pc_id, None)
