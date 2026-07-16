@@ -8,6 +8,7 @@ in-memory fake transport (no `aiortc` / ICE), proving:
 - teardown on transport drop cancels the task gracefully.
 """
 
+import array
 import asyncio
 import sys
 import unittest
@@ -29,6 +30,7 @@ from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult  # n
 from stt_validation.models import SttOutcome, TranscriptResult  # noqa: E402
 from tts_synthesis.models import SynthesisResult, TtsOutcome  # noqa: E402
 from web_voice.streaming_runtime import StreamingVoiceSession  # noqa: E402
+from web_voice.utterance_aggregator import UtteranceAggregator  # noqa: E402
 
 
 def _transcript(outcome: SttOutcome, text: str = "") -> TranscriptResult:
@@ -154,6 +156,39 @@ def _audio_frame(payload: bytes) -> InputAudioRawFrame:
     return InputAudioRawFrame(audio=payload, sample_rate=16000, num_channels=1)
 
 
+def _pcm(ms: float, peak: int, *, sample_rate: int = 16000) -> bytes:
+    """PCM16 mono of `ms` duration at a constant |amplitude| (peak)."""
+    samples = array.array("h", [peak] * int(sample_rate * ms / 1000))
+    return samples.tobytes()
+
+
+def _speech_frame(ms: float = 300.0) -> InputAudioRawFrame:
+    # Peak 2000 > the 1000 speech threshold; > 200 ms min-utterance guard.
+    return _audio_frame(_pcm(ms, 2000))
+
+
+def _silence_frame(ms: float = 300.0) -> InputAudioRawFrame:
+    # Peak 100 < the 1000 speech threshold -> never counts as speech.
+    return _audio_frame(_pcm(ms, 100))
+
+
+def _batch_session(transport, ingress, egress) -> StreamingVoiceSession:
+    """A streaming session wired like the batch-fallback WebRTC path: an utterance
+    aggregator in front of the batch STT, which owns end-of-turn via finish()."""
+    aggregator = UtteranceAggregator(
+        sample_rate_hz=16000, envelope=_envelope(), provider_name="webrtc"
+    )
+    return StreamingVoiceSession(
+        transport,
+        ingress=ingress,
+        egress=egress,
+        envelope=_envelope(),
+        backend=_FakeBackend(),
+        pre_stt=[aggregator],
+        stt_detects_end_of_turn=False,
+    )
+
+
 class StreamingVoiceSessionTest(unittest.IsolatedAsyncioTestCase):
     async def test_drives_the_loop_once_and_flows_audio_out_the_transport(self) -> None:
         # GIVEN a transport feeding one utterance, and STT/answer/TTS fakes
@@ -195,6 +230,44 @@ class StreamingVoiceSessionTest(unittest.IsolatedAsyncioTestCase):
         await session.stop()
         # THEN run() returns without raising (graceful teardown), still one loop
         await asyncio.wait_for(run_task, timeout=10)
+        self.assertEqual(session.run_count, 1)
+
+    async def test_drain_flushes_a_trailing_partial_utterance_on_call_end(self) -> None:
+        # GIVEN a held call where the customer speaks but no trailing silence has
+        # elapsed (mid-speech at hangup): no end-of-turn fires during the call
+        transport = _FakeTransport([_speech_frame(300.0)])
+        egress = _FakeEgress()
+        session = _batch_session(
+            transport, _FakeIngress(_transcript(SttOutcome.SUCCESS, text="hi")), egress
+        )
+        run_task = asyncio.create_task(session.run())
+        await asyncio.wait_for(transport.input().started.wait(), timeout=10)
+        await _wait_for(lambda: len(egress.calls) == 0 or transport.captured_audio != b"")
+        # (nothing synthesized yet: the utterance is still buffered, no end-of-turn)
+        self.assertEqual(transport.captured_audio, b"")
+        # WHEN the call ends and we drain instead of hard-cancelling
+        await session.drain()
+        await asyncio.wait_for(run_task, timeout=10)
+        # THEN the trailing utterance was flushed, answered and synthesized out
+        self.assertEqual(egress.calls[0][0], "ANSWERED:hi")
+        self.assertEqual(transport.captured_audio, b"AUDIO:ANSWERED:hi")
+        self.assertEqual(session.run_count, 1)
+
+    async def test_drain_is_safe_when_no_utterance_is_pending(self) -> None:
+        # GIVEN a held call with only sub-threshold silence (no speech at all)
+        transport = _FakeTransport([_silence_frame(300.0)])
+        egress = _FakeEgress()
+        session = _batch_session(
+            transport, _FakeIngress(_transcript(SttOutcome.SUCCESS, text="hi")), egress
+        )
+        run_task = asyncio.create_task(session.run())
+        await asyncio.wait_for(transport.input().started.wait(), timeout=10)
+        # WHEN the call ends
+        await session.drain()
+        await asyncio.wait_for(run_task, timeout=10)
+        # THEN nothing is invented (no flush, no synthesis) and teardown is clean
+        self.assertEqual(egress.calls, [])
+        self.assertEqual(transport.captured_audio, b"")
         self.assertEqual(session.run_count, 1)
 
 

@@ -111,5 +111,63 @@ class WebRtcSignalingTest(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.1)
 
 
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
+    async def test_call_end_drains_session_before_discarding(self) -> None:
+        # GIVEN a signaling service holding one live session record
+        from web_voice.webrtc_signaling import WebRtcSignalingService, _Session
+
+        drained = asyncio.Event()
+        logged: list = []
+
+        class _FakeSession:
+            async def drain(self) -> None:
+                drained.set()
+
+        service = WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=logged.append,
+        )
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc-1"),
+            session=_FakeSession(),
+            envelope=SimpleNamespace(correlation_id="c"),
+            telemetry=SimpleNamespace(),
+            task=None,
+        )
+        service._sessions["pc-1"] = record
+        # WHEN the call ends (closed/disconnected path)
+        await service._drain_and_discard("pc-1")
+        # THEN the session was drained (trailing partial flushed) then discarded + logged
+        self.assertTrue(drained.is_set())
+        self.assertNotIn("pc-1", service._sessions)
+        self.assertEqual(logged, [record.telemetry])
+
+    async def test_drain_failure_still_discards_the_session(self) -> None:
+        # GIVEN a session whose drain() raises (e.g. abrupt drop mid-flush)
+        from web_voice.webrtc_signaling import WebRtcSignalingService, _Session
+
+        class _ExplodingSession:
+            async def drain(self) -> None:
+                raise RuntimeError("socket already gone")
+
+        service = WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=lambda _t: None,
+        )
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc-2"),
+            session=_ExplodingSession(),
+            envelope=SimpleNamespace(correlation_id="c"),
+            telemetry=SimpleNamespace(),
+            task=None,
+        )
+        service._sessions["pc-2"] = record
+        # WHEN the call ends and draining fails
+        await service._drain_and_discard("pc-2")
+        # THEN teardown still proceeds (best-effort flush never blocks discard)
+        self.assertNotIn("pc-2", service._sessions)
+
+
 if __name__ == "__main__":
     unittest.main()

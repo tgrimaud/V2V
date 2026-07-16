@@ -203,7 +203,28 @@ class WebRtcSignalingService:
     def _register_cleanup(self, connection) -> None:
         @connection.event_handler("closed")
         async def _on_closed(conn) -> None:  # noqa: ANN001 - pipecat callback signature
-            self._discard(conn.pc_id)
+            await self._drain_and_discard(conn.pc_id)
+
+    async def _drain_and_discard(self, pc_id: str) -> None:
+        """On call end/drop: flush a trailing partial utterance (TASK-WEB-008) before
+        discarding, so a customer still mid-speech at hangup still yields an
+        end_of_turn span + final transcript in telemetry instead of a silently
+        dropped turn. Draining is best-effort; teardown always proceeds.
+        """
+        record = self._sessions.get(pc_id)
+        if record is not None:
+            await self._drain(record)
+        self._discard(pc_id)
+
+    async def _drain(self, record: _Session) -> None:
+        import asyncio
+
+        try:
+            await record.session.drain()
+            if record.task is not None:
+                await asyncio.wait_for(record.task, timeout=5)
+        except Exception:  # noqa: BLE001 - best-effort flush; teardown must not fail
+            pass
 
     def _discard(self, pc_id: str) -> None:
         record = self._sessions.pop(pc_id, None)
