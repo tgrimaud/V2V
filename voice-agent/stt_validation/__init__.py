@@ -21,6 +21,13 @@ from .quality import (
     word_error_rate,
 )
 from .runner import SttValidationRunner
+from .streaming import (
+    FinalTranscript,
+    GradiumStreamingSession,
+    GradiumStreamingSttProvider,
+    PartialTranscript,
+    StreamingSttError,
+)
 from .telemetry import LatencyReport, TelemetryRecorder
 
 __all__ = [
@@ -31,12 +38,17 @@ __all__ = [
     "FixtureCategory",
     "FixtureQualityReport",
     "FixtureSpec",
+    "FinalTranscript",
     "FixtureSttProvider",
     "GradiumResponse",
+    "GradiumStreamingSession",
+    "GradiumStreamingSttProvider",
     "GradiumSttError",
     "GradiumSttProvider",
     "LatencyReport",
     "NoSpeechDetectedError",
+    "PartialTranscript",
+    "StreamingSttError",
     "PIPELINE_SLICES",
     "PipelineTimingReport",
     "SliceTiming",

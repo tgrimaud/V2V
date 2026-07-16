@@ -20,8 +20,8 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | Slice | Span source | Status |
 |---|---|---|
 | `channel_ingress` | `web.voice.ingress` (web) or `stt.audio.accept` (fixture) | Instrumented |
-| `end_of_turn` | `voice.end_of_turn` (batch ingress + streaming aggregator) | Instrumented (TASK-STT-009 batch, TASK-STT-012 streaming) |
-| `stt` | `stt.request` | Instrumented |
+| `end_of_turn` | `voice.end_of_turn` (batch ingress + streaming aggregator + streaming STT processor) | Instrumented (TASK-STT-009 batch, TASK-STT-012 streaming) |
+| `stt` | `stt.request` (batch: transcription call; streaming: post-end-of-turn tail = `time_to_final`) | Instrumented (TASK-STT-010 streaming) |
 | `backend_first_token` | `backend.first_token` (streaming) or `backend.request` (batch) | Instrumented (TASK-WEB-003-D/E) |
 | `tts_first_audio` | `voice.tts.first_audio` (TTS synthesis runner) | Instrumented (TASK-WEB-002) |
 | `channel_egress` | `web.voice.egress` (web voice runtime) | Instrumented (TASK-WEB-002) |
@@ -54,6 +54,24 @@ residual trailing silence on a client stop). Span attributes carry
 and `speech_end_ms`. A buffer with **no usable speech** invents no turn boundary:
 no span is emitted (a `voice.end_of_turn.absent` event is recorded instead), so
 the slice is reported as a gap for that turn rather than a fabricated latency.
+
+### Streaming STT (TASK-STT-010)
+
+On the streaming WebRTC path a `StreamingSttProcessor`
+(`web_voice/streaming_stt_processor.py`) replaces the `[UtteranceAggregator ->
+batch SttFrameProcessor]` pair. It streams audio to the Gradium **WebSocket** ASR
+(`GradiumStreamingSttProvider`) *while the customer speaks* — pushing
+`InterimTranscriptionFrame` partials as they arrive — and finalizes on the
+`StreamingEndOfTurnDetector` end-of-turn (which this processor now owns, emitting
+the `voice.end_of_turn` span on this path). Because most audio is transcribed
+during speech, the `stt.request` span measures only the **post-end-of-turn tail**
+(`time_to_final`) — live ~0.8 s vs ~3.4 s for the batch REST call on a clip this
+long. The processor also emits `time_to_first_partial` and `time_to_final` (as
+records + `stt.time_to_first_partial_ms` / `stt.time_to_final_ms` metrics) so the
+`stt` slice reports both. Selected with `server --stt-mode streaming` (Gradium
+only, default); `--stt-mode batch` keeps the aggregator path. A server error or
+mid-turn transport drop degrades safely (`stt.failure`, no final frame). See
+ADR-0023 and `docs/qa/stt-010-streaming-stt-qa.md`.
 
 ## How it works
 

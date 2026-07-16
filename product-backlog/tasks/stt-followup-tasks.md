@@ -388,7 +388,9 @@ pipeline wiring.
 **Depends on:** TASK-STT-008 (Gradium provider)
 **Pairs with:** TASK-WEB-004 (streaming TTS voice-out) — the two form the low-latency voice loop
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 6 (latency optimization, paired with streaming TTS TASK-WEB-004)
+**Status:** Implemented (Sprint 6, 2026-07-16) — stacked on TASK-STT-012; live WebRTC
+gate green (streaming `stt.request` tail **818 ms** vs ~3.4 s batch); RF-007 closed;
+pending adversarial review + QA acceptance + user validation
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-STT-010-streaming-stt`
 
@@ -443,6 +445,28 @@ Scenario: Partial transcripts stream during speech
   compared against the batch baseline.
 - Behave scenario for the streaming outcome.
 - RF-007 moved to Closed once the streaming transport lands.
+
+### Delivery Evidence (2026-07-16)
+
+- **Spike (`docs/qa/stt-010-streaming-stt-spike.md`):** confirmed Gradium WebSocket
+  ASR (`wss://api.gradium.ai/api/speech/asr`); post-end-of-turn tail 0.78 s vs ~3.4 s
+  batch (~4×); `websockets`/`aiohttp` already in the venv (no new dependency).
+- **Provider seam:** `stt_validation/streaming.py` — `GradiumStreamingSttProvider` +
+  `GradiumStreamingSession` (async, injectable WS connector; key only in the connect
+  header; error/drop → `StreamingSttError`). `build_streaming_provider` factory.
+- **Pipeline:** `web_voice/streaming_stt_processor.py` — streams audio during speech,
+  pushes `InterimTranscriptionFrame` partials, owns end-of-turn via
+  `StreamingEndOfTurnDetector` (`has_speech` gate), emits the final `TranscriptionFrame`
+  + `stt.request` span with `time_to_first_partial`/`time_to_final`. Wired via
+  `StreamingVoiceSession.stt_processor` + `WebRtcSignalingService`; `server --stt-mode`
+  (default `streaming`, Gradium only; `batch` keeps the aggregator fallback).
+- **Tests:** +9 provider unit (fake WS), +6 processor unit (fake provider), +2 Behave
+  scenarios (`features/streaming_stt.feature`). Full suite **241 unit / 7 Behave
+  features (21 scenarios)** green.
+- **Live gate (`docs/qa/stt-010-streaming-stt-qa.md`):** real Gradium streaming STT over
+  WebRTC — `stt.request` **818 ms** tail, `time_to_first_partial` 1249 ms (mid-speech),
+  one `voice.end_of_turn` span, correlation-id continuity through backend + TTS.
+- **ADR-0023** records the transport + turn-finalization decision. **RF-007 → Closed**.
 
 ---
 

@@ -13,6 +13,7 @@ from .gradium_provider import (
     GradiumSttProvider,
 )
 from .providers import FixtureSttProvider, SttProvider
+from .streaming import GradiumStreamingSttProvider
 
 FIXTURE = "fixture"
 GRADIUM = "gradium"
@@ -32,6 +33,25 @@ def _build_gradium() -> GradiumSttProvider:
     if not api_key:
         raise ValueError("GRADIUM_API_KEY must be set to use the gradium provider")
     return GradiumSttProvider(
+        api_key,
+        language=os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE),
+        input_format=os.environ.get("GRADIUM_INPUT_FORMAT", DEFAULT_INPUT_FORMAT),
+    )
+
+
+def build_streaming_provider(name: str = GRADIUM) -> GradiumStreamingSttProvider:
+    """Build the streaming (WebSocket) STT provider for the low-latency voice path.
+
+    Only Gradium has a streaming variant (TASK-STT-010); the fixture provider stays
+    batch-only, so the WebRTC path falls back to the batch aggregator when the
+    streaming provider is not available.
+    """
+    if name != GRADIUM:
+        raise ValueError(f"Streaming STT is only available for the '{GRADIUM}' provider")
+    api_key = os.environ.get("GRADIUM_API_KEY")
+    if not api_key:
+        raise ValueError("GRADIUM_API_KEY must be set to use the gradium streaming provider")
+    return GradiumStreamingSttProvider(
         api_key,
         language=os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE),
         input_format=os.environ.get("GRADIUM_INPUT_FORMAT", DEFAULT_INPUT_FORMAT),
