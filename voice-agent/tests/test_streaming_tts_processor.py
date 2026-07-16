@@ -308,7 +308,27 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         interrupted = [e for e in telemetry.events() if e.name == "tts.interrupted"]
         self.assertTrue(interrupted)
         self.assertEqual(interrupted[0].attributes["outcome"], "interrupted")
+        self.assertIn("elapsed_ms", interrupted[0].attributes)
         self.assertFalse(any(e.name == "tts.failure" for e in telemetry.events()))
+        # AND because audio did play, exactly one voice.tts.first_audio span is emitted
+        # (carrying the time-to-first-audio, a valid slice sample — never total elapsed)
+        spans = [s for s in telemetry.spans() if s.name == TTS_FIRST_AUDIO_SPAN]
+        self.assertEqual(len(spans), 1)
+        self.assertEqual(spans[0].attributes["outcome"], "interrupted")
+
+    async def test_barge_in_before_any_audio_emits_no_first_audio_span(self):
+        # GIVEN a synthesis interrupted before any audio chunk was streamed
+        telemetry = TelemetryRecorder()
+        session = GatedSession([])
+        processor = _processor(FakeProvider(session), telemetry)
+        # WHEN the customer barges in before the first audio
+        sink = await _drive_with_interruption(processor, [TextFrame(text="reponse")])
+        # THEN no audio played and NO first_audio span is emitted (it would skew the
+        # tts_first_audio p95), but the interruption is still recorded and cleaned up
+        self.assertEqual(sink.audio, [])
+        self.assertTrue(session.closed)
+        self.assertEqual([s for s in telemetry.spans() if s.name == TTS_FIRST_AUDIO_SPAN], [])
+        self.assertTrue(any(e.name == "tts.interrupted" for e in telemetry.events()))
 
 
 async def _drive_with_interruption(processor: StreamingTtsProcessor, frames) -> _Sink:

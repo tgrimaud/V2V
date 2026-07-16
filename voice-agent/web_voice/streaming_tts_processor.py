@@ -110,14 +110,16 @@ class StreamingTtsProcessor(FrameProcessor):
             # Stop synthesizing, report the interrupted outcome (with the chunks already
             # played), and re-raise so the framework completes the interruption cleanly.
             self.chunk_count = chunk_count
-            self._emit_interrupted(chunk_count, timer.elapsed_ms())
+            self._emit_interrupted(first_audio_ms, chunk_count, timer.elapsed_ms())
             raise
         except Exception as exc:  # noqa: BLE001 - failure stays observable (StreamingTtsError et al.)
             self._emit_failure(exc, timer.elapsed_ms())
             return
         finally:
-            # Always release the WebSocket — success, failure or barge-in cancellation —
-            # so an interrupted turn never leaks the streaming connection.
+            # Release the WebSocket on every path — success, failure or barge-in
+            # cancellation — so an interrupted turn does not leak the streaming
+            # connection. Best-effort: under a re-cancellation during close the socket
+            # may be dropped rather than cleanly closed (the provider reaps it on drop).
             await self._safe_aclose(session)
         self.chunk_count = chunk_count
         if chunk_count == 0:
@@ -127,8 +129,9 @@ class StreamingTtsProcessor(FrameProcessor):
         self._emit_success(first_audio_ms or 0.0, timer.elapsed_ms(), chunk_count)
 
     async def _safe_aclose(self, session: Any) -> None:
-        """Close the streaming session, swallowing close-time faults so cleanup in a
-        `finally` never masks the turn outcome (or the barge-in cancellation)."""
+        """Best-effort close of the streaming session, swallowing close-time faults so
+        cleanup in a `finally` never masks the turn outcome (or the barge-in
+        cancellation). A CancelledError raised during close still propagates."""
         try:
             await session.aclose()
         except Exception:  # noqa: BLE001 - close is best-effort
@@ -162,12 +165,25 @@ class StreamingTtsProcessor(FrameProcessor):
         self._telemetry.span(TTS_FIRST_AUDIO_SPAN, total_ms, **attrs)
         self._telemetry.record("tts.unavailable", error_code=code, **attrs)
 
-    def _emit_interrupted(self, chunk_count: int, total_ms: float) -> None:
+    def _emit_interrupted(
+        self, first_audio_ms: float | None, chunk_count: int, total_ms: float
+    ) -> None:
         if self._telemetry is None or self._envelope is None:
             return
         attrs = self._attrs(INTERRUPTED_OUTCOME)
-        self._telemetry.span(TTS_FIRST_AUDIO_SPAN, total_ms, **attrs)
-        self._telemetry.record("tts.interrupted", audio_chunks=chunk_count, **attrs)
+        # The first audio really played before the barge-in, so emit the
+        # voice.tts.first_audio span with the *time-to-first-audio* (a valid slice
+        # sample) — never total elapsed, which would skew the tts_first_audio p95.
+        # If no chunk was ever played (rare: stale bot-speaking flag), emit no span.
+        if first_audio_ms is not None:
+            self._telemetry.span(TTS_FIRST_AUDIO_SPAN, first_audio_ms, **attrs)
+        # total_ms (elapsed at interruption) lives on the event, not the timing span.
+        self._telemetry.record(
+            "tts.interrupted",
+            audio_chunks=chunk_count,
+            elapsed_ms=round(total_ms, 3),
+            **attrs,
+        )
 
     def _emit_failure(self, exc: Exception, total_ms: float) -> None:
         if self._telemetry is None or self._envelope is None:
