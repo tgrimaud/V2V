@@ -22,10 +22,12 @@ VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
 from pipecat.frames.frames import (  # noqa: E402
+    BotStartedSpeakingFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
+    InterruptionFrame,
     StartFrame,
     TranscriptionFrame,
 )
@@ -132,6 +134,7 @@ class _Sink(FrameProcessor):
         super().__init__()
         self.finals: list[str] = []
         self.interims: list[str] = []
+        self.interruptions = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -139,6 +142,8 @@ class _Sink(FrameProcessor):
             self.interims.append(frame.text)
         elif isinstance(frame, TranscriptionFrame):
             self.finals.append(frame.text)
+        elif isinstance(frame, InterruptionFrame):
+            self.interruptions += 1
         await self.push_frame(frame, direction)
 
 
@@ -249,6 +254,34 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         # THEN the pending turn is finalized on EndFrame
         self.assertEqual(sink.finals, ["bonjour"])
         self.assertEqual(processor.final_count, 1)
+
+    async def test_barge_in_broadcasts_interruption_when_bot_speaking(self):
+        # GIVEN the bot is speaking, then the customer starts speaking (onset)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("stop")], "stop")
+        processor = _processor(FakeProvider(session), telemetry)
+        frames = [BotStartedSpeakingFrame()] + [_speech_frame()] * 3 + [_silence_frame()] * 10
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN an InterruptionFrame is broadcast downstream and a barge-in is recorded
+        self.assertGreaterEqual(sink.interruptions, 1)
+        self.assertTrue(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+        self.assertTrue(any(m.name == "voice.barge_in.count" for m in telemetry.metrics()))
+        # AND the barge-in utterance is still captured as the new turn
+        self.assertEqual(sink.finals, ["stop"])
+
+    async def test_no_barge_in_when_bot_not_speaking(self):
+        # GIVEN the bot is NOT speaking when the customer speaks (a normal turn)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(FakeProvider(session), telemetry)
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN no interruption is broadcast and no barge-in is recorded
+        self.assertEqual(sink.interruptions, 0)
+        self.assertFalse(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+        self.assertEqual(sink.finals, ["bonjour"])
 
 
 if __name__ == "__main__":

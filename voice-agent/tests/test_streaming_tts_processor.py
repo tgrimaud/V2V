@@ -65,6 +65,31 @@ class FakeSession:
         self.closed = True
 
 
+class GatedSession:
+    """Streams the first chunks, then blocks forever on a gate.
+
+    Lets a test put a synthesis mid-flight (first audio played, more pending) so a
+    barge-in `InterruptionFrame` can cancel it deterministically.
+    """
+
+    def __init__(self, first_chunks):
+        self._first = list(first_chunks)
+        self._gate = asyncio.Event()  # never set: stream stalls until cancelled
+        self.closed = False
+        self.synthesized_text = None
+
+    async def synthesize(self, text):
+        self.synthesized_text = text
+
+    async def stream(self):
+        for chunk in self._first:
+            yield chunk
+        await self._gate.wait()
+
+    async def aclose(self):
+        self.closed = True
+
+
 class FakeProvider:
     name = "fake-streaming-tts"
 
@@ -268,6 +293,48 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         unavailable = [e for e in telemetry.events() if e.name == "tts.unavailable"]
         self.assertTrue(unavailable)
         self.assertEqual(unavailable[0].attributes["error_code"], "no_audio")
+
+    async def test_barge_in_cancels_synthesis_and_closes_session(self):
+        # GIVEN a synthesis in flight (first chunk played, more pending on a gate)
+        telemetry = TelemetryRecorder()
+        session = GatedSession([AudioChunk(b"\x01\x02")])
+        processor = _processor(FakeProvider(session), telemetry)
+        # WHEN the customer barges in (an InterruptionFrame reaches the processor)
+        sink = await _drive_with_interruption(processor, [TextFrame(text="une longue reponse")])
+        # THEN only the already-played chunk was emitted, the session is closed (no
+        # leaked WebSocket), and an interrupted outcome is recorded (not a failure)
+        self.assertEqual(sink.audio, [b"\x01\x02"])
+        self.assertTrue(session.closed)
+        interrupted = [e for e in telemetry.events() if e.name == "tts.interrupted"]
+        self.assertTrue(interrupted)
+        self.assertEqual(interrupted[0].attributes["outcome"], "interrupted")
+        self.assertFalse(any(e.name == "tts.failure" for e in telemetry.events()))
+
+
+async def _drive_with_interruption(processor: StreamingTtsProcessor, frames) -> _Sink:
+    """Start a synthesis, wait for it to be in-flight, then inject an InterruptionFrame
+    (barge-in) so Pipecat cancels the processor's task mid-stream."""
+    sink = _Sink()
+    pipeline = Pipeline([_Source(frames), processor, sink])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        from pipecat.frames.frames import EndFrame, InterruptionFrame
+        from pipecat.pipeline.runner import PipelineRunner
+        from pipecat.pipeline.task import PipelineParams, PipelineTask
+
+        task = PipelineTask(
+            pipeline, params=PipelineParams(), enable_rtvi=False,
+            enable_turn_tracking=False, cancel_on_idle_timeout=False, check_dangling_tasks=False,
+        )
+        run = asyncio.create_task(PipelineRunner(handle_sigint=False).run(task))
+        deadline = asyncio.get_event_loop().time() + 1.5
+        while not sink.audio and asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.02)
+        await task.queue_frames([InterruptionFrame()])
+        await asyncio.sleep(0.1)
+        await task.queue_frames([EndFrame()])
+        await asyncio.wait_for(run, timeout=10)
+    return sink
 
 
 async def _drive_no_audio(processor: StreamingTtsProcessor, frames) -> _Sink:

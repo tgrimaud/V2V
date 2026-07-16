@@ -20,6 +20,8 @@ import asyncio
 from typing import Any
 
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
@@ -45,6 +47,10 @@ from .end_of_turn import (
 
 DEFAULT_PROVIDER_NAME = "gradium-stt-streaming"
 STT_REQUEST_SPAN = "stt.request"
+# Barge-in observability (TASK-WEB-008): emitted when speech onset while the bot is
+# speaking triggers an interruption of the spoken answer.
+BARGE_IN_EVENT = "voice.barge_in.detected"
+BARGE_IN_METRIC = "voice.barge_in.count"
 # The final transcript should land ~1 s after end-of-turn; cap the wait so a stalled
 # provider fails the turn (safe degraded reply) instead of hanging the call.
 DEFAULT_FINAL_TIMEOUT_S = 10.0
@@ -82,6 +88,10 @@ class StreamingSttProcessor(FrameProcessor):
         self._first_partial_ms: float | None = None
         # Read by tests: number of final transcripts emitted this session.
         self.final_count = 0
+        # True while the bot's spoken answer is playing (tracked from the
+        # BotStarted/StoppedSpeakingFrame the output transport emits upstream). Speech
+        # onset is treated as a barge-in only while this is set (TASK-WEB-008).
+        self._bot_speaking = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -90,6 +100,11 @@ class StreamingSttProcessor(FrameProcessor):
         elif isinstance(frame, EndFrame):
             await self._on_end(direction)
             await self.push_frame(frame, direction)
+        elif isinstance(frame, (BotStartedSpeakingFrame, BotStoppedSpeakingFrame)):
+            # The output transport emits these upstream as it starts / stops playing the
+            # bot audio; track the state and forward them untouched.
+            self._bot_speaking = isinstance(frame, BotStartedSpeakingFrame)
+            await self.push_frame(frame, direction)
         else:
             await self.push_frame(frame, direction)
 
@@ -97,6 +112,8 @@ class StreamingSttProcessor(FrameProcessor):
         decision = self._detector.observe(frame.audio)
         if self._detector.has_speech and self._session is None:
             await self._open_session()
+            if self._bot_speaking:
+                await self._trigger_barge_in()
         if self._session is not None:
             await self._session.send_audio(frame.audio)
             await self._emit_partials(self._session, direction)
@@ -104,6 +121,20 @@ class StreamingSttProcessor(FrameProcessor):
             await self._finalize(decision.detection, direction)
         elif decision.discard:
             await self._discard_session()
+
+    async def _trigger_barge_in(self) -> None:
+        """Customer started speaking mid-answer: cut the bot now.
+
+        `broadcast_interruption()` sends an `InterruptionFrame` downstream (Pipecat
+        cancels the streaming TTS task and the output transport flushes its buffered
+        audio) and upstream, so playback stops promptly. Fires at most once per turn —
+        the `self._session is None` onset guard opens a session exactly once — and the
+        `_bot_speaking` flag is cleared so a stale value cannot re-trigger next turn
+        before the BotStoppedSpeakingFrame arrives.
+        """
+        self._bot_speaking = False
+        self._emit_barge_in()
+        await self.broadcast_interruption()
 
     async def _on_end(self, direction: FrameDirection) -> None:
         decision = self._detector.finish()
@@ -159,6 +190,17 @@ class StreamingSttProcessor(FrameProcessor):
         if self._session is not None:
             await self._session.aclose()
             self._session = None
+
+    def _emit_barge_in(self) -> None:
+        if self._telemetry is None or self._envelope is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+        }
+        self._telemetry.record(BARGE_IN_EVENT, **attrs)
+        self._telemetry.metric(BARGE_IN_METRIC, 1, **attrs)
 
     def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:
         if self._telemetry is None or self._envelope is None or detection.slice_ms is None:
