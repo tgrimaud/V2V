@@ -27,11 +27,18 @@
 | `InterimTranscriptionFrame` (streaming partials) never synthesized | Pass | `..._does_not_synthesize_interim_transcription`; live run (1 synthesis/turn) | Regression for the "bot repeats the question" bug (partials inherit from `TextFrame`) |
 | Empty answer → UNAVAILABLE, no invented audio | Pass | `..._empty_text_reports_unavailable_without_audio`; `streaming_tts.feature` #2 | `tts.unavailable` (`empty_text`) event, no frames |
 | Provider error → FAILED, safe degrade (no audio) | Pass | `..._provider_error_degrades_without_audio` | sanitized `tts.failure`, session closed, no crash |
+| Connect/handshake failure at `open()` → FAILED (no silent turn) | Pass | `..._connect_failure_degrades_without_audio` | `provider.open()` wrapped; auth/credit/drop maps to sanitized `tts.failure`, no audio |
+| Text present but zero chunks → UNAVAILABLE (`no_audio`) | Pass | `..._zero_chunks_reports_unavailable_without_audio` | never invents audio when the stream is empty |
 | API key never in a frame/log/telemetry | Pass | `test_streaming_tts_provider.test_setup_sent_first_without_key`, `..._api_key_travels_only_in_connect_header` | Key only in the connect header |
 | Safe error mapping (credits / auth / voice id / drop / unparsable) | Pass | `test_streaming_tts_provider` (5 mapped cases) | Raw payload never surfaced |
 | Batch TTS path + stdlib/fixture path unchanged | Pass | batch provider untouched; `--tts-mode batch` keeps `TtsFrameProcessor`; full suite green | Fallback preserved |
 
-Regression net: **259 unit tests OK**; **Behave 8 features / 23 scenarios / 103 steps**.
+Synthesis is an exact-type **allowlist** (`type(frame) is TextFrame`): only a plain
+answer frame is spoken; every `TextFrame` subclass is forwarded untouched, so a future
+subclass cannot regress into "the bot speaks the question". Per-chunk stall budget
+lowered 30 s → **8 s** so a stalled socket degrades within a turn.
+
+Regression net: **261 unit tests OK**; **Behave 8 features / 23 scenarios / 103 steps**.
 
 ## Latency Results
 Live WebRTC round trip, **Gradium streaming TTS** (+ streaming STT), stub backend,

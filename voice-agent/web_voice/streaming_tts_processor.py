@@ -24,9 +24,7 @@ from typing import Any
 
 from pipecat.frames.frames import (
     Frame,
-    InterimTranscriptionFrame,
     TextFrame,
-    TranscriptionFrame,
     TTSAudioRawFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -67,13 +65,13 @@ class StreamingTtsProcessor(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
-        # Synthesize only the plain answer TextFrame. BOTH TranscriptionFrame and
-        # InterimTranscriptionFrame subclass TextFrame but are NOT plain answers:
-        # they are upstream STT output (final + live partials from the streaming STT
-        # processor). Synthesizing them would speak the customer's own question back.
-        if isinstance(frame, (TranscriptionFrame, InterimTranscriptionFrame)):
-            await self.push_frame(frame, direction)
-        elif isinstance(frame, TextFrame):
+        # Allowlist, not denylist: synthesize ONLY a *plain* answer TextFrame
+        # (`type is TextFrame`). Every TextFrame *subclass* — TranscriptionFrame and
+        # InterimTranscriptionFrame (final + live partials from the streaming STT
+        # processor), and any future subclass — is forwarded untouched. An exact-type
+        # check is safe-by-default: a new TextFrame subclass can never leak into
+        # synthesis and make the bot speak the customer's own words back.
+        if type(frame) is TextFrame:
             await self._synthesize(frame, direction)
         else:
             await self.push_frame(frame, direction)
@@ -81,7 +79,14 @@ class StreamingTtsProcessor(FrameProcessor):
     async def _synthesize(self, frame: TextFrame, direction: FrameDirection) -> None:
         text = frame.text
         timer = Timer()
-        session = await self._provider.open()
+        try:
+            # Connecting + sending the setup can fail (auth/credit rejection at the
+            # handshake, unreachable host, drop). Map it to the same sanitized
+            # FAILED path so a connect fault is never a silent, unobservable turn.
+            session = await self._provider.open()
+        except Exception as exc:  # noqa: BLE001 - connect/handshake failure stays observable
+            self._emit_failure(exc, timer.elapsed_ms())
+            return
         first_audio_ms: float | None = None
         chunk_count = 0
         try:

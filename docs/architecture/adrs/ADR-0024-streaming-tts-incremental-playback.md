@@ -42,14 +42,21 @@ and as the fallback).
    `TtsFrameProcessor` on the streaming path; the batch processor remains the
    fallback. It lives in `web_voice` (the WebRTC composition layer), keeping the
    transport-agnostic `voice_pipeline` TTS service free of the streaming wiring per
-   the architecture-separation test. `TranscriptionFrame` (a `TextFrame` subclass,
-   upstream STT output) is forwarded untouched — only plain answer text is
-   synthesized.
+   the architecture-separation test. Synthesis is an **allowlist**
+   (`type(frame) is TextFrame`), not a denylist: only a *plain* answer `TextFrame` is
+   spoken, and every `TextFrame` subclass (`TranscriptionFrame` +
+   `InterimTranscriptionFrame` = STT output, and any future subclass) is forwarded
+   untouched — safe-by-default so a new subclass can never leak into synthesis and make
+   the bot speak the customer's own words back (the regression that motivated the
+   exact-type check).
 3. **Safety invariants preserved (mirror of the batch runner).** A non-success
    outcome never invents audio: empty text → `UNAVAILABLE` (`empty_text`); a
-   provider error → `FAILED` with a sanitized `tts.failure`; text present but zero
-   chunks → `UNAVAILABLE` (`no_audio`). In every non-success case nothing flows
-   downstream.
+   connect/handshake failure at `provider.open()` (auth/credit rejection, unreachable
+   host, drop) or a mid-stream provider error → `FAILED` with a sanitized
+   `tts.failure`; text present but zero chunks → `UNAVAILABLE` (`no_audio`). In every
+   non-success case nothing flows downstream and no secret is exposed. A stalled socket
+   surfaces as `FAILED` within a conversational per-chunk budget
+   (`DEFAULT_CHUNK_TIMEOUT_S = 8 s`) rather than freezing the turn.
 4. **Wiring is configurable.** `StreamingVoiceSession` accepts an injected
    `tts_processor`; `WebRtcSignalingService` builds the streaming TTS processor when
    a streaming TTS provider is present (independent of the STT mode, so it applies to

@@ -77,6 +77,20 @@ class FakeProvider:
         return self._sessions.pop(0)
 
 
+class FailingOpenProvider:
+    """Fails at connect/handshake time (open raises before any session exists)."""
+
+    name = "fake-streaming-tts"
+
+    def __init__(self, error):
+        self._error = error
+        self.open_count = 0
+
+    async def open(self):
+        self.open_count += 1
+        raise self._error
+
+
 class _Source(FrameProcessor):
     def __init__(self, frames) -> None:
         super().__init__()
@@ -228,6 +242,32 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.audio, [])
         self.assertTrue(session.closed)
         self.assertTrue(any(e.name == "tts.failure" for e in telemetry.events()))
+
+    async def test_connect_failure_degrades_without_audio(self):
+        # GIVEN the provider fails at connect/handshake time (open raises)
+        telemetry = TelemetryRecorder()
+        provider = FailingOpenProvider(StreamingTtsError("auth rejected at handshake"))
+        processor = _processor(provider, telemetry)
+        # WHEN a synthesis is attempted
+        sink = await _drive_no_audio(processor, [TextFrame(text="bonjour")])
+        # THEN the connect fault is a sanitized tts.failure, not a silent dead turn
+        self.assertEqual(provider.open_count, 1)
+        self.assertEqual(sink.audio, [])
+        self.assertTrue(any(e.name == "tts.failure" for e in telemetry.events()))
+
+    async def test_zero_chunks_reports_unavailable_without_audio(self):
+        # GIVEN the provider streams no audio at all (text present, zero chunks)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([])
+        processor = _processor(FakeProvider(session), telemetry)
+        # WHEN a synthesis is attempted
+        sink = await _drive_no_audio(processor, [TextFrame(text="bonjour")])
+        # THEN no audio is invented and a no_audio UNAVAILABLE outcome is recorded
+        self.assertEqual(sink.audio, [])
+        self.assertTrue(session.closed)
+        unavailable = [e for e in telemetry.events() if e.name == "tts.unavailable"]
+        self.assertTrue(unavailable)
+        self.assertEqual(unavailable[0].attributes["error_code"], "no_audio")
 
 
 async def _drive_no_audio(processor: StreamingTtsProcessor, frames) -> _Sink:

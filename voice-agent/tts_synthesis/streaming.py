@@ -33,7 +33,11 @@ DEFAULT_MODEL = "default"
 DEFAULT_VOICE_ID = "b35yykvVppLXyw_l"
 DEFAULT_OUTPUT_FORMAT = DEFAULT_AUDIO_FORMAT  # pcm_16000 (PCM16 mono 16 kHz)
 GRADIUM_TTS_WS_URL = "wss://api.gradium.ai/api/speech/tts"
-DEFAULT_CHUNK_TIMEOUT_S = 30.0
+# Per-chunk receive budget. Kept conversational (not the old 30 s): a stalled socket
+# must surface as a safe StreamingTtsError fast enough not to freeze the voice loop.
+# Generous enough for a cold first-chunk (warm ~0.4 s, cold ~1.5 s), tight enough that
+# a mid-stream stall degrades within a turn. Configurable via the provider ctor.
+DEFAULT_CHUNK_TIMEOUT_S = 8.0
 
 
 @dataclass(frozen=True)

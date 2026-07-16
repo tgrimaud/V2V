@@ -9,8 +9,9 @@ The egress collaborator is injected (duck-typed `TtsEgress`) so this module neve
 imports `web_voice` (whose package init also pulls the STT half) nor
 `stt_validation`, preserving the hard STT/TTS separation.
 
-Note: `TranscriptionFrame` subclasses `TextFrame`, so we synthesize only *plain*
-`TextFrame`s (the echo stage's output) and forward transcription frames untouched.
+Note: several frame types subclass `TextFrame` (TranscriptionFrame,
+InterimTranscriptionFrame = STT output), so we synthesize only *plain* `TextFrame`s
+(the backend answer) via an exact-type allowlist and forward every subclass untouched.
 The `web.voice.egress` span is intentionally NOT emitted here: it is measured by the
 transport after the audio is actually sent (the turn processor calls the egress
 `record_egress` with the real send window), preserving parity with the stdlib path.
@@ -21,9 +22,7 @@ from typing import Any, Protocol
 
 from pipecat.frames.frames import (
     Frame,
-    InterimTranscriptionFrame,
     TextFrame,
-    TranscriptionFrame,
     TTSAudioRawFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -55,13 +54,12 @@ class TtsFrameProcessor(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
-        # Synthesize only the plain answer TextFrame. BOTH TranscriptionFrame and
-        # InterimTranscriptionFrame subclass TextFrame but are upstream STT output
-        # (final + live partials on the streaming-STT path) — forward them untouched
-        # so the bot never speaks the customer's own question back.
-        if isinstance(frame, (TranscriptionFrame, InterimTranscriptionFrame)):
-            await self.push_frame(frame, direction)
-        elif isinstance(frame, TextFrame):
+        # Allowlist, not denylist: synthesize ONLY a *plain* answer TextFrame
+        # (`type is TextFrame`). Every TextFrame *subclass* — TranscriptionFrame and
+        # InterimTranscriptionFrame (final + live STT partials), and any future
+        # subclass — is forwarded untouched, so the bot never speaks the customer's
+        # own question back and a new subclass is safe by default.
+        if type(frame) is TextFrame:
             await self._synthesize(frame, direction)
         else:
             await self.push_frame(frame, direction)
