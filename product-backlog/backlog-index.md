@@ -46,7 +46,7 @@ against the new empty-codebase plan.
 | US-018 | Call the bot for a spoken invoice explanation | V1 core | Draft | High |
 | US-019 | Ask from a web voice chat | V1 core | Done (Sprint 5, 2026-07-15; full Voice2Voice loop: STT → backend answer → TTS, stub + http backends) | High |
 | US-020 | Receive a quick spoken acknowledgement during long analysis | V1 core | Draft | Medium |
-| US-021 | Interrupt the bot during a spoken answer | V1 core | ✅ Validated by user (2026-07-16) — Sprint 6 (TASK-WEB-008 barge-in), merge-ready | Medium |
+| US-021 | Interrupt the bot during a spoken answer | V1 core | ✅ Validated by user (2026-07-16) — Sprint 6 (TASK-WEB-008 barge-in), merged into `feat/sprint-6-streaming` | Medium |
 | US-022 | Use text to complement a voice question | V1 enabler | Draft | Low |
 | US-023 | Be transferred on explicit request | V1 core | Draft | High |
 | US-024 | Be transferred when the bot lacks enough certainty | V1 core | Draft | High |
@@ -96,7 +96,7 @@ against the new empty-codebase plan.
 | TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | ✅ Done (Sprint 6, 2026-07-16 — validated + merged; live first-audio 363 ms; review 96/100) | High |
 | TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Done (Sprint 4) | High |
 | TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) driving the pipeline on one long-lived async loop (closes RF-012) | V1 core | Planned (Sprint 6) | High |
-| TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | ✅ Validated by user (2026-07-16), merge-ready (unmerged) | Medium |
+| TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | ✅ Validated by user (2026-07-16), merged into `feat/sprint-6-streaming` (branch deleted) | Medium |
 | TASK-WEB-009 | Streaming QA + `time_to_first_audio` p95 < 800 ms latency report + ADR-0018 evidence (Sprint 6 close) | V1 pilot gate | Planned (Sprint 6) | High |
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned (Sprint 6) | Low |
