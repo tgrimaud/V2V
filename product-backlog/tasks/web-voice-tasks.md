@@ -737,7 +737,7 @@ Scenario: STT and TTS stay independent in the pipeline
 `GlobalExceptionHandler` `ERR_UPSTREAM` pattern
 **Depends on:** TASK-WEB-005 (voice endpoints + `VoiceTurnProcessor` seam)
 **Classification:** V1 hardening
-**Status:** Implemented on `task/TASK-WEB-006-generic-voice-errors` (2026-07-16) — unit + behave green; pending adversarial review, QA and user validation
+**Status:** ✅ Validated by user (2026-07-16) — adversarial review 94/100 (Pass), 281 unit + behave green, live full-stack validated. Merge-ready on `task/TASK-WEB-006-generic-voice-errors` (unmerged — merge on explicit request). Closes RF-013
 **Priority:** Low
 **Branch:** `task/TASK-WEB-006-generic-voice-errors` (from `feat/sprint-6-streaming`)
 **Source finding:** RF-013 (`product-backlog/review-findings.md`)

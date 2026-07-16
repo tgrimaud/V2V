@@ -56,7 +56,7 @@ and barge-in.
 | TASK-STT-010 | Streaming STT (partial + final transcripts) | STT | High | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming`; live tail 818 ms vs ~3.4 s batch; RF-007 closed |
 | TASK-WEB-004 | Streaming TTS (incremental playback, time-to-first-audio) | TTS | High | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming`; live first-audio 363 ms vs ~1.59 s batch; review 96/100 (open()/allowlist/timeout hardening) |
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming` (no-ff; branch deleted). Live full-stack: barge-in cuts the answer, resumes the new turn; anti-echo gate (amplitude threshold + N-frame confirmation) fixed without-headphones self-interruption |
-| TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | ✅ Implemented (2026-07-16) on `task/TASK-WEB-006-generic-voice-errors` — unit + behave green; pending review/QA/user validation |
+| TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | ✅ Validated by user (2026-07-16) — adversarial review 94/100, 281 unit + behave green, live validated; merge-ready (unmerged) |
 | TASK-WEB-009 | Streaming QA + `p95 < 800 ms` latency report + ADR update (sprint close) | QA / Docs | High | Planned |
 
 ### Out of scope (confirmed with the user, 2026-07-15)
@@ -206,5 +206,5 @@ back once validated.
 | TASK-STT-010 | `task/TASK-STT-010-streaming-stt` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-004 | `task/TASK-WEB-004-streaming-tts` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
-| TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | ✅ Implemented (2026-07-16) — unmerged; pending review/QA/user validation |
+| TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | ✅ Validated by user (2026-07-16) — merge-ready (unmerged; awaiting explicit merge request) |
 | TASK-WEB-009 | `task/TASK-WEB-009-streaming-qa-latency` | Planned |
