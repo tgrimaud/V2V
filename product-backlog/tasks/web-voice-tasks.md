@@ -1010,7 +1010,12 @@ Scenario: The bot does not interrupt itself
 (per-step latency before any SLO claim), ADR-0010 (industrialization gates)
 **Depends on:** TASK-WEB-007, TASK-STT-012, TASK-STT-010, TASK-WEB-004, TASK-WEB-008
 **Classification:** V1 pilot gate
-**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Status:** In progress — Sprint 6 (`sprints/sprint-6-streaming.md`). Delivered:
+`time_to_first_audio` composite + `scripts/streaming_latency_report.py` + E2E
+`streaming_loop.feature` (297 unit tests, 10 Behave features green); docs
+(voice-journey-timing, HTTP contract WebRTC surface, ADR-0018 evidence) + QA report
+`docs/qa/streaming-voice-qa-report.md`. Pending: warm live latency sample (fills the
+consolidated p50/p95/p99 + ADR-0018 gate outcome), adversarial review, user validation.
 **Priority:** High
 **Branch:** `task/TASK-WEB-009-streaming-qa-latency`
 
