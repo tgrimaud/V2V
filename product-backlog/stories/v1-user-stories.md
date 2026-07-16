@@ -978,3 +978,60 @@ Scenario: Pilot readiness can be decided
   Then it includes customer outcome coverage, evidence reliability, p50/p95/p99 latency, escalation reasons, unresolved questions and open risks
   And it separates Genesys contact-center metrics from AI-layer metrics when Genesys participates
 ```
+
+---
+
+## US-041 - End The Call When The Customer Signals They Are Done
+
+**Parent:** EPIC-006
+**Classification:** V1 core
+**Status:** Draft (proposed 2026-07-16)
+**Priority:** Medium
+
+### User Story
+
+As an end customer, when I signal that I am finished (for example "au revoir",
+"merci, c'est tout", "bonne journée"), I want the bot to acknowledge and end the
+call cleanly, so that I do not have to hang up manually and the conversation
+closes naturally.
+
+### Business Rules
+
+| ID | Rule |
+|----|------|
+| BR-041-1 | The bot must not end the call while the customer still needs help — a closing word inside a longer request (or a negation such as "non, pas au revoir") must not terminate the call. |
+| BR-041-2 | Before ending, the bot gives a short spoken closing so the ending is never abrupt. |
+| BR-041-3 | The end-of-call reason must be observable for pilot review, distinct from a manual hangup or an error/drop. |
+| BR-041-4 | V1 covers French closing formulas; broader language coverage is deferred. |
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Customer says a closing formula and the call ends cleanly
+  Given the customer has received their answer
+  When the customer clearly signals they are done (for example "au revoir")
+  Then the bot gives a short spoken closing
+  And the call ends cleanly without the customer having to hang up
+  And the end-of-call reason is observable for pilot review
+```
+
+```gherkin
+Scenario: A closing word inside a longer request does not end the call
+  Given the customer is still explaining their problem
+  When they use a closing word as part of a longer sentence
+  Then the bot does not end the call
+  And the conversation continues normally
+```
+
+### Open Questions
+
+- OQ-041-a: On a clear standalone closing, does the bot end immediately after its
+  closing message, or first ask a confirmation ("Souhaitez-vous autre chose ?")
+  and end only on confirmation / silence? (UX vs false-positive trade-off.)
+- OQ-041-b: Detection basis — a curated closing-phrase list, or intent
+  classification (more robust to phrasing), or a hybrid? (Decision owner: Product
+  + Architecture. The barge-in lesson showed keyword-only matching is fragile.)
+- OQ-041-c: Timeout-based end of call (prolonged customer silence) — in scope with
+  farewell detection, or a separate story?
+- OQ-041-d: Web session close in V1; phone/Genesys hangup semantics deferred to
+  the contact-center integration — confirm the V1 channel boundary.

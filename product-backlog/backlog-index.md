@@ -66,6 +66,7 @@ against the new empty-codebase plan.
 | US-038 | Track escalations and their reasons | V1 pilot gate | Draft | Medium |
 | US-039 | Track unresolved questions | V1 pilot gate | Draft | Medium |
 | US-040 | Produce the pilot readiness report | V1 pilot gate | Draft | High |
+| US-041 | End the call when the customer signals they are done (e.g. "au revoir") | V1 core | Draft (proposed 2026-07-16) — EPIC-006 | Medium |
 
 ## Technical Tasks
 
@@ -98,6 +99,7 @@ against the new empty-codebase plan.
 | TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) driving the pipeline on one long-lived async loop (closes RF-012) | V1 core | Planned (Sprint 6) | High |
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | ✅ Validated by user (2026-07-16), merged into `feat/sprint-6-streaming` (branch deleted) | Medium |
 | TASK-WEB-009 | Streaming QA + `time_to_first_audio` p95 < 800 ms latency report + ADR-0018 evidence (Sprint 6 close) | V1 pilot gate | Planned (Sprint 6) | High |
+| TASK-WEB-010 | End the call on a customer closing formula (US-041) — detect closing intent on final transcript, speak a closing, end the session; false-positive guard + end-of-call reason telemetry | V1 core | Proposed (2026-07-16, unscheduled) | Medium |
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | Planned (Sprint 6) | Low |
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |

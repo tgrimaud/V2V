@@ -1027,3 +1027,95 @@ Scenario: The streaming loop meets the pilot latency acceptance criterion
 - QA report published; docs + ADR-0018 evidence updated; no code-only contract for
   the new WebRTC surface.
 - Go/no-go recommendation for the streaming voice pilot.
+
+---
+
+## TASK-WEB-010 - End The Call On A Customer Closing Formula (US-041)
+
+**Parent:** EPIC-006 (+ EPIC-010)
+**Related story:** US-041 (end the call when the customer signals they are done),
+US-019 (voice runtime)
+**Related decision:** ADR-0002 (streaming voice path); a dedicated ADR is required
+if intent-based detection or a confirmation step is chosen (see open questions)
+**Depends on:** streaming STT (TASK-STT-010, merged), streaming TTS (TASK-WEB-004,
+merged), graceful pipeline drain on call end (delivered with TASK-WEB-008)
+**Classification:** V1 core
+**Status:** Proposed (2026-07-16) — not yet scheduled in a sprint
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-010-call-end-farewell` (to be created when scheduled)
+
+### Objective
+
+Let the bot **end the call cleanly when the customer signals they are done**
+(closing formulas such as "au revoir", "merci c'est tout", "bonne journée"):
+detect the closing intent on a final transcript, speak a short closing message,
+then terminate the streaming session — instead of leaving the customer to hang up
+manually (US-041).
+
+### Context (why this is needed)
+
+Today a call only ends when the customer closes the browser tab / drops the
+WebRTC session (`session.stop()` → graceful drain added in TASK-WEB-008). There is
+no conversational way to end a call, which feels unnatural and leaves the channel
+open. This is the customer-facing counterpart to barge-in on the conversation
+lifecycle. It reuses the existing streaming STT final transcript, TTS for the
+closing message, and the drain/teardown machinery already in place.
+
+### Scope
+
+- Detect a customer closing intent on a **final** transcript (not partials).
+- **False-positive protection (BR-041-1):** do not end on a closing word embedded
+  in a longer request or a negation ("non, pas au revoir"). Mirror the barge-in
+  echo lesson: naive `contains()` matching is fragile — prefer standalone-phrase /
+  intent detection with a confirmation guard (see open questions).
+- Speak a short closing message via TTS before ending (BR-041-2).
+- Terminate the streaming session gracefully after the closing message drains.
+- **Telemetry (BR-041-3):** record the end-of-call reason as a distinct value
+  (e.g. `customer_farewell`) vs manual/`client_stop` vs error/drop, under the turn
+  correlation id; emit an OpenTelemetry event/span for pilot review.
+- FR closing formulas in V1 (BR-041-4); make the phrase set/config externalizable
+  (env-tunable), consistent with the barge-in thresholds pattern.
+
+### Out Of Scope
+
+- Phone / Genesys hangup semantics (deferred to the contact-center integration).
+- Silence-timeout-based end of call (candidate separate story — OQ-041-c).
+- Backend conversation-summary generation on call end (separate concern).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Customer says a closing formula and the call ends cleanly
+  Given the streaming voice loop is active and the customer has their answer
+  When the customer clearly says a closing formula (for example "au revoir")
+  Then the bot plays a short spoken closing
+  And the streaming session ends gracefully
+  And the end-of-call reason is recorded as customer_farewell for pilot review
+```
+
+```gherkin
+Scenario: A closing word inside a longer request does not end the call
+  Given the streaming voice loop is active
+  When the customer uses a closing word as part of a longer sentence
+  Then the call is not ended
+  And the turn is answered normally
+```
+
+### Required Evidence
+
+- Developer tests: closing-intent detection fires on standalone closing, not on
+  embedded/negated closing; end-of-call reason set correctly; teardown path taken.
+- Behave scenario for the end-of-call outcome (composed STT → intent → TTS →
+  graceful drain), reusing the TASK-WEB-008 single-phase harness pattern.
+- OpenTelemetry evidence: end-of-call event with reason under the turn correlation id.
+- Live Chrome DevTools MCP validation: closing formula ends the call after the
+  spoken closing; embedded closing word does not.
+- When validated live by the user, **US-041 → Done**.
+
+### Open Questions (must be resolved before implementation)
+
+- OQ-041-a: immediate end after the closing message vs a confirmation step
+  ("Souhaitez-vous autre chose ?").
+- OQ-041-b: curated phrase list vs intent classification vs hybrid.
+- OQ-041-c: include silence-timeout end of call, or keep it a separate story.
+- OQ-041-d: confirm the V1 channel boundary (web session close only).

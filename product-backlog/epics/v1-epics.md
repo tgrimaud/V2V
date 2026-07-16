@@ -251,6 +251,7 @@ answer or escalation path with acceptable perceived latency.
 - US-020 - Receive a quick spoken acknowledgement during long analysis.
 - US-021 - Interrupt the bot during a spoken answer.
 - US-022 - Use text to complement a voice question.
+- US-041 - End the call when the customer signals they are done.
 
 ---
 
