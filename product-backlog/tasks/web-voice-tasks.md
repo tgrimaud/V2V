@@ -926,6 +926,21 @@ exist in the batch loop. The frontend already learned the "stop the current
   review; register any new span name if it feeds a slice.
 - Safe behaviour: no barge-in on the bot's own audio / echo; configurable onset
   threshold; no invented turn on spurious noise (reuse the TASK-STT-012 guarantee).
+- **Graceful end-of-turn flush on call end/drop (carried from TASK-STT-012 QA).**
+  Today the streaming `UtteranceAggregator.finish()` (client-stop flush) only runs
+  on an `EndFrame`, but WebRTC teardown cancels the pipeline task (`session.stop()`
+  → `CancelFrame`) and a single client `"closed"` event only logs telemetry, so a
+  trailing partial utterance (customer still mid-speech at hangup) is never flushed.
+  This ticket already touches the same frame-cancellation/teardown machinery, so
+  fold in a graceful drain: add a `StreamingVoiceSession.drain()` that queues an
+  `EndFrame` (or `stop_when_done`) and awaits completion, and call it on the
+  `"closed"`/`"disconnected"` event in `webrtc_signaling` before discard. The
+  aggregator's `EndFrame → finish()` path already exists.
+  - Evidence: unit test (fake transport: speech then drop with no silence window →
+    exactly one `client_stop` flush + `voice.end_of_turn` span); live re-run with a
+    clip that ends mid-speech asserting `end_of_turn_signal=client_stop`.
+  - Note: a genuinely abrupt network drop may remain best-effort. Cost estimate:
+    ~2–4 h incl. tests (see `docs/qa/stt-012-streaming-end-of-turn-qa.md`).
 
 ### Out Of Scope
 
