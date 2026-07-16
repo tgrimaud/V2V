@@ -28,6 +28,7 @@ from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 from .streaming_runtime import StreamingVoiceSession
 from .streaming_stt_processor import StreamingSttProcessor
+from .streaming_tts_processor import StreamingTtsProcessor
 from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
 
@@ -66,6 +67,7 @@ class WebRtcSignalingService:
         telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
         log: Callable[[TelemetryRecorder], None] = _log_telemetry,
         streaming_provider: Any = None,
+        streaming_tts_provider: Any = None,
     ) -> None:
         support = probe_webrtc_support()
         if not support.available:
@@ -83,6 +85,10 @@ class WebRtcSignalingService:
         # (partials during speech, low-latency finalize) instead of the batch
         # utterance aggregator + one-shot transcription.
         self._streaming_provider = streaming_provider
+        # When set (TASK-WEB-004), each session uses the streaming TTS processor
+        # (incremental playback on the first chunk) instead of the batch TTS
+        # processor. Independent of the STT mode, so it applies to both paths.
+        self._streaming_tts_provider = streaming_tts_provider
         self._sessions: dict[str, _Session] = {}
 
     def handle_offer(self, body: dict, *, timeout: float = 30.0) -> dict:
@@ -121,11 +127,25 @@ class WebRtcSignalingService:
 
     def _build_session(self, connection, envelope, telemetry) -> StreamingVoiceSession:
         transport = self._build_transport(connection)
+        tts_processor = self._build_tts_processor(envelope, telemetry)
         if self._streaming_provider is not None:
-            return self._build_streaming_session(transport, envelope, telemetry)
-        return self._build_batch_session(transport, envelope, telemetry)
+            return self._build_streaming_session(transport, envelope, telemetry, tts_processor)
+        return self._build_batch_session(transport, envelope, telemetry, tts_processor)
 
-    def _build_streaming_session(self, transport, envelope, telemetry) -> StreamingVoiceSession:
+    def _build_tts_processor(self, envelope, telemetry):
+        """Streaming TTS processor for the session, or None (batch TTS fallback)."""
+        if self._streaming_tts_provider is None:
+            return None
+        return StreamingTtsProcessor(
+            self._streaming_tts_provider,
+            envelope,
+            telemetry,
+            provider_name=self._streaming_tts_provider.name,
+        )
+
+    def _build_streaming_session(
+        self, transport, envelope, telemetry, tts_processor
+    ) -> StreamingVoiceSession:
         stt = StreamingSttProcessor(
             self._streaming_provider,
             envelope,
@@ -142,9 +162,12 @@ class WebRtcSignalingService:
             # The streaming STT processor consumes continuous audio, owns end-of-turn
             # detection + its span and emits the final transcript itself.
             stt_processor=stt,
+            tts_processor=tts_processor,
         )
 
-    def _build_batch_session(self, transport, envelope, telemetry) -> StreamingVoiceSession:
+    def _build_batch_session(
+        self, transport, envelope, telemetry, tts_processor
+    ) -> StreamingVoiceSession:
         aggregator = UtteranceAggregator(
             sample_rate_hz=DEFAULT_SAMPLE_RATE,
             telemetry=telemetry,
@@ -162,6 +185,7 @@ class WebRtcSignalingService:
             # The aggregator owns incremental end-of-turn detection + its span on the
             # streaming path, so the batch detector in the ingress is skipped here.
             stt_detects_end_of_turn=False,
+            tts_processor=tts_processor,
         )
 
     def _build_transport(self, connection):

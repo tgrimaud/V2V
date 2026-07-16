@@ -588,7 +588,7 @@ conversation-contract surface are both documented under `docs/` and linked from
 **Pairs with:** TASK-STT-010 (streaming STT) — the two form the low-latency voice loop
 **Related decision:** DEC-005 (Pipecat streaming voice path; ADR-0002), DEC-010 (per-step latency before any SLO claim)
 **Classification:** V1 core
-**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Status:** Implemented — Sprint 6 (`sprints/sprint-6-streaming.md`); live first-audio ~463 ms vs ~1.59 s batch (~3.4x cut); ADR-0024 + `docs/qa/web-004-streaming-tts-qa.md`; pending adversarial review + QA + user validation
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-WEB-004-streaming-tts`
 

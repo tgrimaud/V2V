@@ -32,7 +32,10 @@ from stt_validation.provider_factory import (  # noqa: E402
     build_provider,
     build_streaming_provider,
 )
-from tts_synthesis.provider_factory import build_provider as build_tts_provider  # noqa: E402
+from tts_synthesis.provider_factory import (  # noqa: E402
+    build_provider as build_tts_provider,
+    build_streaming_provider as build_streaming_tts_provider,
+)
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
 from .egress import WebVoiceEgress  # noqa: E402
@@ -287,6 +290,7 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
         loop=loop,
         ice_servers=ice,
         streaming_provider=_build_streaming_provider(args),
+        streaming_tts_provider=_build_streaming_tts_provider(args),
     )
     return signaling, loop
 
@@ -302,6 +306,17 @@ def _build_streaming_provider(args) -> Any:
     return build_streaming_provider(args.provider)
 
 
+def _build_streaming_tts_provider(args) -> Any:
+    """Build the streaming TTS provider for the WebRTC path, or None (batch fallback).
+
+    Streaming TTS (TASK-WEB-004) is Gradium-only; any other provider or an explicit
+    `--tts-mode batch` keeps the batch TTS processor (synthesize whole clip then play).
+    """
+    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+        return None
+    return build_streaming_tts_provider(args.provider)
+
+
 def main() -> int:
     args = _parse_args()
     ingress = WebVoiceIngress(build_provider(args.provider))
@@ -315,7 +330,8 @@ def main() -> int:
     print(
         f"Web voice server on http://{args.host}:{args.port} "
         f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name}, "
-        f"webrtc={'on' if signaling else 'off'}, stt_mode={args.stt_mode})",
+        f"webrtc={'on' if signaling else 'off'}, stt_mode={args.stt_mode}, "
+        f"tts_mode={args.tts_mode})",
         file=sys.stderr,
     )
     try:
@@ -363,6 +379,12 @@ def _parse_args() -> argparse.Namespace:
         choices=("streaming", "batch"),
         default=os.environ.get("VOICE_STT_MODE", "streaming"),
         help="WebRTC STT path: 'streaming' (default, Gradium WS partials) or 'batch'",
+    )
+    parser.add_argument(
+        "--tts-mode",
+        choices=("streaming", "batch"),
+        default=os.environ.get("VOICE_TTS_MODE", "streaming"),
+        help="WebRTC TTS path: 'streaming' (default, Gradium WS incremental) or 'batch'",
     )
     return parser.parse_args()
 
