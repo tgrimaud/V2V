@@ -23,7 +23,7 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | `end_of_turn` | `voice.end_of_turn` (batch ingress + streaming aggregator + streaming STT processor) | Instrumented (TASK-STT-009 batch, TASK-STT-012 streaming) |
 | `stt` | `stt.request` (batch: transcription call; streaming: post-end-of-turn tail = `time_to_final`) | Instrumented (TASK-STT-010 streaming) |
 | `backend_first_token` | `backend.first_token` (streaming) or `backend.request` (batch) | Instrumented (TASK-WEB-003-D/E) |
-| `tts_first_audio` | `voice.tts.first_audio` (TTS synthesis runner) | Instrumented (TASK-WEB-002) |
+| `tts_first_audio` | `voice.tts.first_audio` (batch runner; streaming: time-to-first-audio) | Instrumented (TASK-WEB-002 batch, TASK-WEB-004 streaming) |
 | `channel_egress` | `web.voice.egress` (web voice runtime) | Instrumented (TASK-WEB-002) |
 
 For `channel_ingress` the first present span wins: a web turn uses
@@ -72,6 +72,23 @@ records + `stt.time_to_first_partial_ms` / `stt.time_to_final_ms` metrics) so th
 only, default); `--stt-mode batch` keeps the aggregator path. A server error or
 mid-turn transport drop degrades safely (`stt.failure`, no final frame). See
 ADR-0023 and `docs/qa/stt-010-streaming-stt-qa.md`.
+
+### Streaming TTS (TASK-WEB-004)
+
+On the streaming WebRTC path a `StreamingTtsProcessor`
+(`web_voice/streaming_tts_processor.py`) replaces the batch `TtsFrameProcessor`. It
+streams the answer text to the Gradium **WebSocket** TTS
+(`GradiumStreamingTtsProvider`) and pushes each `TTSAudioRawFrame` *as it arrives*,
+so playback starts on the first synthesized chunk instead of after the whole clip.
+The `voice.tts.first_audio` span (same name the batch runner emits, so the
+`tts_first_audio` slice needs no change) now measures **time-to-first-audio** — live
+~0.46 s vs ~1.59 s for the batch whole-clip synthesis (~3.4x cut). The processor
+also emits `tts.time_to_first_audio_ms` and `tts.time_to_last_audio_ms` metrics (+ a
+`tts.audio.final` event with the chunk count). A non-success outcome never invents
+audio: empty text → `tts.unavailable`, a provider error → sanitized `tts.failure`,
+nothing flows downstream. Selected with `server --tts-mode streaming` (Gradium only,
+default); `--tts-mode batch` keeps the batch processor. See ADR-0024 and
+`docs/qa/web-004-streaming-tts-qa.md`.
 
 ## How it works
 
@@ -162,6 +179,12 @@ and the scenarios in `features/web_voice.feature` / `features/pipeline_timing.fe
 - `tests/test_web_voice_ingress.py` (end-of-turn span emission + absent event).
 - `tests/test_tts_runner.py` / `tests/test_web_voice_egress.py` (`voice.tts.first_audio`
   and `web.voice.egress` span emission for the voice-out slices).
+- `tests/test_streaming_tts_provider.py` (streaming TTS seam: incremental chunks,
+  key hygiene, safe error mapping) and `tests/test_streaming_tts_processor.py`
+  (streaming TTS processor: incremental `TTSAudioRawFrame`s, `voice.tts.first_audio`
+  span + time-to-first/last-audio metrics, UNAVAILABLE/FAILED safe degrade).
+- `features/streaming_tts.feature` (streaming TTS incremental-playback outcome +
+  time-to-first-audio observability).
 - `features/pipeline_timing.feature` (US-036 acceptance scenarios over a reviewed
   sample of web voice turns — the STT-only sample, plus full-turn samples through
   the backend bridge where the `backend_first_token`, `tts_first_audio` and
