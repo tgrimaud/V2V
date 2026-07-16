@@ -93,7 +93,7 @@ against the new empty-codebase plan.
 | TASK-WEB-003-E | End-to-end backend telemetry + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | V1 pilot gate | Validated by user (2026-07-15; review 95/100; RF-021) — merged into sprint | High |
 | TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | V1 core | Merged into sprint (2026-07-15; resolves RF-020) | High |
 | TASK-WEB-003-G | QA + behave + latency table + docs + conversation-contract ADR | V1 core | ✅ Done (Sprint 5, 2026-07-15; review 95/100; ADR-0021 + HTTP contract + QA report + latency sample) | High |
-| TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | Implemented (Sprint 6, 2026-07-16 — live first-audio ~463 ms; pending review + QA) | High |
+| TASK-WEB-004 | Stream the bot voice response — incremental TTS playback (US-036 `tts_first_audio` slice) | V1 core | ✅ Done (Sprint 6, 2026-07-16 — validated + merged; live first-audio 363 ms; review 96/100) | High |
 | TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Done (Sprint 4) | High |
 | TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) driving the pipeline on one long-lived async loop (closes RF-012) | V1 core | Planned (Sprint 6) | High |
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | Planned (Sprint 6) | Medium |
