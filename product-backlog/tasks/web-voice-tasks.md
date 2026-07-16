@@ -737,7 +737,7 @@ Scenario: STT and TTS stay independent in the pipeline
 `GlobalExceptionHandler` `ERR_UPSTREAM` pattern
 **Depends on:** TASK-WEB-005 (voice endpoints + `VoiceTurnProcessor` seam)
 **Classification:** V1 hardening
-**Status:** Planned — Sprint 6 (`sprints/sprint-6-streaming.md`)
+**Status:** ✅ Validated by user (2026-07-16) — adversarial review 94/100 (Pass), 281 unit + behave green, live full-stack validated. Merge-ready on `task/TASK-WEB-006-generic-voice-errors` (unmerged — merge on explicit request). Closes RF-013
 **Priority:** Low
 **Branch:** `task/TASK-WEB-006-generic-voice-errors` (from `feat/sprint-6-streaming`)
 **Source finding:** RF-013 (`product-backlog/review-findings.md`)
@@ -796,6 +796,31 @@ Scenario: Both runtimes return the same client-safe error contract
   (extends `test_voice_runtime.py::test_turn_endpoint_fails_closed_with_json_when_stt_fails`).
 - Confirmation the raw reason still appears in the server-side log line.
 - Closes RF-013.
+
+### Implementation (2026-07-16)
+
+- New `web_voice/error_response.py::client_error_body(error_code, correlation_id,
+  outcome)` builds the client-safe body `{outcome, error_code, correlation_id,
+  message}`. Only author-controlled strings reach the body; the raw provider reason
+  is never included. A small curated message map covers client-actionable codes
+  (`no_speech`, `empty_text`, timeouts, `no_transcript`, `no_audio`) with a generic
+  default.
+- `server.py` `_handle_stt` / `_handle_tts` / `_handle_turn` now serialize this body
+  on every 502 (both runtimes route through the same handler). `_turn_stt_error` /
+  `_turn_tts_error` cover the `no_transcript` / `no_audio` fallbacks with the
+  envelope correlation id.
+- Full sanitized reason retained server-side: `_log_turn` still dumps the
+  `stt.failure` / `tts.failure` telemetry events (which carry `error_reason`) to
+  stderr under the correlation id — verified by
+  `test_voice_runtime.py::test_turn_502_keeps_the_full_reason_in_the_server_log`.
+- Frontend `static/app.js` reads the generic `message` (falls back to legacy
+  `error_reason`).
+- Tests: `tests/test_error_response.py` (mapper units) +
+  client-safe/parity/server-log tests in `test_voice_runtime.py`, plus `/stt` and
+  `/tts` HTTP client-safe assertions in `test_web_voice_ingress.py` /
+  `test_web_voice_egress.py`. Full suite: 281 unit + 9 behave features green.
+- Docs: `docs/architecture/voice-runtime-http-contract.md` updated to the new 502
+  shape.
 
 ---
 

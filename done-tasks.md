@@ -437,3 +437,36 @@ mechanism for the cut (ADR-0025). Silero deferred as a drop-in verdict upgrade.
 - `voice-agent/features/barge_in.feature`, `voice-agent/features/steps/barge_in_steps.py` — behave e2e (composed STT→TTS barge-in)
 - `voice-agent/tests/test_streaming_stt_processor.py`, `test_streaming_tts_processor.py` — barge-in fire/no-fire + interruption cleanup + TTFA-span tests
 - `docs/architecture/adrs/ADR-0025-barge-in-native-interruption.md`, `docs/architecture/adrs/README.md`
+
+## 2026-07-16 — Sprint 6: Genericize voice error responses (TASK-WEB-006, closes RF-013)
+
+**Summary:**
+
+Stopped the voice HTTP endpoints from echoing raw provider exception text in their
+`502` bodies. Even after sanitization redacts paths/ids/secrets (RF-001/RF-009),
+generic provider wording could still reach the client. Now every `/api/voice/stt`,
+`/tts` and `/turn` `502` returns a client-safe body — a stable `error_code`, the
+`correlation_id` and a generic author-controlled `message` — while the full sanitized
+reason stays server-side in the `_log_turn` telemetry, retrievable by correlation id
+(mirrors the Java backend `ERR_UPSTREAM` pattern).
+
+### What shipped
+- New `web_voice/error_response.py::client_error_body(error_code, correlation_id, outcome)` → `{outcome, error_code, correlation_id, message}`. Only author-controlled strings reach the body; a small curated map covers client-actionable codes (`no_speech`, `empty_text`, timeouts, `no_transcript`, `no_audio`) with a generic default.
+- `web_voice/server.py`: all three `502` paths (both stdlib + pipecat runtimes route through the same handler) serialize this body; `_turn_stt_error` / `_turn_tts_error` cover the `no_transcript` / `no_audio` fallbacks with the envelope correlation id.
+- `web_voice/static/app.js`: reads the generic `message` (falls back to legacy `error_reason`).
+
+### Tests + review + live validation
+- **Full suite green: 281 unit tests + behave 9 features / 25 scenarios / 114 steps.** New `tests/test_error_response.py` (mapper units) + client-safe/runtime-parity/server-log-retention tests in `test_voice_runtime.py` + `/stt` and `/tts` HTTP client-safe assertions.
+- **Adversarial code review: 94/100, QA gate Pass** — no blocking findings; two Low non-blocking (global `sys.stderr` patch in one test; generic `no_audio` on a near-unreachable path). Both accepted.
+- **User live full-stack validation: PASS** (fixture provider, real HTTP). A `FileNotFoundError("Transcript fixture not found: <temp path>")` on `/turn` and `/stt` returned a generic `502` (`error_code: fixture_missing`, no path/wording), `/tts?text=` returned `unavailable`/`empty_text`, and `/tts?text=Bonjour` still returned a `200` WAV. Two-sided proof: client bodies carried no internal wording/path, while the server log kept `error_reason: "Transcript fixture not found: <redacted-path>"` under the same correlation id (raw temp path already redacted at source — 0 occurrences).
+
+### Status
+- **Validated by user (2026-07-16); merge-ready on `task/TASK-WEB-006-generic-voice-errors` (unmerged — merge on explicit request).** RF-013 closed.
+
+### Files changed
+- `voice-agent/web_voice/error_response.py` (new) — client-safe error body mapper
+- `voice-agent/web_voice/server.py` — genericized `502` on `/stt` `/tts` `/turn` + `_turn_stt_error` / `_turn_tts_error`
+- `voice-agent/web_voice/static/app.js` — read generic `message`
+- `voice-agent/tests/test_error_response.py` (new), `test_voice_runtime.py`, `test_web_voice_ingress.py`, `test_web_voice_egress.py`
+- `docs/architecture/voice-runtime-http-contract.md` — new `502` shape
+- `product-backlog/` — `tasks/web-voice-tasks.md`, `review-findings.md` (RF-013 closed), `sprints/sprint-6-streaming.md`, `backlog-index.md`

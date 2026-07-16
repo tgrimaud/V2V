@@ -105,9 +105,9 @@ class WebVoiceEgressTest(unittest.TestCase):
 
 
 class WebVoiceTtsServerTest(unittest.TestCase):
-    def _serve(self) -> int:
+    def _serve(self, tts_provider=None) -> int:
         ingress = WebVoiceIngress(_StubStt())
-        egress = WebVoiceEgress(FixtureTtsProvider())
+        egress = WebVoiceEgress(tts_provider or FixtureTtsProvider())
         processor = StdlibTurnProcessor(ingress, egress)
         server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -141,6 +141,23 @@ class WebVoiceTtsServerTest(unittest.TestCase):
         self.assertEqual(status, 502)
         self.assertIn("application/json", content_type)
         self.assertEqual(json.loads(body.decode("utf-8"))["outcome"], "unavailable")
+
+    def test_post_provider_failure_returns_a_client_safe_body(self) -> None:
+        # GIVEN a TTS provider that raises a distinctive exception message
+        port = self._serve(_RaisingProvider(RuntimeError("Gradium TTS credits exhausted")))
+
+        status, content_type, body = self._post(port, {"text": "Bonjour", "correlation_id": "c9"})
+
+        # THEN the 502 body is client-safe: stable code + correlation id + generic
+        # message, and never the raw provider exception text (RF-013)
+        self.assertEqual(status, 502)
+        self.assertIn("application/json", content_type)
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(payload["error_code"], "tts_error")
+        self.assertEqual(payload["correlation_id"], "c9")
+        self.assertTrue(payload["message"])
+        self.assertNotIn("error_reason", payload)
+        self.assertNotIn(b"credits exhausted", body)
 
 
 class _StubStt:

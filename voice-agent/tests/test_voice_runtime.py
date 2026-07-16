@@ -264,6 +264,54 @@ class VoiceTurnEndpointTest(unittest.TestCase):
                 self.assertEqual(body["outcome"], "failed")
                 self.assertTrue(body["correlation_id"])
 
+    def test_turn_502_body_is_client_safe_on_both_runtimes(self) -> None:
+        # GIVEN both runtimes wired to an STT provider that raises a distinctive message
+        # (_FailingStt raises RuntimeError("provider unavailable"))
+        for runtime in (STDLIB, PIPECAT):
+            with self.subTest(runtime=runtime):
+                port = self._serve(runtime, _failing_ingress())
+                # WHEN a phrase is posted and a 502 is returned
+                status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
+                self.assertEqual(status, 502)
+                body = json.loads(payload)
+                # THEN the body carries a stable error_code, correlation id and a
+                # generic message — and NEVER the raw provider exception text (RF-013)
+                self.assertTrue(body["error_code"])
+                self.assertTrue(body["correlation_id"])
+                self.assertTrue(body["message"])
+                self.assertNotIn("error_reason", body)
+                self.assertNotIn("provider unavailable", payload.decode("utf-8"))
+
+    def test_both_runtimes_return_the_identical_client_safe_error_shape(self) -> None:
+        # GIVEN both runtimes failing at the STT slice
+        stdlib_body = self._error_body(self._serve(STDLIB, _failing_ingress()))
+        pipecat_body = self._error_body(self._serve(PIPECAT, _failing_ingress()))
+        # THEN the client-safe error contract is identical modulo the correlation id
+        for body in (stdlib_body, pipecat_body):
+            body.pop("correlation_id")
+        self.assertEqual(stdlib_body, pipecat_body)
+
+    def test_turn_502_keeps_the_full_reason_in_the_server_log(self) -> None:
+        # GIVEN a failing STT and a captured server stderr (structured turn log)
+        import io
+
+        port = self._serve(STDLIB, _failing_ingress())
+        captured = io.StringIO()
+        original_stderr = sys.stderr
+        sys.stderr = captured
+        try:
+            # WHEN a turn fails (the handler logs the turn before sending the 502)
+            _status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
+        finally:
+            sys.stderr = original_stderr
+        # THEN the raw reason is absent from the client body but present server-side
+        self.assertNotIn("provider unavailable", payload.decode("utf-8"))
+        self.assertIn("provider unavailable", captured.getvalue())
+
+    def _error_body(self, port: int) -> dict:
+        _status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
+        return json.loads(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

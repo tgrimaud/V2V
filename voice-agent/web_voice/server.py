@@ -40,6 +40,7 @@ from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
 from .egress import WebVoiceEgress  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
+from .error_response import client_error_body  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
 from .runtime import (  # noqa: E402
     DEFAULT_RUNTIME,
@@ -131,8 +132,15 @@ def build_handler(
             telemetry = TelemetryRecorder()
             result = processor.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
             _log_turn(telemetry)
-            status = 200 if result.outcome is SttOutcome.SUCCESS else 502
-            self._send_json(status, result.to_dict())
+            if result.outcome is SttOutcome.SUCCESS:
+                self._send_json(200, result.to_dict())
+                return
+            # Client-safe body: stable code + correlation id, never the raw provider
+            # reason (RF-013). Full reason stays in the telemetry logged above.
+            self._send_json(
+                502,
+                client_error_body(result.error_code, result.correlation_id, result.outcome.value),
+            )
 
         def _handle_tts(self) -> None:
             query = urlparse(self.path).query
@@ -145,7 +153,11 @@ def build_handler(
             response = processor.synthesize_turn(text, envelope, telemetry)
             if response.wav is None:
                 _log_turn(telemetry)
-                self._send_json(502, response.result.to_dict())
+                result = response.result
+                self._send_json(
+                    502,
+                    client_error_body(result.error_code, result.correlation_id, result.outcome.value),
+                )
                 return
             send = Timer()
             self._send_wav(response.wav)
@@ -165,12 +177,12 @@ def build_handler(
             transcript = result.transcript_result
             if transcript is None or transcript.outcome is not SttOutcome.SUCCESS:
                 _log_turn(telemetry)
-                self._send_json(502, transcript.to_dict() if transcript else {"error": "no_transcript"})
+                self._send_json(502, _turn_stt_error(transcript, envelope))
                 return
             response = result.tts_response
             if response is None or response.wav is None:
                 _log_turn(telemetry)
-                self._send_json(502, response.result.to_dict() if response else {"error": "no_audio"})
+                self._send_json(502, _turn_tts_error(response, envelope))
                 return
             send = Timer()
             self._send_wav(response.wav, _answer_headers(transcript, result.answer_result))
@@ -216,6 +228,21 @@ def build_handler(
             return
 
     return WebVoiceHandler
+
+
+def _turn_stt_error(transcript, envelope) -> dict[str, Any]:
+    """Client-safe 502 body for a `/turn` that failed at the STT slice (RF-013)."""
+    if transcript is None:
+        return client_error_body("no_transcript", envelope.correlation_id)
+    return client_error_body(transcript.error_code, transcript.correlation_id, transcript.outcome.value)
+
+
+def _turn_tts_error(response, envelope) -> dict[str, Any]:
+    """Client-safe 502 body for a `/turn` that produced no audio answer (RF-013)."""
+    if response is None:
+        return client_error_body("no_audio", envelope.correlation_id)
+    result = response.result
+    return client_error_body(result.error_code, result.correlation_id, result.outcome.value)
 
 
 def _answer_headers(transcript, answer) -> dict[str, str]:
