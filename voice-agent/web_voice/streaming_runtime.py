@@ -59,6 +59,7 @@ class StreamingVoiceSession:
         pre_stt: Sequence[FrameProcessor] = (),
         stt_detects_end_of_turn: bool = True,
         stt_processor: FrameProcessor | None = None,
+        tts_processor: FrameProcessor | None = None,
     ) -> None:
         self._transport = transport
         self._ingress = ingress
@@ -71,6 +72,10 @@ class StreamingVoiceSession:
         # final TranscriptionFrame itself, so the batch SttFrameProcessor + utterance
         # aggregator are not built.
         self._stt_processor = stt_processor
+        # When set (streaming TTS path, TASK-WEB-004), this processor is the TTS
+        # stage: it streams the answer to the provider and pushes TTSAudioRawFrames
+        # incrementally, so the batch TtsFrameProcessor is not built.
+        self._tts_processor = tts_processor
         # False when a pre-STT utterance aggregator owns incremental end-of-turn
         # detection (streaming path, TASK-STT-012); the batch detector in the
         # ingress is then skipped so the voice.end_of_turn span is not duplicated.
@@ -92,7 +97,9 @@ class StreamingVoiceSession:
             detect_end_of_turn=self._stt_detects_end_of_turn,
         )
         answer = AnswerProcessor(self._backend, self._envelope, self._telemetry)
-        tts = TtsFrameProcessor(self._egress, self._envelope, self._telemetry)
+        tts = self._tts_processor or TtsFrameProcessor(
+            self._egress, self._envelope, self._telemetry
+        )
         return Pipeline(
             [
                 self._transport.input(),

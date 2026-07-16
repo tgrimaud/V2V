@@ -15,6 +15,7 @@ from .gradium_tts_provider import (
     GradiumTtsProvider,
 )
 from .providers import FixtureTtsProvider, TtsProvider
+from .streaming import GradiumStreamingTtsProvider
 
 FIXTURE = "fixture"
 GRADIUM = "gradium"
@@ -39,6 +40,26 @@ def _build_gradium() -> GradiumTtsProvider:
     if not api_key:
         raise ValueError("GRADIUM_API_KEY must be set to use the gradium provider")
     return GradiumTtsProvider(
+        api_key,
+        voice_id=_resolve_voice_id(os.environ.get("GRADIUM_VOICE_ID")),
+        output_format=os.environ.get("GRADIUM_OUTPUT_FORMAT", DEFAULT_OUTPUT_FORMAT),
+        model_name=os.environ.get("GRADIUM_MODEL_NAME", DEFAULT_MODEL),
+    )
+
+
+def build_streaming_provider(name: str = GRADIUM) -> GradiumStreamingTtsProvider:
+    """Build the streaming (WebSocket) TTS provider for incremental playback.
+
+    Only Gradium has a streaming variant (TASK-WEB-004); the fixture provider stays
+    batch-only, so the WebRTC path falls back to the batch TTS processor when the
+    streaming provider is not available.
+    """
+    if name != GRADIUM:
+        raise ValueError(f"Streaming TTS is only available for the '{GRADIUM}' provider")
+    api_key = os.environ.get("GRADIUM_API_KEY")
+    if not api_key:
+        raise ValueError("GRADIUM_API_KEY must be set to use the gradium streaming provider")
+    return GradiumStreamingTtsProvider(
         api_key,
         voice_id=_resolve_voice_id(os.environ.get("GRADIUM_VOICE_ID")),
         output_format=os.environ.get("GRADIUM_OUTPUT_FORMAT", DEFAULT_OUTPUT_FORMAT),
