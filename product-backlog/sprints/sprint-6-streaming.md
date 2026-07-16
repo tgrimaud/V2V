@@ -51,7 +51,7 @@ and barge-in.
 
 | Ticket | Title | Role | Priority | Status |
 |---|---|---|---|---|
-| TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) on a single long-lived async loop | Transport/Enabler | High | In progress (spike done) |
+| TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) on a single long-lived async loop | Transport/Enabler | High | ✅ Done (merged 2026-07-16) |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | Turn detection | Medium | Planned |
 | TASK-STT-010 | Streaming STT (partial + final transcripts) | STT | High | Planned |
 | TASK-WEB-004 | Streaming TTS (incremental playback, time-to-first-audio) | TTS | High | Planned |
@@ -201,7 +201,7 @@ back once validated.
 
 | Ticket | Branch | Status |
 |---|---|---|
-| TASK-WEB-007 | `task/TASK-WEB-007-webrtc-transport` | In progress (spike done) |
+| TASK-WEB-007 | `task/TASK-WEB-007-webrtc-transport` | ✅ Done (merged 2026-07-16, branch deleted) |
 | TASK-STT-012 | `task/TASK-STT-012-streaming-vad-end-of-turn` | Planned |
 | TASK-STT-010 | `task/TASK-STT-010-streaming-stt` | Planned |
 | TASK-WEB-004 | `task/TASK-WEB-004-streaming-tts` | Planned |
