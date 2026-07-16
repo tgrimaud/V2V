@@ -613,3 +613,94 @@ Scenario: End-of-turn fires from streamed audio frames
 - Behave scenario for the streaming end-of-turn outcome.
 - `docs/observability/voice-journey-timing.md` updated to note the streaming
   detector once it lands.
+
+---
+
+## TASK-STT-013 - Reduce STT Post-EOT Finalize Tail To Meet ADR-0018 (p95 < 800 ms)
+
+**Parent:** EPIC-006, EPIC-010
+**Related stories:** US-036 (the `stt` slice + `time_to_first_audio`), US-019 (web voice)
+**Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming STT transport + turn finalization), DEC-010 (per-step latency before any SLO claim)
+**Builds on:** TASK-STT-010 (streaming STT), TASK-WEB-009 (baseline that measured the gap)
+**Classification:** V1 pilot gate — **blocks the Sprint 6 Definition of Done**
+**Status:** Open — spike phase (Sprint 6). Opened from the TASK-WEB-009 warm baseline: `time_to_first_audio` p95 **1698 ms** vs the ADR-0018 criterion **< 800 ms** (NO-GO).
+**Priority:** High (latency-driven; sprint-blocking)
+**Branch:** `task/TASK-STT-013-reduce-finalize-tail`
+
+### Objective
+
+Bring `time_to_first_audio` p95 below the ADR-0018 pilot criterion of **800 ms**
+warm on the web channel, by reducing the dominant slice: the **STT post-end-of-turn
+finalize tail**.
+
+### Context (why this is needed)
+
+The TASK-WEB-009 warm live sample (Gradium streaming STT+TTS, stub backend,
+`docs/qa/streaming-latency-warm-sample.json`) measured `time_to_first_audio`
+**p50 1310 ms / p95 1698 ms** — NO-GO on ADR-0018. The breakdown:
+
+| Slice | p50 | p95 |
+|---|---:|---:|
+| `stt` (post-EOT finalize tail) | 866 ms | **1389 ms** |
+| `backend_first_token` (stub) | ~0 ms | ~0 ms |
+| `tts_first_audio` | 309 ms | 479 ms |
+
+The STT finalize tail **alone exceeds the whole 800 ms budget**. Root cause in the
+code: on end-of-turn, `GradiumStreamingSession.finish()` sends `flush` +
+`end_of_stream` and `wait_final()` blocks on the server's terminal `end_of_stream`
+round-trip — even though the "final" transcript is just `" ".join(parts)`, the
+concatenation of partials **already received**. So the transcript content is
+largely in hand at EOT; we are paying a server round-trip for confirmation.
+
+### Scope
+
+**Phase 1 — Spike (do first, decides feasibility before implementation):**
+- Measure the `flush → end_of_stream` round-trip in isolation against live Gradium
+  (how much of the 866–1389 ms tail is the server finalization vs local overhead).
+- Quantify the accuracy delta between the last stable partial(s) at EOT and the
+  authoritative final (does committing on the last partial lose trailing words?).
+- Prototype **commit-on-last-partial** finalization (commit the answer on the last
+  stable partial at EOT; let the authoritative final confirm/correct asynchronously
+  for telemetry/audit) and measure the resulting `time_to_first_audio`.
+- Explore provider-side finalization tuning and the EOT silence-window contribution
+  (the latter is excluded from the ADR-0018 metric but affects perceived latency).
+- Record findings + a go/no-go on reaching 800 ms in
+  `docs/qa/stt-013-finalize-tail-spike.md`.
+
+**Phase 2 — Implementation (only if the spike confirms 800 ms is reachable):**
+- Add a configurable finalization strategy (commit-on-last-partial and/or tuned
+  provider finalize) behind the existing streaming STT seam; keep the current
+  authoritative-final behaviour available as a fallback.
+- Preserve all safety invariants: no invented transcript, no secret leak, safe
+  degraded fallback, no invented turn boundary on no-speech.
+- Re-measure with `scripts/streaming_latency_report.py` over a warm sample
+  (N large enough for meaningful p95) and update the ADR-0018 evidence + the
+  streaming QA report go/no-go.
+
+### Out Of Scope
+
+- Streaming backend answer (`first_token` ≠ `request`, RF-021) — the answer engine
+  stays the Sprint 5 stub/http backend.
+- Reducing the TTS first-audio slice (already ~309 ms; not the bottleneck).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The streaming voice loop meets the ADR-0018 pilot latency criterion
+  Given the streaming WebRTC voice runtime with the reduced finalize tail
+  When a warm sample of turns is measured on the web channel
+  Then time_to_first_audio p95 is below 800 ms
+  And the per-slice p50/p95/p99 baseline is published
+  And no transcript is invented and no safety invariant is regressed
+```
+
+If the spike concludes 800 ms is **not** reachable with Gradium on this path, the
+alternative acceptance is an explicit Product/Architecture revision of the ADR-0018
+criterion recorded in the ADR (not a silent weakening).
+
+### Required Evidence
+
+- `docs/qa/stt-013-finalize-tail-spike.md` (spike findings + feasibility go/no-go).
+- If implemented: unit tests for the finalization strategy (fake WS), a re-measured
+  warm sample, updated ADR-0018 evidence + streaming QA report.
+- Adversarial review ≥ 90% + QA acceptance + user validation before merge.
