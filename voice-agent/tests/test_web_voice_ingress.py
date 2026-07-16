@@ -222,6 +222,22 @@ class WebVoiceServerTest(unittest.TestCase):
         self.assertEqual(status, 502)
         self.assertEqual(json.loads(payload)["outcome"], "failed")
 
+    def test_post_failure_returns_a_client_safe_body(self) -> None:
+        # GIVEN an STT provider raising a distinctive exception message
+        _, port = self._serve(WebVoiceIngress(_StubProvider(error=ValueError("bad audio"))))
+
+        status, payload = self._post(port, b"\x01")
+
+        # THEN the 502 body carries a stable code + correlation id + generic message,
+        # and never echoes the raw provider exception text (RF-013)
+        self.assertEqual(status, 502)
+        body = json.loads(payload)
+        self.assertTrue(body["error_code"])
+        self.assertTrue(body["correlation_id"])
+        self.assertTrue(body["message"])
+        self.assertNotIn("error_reason", body)
+        self.assertNotIn("bad audio", payload)
+
     def test_unknown_route_returns_404(self) -> None:
         _, port = self._serve(WebVoiceIngress(_StubProvider()))
 

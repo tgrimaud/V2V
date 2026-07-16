@@ -40,9 +40,11 @@ gated by OQ-001 / RF-006). Requests carry an optional envelope via query params
 
 - **Audio in** is raw **PCM16 mono 16 kHz** (`Content-Type: audio/pcm`).
 - **Audio out** is **WAV** (`audio/wav`, PCM16 mono + 44-byte header).
-- **Errors** are JSON with a stable `error_code` and a **sanitized** `error_reason`
-  (RF-013): no raw audio, filesystem path, provider text or secret. Every response
-  carries a `correlation_id` for tracing.
+- **Errors** are JSON with a stable `error_code`, a generic client-safe `message`
+  and the `correlation_id` (TASK-WEB-006 / RF-013). The raw provider reason is
+  **never** in the body — no audio, filesystem path, provider text or secret; the
+  full sanitized reason stays server-side in the structured turn log, retrievable
+  by `correlation_id` (mirrors the Java backend `ERR_UPSTREAM` pattern).
 - Size guards: audio `> 25 MiB` → `413 {"error":"audio_too_large"}`; TTS text
   `> 5000` chars → `413 {"error":"text_too_large"}`.
 
@@ -51,7 +53,7 @@ gated by OQ-001 / RF-006). Requests carry an optional envelope via query params
 Voice-in only (no answer, no audio out).
 
 - **Request:** body = PCM16 audio bytes; query = optional envelope ids.
-- **200** (`SttOutcome.success`) / **502** (`failed` or `unavailable`), JSON:
+- **200** (`SttOutcome.success`) — the full result JSON:
 
 ```json
 {
@@ -66,8 +68,17 @@ Voice-in only (no answer, no audio out).
 }
 ```
 
-On failure `outcome` is `failed`/`unavailable`, `transcript` is `""`, and
-`error_code`/`error_reason` are populated (sanitized). No transcript is invented.
+- **502** (`failed` or `unavailable`) — the client-safe error body only
+  (TASK-WEB-006): no transcript is invented, and no raw provider text is echoed.
+
+```json
+{
+  "outcome": "failed",
+  "error_code": "stt_error",
+  "correlation_id": "…",
+  "message": "The voice service could not process this request. Please try again."
+}
+```
 
 ## `POST /api/voice/tts?text=…` — synthesize
 
@@ -75,23 +86,19 @@ Voice-out only.
 
 - **Request:** `text` query param (URL-encoded); query = optional envelope ids.
 - **200:** `audio/wav` body (the spoken text).
-- **502:** JSON `SynthesisResult` on failure/unavailable:
+- **502:** the client-safe error body on failure/unavailable (TASK-WEB-006):
 
 ```json
 {
-  "provider": "gradium-tts",
   "outcome": "failed",
-  "duration_ms": 12.0,
-  "tts_request_ms": 11.5,
-  "correlation_id": "…",
-  "audio_format": "pcm_16000",
-  "audio_bytes": 0,
   "error_code": "tts_error",
-  "error_reason": "…"
+  "correlation_id": "…",
+  "message": "The voice service could not process this request. Please try again."
 }
 ```
 
-Empty text is reported `unavailable` (not a failure) and invents no audio.
+Empty text is reported `unavailable` (not a failure, `error_code: empty_text`) and
+invents no audio.
 
 ## `POST /api/voice/turn` — full Voice2Voice loop
 
@@ -111,10 +118,11 @@ Runs `STT → backend answer → TTS` in one call (the answering loop, TASK-WEB-
 
 Headers are sent only to the requesting client and never written to server logs.
 
-- **502 (JSON), fails closed** when the loop cannot produce audio:
-  - STT did not succeed → the `TranscriptResult` JSON (`outcome: failed`), or
-    `{"error":"no_transcript"}`.
-  - TTS produced no audio → the `SynthesisResult` JSON, or `{"error":"no_audio"}`.
+- **502 (JSON), fails closed** when the loop cannot produce audio — the client-safe
+  error body (`outcome`, `error_code`, `correlation_id`, `message`), never raw
+  provider text (TASK-WEB-006):
+  - STT did not succeed → `error_code` = the STT failure code, or `no_transcript`.
+  - TTS produced no audio → `error_code` = the TTS failure code, or `no_audio`.
 
 ### Degraded mode (TASK-WEB-003-F)
 

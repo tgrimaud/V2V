@@ -131,7 +131,9 @@ async function renderTurnError(response) {
   try {
     const err = await response.json();
     code = err.error_code || err.error || code;
-    reason = err.error_reason || reason;
+    // TASK-WEB-006 (RF-013): the 502 body now carries a generic, client-safe
+    // `message`; `error_reason` is kept only as a fallback for older responses.
+    reason = err.message || err.error_reason || reason;
   } catch (_e) {
     // non-JSON error body; keep defaults
   }
