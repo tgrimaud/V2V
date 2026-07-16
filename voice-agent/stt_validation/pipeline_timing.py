@@ -13,9 +13,14 @@ from voice_common.pipeline_timing import (
     END_OF_TURN,
     PIPELINE_SLICES,
     STT,
+    TIME_TO_FIRST_AUDIO,
+    TIME_TO_FIRST_AUDIO_SLICES,
     TTS_FIRST_AUDIO,
+    CompositeTiming,
     PipelineTimingReport,
     SliceTiming,
+    time_to_first_audio_report,
+    time_to_first_audio_samples,
 )
 
 __all__ = [
@@ -25,7 +30,12 @@ __all__ = [
     "END_OF_TURN",
     "PIPELINE_SLICES",
     "STT",
+    "TIME_TO_FIRST_AUDIO",
+    "TIME_TO_FIRST_AUDIO_SLICES",
     "TTS_FIRST_AUDIO",
+    "CompositeTiming",
     "PipelineTimingReport",
     "SliceTiming",
+    "time_to_first_audio_report",
+    "time_to_first_audio_samples",
 ]

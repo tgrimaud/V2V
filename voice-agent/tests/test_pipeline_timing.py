@@ -11,8 +11,12 @@ from stt_validation.pipeline_timing import (  # noqa: E402
     END_OF_TURN,
     PIPELINE_SLICES,
     STT,
+    TIME_TO_FIRST_AUDIO,
+    TIME_TO_FIRST_AUDIO_SLICES,
     TTS_FIRST_AUDIO,
     PipelineTimingReport,
+    time_to_first_audio_report,
+    time_to_first_audio_samples,
 )
 from stt_validation.telemetry import Span  # noqa: E402
 from tts_synthesis import FixtureTtsProvider  # noqa: E402
@@ -23,6 +27,15 @@ from voice_pipeline.pipeline import run_batch_turn  # noqa: E402
 
 def _span(name: str, duration_ms: float) -> Span:
     return Span(name=name, duration_ms=duration_ms, attributes={})
+
+
+def _turn_spans(correlation_id: str, stt_ms: float, backend_ms: float, tts_ms: float) -> list[Span]:
+    """One streaming turn: the three post-EOT slices that make up time_to_first_audio."""
+    return [
+        Span("stt.request", stt_ms, {"correlation_id": correlation_id}),
+        Span("backend.first_token", backend_ms, {"correlation_id": correlation_id}),
+        Span("voice.tts.first_audio", tts_ms, {"correlation_id": correlation_id}),
+    ]
 
 
 class _StubSttProvider:
@@ -202,6 +215,105 @@ class PipelineTimingReportTest(unittest.TestCase):
         self.assertIsNone(tts["latency"])
         self.assertNotIn("TASK-WEB-002", tts["note"])
         self.assertIn("voice.tts.first_audio", tts["note"])
+
+
+class TimeToFirstAudioCompositeTest(unittest.TestCase):
+    """ADR-0018 pilot criterion: time_to_first_audio (EOT -> first playable frame)."""
+
+    def test_composite_sums_the_post_eot_slices_of_one_turn(self) -> None:
+        # GIVEN one streaming turn: STT tail 120 + backend 200 + TTS first-audio 180
+        spans = _turn_spans("corr-1", stt_ms=120.0, backend_ms=200.0, tts_ms=180.0)
+
+        # WHEN
+        samples = time_to_first_audio_samples(spans)
+
+        # THEN the composite is the sum of the three sequential slices
+        self.assertEqual(samples, [500.0])
+
+    def test_composite_component_slices_are_the_post_eot_path(self) -> None:
+        # THEN end-of-turn (the acceptance boundary) and channel egress are excluded
+        self.assertEqual(TIME_TO_FIRST_AUDIO_SLICES, (STT, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO))
+
+    def test_backend_request_span_feeds_composite_when_first_token_absent(self) -> None:
+        # GIVEN a batch-style backend (only backend.request, no first_token)
+        spans = [
+            Span("stt.request", 100.0, {"correlation_id": "corr-1"}),
+            Span("backend.request", 150.0, {"correlation_id": "corr-1"}),
+            Span("voice.tts.first_audio", 90.0, {"correlation_id": "corr-1"}),
+        ]
+
+        # WHEN / THEN the request span still contributes the backend component
+        self.assertEqual(time_to_first_audio_samples(spans), [340.0])
+
+    def test_turns_of_different_calls_never_mix(self) -> None:
+        # GIVEN two calls (distinct correlation ids), one turn each
+        spans = _turn_spans("call-a", 100.0, 100.0, 100.0) + _turn_spans("call-b", 200.0, 200.0, 200.0)
+
+        # WHEN
+        samples = sorted(time_to_first_audio_samples(spans))
+
+        # THEN each call yields its own composite, none blended across correlation ids
+        self.assertEqual(samples, [300.0, 600.0])
+
+    def test_multi_turn_call_reconstructs_each_turn_by_position(self) -> None:
+        # GIVEN one call that answered two turns (same correlation id, recorded in order)
+        spans = (
+            _turn_spans("call-a", 100.0, 100.0, 100.0)
+            + _turn_spans("call-a", 200.0, 200.0, 200.0)
+        )
+
+        # WHEN
+        samples = time_to_first_audio_samples(spans)
+
+        # THEN positional zip pairs the k-th span of each slice into turn k
+        self.assertEqual(samples, [300.0, 600.0])
+
+    def test_turn_missing_a_component_slice_is_skipped(self) -> None:
+        # GIVEN a barge-in turn with no backend answer nor TTS in this call
+        spans = [Span("stt.request", 100.0, {"correlation_id": "corr-1"})]
+
+        # WHEN / THEN no truncated composite is produced
+        self.assertEqual(time_to_first_audio_samples(spans), [])
+
+    def test_report_computes_percentiles_and_flags_measured(self) -> None:
+        # GIVEN 100 warm turns with a rising composite (i ms each component -> 3i total)
+        spans: list[Span] = []
+        for i in range(1, 101):
+            spans += _turn_spans(f"corr-{i}", float(i), float(i), float(i))
+
+        # WHEN
+        composite = time_to_first_audio_report(spans)
+
+        # THEN it is measured with nearest-rank percentiles over the composite samples
+        self.assertEqual(composite.name, TIME_TO_FIRST_AUDIO)
+        self.assertTrue(composite.measured)
+        self.assertEqual(composite.report.count, 100)
+        self.assertEqual(composite.report.p50_ms, 150.0)
+        self.assertEqual(composite.report.p95_ms, 285.0)
+        self.assertEqual(composite.report.p99_ms, 297.0)
+
+    def test_report_is_not_measured_when_no_complete_turn_exists(self) -> None:
+        # GIVEN only an STT span, no backend/TTS
+        composite = time_to_first_audio_report([_span("stt.request", 5.0)])
+
+        # THEN it is an explicit gap with a reason, not a fabricated zero
+        self.assertFalse(composite.measured)
+        self.assertIsNone(composite.report)
+        self.assertTrue(composite.note)
+
+    def test_composite_to_dict_is_json_serializable(self) -> None:
+        # GIVEN a measured composite
+        composite = time_to_first_audio_report(_turn_spans("corr-1", 100.0, 100.0, 100.0))
+
+        # WHEN
+        payload = composite.to_dict()
+
+        # THEN the dict carries the component slices and the latency distribution
+        self.assertEqual(payload["name"], TIME_TO_FIRST_AUDIO)
+        self.assertTrue(payload["measured"])
+        self.assertEqual(payload["component_slices"], list(TIME_TO_FIRST_AUDIO_SLICES))
+        self.assertEqual(payload["latency"]["count"], 1)
+        self.assertEqual(payload["latency"]["p50_ms"], 300.0)
 
 
 class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):
