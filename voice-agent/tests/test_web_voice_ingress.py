@@ -140,6 +140,26 @@ class WebVoiceIngressTest(unittest.TestCase):
         event_names = [event.name for event in telemetry.events()]
         self.assertIn("voice.end_of_turn.detected", event_names)
 
+    def test_detect_end_of_turn_false_skips_the_span(self) -> None:
+        # GIVEN speech + a full silence window that WOULD fire the batch detector
+        ingress = WebVoiceIngress(_StubProvider())
+        telemetry = TelemetryRecorder()
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="corr-stream")
+
+        # WHEN the streaming path disables ingress detection (aggregator owns it)
+        ingress.transcribe_turn(
+            _speech_then_silence(200, 500), envelope, telemetry, detect_end_of_turn=False
+        )
+
+        # THEN the ingress emits no end-of-turn span or event (no duplicate span)
+        span_names = [span.name for span in telemetry.spans()]
+        self.assertNotIn(END_OF_TURN_SPAN, span_names)
+        event_names = [event.name for event in telemetry.events()]
+        self.assertNotIn("voice.end_of_turn.detected", event_names)
+        self.assertNotIn("voice.end_of_turn.absent", event_names)
+        # AND the ingress span itself is still recorded (STT slice unaffected)
+        self.assertIn("web.voice.ingress", span_names)
+
     def test_no_end_of_turn_span_for_pure_silence(self) -> None:
         # GIVEN a silent buffer: no turn boundary must be invented
         ingress = WebVoiceIngress(_StubProvider())
