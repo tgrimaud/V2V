@@ -20,6 +20,8 @@ import asyncio
 from typing import Any
 
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
@@ -41,10 +43,26 @@ from .end_of_turn import (
     END_OF_TURN_SPAN,
     EndOfTurnResult,
     StreamingEndOfTurnDetector,
+    _pcm16_samples,
+    _peak_amplitude,
 )
 
 DEFAULT_PROVIDER_NAME = "gradium-stt-streaming"
 STT_REQUEST_SPAN = "stt.request"
+# Barge-in observability (TASK-WEB-008): emitted when speech onset while the bot is
+# speaking triggers an interruption of the spoken answer.
+BARGE_IN_EVENT = "voice.barge_in.detected"
+BARGE_IN_METRIC = "voice.barge_in.count"
+# Anti-echo barge-in gate (TASK-WEB-008). Without headphones the bot's own audio
+# re-enters the mic even with browser echo cancellation, and an energy VAD reads it as
+# speech -> the bot self-interrupts. To cut the bot only on a *real* customer barge-in,
+# the incoming frame must (1) exceed a HIGHER amplitude than normal speech onset
+# (residual echo is attenuated by AEC, so it sits below direct-voice level) AND (2) stay
+# above it for several consecutive frames (rejects brief spikes). Both are tunable via
+# env in the signaling wiring so the threshold can be raised on echoey speaker setups
+# without a code change. The onset threshold (opening the STT session) is unchanged.
+DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD = 2500
+DEFAULT_BARGE_IN_CONFIRM_FRAMES = 4
 # The final transcript should land ~1 s after end-of-turn; cap the wait so a stalled
 # provider fails the turn (safe degraded reply) instead of hanging the call.
 DEFAULT_FINAL_TIMEOUT_S = 10.0
@@ -63,6 +81,8 @@ class StreamingSttProcessor(FrameProcessor):
         provider_name: str = DEFAULT_PROVIDER_NAME,
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
         final_timeout_s: float = DEFAULT_FINAL_TIMEOUT_S,
+        barge_in_amplitude_threshold: int = DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD,
+        barge_in_confirm_frames: int = DEFAULT_BARGE_IN_CONFIRM_FRAMES,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -70,6 +90,8 @@ class StreamingSttProcessor(FrameProcessor):
         self._telemetry = telemetry
         self._provider_name = provider_name
         self._final_timeout_s = final_timeout_s
+        self._barge_in_amplitude_threshold = barge_in_amplitude_threshold
+        self._barge_in_confirm_frames = max(1, barge_in_confirm_frames)
         self._detector = detector or StreamingEndOfTurnDetector(
             sample_rate_hz=sample_rate_hz,
             silence_window_ms=DEFAULT_SILENCE_WINDOW_MS,
@@ -82,6 +104,16 @@ class StreamingSttProcessor(FrameProcessor):
         self._first_partial_ms: float | None = None
         # Read by tests: number of final transcripts emitted this session.
         self.final_count = 0
+        # True while the bot's spoken answer is playing (tracked from the
+        # BotStarted/StoppedSpeakingFrame the output transport emits upstream). Speech
+        # onset is treated as a barge-in only while this is set (TASK-WEB-008).
+        self._bot_speaking = False
+        # Consecutive above-threshold frames seen while the bot speaks; barge-in fires
+        # once the count reaches _barge_in_confirm_frames (anti-echo gate). Reset when a
+        # frame drops below threshold, when the bot (re)starts speaking, or after firing.
+        self._barge_in_confirm_count = 0
+        # Fires the cut at most once per bot-speaking span; reset on BotStartedSpeaking.
+        self._barge_in_fired = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -90,6 +122,14 @@ class StreamingSttProcessor(FrameProcessor):
         elif isinstance(frame, EndFrame):
             await self._on_end(direction)
             await self.push_frame(frame, direction)
+        elif isinstance(frame, (BotStartedSpeakingFrame, BotStoppedSpeakingFrame)):
+            # The output transport emits these upstream as it starts / stops playing the
+            # bot audio; track the state and forward them untouched. Reset the anti-echo
+            # confirmation gate on every transition so a new answer starts clean.
+            self._bot_speaking = isinstance(frame, BotStartedSpeakingFrame)
+            self._barge_in_confirm_count = 0
+            self._barge_in_fired = False
+            await self.push_frame(frame, direction)
         else:
             await self.push_frame(frame, direction)
 
@@ -97,6 +137,8 @@ class StreamingSttProcessor(FrameProcessor):
         decision = self._detector.observe(frame.audio)
         if self._detector.has_speech and self._session is None:
             await self._open_session()
+        if self._bot_speaking and not self._barge_in_fired:
+            await self._maybe_barge_in(frame.audio)
         if self._session is not None:
             await self._session.send_audio(frame.audio)
             await self._emit_partials(self._session, direction)
@@ -104,6 +146,37 @@ class StreamingSttProcessor(FrameProcessor):
             await self._finalize(decision.detection, direction)
         elif decision.discard:
             await self._discard_session()
+
+    async def _maybe_barge_in(self, audio: bytes) -> None:
+        """Anti-echo gate: cut the bot only after a loud-enough, *sustained* onset.
+
+        Residual echo (the bot's own audio leaking back through the mic even with
+        browser echo cancellation) is attenuated, so it sits below the barge-in
+        amplitude threshold; a real customer speaking close to the mic clears it. The
+        N-frame confirmation additionally rejects brief spikes. Only then do we cut.
+        """
+        peak = _peak_amplitude(_pcm16_samples(audio))
+        if peak < self._barge_in_amplitude_threshold:
+            self._barge_in_confirm_count = 0
+            return
+        self._barge_in_confirm_count += 1
+        if self._barge_in_confirm_count >= self._barge_in_confirm_frames:
+            await self._trigger_barge_in()
+
+    async def _trigger_barge_in(self) -> None:
+        """Customer confirmed speaking mid-answer: cut the bot now.
+
+        `broadcast_interruption()` sends an `InterruptionFrame` downstream (Pipecat
+        cancels the streaming TTS task and the output transport flushes its buffered
+        audio) and upstream, so playback stops promptly. Fires at most once per
+        bot-speaking span — `_barge_in_fired` guards re-entry — and clears `_bot_speaking`
+        so a stale value cannot re-trigger before the BotStoppedSpeakingFrame arrives.
+        """
+        self._barge_in_fired = True
+        self._bot_speaking = False
+        self._barge_in_confirm_count = 0
+        self._emit_barge_in()
+        await self.broadcast_interruption()
 
     async def _on_end(self, direction: FrameDirection) -> None:
         decision = self._detector.finish()
@@ -159,6 +232,17 @@ class StreamingSttProcessor(FrameProcessor):
         if self._session is not None:
             await self._session.aclose()
             self._session = None
+
+    def _emit_barge_in(self) -> None:
+        if self._telemetry is None or self._envelope is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+        }
+        self._telemetry.record(BARGE_IN_EVENT, **attrs)
+        self._telemetry.metric(BARGE_IN_METRIC, 1, **attrs)
 
     def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:
         if self._telemetry is None or self._envelope is None or detection.slice_ms is None:

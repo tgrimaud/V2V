@@ -133,6 +133,22 @@ class StreamingVoiceSession:
             self.run_count += 1
             await runner.run(self._task)
 
+    async def drain(self) -> None:
+        """Graceful end-of-call flush (TASK-WEB-008): queue an `EndFrame` so a trailing
+        partial utterance (customer still mid-speech at hangup) is finalized as a
+        `client_stop` end-of-turn and transcribed before teardown, instead of being
+        silently dropped.
+
+        Unlike `stop()` (which cancels the task and discards pending work), `drain()`
+        lets the pipeline process the `EndFrame` end to end — the utterance aggregator
+        / streaming STT run their `finish()` path, emit the `voice.end_of_turn` span and
+        the final transcript. `run()` then returns on its own. Safe to call when nothing
+        is pending or the task has already finished. A genuinely abrupt network drop may
+        still lose the tail; this covers the graceful `closed`/`disconnected` case.
+        """
+        if self._task is not None and not self._task.has_finished():
+            await self._task.stop_when_done()
+
     async def stop(self) -> None:
         """Graceful teardown: cancel the running task (transport drop / session end)."""
         if self._task is not None:

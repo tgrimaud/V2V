@@ -22,10 +22,12 @@ VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
 from pipecat.frames.frames import (  # noqa: E402
+    BotStartedSpeakingFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
+    InterruptionFrame,
     StartFrame,
     TranscriptionFrame,
 )
@@ -69,6 +71,14 @@ def _speech_frame() -> InputAudioRawFrame:
 
 def _silence_frame() -> InputAudioRawFrame:
     return InputAudioRawFrame(audio=b"\x00" * FRAME_BYTES, sample_rate=SAMPLE_RATE, num_channels=1)
+
+
+def _echo_frame() -> InputAudioRawFrame:
+    # Above the speech-onset threshold (1000) but below the barge-in threshold (2500):
+    # models the bot's own residual echo after browser echo cancellation. Opens the STT
+    # session but must NOT be treated as a barge-in (TASK-WEB-008 anti-echo gate).
+    pcm = (1500).to_bytes(2, "little", signed=True) * (FRAME_BYTES // 2)
+    return InputAudioRawFrame(audio=pcm, sample_rate=SAMPLE_RATE, num_channels=1)
 
 
 class FakeSession:
@@ -132,6 +142,7 @@ class _Sink(FrameProcessor):
         super().__init__()
         self.finals: list[str] = []
         self.interims: list[str] = []
+        self.interruptions = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -139,6 +150,8 @@ class _Sink(FrameProcessor):
             self.interims.append(frame.text)
         elif isinstance(frame, TranscriptionFrame):
             self.finals.append(frame.text)
+        elif isinstance(frame, InterruptionFrame):
+            self.interruptions += 1
         await self.push_frame(frame, direction)
 
 
@@ -249,6 +262,67 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         # THEN the pending turn is finalized on EndFrame
         self.assertEqual(sink.finals, ["bonjour"])
         self.assertEqual(processor.final_count, 1)
+
+    async def test_barge_in_broadcasts_interruption_when_bot_speaking(self):
+        # GIVEN the bot is speaking, then the customer speaks loudly and sustained
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("stop")], "stop")
+        processor = _processor(FakeProvider(session), telemetry)
+        # 6 loud frames (> barge-in threshold) clear the 4-frame confirmation gate
+        frames = [BotStartedSpeakingFrame()] + [_speech_frame()] * 6 + [_silence_frame()] * 10
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN an InterruptionFrame is broadcast downstream and a barge-in is recorded
+        self.assertGreaterEqual(sink.interruptions, 1)
+        self.assertTrue(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+        self.assertTrue(any(m.name == "voice.barge_in.count" for m in telemetry.metrics()))
+        # AND the barge-in utterance is still captured as the new turn
+        self.assertEqual(sink.finals, ["stop"])
+
+    async def test_residual_echo_below_threshold_does_not_barge_in(self):
+        # GIVEN the bot is speaking and only its own residual echo re-enters the mic
+        # (above the onset threshold, below the barge-in threshold) — the without-
+        # headphones case that used to self-interrupt (TASK-WEB-008 anti-echo gate)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("echo")], "echo")
+        processor = _processor(FakeProvider(session), telemetry)
+        frames = [BotStartedSpeakingFrame()] + [_echo_frame()] * 8 + [_silence_frame()] * 10
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN no interruption is broadcast and no barge-in is recorded
+        self.assertEqual(sink.interruptions, 0)
+        self.assertFalse(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+
+    async def test_brief_loud_spike_shorter_than_confirmation_does_not_barge_in(self):
+        # GIVEN the bot is speaking and a brief loud spike (fewer frames than the
+        # confirmation window) hits the mic, then it goes quiet again
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("blip")], "blip")
+        processor = _processor(FakeProvider(session), telemetry)
+        # 2 loud frames (< 4-frame gate), broken by echo-level frames that reset the count
+        frames = (
+            [BotStartedSpeakingFrame()]
+            + [_speech_frame()] * 2 + [_echo_frame()] * 2 + [_speech_frame()] * 2
+            + [_silence_frame()] * 10
+        )
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN the spike never reaches the sustained-onset gate: no barge-in
+        self.assertEqual(sink.interruptions, 0)
+        self.assertFalse(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+
+    async def test_no_barge_in_when_bot_not_speaking(self):
+        # GIVEN the bot is NOT speaking when the customer speaks (a normal turn)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(FakeProvider(session), telemetry)
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN no interruption is broadcast and no barge-in is recorded
+        self.assertEqual(sink.interruptions, 0)
+        self.assertFalse(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
+        self.assertEqual(sink.finals, ["bonjour"])
 
 
 if __name__ == "__main__":

@@ -14,9 +14,10 @@ audio buffer and emits the span/event when the detector reports a turn, so the
 US-036 `end_of_turn` slice is measured at the real streaming moment instead of
 being re-derived by the batch detector inside the ingress.
 
-Scope guard: no barge-in (TASK-WEB-008) — while the bot speaks, incoming mic frames
-are still buffered; controlled demos use headphones to avoid the bot echoing into
-its own aggregator.
+Scope guard: barge-in (TASK-WEB-008) is implemented on the live streaming STT path
+(`StreamingSttProcessor`), not on this batch aggregator path. Here, while the bot
+speaks incoming mic frames are still buffered (no interruption), so controlled demos
+on the batch path use headphones to avoid the bot echoing into its own aggregator.
 
 End-of-turn depends on receiving sub-threshold "silence" frames: a real microphone
 emits an ambient noise floor, so Opus keeps sending packets and the trailing-silence
