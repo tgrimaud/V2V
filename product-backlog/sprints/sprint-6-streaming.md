@@ -18,9 +18,10 @@ OQ-001 / RF-006 / RF-014).
 
 ## Status
 
-**Status:** In progress — **ADR-0018 latency gate MET** (updated 2026-07-17); pending
-user validation of TASK-STT-013 + TASK-WEB-011 to close. All seven functional tickets
-are delivered/validated. TASK-WEB-009 shipped the streaming instrumentation + baseline
+**Status:** ✅ **Done (closed 2026-07-17)** — **ADR-0018 latency gate MET**; user
+validated TASK-STT-013 + TASK-WEB-011 (live streaming-loop test + adversarial review
+93/100 + QA GO) and the sprint stack was merged fast-forward into
+`feat/restart-from-scratch`. All seven functional tickets are delivered/validated. TASK-WEB-009 shipped the streaming instrumentation + baseline
 (warm p95 **1698 ms**, NO-GO). Two latency levers then closed the gap:
 - **TASK-STT-013** — streaming STT finalizes on Gradium's `flushed` ack (not
   `end_of_stream`): STT tail p95 **1389 → 373 ms**, composite p95 **1698 → 853 ms**.
@@ -31,8 +32,8 @@ are delivered/validated. TASK-WEB-009 shipped the streaming instrumentation + ba
 **ADR-0018: `time_to_first_audio` p95 761.5 ms < 800 ms → GO (margin +38.5 ms)**,
 warm, web channel, **stub backend** (`docs/qa/streaming-latency-warm-prewarm.json`).
 Full arc: 1698 (−898) → 853 (−53) → 761.5 (+38.5). Caveats: stub backend (real answer
-time is a separate budget line), `channel_egress` excluded, N = 8. The sprint is
-ready to close on the user's validation.
+time is a separate budget line), `channel_egress` excluded, N = 8. **Sprint closed
+2026-07-17** — merged fast-forward into `feat/restart-from-scratch`.
 **Created:** 2026-07-15
 **Predecessor:** [`sprint-5-backend-bridge.md`](sprint-5-backend-bridge.md) (Sprint 5 — ✅ Done, closed 2026-07-15)
 **Working branch:** `feat/sprint-6-streaming` (to be cut from `feat/restart-from-scratch`)
@@ -48,7 +49,7 @@ ready to close on the user's validation.
 | Sprint 3 | TTS / voice-out (batch) → first end-to-end voice loop | ✅ Done |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
 | Sprint 5 | Backend answer bridge (echo → real answer, US-019 close) | ✅ Done |
-| **Sprint 6** | **Streaming voice loop + latency (streaming STT/TTS/VAD + WebRTC transport + barge-in) — this sprint** | 🚧 In progress — ADR-0018 gate MET (p95 761.5 ms, +38.5 ms) after TASK-STT-013 + TASK-WEB-011; pending user validation to close |
+| **Sprint 6** | **Streaming voice loop + latency (streaming STT/TTS/VAD + WebRTC transport + barge-in) — this sprint** | ✅ Done (closed 2026-07-17) — ADR-0018 gate MET (p95 761.5 ms, +38.5 ms); merged fast-forward into `feat/restart-from-scratch` |
 | Sprint 7 (tentative) | Telephony channel (US-018) + Genesys handoff (EPIC-007) | Planned |
 
 ## Why now (baseline that justifies the sprint)

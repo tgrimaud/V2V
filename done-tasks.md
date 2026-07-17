@@ -470,3 +470,48 @@ reason stays server-side in the `_log_turn` telemetry, retrievable by correlatio
 - `voice-agent/tests/test_error_response.py` (new), `test_voice_runtime.py`, `test_web_voice_ingress.py`, `test_web_voice_egress.py`
 - `docs/architecture/voice-runtime-http-contract.md` — new `502` shape
 - `product-backlog/` — `tasks/web-voice-tasks.md`, `review-findings.md` (RF-013 closed), `sprints/sprint-6-streaming.md`, `backlog-index.md`
+
+## 2026-07-17 — Sprint 6 CLOSED: ADR-0018 latency gate met (TASK-STT-013 + TASK-WEB-011)
+
+**Summary:**
+
+Closed Sprint 6 (Streaming Voice Loop & Latency). The sprint's headline deliverable —
+a measured `time_to_first_audio` **p95 < 800 ms** on the web voice channel (ADR-0018
+pilot criterion) — is **met** after two latency levers that closed the gap
+TASK-WEB-009 surfaced (warm p95 1698 ms, NO-GO):
+
+- **TASK-STT-013 — STT finalize-tail reduction.** Streaming STT now finalizes on
+  Gradium's `flushed` ack instead of blocking on the terminal `end_of_stream`
+  (guarded by `_flush_id > 0`, with `end_of_stream`/`error` kept as safe fallbacks).
+  Zero word loss (the transcript is the concatenation of partials already in hand).
+  `stt` tail p95 **1389 → 373 ms**; composite p95 **1698 → 853 ms**.
+- **TASK-WEB-011 — TTS WebSocket pre-warm.** Gradium's TTS WebSocket is single-use, so
+  it cannot be reused, but it can be pre-warmed: `TtsSessionWarmer` keeps one spare
+  session opening/opened off the per-turn critical path (warm on `StartFrame`, hand out
+  the spare + pre-open the next on acquire, release on `End`/`Cancel`), removing the
+  ~90 ms connect from the `voice.tts.first_audio` timer. `tts_first_audio` p95
+  **484 → 381 ms**; composite p95 **853 → 761.5 ms → GO (+38.5 ms)**.
+
+Full arc: **1698 ms (−898) → 853 ms (−53) → 761.5 ms (+38.5)**, warm, web channel,
+stub backend, N=8 (`docs/qa/streaming-latency-warm-prewarm.json`). Caveats recorded:
+stub backend (real answer time is a separate budget line), `channel_egress` excluded.
+
+### Gates
+- **Adversarial review: 93/100 (Pass)** for both tickets — no blocking findings.
+- **QA acceptance: GO** — 315 unit / 10 Behave features (26 scenarios / 120 steps) green;
+  ADR-0018 gate re-confirmed (`docs/qa/streaming-voice-qa-report.md`).
+- **User validation: PASS** — live streaming WebRTC loop tested in-browser (Gradium
+  STT+TTS, stub backend), then validated.
+
+### Sprint closure
+- Merged **fast-forward** `feat/sprint-6-streaming` → `feat/restart-from-scratch`
+  (49 commits: the full Sprint 6 stack — TASK-WEB-004/005/006/007/008/009,
+  TASK-STT-010/012/013, TASK-WEB-011).
+- Sprint status flipped to ✅ Done in `sprints/sprint-6-streaming.md` (header + roadmap)
+  and the `backlog-index.md` sprint registry.
+
+### Files changed (closure)
+- `product-backlog/tasks/stt-followup-tasks.md`, `product-backlog/tasks/web-voice-tasks.md` — TASK-STT-013 / TASK-WEB-011 validated
+- `product-backlog/sprints/sprint-6-streaming.md`, `product-backlog/backlog-index.md` — sprint ✅ Done
+- `done-tasks.md` — this entry
+- (implementation + tests + ADR-0023/0024/0025 + QA docs landed via the merged sprint stack)
