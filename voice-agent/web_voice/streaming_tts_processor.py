@@ -24,7 +24,10 @@ import asyncio
 from typing import Any
 
 from pipecat.frames.frames import (
+    CancelFrame,
+    EndFrame,
     Frame,
+    StartFrame,
     TextFrame,
     TTSAudioRawFrame,
 )
@@ -34,6 +37,8 @@ from tts_synthesis.models import TtsOutcome
 from tts_synthesis.providers import EmptyTextError
 from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import Timer
+
+from .tts_session_warmer import TtsSessionWarmer
 
 DEFAULT_PROVIDER_NAME = "gradium-tts-streaming"
 TTS_FIRST_AUDIO_SPAN = "voice.tts.first_audio"
@@ -58,6 +63,7 @@ class StreamingTtsProcessor(FrameProcessor):
         *,
         provider_name: str = DEFAULT_PROVIDER_NAME,
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
+        prewarm: bool = True,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -65,18 +71,32 @@ class StreamingTtsProcessor(FrameProcessor):
         self._telemetry = telemetry
         self._provider_name = provider_name
         self._sample_rate_hz = sample_rate_hz
+        # Pre-warm the TTS WebSocket so its ~90 ms connect+setup is off the per-turn
+        # critical path (TASK-WEB-011). Enabled in production; tests opt out to assert
+        # the raw synthesis path. Gradium's socket is single-use, so we pre-open the
+        # *next* spare rather than reusing the connection.
+        self._prewarm = prewarm
+        self._warmer = TtsSessionWarmer(provider)
         # Read by tests: number of chunks pushed on the last synthesis.
         self.chunk_count = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
+        # Pre-warm the first turn's TTS session at pipeline start, and release an unused
+        # spare on teardown, so a pre-warmed connection is never leaked (TASK-WEB-011).
+        if self._prewarm and isinstance(frame, StartFrame):
+            self._warmer.start()
+            await self.push_frame(frame, direction)
+        elif self._prewarm and isinstance(frame, (EndFrame, CancelFrame)):
+            await self._warmer.aclose()
+            await self.push_frame(frame, direction)
         # Allowlist, not denylist: synthesize ONLY a *plain* answer TextFrame
         # (`type is TextFrame`). Every TextFrame *subclass* — TranscriptionFrame and
         # InterimTranscriptionFrame (final + live partials from the streaming STT
         # processor), and any future subclass — is forwarded untouched. An exact-type
         # check is safe-by-default: a new TextFrame subclass can never leak into
         # synthesis and make the bot speak the customer's own words back.
-        if type(frame) is TextFrame:
+        elif type(frame) is TextFrame:
             await self._synthesize(frame, direction)
         else:
             await self.push_frame(frame, direction)
@@ -88,7 +108,7 @@ class StreamingTtsProcessor(FrameProcessor):
             # Connecting + sending the setup can fail (auth/credit rejection at the
             # handshake, unreachable host, drop). Map it to the same sanitized
             # FAILED path so a connect fault is never a silent, unobservable turn.
-            session = await self._provider.open()
+            session = await self._acquire_session()
         except Exception as exc:  # noqa: BLE001 - connect/handshake failure stays observable
             self._emit_failure(exc, timer.elapsed_ms())
             return
@@ -127,6 +147,16 @@ class StreamingTtsProcessor(FrameProcessor):
             self._emit_unavailable("no_audio", timer.elapsed_ms())
             return
         self._emit_success(first_audio_ms or 0.0, timer.elapsed_ms(), chunk_count)
+
+    async def _acquire_session(self) -> Any:
+        """Get the session to synthesize on. With pre-warm, hand out the spare opened
+        during the previous turn (connect already paid, off the critical path) and
+        immediately begin opening the next spare; otherwise open on demand."""
+        if not self._prewarm:
+            return await self._provider.open()
+        session = await self._warmer.acquire()
+        self._warmer.start()
+        return session
 
     async def _safe_aclose(self, session: Any) -> None:
         """Best-effort close of the streaming session, swallowing close-time faults so

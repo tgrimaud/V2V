@@ -176,7 +176,9 @@ def _envelope() -> SimpleNamespace:
 
 
 def _processor(provider, telemetry=None) -> StreamingTtsProcessor:
-    return StreamingTtsProcessor(provider, _envelope(), telemetry)
+    # prewarm=False: these tests assert the raw synthesis path (open-on-demand). The
+    # pre-warm path (TASK-WEB-011) has its own tests below + TtsSessionWarmer unit tests.
+    return StreamingTtsProcessor(provider, _envelope(), telemetry, prewarm=False)
 
 
 class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
@@ -329,6 +331,72 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(session.closed)
         self.assertEqual([s for s in telemetry.spans() if s.name == TTS_FIRST_AUDIO_SPAN], [])
         self.assertTrue(any(e.name == "tts.interrupted" for e in telemetry.events()))
+
+
+class RecordingProvider:
+    """Opens a fresh FakeSession per call (scripted chunks for successive opens; extra
+    opens stream nothing) and records every session it hands out, in open order."""
+
+    name = "fake-streaming-tts"
+
+    def __init__(self, chunk_scripts):
+        self._scripts = list(chunk_scripts)
+        self.opened: list[FakeSession] = []
+        self.open_count = 0
+
+    async def open(self):
+        self.open_count += 1
+        chunks = self._scripts.pop(0) if self._scripts else []
+        session = FakeSession([AudioChunk(c) for c in chunks])
+        self.opened.append(session)
+        return session
+
+
+class FlakyOpenProvider:
+    """First open fails at handshake; later opens succeed (streaming the given chunks)."""
+
+    name = "fake-streaming-tts"
+
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+        self.open_count = 0
+
+    async def open(self):
+        self.open_count += 1
+        if self.open_count == 1:
+            raise StreamingTtsError("spare connect failed")
+        return FakeSession([AudioChunk(c) for c in self._chunks])
+
+
+class StreamingTtsPrewarmTest(unittest.IsolatedAsyncioTestCase):
+    async def test_prewarm_uses_preopened_spare_and_releases_unused_spare(self):
+        # GIVEN pre-warm enabled (production default): a spare is opened at pipeline start
+        provider = RecordingProvider([[b"\x01", b"\x02"]])
+        processor = StreamingTtsProcessor(provider, _envelope(), None, prewarm=True)
+        # WHEN a plain answer TextFrame flows through
+        sink = await _drive(processor, [TextFrame(text="bonjour")])
+        # THEN the turn synthesized on the spare opened BEFORE the turn (connect off the
+        # per-turn critical path), and streamed its audio
+        self.assertEqual(sink.audio, [b"\x01", b"\x02"])
+        used = provider.opened[0]
+        self.assertEqual(used.synthesized_text, "bonjour")
+        self.assertTrue(used.closed)
+        # AND a second spare was pre-opened for the (never-arriving) next turn and is
+        # released on teardown — a pre-warmed connection is never leaked
+        self.assertGreaterEqual(provider.open_count, 2)
+        spare_next = provider.opened[1]
+        self.assertIsNone(spare_next.synthesized_text)
+        self.assertTrue(spare_next.closed)
+
+    async def test_prewarm_falls_back_to_on_demand_when_spare_open_failed(self):
+        # GIVEN the pre-opened spare fails at connect time
+        provider = FlakyOpenProvider([b"\x09"])
+        processor = StreamingTtsProcessor(provider, _envelope(), None, prewarm=True)
+        # WHEN a synthesis is attempted
+        sink = await _drive(processor, [TextFrame(text="bonjour")])
+        # THEN the turn still speaks via an on-demand open (no dead turn from a bad spare)
+        self.assertEqual(sink.audio, [b"\x09"])
+        self.assertGreaterEqual(provider.open_count, 2)
 
 
 async def _drive_with_interruption(processor: StreamingTtsProcessor, frames) -> _Sink:
