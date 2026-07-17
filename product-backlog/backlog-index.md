@@ -104,8 +104,18 @@ against the new empty-codebase plan.
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16) | Low |
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |
-| TASK-WEB-010 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | Gated (OQ-002 + billing answer engine) | Medium |
-| TASK-WEB-011 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | Planned (opportunistic) | Low |
+| TASK-WEB-012 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | Gated (OQ-002 + billing answer engine) | Medium |
+| TASK-WEB-013 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | Planned (opportunistic) | Low |
+| TASK-BE-001 | Decide the backend answer-engine framework (Spring AI vs LangChain4J vs other) + ADR (closes OQ-007) | Decision / Architecture | Planned (Sprint 7, first) | High |
+| TASK-BE-002 | Scaffold the Java backend module on the restart branch (hexagonal skeleton, build + ArchUnit green) | V1 enabler | Planned (Sprint 7) | High |
+| TASK-BE-003 | Knowledge-base ingestion socle (pivot + Markdown connector + idempotent sync + pgvector 768 + swappable embedding adapter) | V1 enabler | Planned (Sprint 7) | High |
+| TASK-BE-004 | RAG retrieval + domain guardrails before/after (ADR-0014) | V1 core | Planned (Sprint 7) | High |
+| TASK-BE-005 | Provider-agnostic LLM wording (Mistral API default, Ollama alt), grounded + no invented amounts (DEC-002) | V1 core | Planned (Sprint 7) | High |
+| TASK-BE-006 | Conversation endpoint implementing the ADR-0021 contract + short conversation memory | V1 core | Planned (Sprint 7) | High |
+| TASK-BE-007 | Streaming-token answer (SSE) per ADR-0013 — `backend.first_token` ≠ `backend.request` (RF-021) | V1 core | Planned (Sprint 7; Medium, may defer) | Medium |
+| TASK-BE-008 | Wire `voice-agent --backend http` end to end to the real endpoint (stub → real) | V1 core | Planned (Sprint 7) | High |
+| TASK-BE-009 | Backend observability: OTel traces/metrics/logs across guardrails, retrieval, LLM (DEC-010, ADR-0010) | V1 pilot gate | Planned (Sprint 7) | High |
+| TASK-BE-010 | QA functional + latency report (RAG + LLM slices; composite with real backend) + adversarial review | V1 pilot gate | Planned (Sprint 7) | High |
 
 ## Planned Sprints
 
@@ -117,6 +127,7 @@ against the new empty-codebase plan.
 | SPRINT-4-PIPECAT | Pipecat runtime migration (batch parity) | ✅ Done (2026-07-14, merged → `feat/restart-from-scratch`) | Run the web voice batch loop (STT → echo → TTS) through a Pipecat pipeline (pipeline-only, no WebRTC/streaming), selectable via `--runtime` and shipped as the default, with the stdlib path kept as fallback/comparison (TASK-WEB-005) — `sprints/sprint-4-pipecat-batch.md` |
 | SPRINT-5-BACKEND-BRIDGE | Backend answer bridge (US-019 close) | ✅ Done (2026-07-15) | Turn the echo loop into a real answer loop: transcript → `BackendAnswerPort` (stub default + HTTP) → response text → TTS, one correlation id end to end, closing US-019 and the US-036 `backend_first_token` gap (TASK-WEB-003 A…G) — `sprints/sprint-5-backend-bridge.md` |
 | SPRINT-6-STREAMING | Streaming voice loop & latency (US-019 optimization, US-021) | ✅ Done (closed 2026-07-17, merged → `feat/restart-from-scratch`) — **ADR-0018 gate MET** (`time_to_first_audio` p95 761.5 ms < 800 ms) via TASK-STT-013 + TASK-WEB-011 | WebRTC transport (TASK-WEB-007, closes RF-012) + streaming VAD (TASK-STT-012) + streaming STT (TASK-STT-010) + streaming TTS (TASK-WEB-004) + barge-in (TASK-WEB-008 / US-021) + generic voice errors (TASK-WEB-006, closes RF-013) + QA/latency close (TASK-WEB-009) + finalize-tail reduction (TASK-STT-013), targeting `time_to_first_audio` p95 < 800 ms — `sprints/sprint-6-streaming.md` |
+| SPRINT-7-ANSWER-ENGINE | Real conversation answer engine — RAG over the knowledge base (EPIC-005) | 📋 Planned (prep 2026-07-17; **not started**) — hard entry gate: Sprint 6 closed/validated (OQ-005) | Turn the stub answer into a real, KB-grounded answer engine behind the ADR-0021 contract: framework decision (TASK-BE-001, closes OQ-007) → backend scaffold (TASK-BE-002) → KB ingestion/pgvector (TASK-BE-003) → RAG + guardrails (TASK-BE-004) → provider-agnostic LLM wording (TASK-BE-005) → conversation endpoint + memory (TASK-BE-006) → streaming tokens (TASK-BE-007) → wire `--backend http` (TASK-BE-008) → observability (TASK-BE-009) → QA + latency (TASK-BE-010). Scoped to KB-grounded answers; customer identity/BSS/PDF/comparison stay gated (OQ-001/003/004) — `sprints/sprint-7-answer-engine.md` |
 
 ## Restart Delivery Notes
 
@@ -175,3 +186,4 @@ RF-008 (WER normalization, surfaced by the first live Gradium run) → TASK-STT-
 | DEC-008 | V1 routing prioritizes billing explanation while support/sales agents remain foundation capabilities | Accepted via ADR-0017 and ADR-0015 |
 | DEC-009 | Genesys handoff is in V1, full Genesys voice routing remains optional | Accepted via ADR-0019 and ADR-0020 |
 | DEC-010 | Pilot observability requires per-step latency traces before any production SLO claim | Accepted via ADR-0010 and ADR-0018 |
+| DEC-011 | Chat LLM: Mistral API is the development default; OpenAI is the POC target (live validation gated on credentials); Ollama stays the local alternative. Embedding also stays behind its own replaceable adapter (default Ollama `nomic-embed-text` 768; dimension change ⇒ recreate `vector_store` + re-sync). All behind replaceable provider ports | Accepted (user, 2026-07-17) |

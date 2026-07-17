@@ -252,3 +252,51 @@ across participating components. Reports must publish p50, p95, p99, sample
 size, channel, provider configuration, warm/cold state and cache/connection
 state. Genesys Analytics metrics and AI-layer metrics must be combined for pilot
 review when Genesys participates in the interaction.
+
+---
+
+## DEC-011 - Chat LLM Provider Strategy (Mistral For Development, OpenAI For The POC)
+
+**Status:** Accepted (user decision)
+**Date:** 2026-07-17
+
+### Decision
+
+The answer engine's chat LLM stays behind the replaceable provider port (DEC-005).
+Two providers are in scope for V1:
+
+- **Mistral API** (`mistral-small-latest`) is the **development default** so
+  implementation can progress immediately.
+- **OpenAI** is the **POC target** provider. Its adapter is built to the same
+  port, but **live validation is gated on OpenAI credentials**, which are not yet
+  available.
+
+Ollama remains the local/offline alternative for chat.
+
+The **embedding** model is a **separate model** that must not be confused with the
+chat LLM. It **stays Ollama `nomic-embed-text` (768 dim) as the default**, but —
+like the chat LLM — it must sit behind its **own replaceable provider port /
+adapter** so a different embedding provider can be swapped in easily (DEC-005).
+**Caveat:** the vector dimension is fixed at `vector_store` creation, so switching
+to an embedding model of a different dimension (e.g. `mistral-embed` = 1024 ≠ 768)
+requires **recreating the table and re-syncing** the whole knowledge base — the
+port makes the *code* swap easy, not the data migration.
+
+### Rationale
+
+Development must not wait for credentials, and Mistral already works. Committing
+the POC to OpenAI while keeping Mistral as the working default keeps progress
+unblocked, avoids any code lock-in (the port makes the switch cheap and
+benchmarkable), and lets Mistral vs OpenAI be compared once the engine exists.
+
+### Implication
+
+- The Sprint 7 wording step (TASK-BE-005) implements provider-agnostic
+  configuration supporting Mistral and OpenAI (and Ollama), selectable by config.
+- The Sprint 7 ingestion step (TASK-BE-003) puts the **embedding** behind its own
+  replaceable adapter (default Ollama `nomic-embed-text`, 768), config-selectable;
+  a dimension change requires recreating `vector_store` + re-syncing.
+- The framework decision (OQ-007 / TASK-BE-001) must support all three chat
+  providers **and** a swappable embedding provider, with streaming tokens.
+- OpenAI live/POC validation is deferred until credentials are provided; until
+  then, functional and latency runs use Mistral (or Ollama offline).
