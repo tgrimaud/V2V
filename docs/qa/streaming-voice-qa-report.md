@@ -112,6 +112,46 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
   --channel web --provider gradium-streaming --warm
 ```
 
+### Provider baseline — TTS time to first audio buffer (2026-07-16)
+
+The Gradium dashboard publishes its own "time to first audio buffer" percentiles
+for the TTS API. On the same day as the consolidated sample, it reported
+**min 186 ms / p50 330 ms / p90 364 ms / p95 364 ms**. Because our
+`tts.time_to_first_audio_ms` metric measures the same thing one hop further out
+(provider + network/transport + agent handling, over the `count=4` metric
+distribution), the difference is the **transport/handling delta** our path adds on
+top of the provider.
+
+| Percentile | Gradium (provider, server-side) | Measured (`tts.time_to_first_audio_ms`) | Delta (measured − provider) |
+|---|---:|---:|---:|
+| min | 186 ms | 307 ms | +120 ms |
+| p50 | 330 ms | 309 ms | −20 ms |
+| p90 | 364 ms | — (not computed) | — |
+| p95 | 364 ms | 479 ms | +115 ms |
+
+Reading: on the median turn our path adds essentially nothing (co-located dev
+host, negligible network on the typical case); the ~115 ms p95 gap is the
+transport/handling cost surfacing on the slow tail. **Caveat:** the delta is not
+pure transport — the sign flips (min +120 ms but p50 −20 ms), which only happens
+because the two distributions have very different sample sizes: our side is
+4–5 turns (p95 = p99 = max, and our fastest turn is not as fast as the provider's
+best-of-a-full-day), while the provider p95 is over a full day of calls and is far
+more robust. Treat this as directional until a larger warm sample lands (see the
+Sprint 6 "Out Of Sprint" follow-up, blocked on Gradium credit). This still
+confirms the TTS brick is **not** the latency blocker; the dominant cost remains
+the STT post-EOT finalize tail (p95 ~1389 ms).
+
+Regenerate the comparison by passing the published provider percentiles to the
+report:
+
+```bash
+python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jsonl \
+  --channel web --provider gradium-streaming --warm \
+  --tts-baseline "min=186.36,p50=329.53,p90=364.19,p95=364.19" \
+  --tts-baseline-source "Gradium dashboard 2026-07-16"
+# -> adds a "provider_baseline" section with per-percentile delta_ms (measured - provider)
+```
+
 ## Component Findings
 | Brick | Status | Findings | Next action |
 |---|---|---|---|

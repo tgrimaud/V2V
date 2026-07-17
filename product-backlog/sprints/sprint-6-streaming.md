@@ -146,6 +146,7 @@ ticket (mirrors the Sprint 4 Pipecat spike).
 | Telephony channel (US-018) + Genesys handoff (EPIC-007) | Separate channel/contact-center sprint. |
 | Customer identity / ingress auth (OQ-001, RF-006/RF-014) | Deferred; the streaming ingress stays unauthenticated on the pilot host. |
 | US-022 (text complement) | Independent web UX. |
+| **Larger warm TTS sample vs Gradium provider baseline** (20–50 turns) | The provider-baseline comparison exists in `streaming_latency_report.py` (`--tts-baseline`) and the QA report records the 2026-07-16 Gradium figures (p50 330 ms / p95 364 ms), but our measured side is only 4–5 turns (p95 = p99 = max), so the tail is not statistically comparable to the provider's full-day p95. **Blocked: no Gradium credit available (2026-07-17).** When credit is restored, capture 20–50 warm turns and re-run the report with `--tts-baseline "min=186.36,p50=329.53,p90=364.19,p95=364.19" --tts-baseline-source "Gradium dashboard 2026-07-16"` to confirm the transport overhead on the tail. |
 
 ## Sprint Acceptance Criteria
 

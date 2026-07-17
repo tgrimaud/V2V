@@ -11,6 +11,7 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT / "scripts"))
 
 from streaming_latency_report import (  # noqa: E402
     build_streaming_report,
+    parse_baseline,
     parse_telemetry_dumps,
 )
 
@@ -139,6 +140,76 @@ class BuildStreamingReportTest(unittest.TestCase):
         self.assertEqual(report["barge_in_count"], 1)
         self.assertEqual(report["sample"]["calls"], 2)
         self.assertEqual(report["sample"]["turns_with_first_audio"], 2)
+
+    def test_provider_baseline_absent_by_default(self) -> None:
+        # GIVEN a report built without a provider baseline
+        report = self._report(_call_dump("c1", 120.0, 200.0, 180.0))
+
+        # THEN the provider_baseline section is an explicit null, not a fabricated value
+        self.assertIsNone(report["provider_baseline"])
+
+    def test_provider_baseline_reports_delta(self) -> None:
+        # GIVEN two turns whose measured TTS first-audio is 300 and 500 ms
+        spans, metrics, calls = parse_telemetry_dumps(
+            [_call_dump("c1", 120.0, 200.0, 300.0), _call_dump("c2", 130.0, 210.0, 500.0)]
+        )
+        baseline = parse_baseline("min=186.36,p50=329.53,p90=364.19,p95=364.19")
+
+        # WHEN a Gradium-style provider baseline is supplied
+        report = build_streaming_report(
+            spans, metrics, calls=calls, channel="web", provider="gradium-streaming",
+            warm=True, tts_baseline=baseline, tts_baseline_source="Gradium dashboard 2026-07-16",
+        )
+
+        # THEN the delta is measured minus provider at the overlapping percentiles
+        section = report["provider_baseline"]
+        self.assertEqual(section["metric"], "tts.time_to_first_audio_ms")
+        self.assertEqual(section["source"], "Gradium dashboard 2026-07-16")
+        self.assertEqual(section["provider"]["p90_ms"], 364.19)  # provider extra kept, informational
+        self.assertEqual(section["measured"]["p50_ms"], 300.0)
+        self.assertEqual(section["measured"]["p95_ms"], 500.0)
+        # p50 delta = 300 - 329.53 (our median is faster here); p95 = 500 - 364.19
+        self.assertAlmostEqual(section["delta_ms"]["p50_ms"], -29.53, places=3)
+        self.assertAlmostEqual(section["delta_ms"]["p95_ms"], 135.81, places=3)
+        # p90 has no measured counterpart, so no delta entry for it
+        self.assertNotIn("p90_ms", section["delta_ms"])
+
+    def test_provider_baseline_with_no_measured_samples(self) -> None:
+        # GIVEN a turn that produced no TTS first-audio metric (STT-only dump)
+        dump = json.dumps(
+            {"spans": [{"name": "voice.end_of_turn", "duration_ms": 250.0, "attributes": {"correlation_id": "x"}}],
+             "events": [], "metrics": []},
+            sort_keys=True,
+        )
+        spans, metrics, calls = parse_telemetry_dumps([dump])
+        baseline = parse_baseline("min=186.36,p50=329.53,p95=364.19")
+
+        # WHEN a provider baseline is supplied but there is nothing to compare against
+        report = build_streaming_report(
+            spans, metrics, calls=calls, channel="web", provider="gradium-streaming",
+            warm=True, tts_baseline=baseline, tts_baseline_source="Gradium dashboard 2026-07-16",
+        )
+
+        # THEN the provider is echoed but measured/delta are explicit nulls (no crash, no fabricated delta)
+        section = report["provider_baseline"]
+        self.assertEqual(section["provider"]["p50_ms"], 329.53)
+        self.assertIsNone(section["measured"])
+        self.assertIsNone(section["delta_ms"])
+
+
+class ParseBaselineTest(unittest.TestCase):
+    def test_parses_percentiles_and_normalises_ms_suffix(self) -> None:
+        # GIVEN a provider baseline spec with mixed keys
+        baseline = parse_baseline(" min=186.36, p50=329.53 ,p95=364.19")
+
+        # THEN keys are normalised to the *_ms convention with float values
+        self.assertEqual(baseline, {"min_ms": 186.36, "p50_ms": 329.53, "p95_ms": 364.19})
+
+    def test_rejects_malformed_entry(self) -> None:
+        # GIVEN a spec missing a value
+        # THEN parsing fails loudly rather than guessing
+        with self.assertRaises(ValueError):
+            parse_baseline("p50=329.53,p95")
 
 
 if __name__ == "__main__":

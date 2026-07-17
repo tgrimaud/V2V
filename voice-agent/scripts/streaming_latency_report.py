@@ -14,7 +14,11 @@ This tool consumes those server-stderr telemetry lines from a reviewed sample of
   streamed tts_first_audio, tts_last_audio);
 - the ADR-0018 composite `time_to_first_audio` (end-of-turn -> first playable
   frame) p50/p95/p99, plus the pilot-acceptance gate (`p95 < 800 ms`);
-- barge-in count observed in the sample.
+- barge-in count observed in the sample;
+- an optional provider baseline for the TTS first-audio metric: when the
+  provider publishes its own "time to first audio buffer" percentiles (e.g. the
+  Gradium dashboard), pass them via `--tts-baseline` to report the per-percentile
+  delta (measured minus provider) our path adds on top of the provider.
 
 Slices that never appear in the sample (e.g. `channel_ingress` / `channel_egress`
     20|are batch-HTTP-only, never emitted on the WebRTC transport) stay explicit gaps
@@ -54,6 +58,51 @@ _METRIC_DISTRIBUTIONS: tuple[str, ...] = (
     "tts.time_to_last_audio_ms",
 )
 _BARGE_IN_METRIC = "voice.barge_in.count"
+
+# Metric compared against a published provider baseline (time to first audio buffer).
+_BASELINE_METRIC = "tts.time_to_first_audio_ms"
+# Percentiles we can subtract (present in both our LatencyReport and a typical
+# provider baseline). Provider extras (e.g. p90) stay informational, no delta.
+_BASELINE_DELTA_KEYS: tuple[str, ...] = ("min_ms", "p50_ms", "p95_ms", "p99_ms")
+
+
+def parse_baseline(spec: str) -> dict[str, float]:
+    """Parse 'min=186.36,p50=329.53,p90=364.19,p95=364.19' into {'min_ms': ..., ...}."""
+    baseline: dict[str, float] = {}
+    for pair in spec.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        key, sep, value = pair.partition("=")
+        key, value = key.strip().lower(), value.strip()
+        if not sep or not key or not value:
+            raise ValueError(f"invalid baseline entry {pair!r}: expected key=value")
+        baseline[key if key.endswith("_ms") else f"{key}_ms"] = float(value)
+    return baseline
+
+
+def _provider_baseline(
+    metrics: list[MetricSample],
+    baseline: dict[str, float] | None,
+    source: str | None,
+) -> dict[str, Any] | None:
+    """Compare our measured TTS first-audio distribution to a provider baseline."""
+    if not baseline:
+        return None
+    samples = [m.value for m in metrics if m.name == _BASELINE_METRIC]
+    measured = LatencyReport.from_samples(samples).to_dict() if samples else None
+    delta: dict[str, float] = {}
+    for key in _BASELINE_DELTA_KEYS:
+        provider_value, measured_value = baseline.get(key), (measured or {}).get(key)
+        if provider_value is not None and measured_value is not None:
+            delta[key] = round(measured_value - provider_value, 3)
+    return {
+        "metric": _BASELINE_METRIC,
+        "source": source,
+        "provider": baseline,
+        "measured": measured,
+        "delta_ms": delta or None,
+    }
 
 
 def _span_from_dict(raw: dict[str, Any]) -> Span:
@@ -139,6 +188,8 @@ def build_streaming_report(
     warm: bool,
     slo_p95_ms: float = DEFAULT_SLO_P95_MS,
     note: str | None = None,
+    tts_baseline: dict[str, float] | None = None,
+    tts_baseline_source: str | None = None,
 ) -> dict[str, Any]:
     per_slice = PipelineTimingReport.from_spans(spans)
     composite = time_to_first_audio_report(spans)
@@ -157,6 +208,7 @@ def build_streaming_report(
         "barge_in_count": _barge_in_count(metrics),
         "time_to_first_audio": composite.to_dict(),
         "adr_0018_gate": _slo_gate(composite, slo_p95_ms),
+        "provider_baseline": _provider_baseline(metrics, tts_baseline, tts_baseline_source),
     }
 
 
@@ -176,6 +228,19 @@ def main() -> int:
     warm_group.add_argument("--cold", dest="warm", action="store_false")
     parser.add_argument("--slo-p95-ms", type=float, default=DEFAULT_SLO_P95_MS)
     parser.add_argument("--note", default=None)
+    parser.add_argument(
+        "--tts-baseline",
+        default=None,
+        help=(
+            "provider TTS first-audio (time to first audio buffer) baseline percentiles, "
+            "e.g. 'min=186.36,p50=329.53,p90=364.19,p95=364.19'; adds a per-percentile delta comparison"
+        ),
+    )
+    parser.add_argument(
+        "--tts-baseline-source",
+        default=None,
+        help="human label for the baseline source, e.g. 'Gradium dashboard 2026-07-16'",
+    )
     args = parser.parse_args()
 
     if args.input == "-":
@@ -184,6 +249,7 @@ def main() -> int:
         lines = Path(args.input).read_text(encoding="utf-8").splitlines()
     spans, metrics, calls = parse_telemetry_dumps(lines)
 
+    tts_baseline = parse_baseline(args.tts_baseline) if args.tts_baseline else None
     report = build_streaming_report(
         spans,
         metrics,
@@ -193,6 +259,8 @@ def main() -> int:
         warm=args.warm,
         slo_p95_ms=args.slo_p95_ms,
         note=args.note,
+        tts_baseline=tts_baseline,
+        tts_baseline_source=args.tts_baseline_source,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
