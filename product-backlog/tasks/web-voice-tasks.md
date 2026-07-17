@@ -1161,3 +1161,78 @@ Scenario: A closing word inside a longer request does not end the call
 - OQ-041-a / OQ-041-b: **resolved** (see Decisions above).
 - OQ-041-c: silence-timeout end of call — kept as a separate future story.
 - OQ-041-d: V1 channel boundary = web session close only (phone/Genesys deferred).
+
+---
+
+## TASK-WEB-011 - Pre-Warm / Reuse The TTS WebSocket To Cross The ADR-0018 Gate
+
+**Parent:** EPIC-006, EPIC-010
+**Related stories:** US-036 (the `tts_first_audio` slice + `time_to_first_audio`), US-019 (web voice)
+**Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming transport)
+**Builds on:** TASK-WEB-004 (streaming TTS), TASK-STT-013 (STT finalize tail solved; isolated the residual gap)
+**Classification:** V1 pilot gate — **the expected-final lever to meet ADR-0018 `p95 < 800 ms`**
+**Status:** Proposed (2026-07-17) — opened from the TASK-STT-013 post-fix baseline
+**Priority:** High (latency-driven; sprint-blocking for the ADR-0018 gate)
+**Branch:** `task/TASK-WEB-011-tts-prewarm` (to be created when scheduled)
+
+### Objective
+
+Remove the per-turn TTS WebSocket connect from the `time_to_first_audio` critical
+path so the composite crosses the ADR-0018 pilot criterion of **p95 < 800 ms** warm
+on the web channel.
+
+### Context (why this is needed)
+
+After TASK-STT-013 finalized streaming STT on the `flushed` ack, the STT tail is no
+longer the bottleneck (p95 373 ms). The post-fix warm baseline
+(`docs/qa/streaming-latency-warm-postfix.json`, 8 turns, stub backend) measures
+`time_to_first_audio` **p50 827 ms / p95 853 ms** — a **−53 ms** miss on the gate.
+The residual is now `tts_first_audio` (p95 484 ms), and the streaming TTS processor
+(`web_voice/streaming_tts_processor.py`) starts its `voice.tts.first_audio` timer
+**before** `await provider.open()`, so the span includes a **fresh TTS WebSocket
+connect + setup every turn**. Measured directly (6 runs): TTS `open()` ~90 ms warm
+(~188 ms cold); the first chunk after open is ~350 ms (inherent Gradium TTS
+latency). Taking the ~90 ms connect off the per-turn path projects `tts_first_audio`
+p95 ~484 → ~394 ms and **composite p95 ~853 → ~763 ms → PASS**.
+
+### Scope
+
+- Pre-warm and/or reuse the streaming TTS WebSocket so the connect + setup handshake
+  is **not** on the per-turn critical path (e.g. open at session start / keep a warm
+  connection across turns, re-warm after a drop).
+- Keep the `voice.tts.first_audio` span semantics honest: still measure EOT → first
+  playable chunk; the connect simply no longer happens per turn on that path.
+- Handle connection lifecycle safely: drop/reconnect, barge-in cancellation
+  (TASK-WEB-008), and the no-audio/empty/failure invariants stay intact (never invent
+  audio; key never logged).
+- Re-measure warm with `scripts/streaming_latency_report.py` (N large enough for a
+  meaningful p95) and update the ADR-0018 evidence + streaming QA report go/no-go.
+
+### Out Of Scope
+
+- Reducing the inherent Gradium TTS first-chunk latency (~350 ms) — provider-side.
+- Real backend answer time (`backend_first_token`) — still the Sprint 5 stub/http
+  backend for this measurement.
+- STT finalize tail (TASK-STT-013, done).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The streaming voice loop meets the ADR-0018 pilot latency criterion
+  Given the streaming WebRTC voice runtime with a pre-warmed/reused TTS connection
+  When a warm sample of turns is measured on the web channel
+  Then time_to_first_audio p95 is below 800 ms
+  And the per-slice p50/p95/p99 baseline is published
+  And no audio is invented and no safety invariant is regressed
+```
+
+If pre-warming does **not** bring p95 below 800 ms, the alternative acceptance is an
+explicit Product/Architecture revision of the ADR-0018 criterion recorded in the ADR
+(not a silent weakening).
+
+### Required Evidence
+
+- Unit tests for the pre-warm/reuse lifecycle (open-at-start, reuse across turns,
+  reconnect after drop, barge-in) with a fake WS.
+- A re-measured warm sample + updated ADR-0018 evidence and streaming QA report.
+- Adversarial review ≥ 90% + QA acceptance + user validation before merge.

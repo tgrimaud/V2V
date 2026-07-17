@@ -136,6 +136,32 @@ is objectified rather than assumed — see
 This is a supporting provider-side measurement; it does not replace the measured
 baseline above (our end-to-end sample remains the source for the pilot gate).
 
+### Post-fix baseline — web channel (TASK-STT-013, 2026-07-17)
+
+TASK-STT-013 attacked the dominant slice above. The spike
+([`docs/qa/stt-013-finalize-tail-spike.md`](../../qa/stt-013-finalize-tail-spike.md))
+found the STT post-EOT tail was ~430 ms of pure waiting for the terminal
+`end_of_stream` *after* the full transcript was already received; the streaming STT
+now finalizes on Gradium's `flushed` ack (zero word loss). Re-measured warm, 8 turns
+over WebRTC, stub backend ([`streaming-latency-warm-postfix.json`](../../qa/streaming-latency-warm-postfix.json)):
+
+| Slice | p50 (ms) | p95 (ms) | Before p95 | Notes |
+|---|---:|---:|---:|---|
+| `stt` (post-EOT finalize tail) | 370.8 | **373.5** | 1388.6 | now the ~350 ms `flushed` round-trip, stable |
+| `backend_first_token` | 0.0 | 0.0 | 0.01 | stub backend |
+| `tts_first_audio` | 457.2 | 483.8 | 478.9 | now the dominant slice; includes a ~90 ms per-turn TTS WebSocket connect |
+| **`time_to_first_audio`** | **826.5** | **852.9** | 1697.9 | p95 cut by 845 ms (~50 %) |
+
+**Gate outcome: still NO-GO, but the margin closed from −897.9 ms to −52.9 ms.** The
+STT lever is now exhausted (tail is the irreducible ~350 ms provider ack). The
+remaining slice is `tts_first_audio`, of which ~90 ms is a fresh TTS WebSocket
+connect + setup performed on the per-turn critical path (measured: `open()` ~90 ms
+warm / ~188 ms cold; first chunk after open ~350 ms). Pre-warming/reusing the TTS
+connection projects `tts_first_audio` p95 ~484 → ~394 ms and composite p95 ~853 →
+~763 ms (**PASS**). This is tracked as **TASK-WEB-011** (TTS connection pre-warm),
+the next and expected-final lever for the pilot gate. The stub-backend and
+`channel_egress` caveats from the baseline above still apply.
+
 ## Related Documents
 
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`

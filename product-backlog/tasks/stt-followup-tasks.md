@@ -623,7 +623,7 @@ Scenario: End-of-turn fires from streamed audio frames
 **Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming STT transport + turn finalization), DEC-010 (per-step latency before any SLO claim)
 **Builds on:** TASK-STT-010 (streaming STT), TASK-WEB-009 (baseline that measured the gap)
 **Classification:** V1 pilot gate — **blocks the Sprint 6 Definition of Done**
-**Status:** Open — spike phase (Sprint 6). Opened from the TASK-WEB-009 warm baseline: `time_to_first_audio` p95 **1698 ms** vs the ADR-0018 criterion **< 800 ms** (NO-GO).
+**Status:** Implemented (Sprint 6, 2026-07-17) — STT lever done. Streaming STT finalizes on Gradium's `flushed` ack (not `end_of_stream`): `stt` tail p95 **1389 → 373 ms**, `time_to_first_audio` p95 **1698 → 853 ms**. ADR-0018 gate margin **−898 → −53 ms**; residual is now TTS-bound (per-turn TTS WebSocket connect) → **TASK-WEB-011**. Pending adversarial review + QA acceptance + user validation.
 **Priority:** High (latency-driven; sprint-blocking)
 **Branch:** `task/TASK-STT-013-reduce-finalize-tail`
 
@@ -704,3 +704,32 @@ criterion recorded in the ADR (not a silent weakening).
 - If implemented: unit tests for the finalization strategy (fake WS), a re-measured
   warm sample, updated ADR-0018 evidence + streaming QA report.
 - Adversarial review ≥ 90% + QA acceptance + user validation before merge.
+
+### Delivery Evidence (2026-07-17)
+
+- **Spike (`docs/qa/stt-013-finalize-tail-spike.md`, live Gradium, short/long/noisy,
+  very stable):** after our end-of-turn flush the last `text` partial lands at
+  ~60–204 ms (full transcript in hand), Gradium's `flushed` ack lands at a
+  clip-length-independent **~350 ms**, but the terminal `end_of_stream` we blocked on
+  lands at **~780 ms** — ~430 ms of pure waiting after the transcript was already
+  complete. Commit-on-last-partial was **rejected** (drops the trailing word: the
+  ~800 ms `delay_in_frames` lookahead lands after flush); finalize-on-`flushed` is
+  lossless and faster. Tool: `voice-agent/scripts/stt013_finalize_spike.py`.
+- **Implementation:** `GradiumStreamingSession._handle_message` finalizes on the
+  `flushed` ack (guarded by `_flush_id > 0`) via `_finalize_from_parts()`;
+  `end_of_stream` (and `error`) kept as safe fallback terminals. All safety invariants
+  unchanged (transcript = concatenation of real partials, key never logged, drop/error
+  still `StreamingSttError`).
+- **Tests:** +2 provider unit tests (finalize-on-`flushed` with zero word loss via a
+  flush-driven fake WS that proves `end_of_stream` was never consumed; `end_of_stream`
+  fallback still finalizes). Full suite **305 unit / 10 Behave features (26 scenarios)**
+  green.
+- **Live re-measurement (`docs/qa/streaming-latency-warm-postfix.json`, 8 warm turns,
+  WebRTC, stub backend):** `stt` p95 **1389 → 373 ms**; `time_to_first_audio` p50/p95
+  **1310/1698 → 827/853 ms** (−845 ms). ADR-0018 gate still FAIL but margin **−898 →
+  −53 ms**.
+- **Residual (now TTS-bound, not STT):** `tts_first_audio` p95 484 ms includes a
+  ~90 ms per-turn TTS WebSocket connect (measured: `open()` ~90 ms warm / ~188 ms
+  cold; first chunk after open ~350 ms). Pre-warming/reusing it → **TASK-WEB-011**,
+  projected composite p95 ~763 ms (PASS). ADR-0018 evidence + streaming QA report
+  updated with the post-fix baseline.

@@ -6,6 +6,18 @@
 **Decision:** ADR-0018 (pilot criterion `time_to_first_audio` p95 < 800 ms)
 **Run date:** 2026-07-16 (warm live sample)
 
+> **Update 2026-07-17 (TASK-STT-013):** the STT finalize tail below was attacked and
+> largely resolved. Streaming STT now finalizes on Gradium's `flushed` ack instead of
+> the terminal `end_of_stream` (zero word loss). Re-measured warm, 8 turns over WebRTC
+> ([`streaming-latency-warm-postfix.json`](streaming-latency-warm-postfix.json)):
+> `stt` p95 **1389 → 373 ms**, `time_to_first_audio` p95 **1698 → 853 ms** (−845 ms,
+> ~50 %). Pilot gate margin closed from **−898 ms to −53 ms**. The remaining
+> bottleneck is now `tts_first_audio` (p95 484 ms), which includes a ~90 ms per-turn
+> TTS WebSocket connect — the next lever is **TASK-WEB-011** (TTS connection pre-warm),
+> projected to cross the 800 ms gate. See
+> [`stt-013-finalize-tail-spike.md`](stt-013-finalize-tail-spike.md). The pre-fix
+> baseline is preserved verbatim below.
+
 ## Executive Summary
 - **Overall readiness (functional):** Go — the streaming loop answers end to end
   (partials → answer → incremental first audio), barge-in interrupts playback, and
@@ -181,12 +193,14 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
 ## Recommendation
 - **Functional:** Go — the streaming loop, barge-in and safe-failure paths meet their
   acceptance criteria with unit + Behave regression coverage.
-- **Pilot latency:** **NO-GO.** The consolidated warm sample measures
-  `time_to_first_audio` p95 1698 ms vs the ADR-0018 criterion `p95 < 800 ms` — a
-  measured miss (~2.1×), driven by the STT post-EOT finalize tail (p95 ~1.39 s), and
-  measured with a **stub backend** (a real answer path only adds time). The lever is
-  the STT finalize tail; treat the `p95 < 800 ms` criterion as open until that is
-  reduced. Sprint 6 delivers the instrumentation and the honest baseline; it does not
-  claim the latency gate.
+- **Pilot latency:** **NO-GO (margin −53 ms after TASK-STT-013).** The pre-fix warm
+  sample measured `time_to_first_audio` p95 1698 ms; after finalizing streaming STT on
+  the `flushed` ack (TASK-STT-013) the post-fix warm sample measures **p95 853 ms**
+  (STT tail p95 1389 → 373 ms). The STT lever is now exhausted (the tail is the
+  irreducible ~350 ms provider ack). The remaining gap is `tts_first_audio` (p95
+  484 ms), of which ~90 ms is a per-turn TTS WebSocket connect; pre-warming/reusing it
+  (**TASK-WEB-011**) projects composite p95 ~763 ms (PASS). Still measured with a
+  **stub backend** (a real answer path adds backend time). Treat the `p95 < 800 ms`
+  criterion as open until TASK-WEB-010 lands and is re-measured.
 - **Required before an SLO claim (ADR-0010):** per-channel/per-step dashboards,
   alerting, degraded-mode and provider-outage tests — out of this sprint.

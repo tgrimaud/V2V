@@ -1,0 +1,139 @@
+{
+  "adr_0018_gate": {
+    "criterion_p95_ms": 800.0,
+    "margin_ms": -52.928,
+    "measured_p95_ms": 852.928,
+    "status": "fail"
+  },
+  "barge_in_count": 0,
+  "metric_distributions": {
+    "stt.time_to_final_ms": {
+      "count": 8,
+      "max_ms": 373.485,
+      "min_ms": 366.661,
+      "p50_ms": 370.781,
+      "p95_ms": 373.485,
+      "p99_ms": 373.485
+    },
+    "stt.time_to_first_partial_ms": {
+      "count": 8,
+      "max_ms": 1260.502,
+      "min_ms": 1165.404,
+      "p50_ms": 1227.167,
+      "p95_ms": 1260.502,
+      "p99_ms": 1260.502
+    },
+    "tts.time_to_first_audio_ms": {
+      "count": 8,
+      "max_ms": 483.813,
+      "min_ms": 296.45,
+      "p50_ms": 457.203,
+      "p95_ms": 483.813,
+      "p99_ms": 483.813
+    },
+    "tts.time_to_last_audio_ms": {
+      "count": 8,
+      "max_ms": 4732.342,
+      "min_ms": 3892.434,
+      "p50_ms": 4093.166,
+      "p95_ms": 4732.342,
+      "p99_ms": 4732.342
+    }
+  },
+  "per_slice": {
+    "slices": [
+      {
+        "latency": null,
+        "measured": false,
+        "note": "no channel-ingress span in this sample",
+        "slice": "channel_ingress"
+      },
+      {
+        "latency": {
+          "count": 8,
+          "max_ms": 500.0,
+          "min_ms": 500.0,
+          "p50_ms": 500.0,
+          "p95_ms": 500.0,
+          "p99_ms": 500.0
+        },
+        "measured": true,
+        "note": null,
+        "slice": "end_of_turn"
+      },
+      {
+        "latency": {
+          "count": 8,
+          "max_ms": 373.485,
+          "min_ms": 366.661,
+          "p50_ms": 370.781,
+          "p95_ms": 373.485,
+          "p99_ms": 373.485
+        },
+        "measured": true,
+        "note": null,
+        "slice": "stt"
+      },
+      {
+        "latency": {
+          "count": 8,
+          "max_ms": 0.03,
+          "min_ms": 0.009,
+          "p50_ms": 0.014,
+          "p95_ms": 0.03,
+          "p99_ms": 0.03
+        },
+        "measured": true,
+        "note": null,
+        "slice": "backend_first_token"
+      },
+      {
+        "latency": {
+          "count": 8,
+          "max_ms": 483.813,
+          "min_ms": 296.45,
+          "p50_ms": 457.203,
+          "p95_ms": 483.813,
+          "p99_ms": 483.813
+        },
+        "measured": true,
+        "note": null,
+        "slice": "tts_first_audio"
+      },
+      {
+        "latency": null,
+        "measured": false,
+        "note": "no web.voice.egress span in this sample",
+        "slice": "channel_egress"
+      }
+    ]
+  },
+  "provider_baseline": null,
+  "sample": {
+    "calls": 8,
+    "channel": "web",
+    "environment": "co-located dev host",
+    "note": "TASK-STT-013 post-fix: streaming STT finalizes on flushed ack (not end_of_stream); 8 warm turns over WebRTC, backend stub",
+    "provider": "gradium",
+    "turns_with_first_audio": 8,
+    "warm": true
+  },
+  "time_to_first_audio": {
+    "component_slices": [
+      "stt",
+      "backend_first_token",
+      "tts_first_audio"
+    ],
+    "latency": {
+      "count": 8,
+      "max_ms": 852.928,
+      "min_ms": 666.015,
+      "p50_ms": 826.458,
+      "p95_ms": 852.928,
+      "p99_ms": 852.928
+    },
+    "measured": true,
+    "name": "time_to_first_audio",
+    "note": null
+  }
+}

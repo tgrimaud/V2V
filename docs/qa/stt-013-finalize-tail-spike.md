@@ -64,17 +64,48 @@ buffered as context at flush and is only emitted during the tail. `flushed` wait
 for that flush to complete, so it is emitted *after* the trailing word — which is
 exactly why it is both fast (~350 ms) and lossless.
 
-## Projected impact
+## Measured impact — live WebRTC re-measurement (post-fix)
 
-With the STT tail at ~350 ms (was ~780–1389 ms) and the other measured slices
-unchanged (backend stub ~0 ms, `tts_first_audio` p50 309 ms / p95 479 ms):
+Implemented (finalize on `flushed`) and re-measured over the real WebRTC streaming
+path, warm, 8 turns, Gradium streaming STT+TTS, backend stub
+(`streaming-latency-warm-postfix.json`):
 
-- `time_to_first_audio` p50 ≈ 350 + 0 + 309 ≈ **~660 ms** (under 800 ms).
-- p95 ≈ 350 + 479 ≈ **~830 ms** worst-case-additive; the true p95 of the sum is
-  typically lower, and the STT part is now small and stable. If p95 still edges the
-  gate, the last-text debounce (tail ~150–250 ms) closes the rest.
+| Slice | Before (TASK-WEB-009) | After (this fix) |
+|---|---:|---:|
+| `stt` post-EOT tail (p50 / p95) | 866 / **1389** ms | 371 / **374** ms |
+| `tts_first_audio` (p50 / p95) | 309 / 479 ms | 457 / 484 ms |
+| `backend_first_token` | ~0 ms (stub) | ~0 ms (stub) |
+| **`time_to_first_audio` (p50 / p95)** | 1310 / **1698** ms | 827 / **853** ms |
+| ADR-0018 gate (`p95 < 800 ms`) | FAIL (−898 ms) | **FAIL (−53 ms)** |
 
-This must be confirmed by a live WebRTC re-measurement (implementation phase).
+The STT lever worked exactly as the spike predicted: the tail is now a stable
+~373 ms (the ~350 ms `flushed` round-trip) and no longer dominates. **Composite
+`time_to_first_audio` p95 dropped from 1698 ms to 853 ms — a 845 ms / ~50 % cut.**
+
+## Residual gap — now TTS-bound, not STT-bound
+
+The gate misses by **53 ms**, now bottlenecked by `tts_first_audio` (p95 484 ms).
+The streaming TTS processor starts its `voice.tts.first_audio` timer *before*
+`await provider.open()`, so the span includes a **fresh TTS WebSocket connect +
+setup every turn**. Measured directly (6 runs):
+
+- TTS `open()` (connect + setup): **~90 ms** warm (~188 ms cold first call).
+- first chunk after open: ~236–384 ms (inherent Gradium TTS first-chunk latency).
+
+Pre-warming / reusing the TTS WebSocket so the ~90 ms connect is off the per-turn
+critical path would bring `tts_first_audio` p95 ~484 → ~394 ms and **composite p95
+~853 → ~763 ms → PASS**. This is a TTS-side change (TASK-WEB-004 streaming-TTS
+scope), tracked as a follow-up (**TASK-WEB-011**), not part of the STT finalize
+tail. Finalizing STT earlier than `flushed` (last-text debounce) is not a reliable
+lever here: the last partial lands at ~97–204 ms but a safe debounce window makes it
+no better than the deterministic ~350 ms `flushed` ack, for added accuracy risk.
+
+## Verdict recap
+
+- **STT finalize tail: solved** — `flushed`-based finalization, zero word loss, tail
+  ~1389 → ~374 ms p95; TASK-STT-013's objective is met.
+- **ADR-0018 pilot gate: not yet met (−53 ms)** — the remaining lever is TTS
+  connection pre-warm (TASK-WEB-011), not further STT work.
 
 ## Design decision for the implementation
 
@@ -87,10 +118,13 @@ This must be confirmed by a live WebRTC re-measurement (implementation phase).
   surfaces `StreamingSttError`.
 - Provider-agnostic seam is unchanged; the batch REST provider is untouched.
 
-## Next steps (implementation)
+## Status of the implementation
 
-1. Finalize-on-`flushed` in `stt_validation/streaming.py` + fake-WS unit tests
+1. ✅ Finalize-on-`flushed` in `stt_validation/streaming.py` + fake-WS unit tests
    (flushed → final; end_of_stream fallback; error/drop still fail).
-2. Live WebRTC re-measurement with `scripts/streaming_latency_report.py` over a warm
-   sample; confirm `time_to_first_audio` p95 < 800 ms.
-3. Update ADR-0018 evidence + the streaming QA report go/no-go.
+2. ✅ Live WebRTC re-measurement (`streaming-latency-warm-postfix.json`): STT tail
+   ~374 ms p95; `time_to_first_audio` p95 853 ms (was 1698 ms). Gate still −53 ms,
+   now TTS-bound.
+3. ✅ ADR-0018 evidence + streaming QA report updated with the post-fix baseline.
+4. ⏭️ Follow-up **TASK-WEB-011** — pre-warm/reuse the TTS WebSocket to remove the
+   ~90 ms per-turn connect from `tts_first_audio` and cross the 800 ms gate.
