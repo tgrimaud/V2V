@@ -88,6 +88,13 @@ It is **TASK-BE-001** below and blocks every other Sprint 7 ticket.
 
 ### TASK-BE-001 — Decide the backend answer-engine framework (closes OQ-007)
 
+> **Decision pre-recorded (2026-07-17):** the framework choice is already captured
+> in [ADR-0026](../../docs/architecture/adrs/ADR-0026-backend-runtime-and-ai-framework.md)
+> — **Spring Boot + Spring AI** for V1 (Quarkus + LangChain4j deferred to an
+> ops/native-image or complex-agentic trigger). OQ-007 is flipped to Decided. This
+> ticket now **confirms** the ADR at sprint start and scaffolds accordingly; no
+> re-evaluation from scratch unless a re-decision trigger appears.
+
 **Goal:** Choose the framework the Java backend uses for LLM orchestration + RAG:
 **Spring AI** vs **LangChain4J** vs another option, and record it as an ADR.
 

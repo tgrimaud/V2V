@@ -40,3 +40,4 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0023](ADR-0023-streaming-stt-transport-and-turn-finalization.md) | Accepted | Streaming STT sends audio to Gradium over a WebSocket while the customer speaks, pushing partials and finalizing on the streaming VAD end-of-turn. |
 | [ADR-0024](ADR-0024-streaming-tts-incremental-playback.md) | Accepted | Streaming TTS plays the answer on the first synthesized chunk over the Gradium WebSocket; batch TTS stays as fallback. |
 | [ADR-0025](ADR-0025-barge-in-native-interruption.md) | Accepted | Barge-in uses Pipecat's native `InterruptionFrame` mechanism driven by the existing streaming VAD (gated by bot-speaking state); Silero deferred as a drop-in verdict upgrade. |
+| [ADR-0026](ADR-0026-backend-runtime-and-ai-framework.md) | Accepted | Backend uses Spring Boot + Spring AI for V1 (resolves OQ-007); Quarkus + LangChain4j deferred to an ops/agentic trigger; providers stay behind replaceable ports. |

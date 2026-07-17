@@ -177,7 +177,11 @@ constraints apply.
 
 ## OQ-007 - Backend AI/RAG Framework (Spring AI vs LangChain4J vs Other)
 
-**Status:** Open — discussion deferred (raised 2026-07-14, not blocking Sprint 5)
+**Status:** ✅ Decided (2026-07-17) — **Spring Boot + Spring AI** for V1, recorded in
+[ADR-0026](../../docs/architecture/adrs/ADR-0026-backend-runtime-and-ai-framework.md).
+Quarkus + LangChain4j deliberately deferred (reconsidered only on an ops/native-image
+or complex-agentic trigger). Providers stay behind replaceable ports (DEC-005, DEC-011,
+ADR-0006). TASK-BE-001 (Sprint 7) implements the recorded decision.
 **Owner:** Architecture / Backend
 **Impacts:** EPIC-005, EPIC-006 (TASK-WEB-003-C HTTP backend adapter and the future
 Java answer engine that implements the conversation contract), EPIC-002/003/004

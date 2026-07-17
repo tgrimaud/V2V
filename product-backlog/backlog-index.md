@@ -161,7 +161,7 @@ The recommended first implementation sequence is:
 | OQ-004 | Invoice PDF extraction reliability and fixture coverage | Product / BSS / QA | Open |
 | OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | Open |
 | OQ-006 | Genesys handoff integration shape | Product / Contact Center / Architecture / Security | Open |
-| OQ-007 | Backend AI/RAG framework (Spring AI vs LangChain4J vs other) | Architecture / Backend | Open — deferred, not blocking Sprint 5 |
+| OQ-007 | Backend AI/RAG framework (Spring AI vs LangChain4J vs other) | Architecture / Backend | ✅ Decided (2026-07-17) — Spring Boot + Spring AI (ADR-0026); TASK-BE-001 implements |
 
 ## Review Findings
 
