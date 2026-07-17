@@ -1171,7 +1171,7 @@ Scenario: A closing word inside a longer request does not end the call
 **Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming transport)
 **Builds on:** TASK-WEB-004 (streaming TTS), TASK-STT-013 (STT finalize tail solved; isolated the residual gap)
 **Classification:** V1 pilot gate — **the expected-final lever to meet ADR-0018 `p95 < 800 ms`**
-**Status:** Implemented (2026-07-17) — **ADR-0018 gate MET**. TTS WebSocket pre-warmed off the per-turn critical path: `tts_first_audio` p95 **484 → 381 ms**, `time_to_first_audio` p95 **853 → 761.5 ms → GO (+38.5 ms)** with a stub backend. Adversarial review **93/100 (Pass)** — no blocking findings (2026-07-17). QA acceptance **GO** (2026-07-17): 315 unit / 10 Behave features (26 scenarios) green + ADR-0018 gate re-confirmed (`streaming-voice-qa-report.md`). Merge-ready, pending user validation.
+**Status:** Implemented (2026-07-17) — **ADR-0018 gate MET**. TTS WebSocket pre-warmed off the per-turn critical path: `tts_first_audio` p95 **484 → 381 ms**, `time_to_first_audio` p95 **853 → 761.5 ms → GO (+38.5 ms)** with a stub backend. Adversarial review **93/100 (Pass)** — no blocking findings (2026-07-17). QA acceptance **GO** (2026-07-17): 315 unit / 10 Behave features (26 scenarios) green + ADR-0018 gate re-confirmed (`streaming-voice-qa-report.md`). **Validated by user (2026-07-17)** — merged into `feat/sprint-6-streaming`.
 **Priority:** High (latency-driven; sprint-blocking for the ADR-0018 gate)
 **Branch:** `task/TASK-WEB-011-tts-prewarm`
 

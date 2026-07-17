@@ -72,8 +72,8 @@ and barge-in.
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming` (no-ff; branch deleted). Live full-stack: barge-in cuts the answer, resumes the new turn; anti-echo gate (amplitude threshold + N-frame confirmation) fixed without-headphones self-interruption |
 | TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming` (no-ff; branch deleted). Adversarial review 94/100, 281 unit + behave green, live validated |
 | TASK-WEB-009 | Streaming QA + `p95 < 800 ms` latency report + ADR update (sprint close) | QA / Docs | High | Instrumentation + baseline delivered (adversarial review 92/100, QA functional Go); **latency gate NOT met** (p95 1698 ms vs 800 ms) — surfaced the gap now owned by TASK-STT-013 |
-| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`p95 < 800 ms`) | Latency / STT | High | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms; **adversarial review 93/100 + QA acceptance GO**; pending user validation |
-| TASK-WEB-011 | Pre-warm the TTS WebSocket to cross the ADR-0018 gate | Latency / TTS | High | Implemented (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **gate GO (+38.5 ms)**; **adversarial review 93/100 + QA acceptance GO**; pending user validation |
+| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`p95 < 800 ms`) | Latency / STT | High | ✅ Validated by user (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms; review 93/100 + QA GO; merged into `feat/sprint-6-streaming` |
+| TASK-WEB-011 | Pre-warm the TTS WebSocket to cross the ADR-0018 gate | Latency / TTS | High | ✅ Validated by user (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **gate GO (+38.5 ms)**; review 93/100 + QA GO; merged into `feat/sprint-6-streaming` |
 
 ### Out of scope (confirmed with the user, 2026-07-15)
 
@@ -230,5 +230,5 @@ back once validated.
 | TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-009 | `task/TASK-WEB-009-streaming-qa-latency` | Impl + tests + docs + warm live sample done; adversarial review 92/100 (Pass), QA functional Go. **Latency gate NOT met** (p95 1698 ms) → gap owned by TASK-STT-013. Pending user validation of the QA/baseline deliverable |
-| TASK-STT-013 | `task/TASK-STT-013-reduce-finalize-tail` | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms. Adversarial review 93/100 (Pass) + QA acceptance GO (315 unit / 26 Behave green). Pending user validation |
-| TASK-WEB-011 | `task/TASK-WEB-011-tts-prewarm` | Implemented (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **ADR-0018 gate GO (+38.5 ms)**. Adversarial review 93/100 (Pass) + QA acceptance GO (315 unit / 26 Behave green). Pending user validation |
+| TASK-STT-013 | `task/TASK-STT-013-reduce-finalize-tail` | ✅ Validated by user (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms. Review 93/100 + QA GO (315 unit / 26 Behave). Merged into `feat/sprint-6-streaming` |
+| TASK-WEB-011 | `task/TASK-WEB-011-tts-prewarm` | ✅ Validated by user (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **ADR-0018 gate GO (+38.5 ms)**. Review 93/100 + QA GO (315 unit / 26 Behave). Merged into `feat/sprint-6-streaming` |
