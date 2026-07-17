@@ -173,19 +173,33 @@ class GradiumStreamingSession:
             self._fail(StreamingSttError("Streaming STT connection failed"))
 
     def _handle_message(self, raw: str) -> bool:
-        """Route one server message; return True when the stream is terminal."""
+        """Route one server message; return True when the turn is terminal for us."""
         message = _parse_message(raw)
         kind = message.get("type")
         if kind == "text":
             self._add_partial(message)
+        elif kind == "flushed" and self._flush_id > 0:
+            # Finalize on the flush acknowledgement rather than blocking on the terminal
+            # `end_of_stream`. TASK-STT-013 spike (docs/qa/stt-013-finalize-tail-spike.md):
+            # every pending partial has been emitted by the time `flushed` lands (~350 ms
+            # after our end-of-turn flush), so this is the *full* transcript ~430 ms
+            # sooner than `end_of_stream`, with no word loss — the primary lever to meet
+            # the ADR-0018 `time_to_first_audio` gate. Guarded by `_flush_id > 0` so a
+            # stray ack before our end-of-turn flush can never finalize early.
+            self._finalize_from_parts()
+            return True
         elif kind == "end_of_stream":
-            self._final = FinalTranscript(" ".join(p for p in self._parts if p).strip())
-            self._done.set()
+            # Fallback terminal: a provider that never sends `flushed` still finalizes.
+            self._finalize_from_parts()
             return True
         elif kind == "error":
             self._fail(StreamingSttError("Streaming STT reported an error"))
             return True
         return False
+
+    def _finalize_from_parts(self) -> None:
+        self._final = FinalTranscript(" ".join(p for p in self._parts if p).strip())
+        self._done.set()
 
     def _add_partial(self, message: dict) -> None:
         text = str(message.get("text", ""))
