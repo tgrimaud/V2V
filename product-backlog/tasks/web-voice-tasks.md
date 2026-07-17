@@ -1171,7 +1171,7 @@ Scenario: A closing word inside a longer request does not end the call
 **Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming transport)
 **Builds on:** TASK-WEB-004 (streaming TTS), TASK-STT-013 (STT finalize tail solved; isolated the residual gap)
 **Classification:** V1 pilot gate — **the expected-final lever to meet ADR-0018 `p95 < 800 ms`**
-**Status:** Implemented (2026-07-17) — **ADR-0018 gate MET**. TTS WebSocket pre-warmed off the per-turn critical path: `tts_first_audio` p95 **484 → 381 ms**, `time_to_first_audio` p95 **853 → 761.5 ms → GO (+38.5 ms)** with a stub backend. Pending adversarial review + QA acceptance + user validation.
+**Status:** Implemented (2026-07-17) — **ADR-0018 gate MET**. TTS WebSocket pre-warmed off the per-turn critical path: `tts_first_audio` p95 **484 → 381 ms**, `time_to_first_audio` p95 **853 → 761.5 ms → GO (+38.5 ms)** with a stub backend. Adversarial review **93/100 (Pass)** — no blocking findings (2026-07-17). QA acceptance **GO** (2026-07-17): 315 unit / 10 Behave features (26 scenarios) green + ADR-0018 gate re-confirmed (`streaming-voice-qa-report.md`). Merge-ready, pending user validation.
 **Priority:** High (latency-driven; sprint-blocking for the ADR-0018 gate)
 **Branch:** `task/TASK-WEB-011-tts-prewarm`
 
@@ -1266,3 +1266,29 @@ explicit Product/Architecture revision of the ADR-0018 criterion recorded in the
   (p95 761.5 ms < 800 ms, margin +38.5 ms).** Full arc: 1698 ms (−898) → 853 ms (−53)
   → 761.5 ms (+38.5). Stub-backend + `channel_egress` caveats still apply.
 - ADR-0018 evidence + streaming QA report updated with the gate-met baseline.
+
+### Adversarial Review (2026-07-17, covers TASK-STT-013 + TASK-WEB-011)
+
+- **Verdict: Proceed. Score 93/100 — QA gate Pass.** No blocking findings.
+- **Functional/architecture:** ADR-0018 gate met (p95 761.5 ms); `TtsSessionWarmer`
+  stays in the `web_voice` composition layer, provider behind its adapter, STT
+  finalize-on-`flushed` guarded by `_flush_id > 0` with `end_of_stream`/`error`
+  fallbacks. No boundary violation; class/method sizes within budget.
+- **Tests:** STT-013 +2 (finalize-on-`flushed` no word loss + `end_of_stream`
+  fallback); WEB-011 +8 warmer + 2 processor prewarm. Suite 315 unit / 10 Behave
+  green, 0 lint.
+- **Security:** API key stays in the provider connect header only; warmer never
+  handles text/keys; no new logging. Clean.
+- **Non-blocking findings (accepted residual):**
+  1. Pre-warm hit/miss is not surfaced as a distinct telemetry signal (silent
+     fallback to on-demand open on a spare failure) → recommend a `tts.prewarm`
+     warm/miss metric; the `voice.tts.first_audio` slice itself stays fully measured.
+  2. `TtsSessionWarmer.aclose()` catches `BaseException` around `await task`
+     (teardown best-effort) → could narrow to `Exception` + re-raise `CancelledError`.
+  3. Narrow race: a cancel landing exactly during `acquire()`'s await of the warm
+     task can orphan one spare (server reaps the idle WS) — very rare.
+  4. Processor prewarm coverage is single-turn; add a 2-turn chain test + a
+     barge-in-with-prewarm QA scenario.
+- **Residual risk accepted:** gate measured with a **stub backend**, **N=8**, and
+  `channel_egress` excluded — the pilot gate is met for the EOT→first-audio
+  streaming path as specified, not an end-to-end production SLO.

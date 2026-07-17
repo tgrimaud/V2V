@@ -23,6 +23,24 @@
 > 761.5 ms (+38.5). See [`stt-013-finalize-tail-spike.md`](stt-013-finalize-tail-spike.md).
 > The original pre-fix baseline is preserved verbatim below.
 
+> **QA acceptance 2026-07-17 (TASK-STT-013 + TASK-WEB-011): GO.** Following the
+> adversarial review **93/100 (Pass, no blocking findings)**, QA re-ran the full
+> regression net and re-confirmed the latency gate:
+> - **Functional regression:** `315 unit tests OK`; **Behave 10 features / 26
+>   scenarios / 120 steps** — green (run via `voice-agent/.venv`). Adds the
+>   finalize-on-`flushed` STT tests and the `TtsSessionWarmer` + processor pre-warm
+>   tests to the streaming net.
+> - **Pilot latency gate:** [`streaming-latency-warm-prewarm.json`](streaming-latency-warm-prewarm.json)
+>   `adr_0018_gate.status = pass`, `time_to_first_audio` p95 **761.5 ms < 800 ms**
+>   (margin **+38.5 ms**), warm, web channel, N=8, stub backend.
+> - **Accepted residual (unchanged):** stub backend (real answer time is a separate
+>   budget line), `channel_egress` excluded, N=8; pre-warm warm/miss not yet a
+>   dedicated metric (non-blocking review finding). No safety invariant regressed
+>   (no invented transcript/audio, key never logged).
+> - **QA verdict:** both tickets pass functional + latency acceptance → **merge-ready,
+>   pending explicit user validation** (per the delivery workflow, merge stays a
+>   user decision).
+
 ## Executive Summary
 - **Overall readiness (functional):** Go — the streaming loop answers end to end
   (partials → answer → incremental first audio), barge-in interrupts playback, and

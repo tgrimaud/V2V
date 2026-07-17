@@ -623,7 +623,7 @@ Scenario: End-of-turn fires from streamed audio frames
 **Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming STT transport + turn finalization), DEC-010 (per-step latency before any SLO claim)
 **Builds on:** TASK-STT-010 (streaming STT), TASK-WEB-009 (baseline that measured the gap)
 **Classification:** V1 pilot gate — **blocks the Sprint 6 Definition of Done**
-**Status:** Implemented (Sprint 6, 2026-07-17) — STT lever done. Streaming STT finalizes on Gradium's `flushed` ack (not `end_of_stream`): `stt` tail p95 **1389 → 373 ms**, `time_to_first_audio` p95 **1698 → 853 ms**. ADR-0018 gate margin **−898 → −53 ms**; residual is now TTS-bound (per-turn TTS WebSocket connect) → **TASK-WEB-011**. Pending adversarial review + QA acceptance + user validation.
+**Status:** Implemented (Sprint 6, 2026-07-17) — STT lever done. Streaming STT finalizes on Gradium's `flushed` ack (not `end_of_stream`): `stt` tail p95 **1389 → 373 ms**, `time_to_first_audio` p95 **1698 → 853 ms**. ADR-0018 gate margin **−898 → −53 ms**; residual is now TTS-bound (per-turn TTS WebSocket connect) → **TASK-WEB-011**. Adversarial review **93/100 (Pass)** — no blocking findings (2026-07-17). QA acceptance **GO** (2026-07-17): 315 unit / 10 Behave features (26 scenarios) green + ADR-0018 gate re-confirmed (`streaming-voice-qa-report.md`). Merge-ready, pending user validation.
 **Priority:** High (latency-driven; sprint-blocking)
 **Branch:** `task/TASK-STT-013-reduce-finalize-tail`
 
