@@ -128,6 +128,14 @@ frame → playable at the browser) is still excluded. Reducing the STT finalize 
 Sprint 6 follow-up. The reproducible sample is committed at
 [`docs/qa/streaming-latency-warm-sample.json`](../../qa/streaming-latency-warm-sample.json).
 
+For the TTS slice specifically, the QA report also records a **provider baseline**
+comparison against Gradium's published "time to first audio buffer" percentiles
+(2026-07-16), so the transport/handling delta our path adds on top of the provider
+is objectified rather than assumed — see
+[Provider baseline — TTS time to first audio buffer](../../qa/streaming-voice-qa-report.md#provider-baseline--tts-time-to-first-audio-buffer-2026-07-16).
+This is a supporting provider-side measurement; it does not replace the measured
+baseline above (our end-to-end sample remains the source for the pilot gate).
+
 ## Related Documents
 
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`
