@@ -18,18 +18,21 @@ OQ-001 / RF-006 / RF-014).
 
 ## Status
 
-**Status:** In progress — **ADR-0018 latency gate nearly met** (updated 2026-07-17).
-All seven functional tickets are delivered/validated. TASK-WEB-009 shipped the
-streaming instrumentation + baseline (warm p95 **1698 ms**, NO-GO). **TASK-STT-013**
-then attacked the dominant STT finalize tail — streaming STT now finalizes on
-Gradium's `flushed` ack instead of the terminal `end_of_stream`, cutting the STT
-tail p95 **1389 → 373 ms** and `time_to_first_audio` p95 **1698 → 853 ms**
-(`docs/qa/streaming-latency-warm-postfix.json`). The ADR-0018 gate margin closed
-from **−898 ms to −53 ms**. The STT lever is now exhausted; the residual gap is
-`tts_first_audio`, which includes a ~90 ms per-turn TTS WebSocket connect — tracked
-as **TASK-WEB-011** (TTS connection pre-warm), projected to reach composite p95
-~763 ms (**PASS**). The sprint stays open until ADR-0018 is satisfied (TASK-WEB-011)
-or Product/Architecture explicitly revises the criterion.
+**Status:** In progress — **ADR-0018 latency gate MET** (updated 2026-07-17); pending
+user validation of TASK-STT-013 + TASK-WEB-011 to close. All seven functional tickets
+are delivered/validated. TASK-WEB-009 shipped the streaming instrumentation + baseline
+(warm p95 **1698 ms**, NO-GO). Two latency levers then closed the gap:
+- **TASK-STT-013** — streaming STT finalizes on Gradium's `flushed` ack (not
+  `end_of_stream`): STT tail p95 **1389 → 373 ms**, composite p95 **1698 → 853 ms**.
+- **TASK-WEB-011** — TTS WebSocket pre-warmed off the per-turn critical path
+  (~90 ms connect removed): `tts_first_audio` p95 **484 → 381 ms**, composite p95
+  **853 → 761.5 ms**.
+
+**ADR-0018: `time_to_first_audio` p95 761.5 ms < 800 ms → GO (margin +38.5 ms)**,
+warm, web channel, **stub backend** (`docs/qa/streaming-latency-warm-prewarm.json`).
+Full arc: 1698 (−898) → 853 (−53) → 761.5 (+38.5). Caveats: stub backend (real answer
+time is a separate budget line), `channel_egress` excluded, N = 8. The sprint is
+ready to close on the user's validation.
 **Created:** 2026-07-15
 **Predecessor:** [`sprint-5-backend-bridge.md`](sprint-5-backend-bridge.md) (Sprint 5 — ✅ Done, closed 2026-07-15)
 **Working branch:** `feat/sprint-6-streaming` (to be cut from `feat/restart-from-scratch`)
@@ -45,7 +48,7 @@ or Product/Architecture explicitly revises the criterion.
 | Sprint 3 | TTS / voice-out (batch) → first end-to-end voice loop | ✅ Done |
 | Sprint 4 | Pipecat runtime migration (batch parity, pipeline-only) | ✅ Done |
 | Sprint 5 | Backend answer bridge (echo → real answer, US-019 close) | ✅ Done |
-| **Sprint 6** | **Streaming voice loop + latency (streaming STT/TTS/VAD + WebRTC transport + barge-in) — this sprint** | 🚧 In progress — ADR-0018 gate margin −53 ms after TASK-STT-013; residual TTS-bound (TASK-WEB-011) |
+| **Sprint 6** | **Streaming voice loop + latency (streaming STT/TTS/VAD + WebRTC transport + barge-in) — this sprint** | 🚧 In progress — ADR-0018 gate MET (p95 761.5 ms, +38.5 ms) after TASK-STT-013 + TASK-WEB-011; pending user validation to close |
 | Sprint 7 (tentative) | Telephony channel (US-018) + Genesys handoff (EPIC-007) | Planned |
 
 ## Why now (baseline that justifies the sprint)
@@ -69,8 +72,8 @@ and barge-in.
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) | Realtime UX | Medium | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming` (no-ff; branch deleted). Live full-stack: barge-in cuts the answer, resumes the new turn; anti-echo gate (amplitude threshold + N-frame confirmation) fixed without-headphones self-interruption |
 | TASK-WEB-006 | Genericize voice error responses (no raw provider text in 502 bodies, RF-013) | Hardening | Low | ✅ Validated by user (2026-07-16) — merged into `feat/sprint-6-streaming` (no-ff; branch deleted). Adversarial review 94/100, 281 unit + behave green, live validated |
 | TASK-WEB-009 | Streaming QA + `p95 < 800 ms` latency report + ADR update (sprint close) | QA / Docs | High | Instrumentation + baseline delivered (adversarial review 92/100, QA functional Go); **latency gate NOT met** (p95 1698 ms vs 800 ms) — surfaced the gap now owned by TASK-STT-013 |
-| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`p95 < 800 ms`) | Latency / STT | High | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms (gate −53 ms); pending review/QA/user validation |
-| TASK-WEB-011 | Pre-warm/reuse the TTS WebSocket to cross the ADR-0018 gate | Latency / TTS | High | Proposed (2026-07-17) — residual −53 ms is the per-turn TTS connect; expected-final lever |
+| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`p95 < 800 ms`) | Latency / STT | High | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms; pending review/QA/user validation |
+| TASK-WEB-011 | Pre-warm the TTS WebSocket to cross the ADR-0018 gate | Latency / TTS | High | Implemented (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **gate GO (+38.5 ms)**; pending review/QA/user validation |
 
 ### Out of scope (confirmed with the user, 2026-07-15)
 
@@ -198,11 +201,11 @@ Scenario: The realtime path drives the pipeline on one async loop
   batch endpoints remain as fallback.
 - `time_to_first_audio` p95 < 800 ms measured warm on the web channel, with the full
   per-slice baseline published (sample size, p50/p95/p99, min/max/mean, warm/cold).
-  **⚠️ NEAR-MET (2026-07-17):** TASK-STT-013 (finalize on `flushed`) cut composite
-  p95 **1698 → 853 ms**; the gate now misses by **−53 ms**. STT lever exhausted; the
-  residual is the per-turn TTS WebSocket connect — closing it is **TASK-WEB-011** (TTS
-  pre-warm, projected p95 ~763 ms). The sprint stays open until ADR-0018 is satisfied
-  (or Product/Architecture explicitly revises the criterion).
+  **✅ MET (2026-07-17):** TASK-STT-013 (finalize on `flushed`) cut composite p95
+  **1698 → 853 ms**, then TASK-WEB-011 (TTS pre-warm) cut it to **761.5 ms → GO
+  (+38.5 ms)** warm with a stub backend (`docs/qa/streaming-latency-warm-prewarm.json`).
+  Caveats: stub backend (real answer time is a separate budget line), `channel_egress`
+  excluded, N = 8. Criterion satisfied for the streaming voice path as specified.
 - Barge-in stops playback and is observable (US-021).
 - RF-007 closed (streaming ingress transport); RF-012 closed (awaited pipeline);
   RF-013 closed (generic client-safe voice error responses).
@@ -227,5 +230,5 @@ back once validated.
 | TASK-WEB-008 | `task/TASK-WEB-008-barge-in` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-006 | `task/TASK-WEB-006-generic-voice-errors` | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16, no-ff; branch deleted) |
 | TASK-WEB-009 | `task/TASK-WEB-009-streaming-qa-latency` | Impl + tests + docs + warm live sample done; adversarial review 92/100 (Pass), QA functional Go. **Latency gate NOT met** (p95 1698 ms) → gap owned by TASK-STT-013. Pending user validation of the QA/baseline deliverable |
-| TASK-STT-013 | `task/TASK-STT-013-reduce-finalize-tail` | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms (gate −53 ms). Pending adversarial review + QA + user validation |
-| TASK-WEB-011 | `task/TASK-WEB-011-tts-prewarm` (to create) | Proposed (2026-07-17) — TTS connection pre-warm; expected-final lever for ADR-0018 |
+| TASK-STT-013 | `task/TASK-STT-013-reduce-finalize-tail` | Implemented (2026-07-17) — finalize on `flushed`; STT tail p95 1389→373 ms, composite p95 1698→853 ms. Pending adversarial review + QA + user validation |
+| TASK-WEB-011 | `task/TASK-WEB-011-tts-prewarm` | Implemented (2026-07-17) — TTS pre-warm; composite p95 853→761.5 ms → **ADR-0018 gate GO (+38.5 ms)**. Pending adversarial review + QA + user validation |

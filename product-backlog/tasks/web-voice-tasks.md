@@ -1171,9 +1171,9 @@ Scenario: A closing word inside a longer request does not end the call
 **Related decisions:** ADR-0018 (pilot latency criterion), ADR-0023 (streaming transport)
 **Builds on:** TASK-WEB-004 (streaming TTS), TASK-STT-013 (STT finalize tail solved; isolated the residual gap)
 **Classification:** V1 pilot gate — **the expected-final lever to meet ADR-0018 `p95 < 800 ms`**
-**Status:** Proposed (2026-07-17) — opened from the TASK-STT-013 post-fix baseline
+**Status:** Implemented (2026-07-17) — **ADR-0018 gate MET**. TTS WebSocket pre-warmed off the per-turn critical path: `tts_first_audio` p95 **484 → 381 ms**, `time_to_first_audio` p95 **853 → 761.5 ms → GO (+38.5 ms)** with a stub backend. Pending adversarial review + QA acceptance + user validation.
 **Priority:** High (latency-driven; sprint-blocking for the ADR-0018 gate)
-**Branch:** `task/TASK-WEB-011-tts-prewarm` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-011-tts-prewarm`
 
 ### Objective
 
@@ -1236,3 +1236,33 @@ explicit Product/Architecture revision of the ADR-0018 criterion recorded in the
   reconnect after drop, barge-in) with a fake WS.
 - A re-measured warm sample + updated ADR-0018 evidence and streaming QA report.
 - Adversarial review ≥ 90% + QA acceptance + user validation before merge.
+
+### Delivery Evidence (2026-07-17)
+
+- **Root cause confirmed live:** Gradium's TTS WebSocket is **single-use** — a 2nd
+  `synthesize()` on one connection fails ("connection failed"), so it cannot be
+  *reused*; but it can be *pre-warmed*. The `voice.tts.first_audio` timer started
+  before `provider.open()`, baking a fresh ~90 ms connect (measured warm; ~188 ms
+  cold) into every turn.
+- **Implementation:** `voice-agent/web_voice/tts_session_warmer.py` — `TtsSessionWarmer`
+  keeps one spare session opening/opened off the per-turn path: `start()` (idempotent)
+  begins the open, `acquire()` hands out the ready spare (or opens on demand if
+  none/failed), `aclose()` discards an unused spare (cancel pending / close opened —
+  no leaked connection). `StreamingTtsProcessor` (`prewarm=True` default) warms on
+  `StartFrame`, hands out the spare + pre-opens the next in `_acquire_session`, and
+  releases the spare on `EndFrame`/`CancelFrame`. All safety invariants unchanged
+  (never invents audio; key never logged; barge-in cancellation intact; a bad spare
+  falls back to on-demand open, an on-demand failure still surfaces `tts.failure`).
+- **Tests:** +8 `TtsSessionWarmer` unit (`tests/test_tts_session_warmer.py`:
+  start→acquire uses the spare with one open; on-demand fallback; idempotent start;
+  fallback when spare open failed; propagate on-demand failure; aclose closes an
+  opened spare / cancels a pending open / no-op with no spare) and +2 processor
+  prewarm tests (uses the pre-opened spare & releases the unused one; falls back on
+  spare-open failure). Existing processor tests opt out (`prewarm=False`). Full suite
+  **315 unit / 10 Behave features (26 scenarios)** green; no lint.
+- **Live re-measurement (`docs/qa/streaming-latency-warm-prewarm.json`, 8 warm turns,
+  WebRTC, stub backend):** `tts_first_audio` p50/p95 365/**381 ms** (was 457/484);
+  `time_to_first_audio` p50/p95 739/**761.5 ms** (was 827/853). **ADR-0018 gate: GO
+  (p95 761.5 ms < 800 ms, margin +38.5 ms).** Full arc: 1698 ms (−898) → 853 ms (−53)
+  → 761.5 ms (+38.5). Stub-backend + `channel_egress` caveats still apply.
+- ADR-0018 evidence + streaming QA report updated with the gate-met baseline.

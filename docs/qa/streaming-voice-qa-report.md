@@ -6,17 +6,22 @@
 **Decision:** ADR-0018 (pilot criterion `time_to_first_audio` p95 < 800 ms)
 **Run date:** 2026-07-16 (warm live sample)
 
-> **Update 2026-07-17 (TASK-STT-013):** the STT finalize tail below was attacked and
-> largely resolved. Streaming STT now finalizes on Gradium's `flushed` ack instead of
-> the terminal `end_of_stream` (zero word loss). Re-measured warm, 8 turns over WebRTC
-> ([`streaming-latency-warm-postfix.json`](streaming-latency-warm-postfix.json)):
-> `stt` p95 **1389 → 373 ms**, `time_to_first_audio` p95 **1698 → 853 ms** (−845 ms,
-> ~50 %). Pilot gate margin closed from **−898 ms to −53 ms**. The remaining
-> bottleneck is now `tts_first_audio` (p95 484 ms), which includes a ~90 ms per-turn
-> TTS WebSocket connect — the next lever is **TASK-WEB-011** (TTS connection pre-warm),
-> projected to cross the 800 ms gate. See
-> [`stt-013-finalize-tail-spike.md`](stt-013-finalize-tail-spike.md). The pre-fix
-> baseline is preserved verbatim below.
+> **Update 2026-07-17 (TASK-STT-013 + TASK-WEB-011): PILOT LATENCY GATE NOW MET.**
+> Two levers closed the gap the baseline below surfaced:
+> - **TASK-STT-013** — streaming STT finalizes on Gradium's `flushed` ack instead of
+>   the terminal `end_of_stream` (zero word loss): `stt` p95 **1389 → 373 ms**,
+>   `time_to_first_audio` p95 **1698 → 853 ms**
+>   ([`streaming-latency-warm-postfix.json`](streaming-latency-warm-postfix.json)).
+> - **TASK-WEB-011** — the TTS WebSocket is pre-warmed off the per-turn critical path
+>   (~90 ms connect removed): `tts_first_audio` p95 **484 → 381 ms**,
+>   `time_to_first_audio` p50/p95 **827/853 → 739/761.5 ms**
+>   ([`streaming-latency-warm-prewarm.json`](streaming-latency-warm-prewarm.json)).
+>
+> **ADR-0018 gate: `time_to_first_audio` p95 761.5 ms < 800 ms → GO (margin +38.5 ms)**,
+> warm, web channel, **stub backend** (a real answer path adds backend time; see
+> caveats in the ADR post-fix baseline). Full arc: 1698 ms (−898) → 853 ms (−53) →
+> 761.5 ms (+38.5). See [`stt-013-finalize-tail-spike.md`](stt-013-finalize-tail-spike.md).
+> The original pre-fix baseline is preserved verbatim below.
 
 ## Executive Summary
 - **Overall readiness (functional):** Go — the streaming loop answers end to end
@@ -193,14 +198,14 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
 ## Recommendation
 - **Functional:** Go — the streaming loop, barge-in and safe-failure paths meet their
   acceptance criteria with unit + Behave regression coverage.
-- **Pilot latency:** **NO-GO (margin −53 ms after TASK-STT-013).** The pre-fix warm
-  sample measured `time_to_first_audio` p95 1698 ms; after finalizing streaming STT on
-  the `flushed` ack (TASK-STT-013) the post-fix warm sample measures **p95 853 ms**
-  (STT tail p95 1389 → 373 ms). The STT lever is now exhausted (the tail is the
-  irreducible ~350 ms provider ack). The remaining gap is `tts_first_audio` (p95
-  484 ms), of which ~90 ms is a per-turn TTS WebSocket connect; pre-warming/reusing it
-  (**TASK-WEB-011**) projects composite p95 ~763 ms (PASS). Still measured with a
-  **stub backend** (a real answer path adds backend time). Treat the `p95 < 800 ms`
-  criterion as open until TASK-WEB-010 lands and is re-measured.
+- **Pilot latency:** **GO (margin +38.5 ms).** After TASK-STT-013 (finalize on
+  `flushed`) and TASK-WEB-011 (TTS WebSocket pre-warm), the warm sample measures
+  `time_to_first_audio` **p95 761.5 ms < 800 ms** (STT tail p95 373 ms, `tts_first_audio`
+  p95 381 ms). Full arc: 1698 ms (−898) → 853 ms (−53) → 761.5 ms (+38.5). **Caveats:**
+  measured with a **stub backend** (the real BSS/RAG/LLM answer time is a separate
+  budget line, not in this EOT→first-audio number), `channel_egress` still excluded,
+  N = 8 warm turns. The streaming voice path meets the pilot latency criterion as
+  specified; a production SLO claim still needs a real backend + the ADR-0010
+  operational controls.
 - **Required before an SLO claim (ADR-0010):** per-channel/per-step dashboards,
   alerting, degraded-mode and provider-outage tests — out of this sprint.

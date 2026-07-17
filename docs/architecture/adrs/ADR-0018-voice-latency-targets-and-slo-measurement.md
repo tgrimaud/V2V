@@ -162,6 +162,36 @@ connection projects `tts_first_audio` p95 ~484 → ~394 ms and composite p95 ~85
 the next and expected-final lever for the pilot gate. The stub-backend and
 `channel_egress` caveats from the baseline above still apply.
 
+### Post-fix baseline — web channel (TASK-WEB-011, 2026-07-17) — GATE MET
+
+TASK-WEB-011 removed the per-turn TTS WebSocket connect from the critical path.
+Gradium's TTS socket is single-use (a 2nd synthesis on one connection fails), so the
+connection cannot be reused, but a spare is now **pre-opened** off the per-turn path
+(`TtsSessionWarmer`: warm on pipeline start, hand out the spare, pre-open the next).
+Re-measured warm, 8 turns over WebRTC, stub backend
+([`streaming-latency-warm-prewarm.json`](../../qa/streaming-latency-warm-prewarm.json)):
+
+| Slice | p50 (ms) | p95 (ms) | Before p95 (TASK-STT-013) | Notes |
+|---|---:|---:|---:|---|
+| `stt` (post-EOT finalize tail) | 370.4 | 380.8 | 373.5 | unchanged (STT lever from TASK-STT-013) |
+| `backend_first_token` | 0.0 | 0.1 | 0.0 | stub backend |
+| `tts_first_audio` | 365.1 | 380.7 | 483.8 | ~90 ms per-turn connect removed (pre-warm) |
+| **`time_to_first_audio`** | **739.1** | **761.5** | 852.9 | **PASS** |
+
+**Gate outcome: GO on the pilot latency criterion — `time_to_first_audio` p95
+761.5 ms < 800 ms (margin +38.5 ms).** Full arc: baseline 1698 ms (−898) →
+TASK-STT-013 finalize-on-`flushed` 853 ms (−53) → TASK-WEB-011 TTS pre-warm
+**761.5 ms (+38.5, PASS)**.
+
+**Caveats (the gate is met, but read them):** (1) still measured with a **stub
+backend** — the real BSS/PDF/comparison/RAG/LLM answer time is not in this number and
+will add to the composite; the 800 ms criterion is defined EOT → first audio and the
+answer-engine latency is a separate budget line. (2) `channel_egress` (WebRTC first
+frame → audible in the browser) is still excluded. (3) N = 8 warm turns (p95 = p99 =
+max at this sample size). The pilot gate is met for the streaming voice path as
+specified; a production SLO claim still needs the ADR-0010 operational controls
+(dashboards, alerting, degraded-mode + provider-outage tests) and a real backend.
+
 ## Related Documents
 
 - `docs/architecture/adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md`

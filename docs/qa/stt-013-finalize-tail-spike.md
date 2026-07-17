@@ -126,5 +126,7 @@ no better than the deterministic ~350 ms `flushed` ack, for added accuracy risk.
    ~374 ms p95; `time_to_first_audio` p95 853 ms (was 1698 ms). Gate still −53 ms,
    now TTS-bound.
 3. ✅ ADR-0018 evidence + streaming QA report updated with the post-fix baseline.
-4. ⏭️ Follow-up **TASK-WEB-011** — pre-warm/reuse the TTS WebSocket to remove the
-   ~90 ms per-turn connect from `tts_first_audio` and cross the 800 ms gate.
+4. ✅ Follow-up **TASK-WEB-011** (delivered 2026-07-17) — TTS WebSocket pre-warmed off
+   the per-turn critical path; `tts_first_audio` p95 484 → 381 ms, `time_to_first_audio`
+   p95 853 → **761.5 ms → GATE MET** (+38.5 ms). See
+   [`streaming-latency-warm-prewarm.json`](streaming-latency-warm-prewarm.json).
