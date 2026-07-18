@@ -88,6 +88,15 @@ The system follows Alistair Cockburn's hexagonal architecture. The core idea: bu
 
 ### Package Structure (Backend)
 
+Two layouts exist. The choice depends on how many bounded contexts the module holds — **not** on personal preference.
+
+- **Single bounded context → layer-first.** The layer (`domain`, `application`, `infrastructure`) is the top-level package.
+- **Multiple bounded contexts → context-first (default target).** The bounded context is the top-level package; each context nests its own full hexagon. This is the canonical Hive layout (see "The Hive Pattern" below) and is the target whenever a service owns more than one context.
+
+The decision rule is simple: **package-by-context first, package-by-layer second.** Prefer context-first as soon as a second bounded context appears — retrofitting the split later is far more invasive than starting with it.
+
+#### Layout A — Single bounded context (layer-first)
+
 ```
 com.{company}.{project}/
 ├── domain/
@@ -113,6 +122,48 @@ com.{company}.{project}/
     │           └── dto/    # Request/Response DTOs
     └── config/             # Framework configuration (Spring, etc.)
 ```
+
+#### Layout B — Multiple bounded contexts (context-first, Hive-aligned)
+
+Each context is a **complete, independently extractable hexagon**. The internal `domain/application/infrastructure` shape is identical to Layout A — it is simply nested under the context package.
+
+```
+com.{company}.{project}/
+├── {ProjectApplication}       # Framework bootstrap / main class (root)
+│
+├── {contextA}/                # Bounded context = top-level package (full hexagon)
+│   ├── domain/
+│   │   ├── model/entity/, valueobject/
+│   │   ├── service/           # Domain services (pure, no framework)
+│   │   ├── port/in/           # Use case interfaces (the context's PUBLISHED API)
+│   │   ├── port/out/          # Output ports (this context's dependencies)
+│   │   └── exception/
+│   ├── application/service/   # Application services (orchestration, caching)
+│   └── infrastructure/
+│       ├── adapter/in/rest/   # Controllers + dto/
+│       ├── adapter/out/{system}/
+│       └── config/            # Per-context bean wiring (NOT a global config)
+│
+├── {contextB}/                # Second bounded context (same shape)
+│   ├── domain/
+│   │   ├── port/in/
+│   │   └── port/out/
+│   │       └── {ContextAGateway}Port   # SPI port for cross-context needs
+│   ├── application/
+│   └── infrastructure/
+│       ├── adapter/out/{contextA}/     # INPROC adapter + ACL → the SEAM (see Hive)
+│       └── config/
+│
+└── shared/                    # Cross-cutting TECHNICAL only — never shared domain
+    ├── telemetry/             # Observability, correlation id
+    └── config/                # Common bootstrap (profiles, base error handling)
+```
+
+Rules specific to context-first:
+
+- **Config is per-context** (`{contextA}/infrastructure/config`, `{contextB}/infrastructure/config`). There is no global `DomainServiceConfig` wiring every bean — each hexagon is self-contained.
+- **The cross-context seam lives in the *calling* context's infrastructure** (`{contextB}/infrastructure/adapter/out/{contextA}/`). It implements one of `{contextB}`'s output ports and calls **only** `{contextA}`'s `port/in` (its published API) — never `{contextA}`'s services, output ports, or internal models. It carries the ACL (see "The Hive Pattern").
+- **`shared/` is technical cross-cutting only** (telemetry, correlation id, base config). Never put domain types in `shared/` — a shared domain re-creates the coupling the split was meant to remove.
 
 ### Feature Structure (Frontend)
 
@@ -281,6 +332,8 @@ Module A                    Module B
 
 No shared layers. Each module is independently extractable because it owns everything from API to storage.
 
+**This vertical slice maps directly to the context-first package layout (Layout B above):** the bounded context is the top-level package (`com.{company}.{project}.{context}`), and `domain/application/infrastructure` nest inside it. Slicing by context at the top level — rather than by layer — is what makes the slice physically movable: extracting a module is "move the `{context}/` package into a new deployable", because nothing outside it depends on its internals.
+
 #### Step 3 — INPROC Ports & Adapters
 
 When modules need to communicate inside the monolith, they use **INPROC (in-process) adapters** — the same ports & adapters pattern used for external dependencies, but implemented as in-memory method calls.
@@ -336,9 +389,9 @@ Our current architecture already follows the Hive's foundational principles:
 **To move toward full Hive readiness**, if the system grows to warrant multiple bounded contexts:
 
 1. Identify bounded contexts within the domain (e.g., "Analytics", "Team Management", "Forecasting")
-2. Give each context its own sub-package with its own ports
-3. Use INPROC adapters for cross-context communication (not direct service calls)
-4. Each context should own its persistence and controllers
+2. Give each context its own **top-level package** holding a full hexagon (context-first Layout B: `{context}/domain`, `{context}/application`, `{context}/infrastructure`) — not a sub-package under a shared `domain/` layer
+3. Use INPROC adapters for cross-context communication (not direct service calls). The adapter lives in the **calling** context's `infrastructure/adapter/out/{otherContext}/`, implements one of the caller's output ports, and depends only on the other context's `port/in` (published API) — the ACL maps between the two domain models
+4. Each context owns its persistence, controllers, and **its own bean-wiring configuration** (no global config wiring every module)
 
 ### References
 
@@ -360,6 +413,8 @@ Architecture rules are only as good as their enforcement. Use automated tests to
 4. **No field injection** — always constructor injection
 5. **Naming conventions** — Controllers end with `Controller`, Adapters with `Adapter`, Ports with `Port`
 6. **No framework annotations in domain** — domain classes are never Spring beans directly
+7. **Context isolation (context-first layouts)** — two bounded-context packages never import each other's `domain` (`..{contextA}.domain..` and `..{contextB}.domain..` are mutually forbidden). Cross-context access is allowed **only** from the caller's INPROC adapter package (`..{contextB}.infrastructure.adapter.out.{contextA}..`) and **only** onto the other context's published `port.in` — never its services, output ports, or internal models
+8. **No shared domain** — the `shared/` package (if any) holds only technical cross-cutting code and must not be imported *by*, nor depend *on*, any bounded context's domain
 
 See `references/archunit-tests.md` for complete ArchUnit test examples that enforce these rules.
 
@@ -370,11 +425,14 @@ See `references/archunit-tests.md` for complete ArchUnit test examples that enfo
 Before making a structural change, verify:
 
 - [ ] New module follows hexagonal structure (domain → ports → adapters)
+- [ ] Layout matches context count: single context → layer-first (Layout A); multiple contexts → context-first (Layout B, `{context}/domain|application|infrastructure`)
 - [ ] Domain layer has zero infrastructure dependencies
 - [ ] Domain services are registered via configuration, not framework annotations
 - [ ] Ports are interfaces named by business capability, not technology
-- [ ] Cross-module communication goes through ports (not direct class references)
-- [ ] Each module owns its vertical slice (controller, domain, persistence)
+- [ ] Cross-module communication goes through ports (not direct class references), via an INPROC adapter in the caller's infrastructure that targets only the callee's `port/in`
+- [ ] Cross-context calls carry an ACL that maps between the two domain models
+- [ ] Each context owns its vertical slice (controller, domain, persistence) **and its own bean-wiring config**
+- [ ] `shared/` (if present) contains only technical cross-cutting code — no shared domain
 - [ ] Value objects protect against primitive obsession at domain boundaries
 - [ ] DTOs map at adapter boundaries with static factory methods
 - [ ] ArchUnit tests cover the new structure
