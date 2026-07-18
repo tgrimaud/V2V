@@ -25,14 +25,18 @@ class NamingConventionsTest {
                     .and().areNotInterfaces()
                     .and().areNotAnnotatedWith(Configuration.class)
                     .and().areTopLevelClasses()
-                    .should().haveSimpleNameEndingWith("Adapter");
+                    .should().haveSimpleNameEndingWith("Adapter")
+                    // Source connectors are a first-class outbound-port family
+                    // (KnowledgeSourceConnector); their adapters keep the Connector suffix.
+                    .orShould().haveSimpleNameEndingWith("Connector");
 
     @ArchTest
     static final ArchRule portsShouldBeNamedCorrectly =
             classes()
                     .that().resideInAPackage("..domain.port..")
                     .should().haveSimpleNameEndingWith("Port")
-                    .orShould().haveSimpleNameEndingWith("UseCase");
+                    .orShould().haveSimpleNameEndingWith("UseCase")
+                    .orShould().haveSimpleNameEndingWith("Connector");
 
     @ArchTest
     static final ArchRule applicationServicesShouldBeNamedCorrectly =
