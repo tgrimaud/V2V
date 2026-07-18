@@ -37,3 +37,8 @@ voice-support:
     chunk-overlap: 50
     markdown-path: ${KB_MARKDOWN_PATH:../knowledge-base}
     default-language: ${KB_DEFAULT_LANGUAGE:fr}
+  conversation:
+    # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
+    # best similarity score reaches this threshold. Provisional value per ADR-0021;
+    # the definitive answer threshold is gated by OQ-002.
+    confidence-threshold: ${CONVERSATION_CONFIDENCE_THRESHOLD:0.5}

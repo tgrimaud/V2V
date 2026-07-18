@@ -1,8 +1,11 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore;
 
+import com.voicesupport.knowledge.domain.model.valueobject.KnowledgeChunk;
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
@@ -11,7 +14,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class PgVectorStoreAdapter implements VectorStorePort {
+public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
+
+    private static final String SHARED_DOMAIN = "general";
 
     private final VectorStore vectorStore;
 
@@ -27,7 +32,7 @@ public class PgVectorStoreAdapter implements VectorStorePort {
         metadata.put("source", source);
         metadata.put("section", section);
         metadata.put("chunk_index", String.valueOf(chunkIndex));
-        metadata.put("domain", domain != null ? domain : "general");
+        metadata.put("domain", domain != null ? domain : SHARED_DOMAIN);
         vectorStore.add(List.of(new Document(content, metadata)));
     }
 
@@ -58,6 +63,41 @@ public class PgVectorStoreAdapter implements VectorStorePort {
                 fb.eq("source_id", sourceId)
         ).build();
         vectorStore.delete(filter);
+    }
+
+    @Override
+    public List<KnowledgeChunk> search(String query, String domain, int topK) {
+        SearchRequest.Builder request = SearchRequest.builder().query(query).topK(topK);
+        Filter.Expression domainFilter = buildDomainFilter(domain);
+        if (domainFilter != null) {
+            request.filterExpression(domainFilter);
+        }
+        List<Document> documents = vectorStore.similaritySearch(request.build());
+        return documents == null ? List.of() : documents.stream().map(this::toChunk).toList();
+    }
+
+    // Restrict results to the requested domain plus the shared "general" domain.
+    // A null/blank domain means no domain restriction (search the whole store).
+    private Filter.Expression buildDomainFilter(String domain) {
+        if (domain == null || domain.isBlank() || SHARED_DOMAIN.equals(domain)) {
+            return null;
+        }
+        FilterExpressionBuilder fb = new FilterExpressionBuilder();
+        return fb.or(fb.eq("domain", domain), fb.eq("domain", SHARED_DOMAIN)).build();
+    }
+
+    private KnowledgeChunk toChunk(Document document) {
+        Object domain = document.getMetadata().get("domain");
+        Object sourceId = document.getMetadata().get("source_id");
+        Object source = document.getMetadata().get("source");
+        String resolvedSource = sourceId != null ? sourceId.toString()
+                : (source != null ? source.toString() : null);
+        Double score = document.getScore();
+        return new KnowledgeChunk(
+                document.getText(),
+                resolvedSource,
+                domain != null ? domain.toString() : SHARED_DOMAIN,
+                score != null ? score : 0.0);
     }
 
     private void putIfPresent(Map<String, Object> metadata, String key, String value) {

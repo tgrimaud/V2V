@@ -319,6 +319,36 @@ after retrieval.
 - Legacy/shared (`general`) chunks are included in results.
 - Guardrail decisions are observable (see BE-009).
 
+**Result (2026-07-18) — live-validated on Postgres `pgvector/pgvector:pg16` (5433)
++ native Ollama `nomic-embed-text` (41 KB chunks: support 17 / billing 12 / commercial 12):**
+- **Retrieval (knowledge context):** `VectorSearchPort` + `KnowledgeRetrievalService`
+  implement the `KnowledgeRetrievalUseCase` seam. `PgVectorStoreAdapter.search` does
+  query-embed + pgvector top-k with a domain filter `domain == X OR general`
+  (null/blank domain = no restriction). `KnowledgeChunk`/`RetrievedEvidence` now carry
+  the similarity `score`.
+- **Guardrails (conversation context):** `InputGuardrail` (pre-retrieval, ADR-0014)
+  → `GREETING` / `OFF_TOPIC` / `INAPPROPRIATE` / `PASS`; `RetrievalConfidenceGuardrail`
+  (post-retrieval) → `LOW_CONFIDENCE` on empty/weak evidence (provisional threshold
+  0.5, config `voice-support.conversation.confidence-threshold`, gated by OQ-002).
+  `RetrievalGroundingService` (application) composes them: blocked inputs short-circuit
+  **before** any embedding/vector call.
+- **Surface + observability:** `POST /api/conversation/retrieve` returns the guardrail
+  verdict + grounded evidence; structured `[GROUNDING]` logs expose
+  `domain / top_k / answerable / verdict / hits / best_score / duration_ms` (full OTel
+  traces/metrics = BE-009). The LLM wording + memory + streaming endpoint stays BE-006.
+- **Live scenarios:** (1) in-domain billing → 3 chunks, `PASS`, warm ~40–60 ms /
+  cold ~685 ms; (2) weather → `OFF_TOPIC`, 0 hits, 1 ms (no retrieval); (3) `Bonjour`
+  → `GREETING`, 0 ms; (4) "fabriquer une bombe" → `INAPPROPRIATE`, 0 ms; (5) `general`
+  chunk surfaced on a `support` query (OR-filter); (6) billing query returned billing
+  chunks only (domain isolation); (7) `LOW_CONFIDENCE` fired end-to-end with threshold
+  raised to 0.99. **Finding:** nomic-embed cosine scores cluster ~0.65–0.79, so the
+  provisional 0.5 threshold mainly guards near-empty retrieval — the discriminating
+  answer threshold is OQ-002.
+- `mvn test` green (78 tests) with **no infra** (domain fakes + `@WebMvcTest` slice):
+  `InputGuardrailTest` (23), `RetrievalConfidenceGuardrailTest` (4),
+  `RetrievalGroundingServiceTest` (5), `KnowledgeRetrievalServiceTest` (4). ArchUnit
+  context boundary held (seam wiring moved into the seam package `KnowledgeSeamConfig`).
+
 ### TASK-BE-005 — LLM wording step (provider-agnostic, grounded)
 
 **Goal:** Produce the spoken answer text from retrieved chunks, grounded and

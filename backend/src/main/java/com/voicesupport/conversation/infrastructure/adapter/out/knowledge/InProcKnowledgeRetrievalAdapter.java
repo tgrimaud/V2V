@@ -22,6 +22,6 @@ public class InProcKnowledgeRetrievalAdapter implements KnowledgeRetrievalPort {
     }
 
     private static RetrievedEvidence toEvidence(KnowledgeChunk chunk) {
-        return new RetrievedEvidence(chunk.text(), chunk.sourceId(), chunk.domain());
+        return new RetrievedEvidence(chunk.text(), chunk.sourceId(), chunk.domain(), chunk.score());
     }
 }

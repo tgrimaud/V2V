@@ -1,11 +1,14 @@
 package com.voicesupport.knowledge.infrastructure.config;
 
 import com.voicesupport.knowledge.domain.port.in.IngestKnowledgeUseCase;
+import com.voicesupport.knowledge.domain.port.in.KnowledgeRetrievalUseCase;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceStatePort;
+import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import com.voicesupport.knowledge.domain.service.KnowledgeIngestionService;
+import com.voicesupport.knowledge.domain.service.KnowledgeRetrievalService;
 import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.infrastructure.adapter.out.markdown.MarkdownFolderConnector;
@@ -22,8 +25,10 @@ import java.util.List;
 @Configuration
 public class KnowledgeConfig {
 
+    // Single adapter instance exposed as both the write port (VectorStorePort) and the
+    // read port (VectorSearchPort); Spring injects it by interface type where required.
     @Bean
-    public VectorStorePort vectorStorePort(VectorStore vectorStore) {
+    public PgVectorStoreAdapter pgVectorStoreAdapter(VectorStore vectorStore) {
         return new PgVectorStoreAdapter(vectorStore);
     }
 
@@ -49,6 +54,11 @@ public class KnowledgeConfig {
     @Bean
     public IngestKnowledgeUseCase ingestKnowledgeUseCase(VectorStorePort vectorStorePort, TextChunker textChunker) {
         return new KnowledgeIngestionService(vectorStorePort, textChunker);
+    }
+
+    @Bean
+    public KnowledgeRetrievalUseCase knowledgeRetrievalUseCase(VectorSearchPort vectorSearchPort) {
+        return new KnowledgeRetrievalService(vectorSearchPort);
     }
 
     @Bean

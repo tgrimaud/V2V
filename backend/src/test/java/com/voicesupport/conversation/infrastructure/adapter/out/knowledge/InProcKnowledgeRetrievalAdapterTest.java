@@ -19,8 +19,8 @@ class InProcKnowledgeRetrievalAdapterTest {
         // GIVEN a knowledge use case returning two chunks
         var fake = new FakeKnowledgeRetrievalUseCase();
         fake.setChunks(List.of(
-                new KnowledgeChunk("proration explained", "billing-faq#1", "billing"),
-                new KnowledgeChunk("late fee explained", "billing-faq#2", "billing")));
+                new KnowledgeChunk("proration explained", "billing-faq#1", "billing", 0.82),
+                new KnowledgeChunk("late fee explained", "billing-faq#2", "billing", 0.71)));
         var adapter = new InProcKnowledgeRetrievalAdapter(fake);
 
         // WHEN the conversation context retrieves through the seam
@@ -31,6 +31,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         assertEquals("proration explained", evidence.get(0).text());
         assertEquals("billing-faq#1", evidence.get(0).sourceId());
         assertEquals("billing", evidence.get(0).domain());
+        assertEquals(0.82, evidence.get(0).score());
     }
 
     @Test
@@ -39,9 +40,9 @@ class InProcKnowledgeRetrievalAdapterTest {
         // GIVEN three available chunks
         var fake = new FakeKnowledgeRetrievalUseCase();
         fake.setChunks(List.of(
-                new KnowledgeChunk("a", "s1", "general"),
-                new KnowledgeChunk("b", "s2", "general"),
-                new KnowledgeChunk("c", "s3", "general")));
+                new KnowledgeChunk("a", "s1", "general", 0.9),
+                new KnowledgeChunk("b", "s2", "general", 0.8),
+                new KnowledgeChunk("c", "s3", "general", 0.7)));
         var adapter = new InProcKnowledgeRetrievalAdapter(fake);
 
         // WHEN retrieving with topK = 2
