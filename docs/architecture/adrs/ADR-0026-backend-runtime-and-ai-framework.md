@@ -47,7 +47,7 @@ capability.
 **V1 uses Spring Boot as the backend runtime and Spring AI as the AI orchestration
 library.**
 
-- The answer engine is built on Spring Boot 3.x (Java 21), hexagonal, with domain
+- The answer engine is built on Spring Boot 3.4.x (OpenJDK 17), hexagonal, with domain
   services wired as `@Bean`s in `DomainServiceConfig` (chat auto-configurations
   excluded; Mistral embedding auto-config excluded so embeddings stay Ollama).
 - Spring AI provides the chat client, the RAG advisor over pgvector, streaming

@@ -106,8 +106,8 @@ against the new empty-codebase plan.
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |
 | TASK-WEB-012 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | Gated (OQ-002 + billing answer engine) | Medium |
 | TASK-WEB-013 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | Planned (opportunistic) | Low |
-| TASK-BE-001 | Decide the backend answer-engine framework (Spring AI vs LangChain4J vs other) + ADR (closes OQ-007) | Decision / Architecture | Planned (Sprint 7, first) | High |
-| TASK-BE-002 | Scaffold the Java backend module on the restart branch (hexagonal skeleton, build + ArchUnit green) | V1 enabler | Planned (Sprint 7) | High |
+| TASK-BE-001 | Decide the backend answer-engine framework (Spring AI vs LangChain4J vs other) + ADR (closes OQ-007) | Decision / Architecture | ✅ Done (2026-07-18) — Spring Boot + Spring AI (ADR-0026) + Hive-light decomposition (ADR-0027); OpenJDK 17 baseline | High |
+| TASK-BE-002 | Scaffold the Java backend module on the restart branch (hexagonal skeleton, build + ArchUnit green) | V1 enabler | 🚧 In progress (Sprint 7) | High |
 | TASK-BE-003 | Knowledge-base ingestion socle (pivot + Markdown connector + idempotent sync + pgvector 768 + swappable embedding adapter) | V1 enabler | Planned (Sprint 7) | High |
 | TASK-BE-004 | RAG retrieval + domain guardrails before/after (ADR-0014) | V1 core | Planned (Sprint 7) | High |
 | TASK-BE-005 | Provider-agnostic LLM wording (Mistral API default, Ollama alt), grounded + no invented amounts (DEC-002) | V1 core | Planned (Sprint 7) | High |

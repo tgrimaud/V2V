@@ -166,6 +166,13 @@ Later extraction = swap `InProcKnowledgeRetrievalAdapter` for a
 
 ### TASK-BE-001 — Decide the backend answer-engine framework (closes OQ-007)
 
+**Status:** ✅ **Done (2026-07-18).** Confirmed at sprint start. Decision recorded in
+[ADR-0026](../../docs/architecture/adrs/ADR-0026-backend-runtime-and-ai-framework.md)
+(framework: **Spring Boot + Spring AI**) and [ADR-0027](../../docs/architecture/adrs/ADR-0027-backend-modular-decomposition-knowledge-conversation.md)
+(modular decomposition). OQ-007 is Decided in both `open-questions/v1-open-questions.md`
+and `backlog-index.md`. **Runtime baseline: OpenJDK 17** (Spring Boot 3.4 minimum;
+team standard). No engine code in this ticket — it unblocks TASK-BE-002.
+
 > **Decision pre-recorded (2026-07-17):** the framework choice is already captured
 > in [ADR-0026](../../docs/architecture/adrs/ADR-0026-backend-runtime-and-ai-framework.md)
 > — **Spring Boot + Spring AI** for V1 (Quarkus + LangChain4j deferred to an
@@ -203,7 +210,7 @@ Later extraction = swap `InProcKnowledgeRetrievalAdapter` for a
 branch; reference implementation lives on `main`).
 
 **Scope:**
-- Spring Boot 3.4.x, Java 21, Maven, package `com.voicesupport`, **context-first
+- Spring Boot 3.4.x, **OpenJDK 17**, Maven, package `com.voicesupport`, **context-first
   hexagonal layout per ADR-0027** (two bounded contexts `knowledge` /
   `conversation`, each a full hexagon; `shared/` for technical cross-cutting only).
   Pure domain, ports `in`/`out`; **per-context bean wiring** (`KnowledgeConfig`,
@@ -437,7 +444,7 @@ Scenario: A backend failure still yields a safe spoken turn
 
 ## Definition Of Done (sprint)
 
-- OQ-007 decided with an ADR (TASK-BE-001).
+- OQ-007 decided with an ADR (TASK-BE-001). ✅ Done (ADR-0026 + ADR-0027).
 - Java backend scaffolded; `mvn test` + ArchUnit green (TASK-BE-002).
 - Knowledge base ingested idempotently into pgvector (TASK-BE-003).
 - RAG retrieval + pre/post guardrails working (TASK-BE-004).
@@ -476,8 +483,8 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 
 | Ticket | Branch | Status |
 |---|---|---|
-| TASK-BE-001 | `task/TASK-BE-001-framework-decision` | Planned (first) |
-| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | Planned |
+| TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
+| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | 🚧 In progress |
 | TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | Planned |
 | TASK-BE-004 | `task/TASK-BE-004-rag-guardrails` | Planned |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
