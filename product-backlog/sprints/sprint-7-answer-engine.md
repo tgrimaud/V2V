@@ -520,7 +520,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 |---|---|---|
 | TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
 | TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
-| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | In progress — implementation done, live-validated (sync/idempotency/deletion-diff/domain metadata); `mvn test` 34 green; awaiting adversarial review + QA |
+| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | QA PASS — adversarial review 94/100; `mvn test` 42 green (5 Cucumber BDD scenarios); live latency: cold sync p50 1422 ms / warm 5 ms / one-shot ingest 27 ms; merge-ready (awaiting user validation + explicit merge) |
 | TASK-BE-004 | `task/TASK-BE-004-rag-guardrails` | Planned |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | Planned |

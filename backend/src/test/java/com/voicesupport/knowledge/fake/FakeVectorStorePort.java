@@ -9,16 +9,19 @@ import java.util.List;
 public class FakeVectorStorePort implements VectorStorePort {
 
     public final List<String> storedChunks = new ArrayList<>();
+    public final List<String> storedChunkDomains = new ArrayList<>();
     public final List<String> deletedSources = new ArrayList<>();
 
     @Override
     public void store(String content, String source, String section, int chunkIndex, String domain) {
         storedChunks.add(source + "#" + chunkIndex + "[" + domain + "]");
+        storedChunkDomains.add(domain);
     }
 
     @Override
     public void storeChunk(SourceDocument document, String chunkContent, String section, int chunkIndex) {
         storedChunks.add(document.sourceType() + "/" + document.sourceId() + "#" + chunkIndex);
+        storedChunkDomains.add(document.domain());
     }
 
     @Override
