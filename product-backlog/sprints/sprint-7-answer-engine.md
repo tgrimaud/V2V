@@ -231,6 +231,23 @@ branch; reference implementation lives on `main`).
   `..shared..` depends on no context and holds no domain.
 - Health endpoint returns a stable, secret-free response.
 
+**Adversarial review (2026-07-18):** ✅ **94/100 — QA gate PASS.** No blocking
+findings. Scaffold matches ADR-0027 (context-first, two hexagons + `shared/`), the
+INPROC seam + ACL is present, `mvn test` green (19 tests) on OpenJDK 17 with no
+DB/Ollama. Non-blocking notes: seam ArchUnit rule allows `knowledge.domain.model`
+(the published API's return types) in addition to `port.in`; `archunit.properties`
+sets `failOnEmptyShould=false` for still-empty packages (revisit once populated in
+BE-003+); empty per-context `@Configuration` classes anchor wiring for later
+tickets; the seam is intentionally unwired until BE-006. Not runtime-affecting
+(no conversation/voice slice yet) — OTel instrumentation deferred to BE-009.
+
+**QA (2026-07-18):** ✅ **PASS.** (1) `mvn test` → BUILD SUCCESS, 19/19, no external
+service. (2) Boundary effectiveness proven by a negative probe: a temporary
+`conversation.domain` class importing `knowledge` made `ContextBoundaryTest` fail
+(2 rules fired), and removing it restored green — the guardrail is not vacuous.
+(3) Health endpoint returns `{"status":"UP","service":"voice-support-backend"}`,
+secret-free. No latency slice applies to an enabler scaffold.
+
 ### TASK-BE-003 — Knowledge-base ingestion socle
 
 **Goal:** Ingest `knowledge-base/*.md` into pgvector so RAG can retrieve grounded
@@ -484,7 +501,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | Ticket | Branch | Status |
 |---|---|---|
 | TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
-| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | 🚧 In progress |
+| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
 | TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | Planned |
 | TASK-BE-004 | `task/TASK-BE-004-rag-guardrails` | Planned |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
