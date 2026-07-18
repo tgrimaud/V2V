@@ -21,8 +21,9 @@ chain stays gated by its open questions (see Out Of Scope).
 **Status:** Planned — **not started.** Preparation only. This sprint must not start
 until **Sprint 6 is finished and validated** (see Entry Condition).
 **Created:** 2026-07-17
-**Predecessor:** [`sprint-6-streaming.md`](sprint-6-streaming.md) (Sprint 6 — 🚧 in
-progress, blocked on the ADR-0018 latency gate / TASK-STT-013)
+**Predecessor:** [`sprint-6-streaming.md`](sprint-6-streaming.md) (Sprint 6 — ✅ Done,
+closed 2026-07-17; ADR-0018 latency gate MET via TASK-STT-013, `time_to_first_audio`
+p95 761.5 ms < 800 ms)
 **Working branch:** `feat/sprint-7-answer-engine` (to be cut from
 `feat/restart-from-scratch` once Sprint 6 is merged/validated)
 **Final validator:** User
@@ -44,7 +45,7 @@ progress, blocked on the ADR-0018 latency gate / TASK-STT-013)
 |---|---|---|
 | Sprint 1–4 | STT validation → hardening → TTS → Pipecat batch | ✅ Done |
 | Sprint 5 | Backend answer bridge (stub/http contract, US-019 close) | ✅ Done |
-| Sprint 6 | Streaming voice loop + latency (WebRTC/streaming/barge-in) | 🚧 In progress — blocked on ADR-0018 gate (TASK-STT-013) |
+| Sprint 6 | Streaming voice loop + latency (WebRTC/streaming/barge-in) | ✅ Done (closed 2026-07-17) — ADR-0018 gate MET (p95 761.5 ms) via TASK-STT-013 |
 | **Sprint 7** | **Real answer engine — RAG over the knowledge base (EPIC-005) — this sprint** | 📋 Planned (prep only; gated on Sprint 6 close) |
 | Sprint 8 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) → customer-specific invoice explanation | Planned — gated by OQ-001/003/004 |
 | Sprint 9 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
@@ -68,6 +69,83 @@ progress, blocked on the ADR-0018 latency gate / TASK-STT-013)
 
 The backend AI/RAG framework (**OQ-007**) must be decided before any engine code.
 It is **TASK-BE-001** below and blocks every other Sprint 7 ticket.
+
+## Backend Architecture (decided — ADR-0026 + ADR-0027)
+
+The internal structure is fixed before coding so TASK-BE-002 scaffolds the final
+shape. Framework: **Spring Boot + Spring AI** ([ADR-0026](../../docs/architecture/adrs/ADR-0026-backend-runtime-and-ai-framework.md)).
+Decomposition: **Hive-light modular monolith, two context-first bounded contexts**
+([ADR-0027](../../docs/architecture/adrs/ADR-0027-backend-modular-decomposition-knowledge-conversation.md)),
+following the `software-architect` skill's Layout B (package-by-context first).
+
+```text
+com.voicesupport
+├── VoiceSupportApplication                 # Spring Boot bootstrap (root)
+│
+├── knowledge/                              # BOUNDED CONTEXT — ingestion + retrieval (full hexagon)
+│   ├── domain/
+│   │   ├── model/entity/                   SourceDocument, KbSourceState
+│   │   ├── model/valueobject/              Chunk, Domain, ContentHash, Language
+│   │   ├── service/                        KnowledgeSyncService, RetrievalService, TextChunker
+│   │   ├── port/in/                        SyncKnowledgeUseCase, KnowledgeRetrievalUseCase  ← published API
+│   │   ├── port/out/                       KnowledgeSourceConnector, VectorStorePort, EmbeddingPort, KbSourceStatePort
+│   │   └── exception/
+│   ├── application/service/                KnowledgeSyncAppService
+│   └── infrastructure/
+│       ├── adapter/in/rest/                KnowledgeController (+ dto/)
+│       ├── adapter/out/pgvector/           PgVectorStoreAdapter
+│       ├── adapter/out/embedding/          OllamaEmbeddingAdapter
+│       ├── adapter/out/markdown/           MarkdownFolderConnector
+│       ├── adapter/out/persistence/        JpaKbSourceStateAdapter
+│       └── config/                         KnowledgeConfig (@Bean wiring)
+│
+├── conversation/                           # BOUNDED CONTEXT — answer engine (full hexagon)
+│   ├── domain/
+│   │   ├── model/entity/                   Conversation, Turn
+│   │   ├── model/valueobject/              Answer, RetrievedEvidence, GuardrailDecision, Confidence
+│   │   ├── service/                        AnswerConversationService, InputGuardrail, OutputGuardrail
+│   │   ├── port/in/                        AnswerConversationUseCase (sync + streaming)
+│   │   ├── port/out/                       ChatModelPort, KnowledgeRetrievalPort, ConversationMemoryPort
+│   │   └── exception/
+│   ├── application/service/                ConversationAppService
+│   └── infrastructure/
+│       ├── adapter/in/rest/                ConversationController (+ SSE, dto/)
+│       ├── adapter/out/knowledge/          InProcKnowledgeRetrievalAdapter   ← THE seam + ACL
+│       ├── adapter/out/chat/               MistralChatAdapter, OpenAiChatAdapter, OllamaChatAdapter
+│       ├── adapter/out/memory/             InMemoryConversationMemoryAdapter
+│       └── config/                         ConversationConfig (@Bean wiring)
+│
+└── shared/                                 # technical cross-cutting ONLY (no shared domain)
+    ├── telemetry/                          OTel setup, correlation id
+    └── config/                             common bootstrap (profiles, base error handling)
+```
+
+**The extraction seam (heart of the Hive-light split):**
+
+```text
+conversation.domain.port.out.KnowledgeRetrievalPort
+        ▲ implemented by
+conversation.infrastructure.adapter.out.knowledge.InProcKnowledgeRetrievalAdapter   (ACL: Chunk → RetrievedEvidence)
+        │ calls only
+knowledge.domain.port.in.KnowledgeRetrievalUseCase  →  RetrievalService (EmbeddingPort + VectorStorePort)
+```
+
+Later extraction = swap `InProcKnowledgeRetrievalAdapter` for a
+`RestKnowledgeRetrievalAdapter`; nothing else moves.
+
+**The four internal-design decisions (were parked; now fixed in ADR-0027):**
+
+| Point | Decision | Rationale / ADR |
+|---|---|---|
+| RAG orchestration | Domain service `AnswerConversationService` sequences **input guardrail → retrieval (seam) → LLM wording → output guardrail** explicitly. Spring AI `QuestionAnswerAdvisor` is **not** the orchestrator (Spring AI = discrete `ChatModelPort` + `EmbeddingPort` only). | Keeps guardrail hooks + seam explicit, testable, per-slice observable — ADR-0014, ADR-0018 |
+| Streaming-ready ports | `ChatModelPort` = sync **+** `TokenStream`; `AnswerConversationUseCase` = sync **+** streaming, from day one. Retrieval stays sync. | Deferring SSE (BE-007, Medium) must not force a later domain change — ADR-0013 |
+| Conversation memory | Behind `ConversationMemoryPort`; V1 `InMemoryConversationMemoryAdapter` keyed by `conversation_id`, last-N turns, history in **system message**, **current turn excluded**. Redis later = adapter swap. | Avoids greeting/duplication bugs; ADR-0008 |
+| Guardrails | Domain services `InputGuardrail` / `OutputGuardrail` returning `GuardrailDecision`; deterministic in V1, LLM-based later behind the same interface. | ADR-0014 |
+
+**ArchUnit boundary (added in BE-002):** `..knowledge.domain..` and
+`..conversation.domain..` never import each other; cross-context access only from
+`..conversation.infrastructure.adapter.out.knowledge..` onto `knowledge..port.in`;
+`..shared..` depends on no context and holds no domain.
 
 ## Included Tickets
 
@@ -125,19 +203,25 @@ It is **TASK-BE-001** below and blocks every other Sprint 7 ticket.
 branch; reference implementation lives on `main`).
 
 **Scope:**
-- Spring Boot 3.4.x, Java 21, Maven, package `com.voicesupport`, hexagonal layout
-  (pure domain, ports `in`/`out`, `infrastructure/config/DomainServiceConfig`
-  `@Bean` wiring; chat auto-configurations excluded per project convention).
-- Profiles + `application.yml`; chosen framework dependency (from BE-001) in
-  `pom.xml`.
-- ArchUnit layer rules; JUnit 5 with **manual fakes (no Mockito)**; `mvn test`
-  green without DB/Ollama.
+- Spring Boot 3.4.x, Java 21, Maven, package `com.voicesupport`, **context-first
+  hexagonal layout per ADR-0027** (two bounded contexts `knowledge` /
+  `conversation`, each a full hexagon; `shared/` for technical cross-cutting only).
+  Pure domain, ports `in`/`out`; **per-context bean wiring** (`KnowledgeConfig`,
+  `ConversationConfig`) — no global `DomainServiceConfig`; chat auto-configurations
+  excluded per project convention.
+- Profiles + `application.yml`; chosen framework dependency (Spring AI, from BE-001
+  / ADR-0026) in `pom.xml`.
+- ArchUnit layer rules **plus the inter-context boundary rules** (see below);
+  JUnit 5 with **manual fakes (no Mockito)**; `mvn test` green without DB/Ollama.
 - A minimal health endpoint; no business logic yet.
 
 **Acceptance:**
 - `mvn test` green on a clean checkout with no external service.
-- ArchUnit enforces domain purity (no Spring annotations in domain) and
-  dependency direction.
+- ArchUnit enforces (a) domain purity (no Spring annotations in domain) and
+  dependency direction, and (b) the ADR-0027 boundary: `..knowledge.domain..` and
+  `..conversation.domain..` never import each other; cross-context access only from
+  `..conversation.infrastructure.adapter.out.knowledge..` onto `knowledge..port.in`;
+  `..shared..` depends on no context and holds no domain.
 - Health endpoint returns a stable, secret-free response.
 
 ### TASK-BE-003 — Knowledge-base ingestion socle

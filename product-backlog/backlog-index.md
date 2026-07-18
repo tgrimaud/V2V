@@ -84,7 +84,7 @@ against the new empty-codebase plan.
 | TASK-STT-010 | Stream partial STT transcripts to cut perceived latency (closes RF-007) | V1 pilot gate | ✅ Validated + merged (Sprint 6, 2026-07-16 — live tail 818 ms; RF-007 closed) | High |
 | TASK-STT-011 | Normalize transcripts (case/punctuation/accents) before WER scoring (closes RF-008) | V1 pilot gate | Done (Sprint 2) | Medium |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection (drop-in replacing the TASK-STT-009 batch detector) | V1 pilot gate | Planned (Sprint 6) | Medium |
-| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`time_to_first_audio` p95 < 800 ms) | V1 pilot gate | Open — spike first (Sprint 6; blocks sprint DoD, from TASK-WEB-009 baseline p95 1698 ms) | High |
+| TASK-STT-013 | Reduce STT post-EOT finalize tail to meet ADR-0018 (`time_to_first_audio` p95 < 800 ms) | V1 pilot gate | ✅ Done (Sprint 6, validated 2026-07-17) — finalize on Gradium `flushed` ack; STT tail p95 1389→373 ms; composite p95 761.5 ms < 800 ms (gate MET); review 93/100 + QA GO | High |
 | TASK-WEB-001 | Capture web voice and transcribe through Gradium STT (US-019 STT half) | V1 core | Done (merged) | High |
 | TASK-WEB-002 | Speak the bot response on the web page (US-019 TTS half) | V1 core | Done (Sprint 3, merged → `feat/restart-from-scratch`) | High |
 | TASK-WEB-003 | Orchestrate transcript to backend answer (US-019 STT/TTS bridge) — split A…G | V1 core | Done (Sprint 5, 2026-07-15; A–G merged into `feat/restart-from-scratch`) | High |
@@ -99,7 +99,7 @@ against the new empty-codebase plan.
 | TASK-WEB-005 | Introduce the Pipecat batch runtime — run the web voice loop through a Pipecat pipeline, selectable alongside the stdlib fallback (US-019 runtime, ADR-0002) | V1 enabler | Done (Sprint 4) | High |
 | TASK-WEB-007 | WebRTC transport (SmallWebRTCTransport + Pipecat JS client) driving the pipeline on one long-lived async loop (closes RF-012) | V1 core | Planned (Sprint 6) | High |
 | TASK-WEB-008 | Barge-in during a spoken answer (US-021) — VAD onset stops playback, starts a new turn | V1 core | ✅ Validated by user (2026-07-16), merged into `feat/sprint-6-streaming` (branch deleted) | Medium |
-| TASK-WEB-009 | Streaming QA + `time_to_first_audio` p95 < 800 ms latency report + ADR-0018 evidence (Sprint 6 close) | V1 pilot gate | Instrumentation + baseline delivered (Sprint 6, 2026-07-16; review 92/100, QA functional Go). **Latency gate NOT met** (p95 1698 ms) → gap owned by TASK-STT-013 | High |
+| TASK-WEB-009 | Streaming QA + `time_to_first_audio` p95 < 800 ms latency report + ADR-0018 evidence (Sprint 6 close) | V1 pilot gate | ✅ Done (Sprint 6, 2026-07-16; review 92/100, QA functional Go). Baseline surfaced p95 1698 ms → gap **closed by TASK-STT-013** (final p95 761.5 ms, gate MET) | High |
 | TASK-WEB-010 | End the call on a customer closing formula (US-041) — detect closing intent on final transcript, speak a closing, end the session; false-positive guard + end-of-call reason telemetry | V1 core | Proposed (2026-07-16, unscheduled) | Medium |
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16) | Low |
