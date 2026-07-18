@@ -262,12 +262,16 @@ chunks.
   `content_hash`, upsert otherwise, deletion-diff via a `kb_source_state` ledger).
 - Storage: one Postgres (`pgvector/pgvector`, port 5433), `vector_store` (Spring
   AI-style, **JSONB** metadata, **768 dim**) + `kb_source_state` ledger.
-- **Embedding behind its own replaceable provider port/adapter** (DEC-011/DEC-005),
-  config-selectable, **default Ollama `nomic-embed-text` (768)**. The adapter
-  boundary makes the provider swap a code/config change; note that switching to a
-  different dimension (e.g. `mistral-embed` = 1024) requires recreating
-  `vector_store` + re-syncing (dimension is fixed at creation). Endpoints
-  `POST /api/knowledge/sync[/{sourceType}]` and one-shot `POST /api/knowledge/ingest`.
+- **Embedding is provider-replaceable at the Spring AI `EmbeddingModel` bean**
+  (DEC-011/DEC-005), config/profile-selectable, **default Ollama `nomic-embed-text`
+  (768)**. Decision (validated with the proven `main` design): the Spring AI pgvector
+  `VectorStore` performs embedding internally via the configured `EmbeddingModel`, so
+  the domain stays embedding-agnostic behind `VectorStorePort` — no separate domain
+  `EmbeddingPort`. Swapping providers is an infra bean/config change; the domain is
+  untouched. Note that switching to a different dimension (e.g. `mistral-embed` = 1024)
+  requires recreating `vector_store` + re-syncing (dimension is fixed at creation).
+  Endpoints `POST /api/knowledge/sync[/{sourceType}]` and one-shot
+  `POST /api/knowledge/ingest`.
 - Always store a `domain` metadata value (default `general`) so no chunk is later
   excluded by domain filtering.
 
@@ -275,10 +279,24 @@ chunks.
 - A sync run ingests the three FAQ files; a second run is a no-op (idempotent).
 - Every stored chunk carries `domain` metadata; deleting a source removes its
   chunks via the ledger.
-- The embedding provider is selected via config behind a replaceable adapter
-  (default Ollama `nomic-embed-text`); a fake embedding adapter is used in tests.
+- The embedding provider is config/profile-selectable at the Spring AI
+  `EmbeddingModel` bean (default Ollama `nomic-embed-text`); domain unit tests fake
+  `VectorStorePort` (no embedding needed offline), so `mvn test` requires no infra.
 - Vector dimension is 768; changing the embedding model is documented as requiring
   a table recreation + re-sync.
+
+**Result (2026-07-18) — live-validated on Postgres `pgvector/pgvector:pg16` (5433)
++ native Ollama `nomic-embed-text`:**
+- Clean sync #1 → `{"processed":3,"ingested":3,"skipped":0,"deleted":0}`; sync #2 →
+  `{...,"ingested":0,"skipped":3}` (idempotent). Chunks: billing 12, commercial 12,
+  support 17 — every chunk carries a non-null `domain` (no legacy NULLs).
+- Deletion-diff: an injected stale source is removed on the next sync
+  (`deleted:1`, purged from both `vector_store` and the `kb_source_state` ledger).
+- One-shot `POST /api/knowledge/ingest` (multipart) stores the chunk with its domain.
+- `mvn test` green (34 tests) with **no infra** (domain fakes; `@WebMvcTest` health slice).
+- Local dev infra added: `docker-compose.yml` (Postgres pgvector + Ollama).
+- Delivered in two green increments: (1) pure domain core + Markdown connector;
+  (2) Spring AI pgvector + Ollama embedding + JPA ledger + REST + per-context wiring.
 
 ### TASK-BE-004 — RAG retrieval + domain guardrails (ADR-0014)
 
@@ -502,7 +520,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 |---|---|---|
 | TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
 | TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
-| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | Planned |
+| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | In progress — implementation done, live-validated (sync/idempotency/deletion-diff/domain metadata); `mvn test` 34 green; awaiting adversarial review + QA |
 | TASK-BE-004 | `task/TASK-BE-004-rag-guardrails` | Planned |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | Planned |

@@ -2,5 +2,38 @@ spring:
   application:
     name: voice-support-backend
 
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/voicesupport}
+    username: ${DB_USERNAME:voicesupport}
+    password: ${DB_PASSWORD:voicesupport}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      embedding:
+        model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+    vectorstore:
+      pgvector:
+        # Embedding dimension is fixed at table creation. Changing the embedding
+        # model requires recreating vector_store + a full re-sync.
+        dimensions: 768
+        index-type: hnsw
+        distance-type: cosine_distance
+        initialize-schema: true
+
 server:
   port: 8080
+
+voice-support:
+  knowledge:
+    chunk-size: 500
+    chunk-overlap: 50
+    markdown-path: ${KB_MARKDOWN_PATH:../knowledge-base}
+    default-language: ${KB_DEFAULT_LANGUAGE:fr}

@@ -1,0 +1,37 @@
+# Local development infrastructure for the Voice Support Bot backend.
+# BE-003 needs: Postgres (pgvector, 768-dim vector_store) + Ollama (nomic-embed-text embeddings).
+#
+# Ollama can also run natively on the host (http://localhost:11434). If it does,
+# start only Postgres: `docker compose up -d postgres`.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: voicesupport
+      POSTGRES_USER: voicesupport
+      POSTGRES_PASSWORD: voicesupport
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicesupport"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pgdata:
+  ollamadata:

@@ -28,7 +28,10 @@ class NamingConventionsTest {
                     .should().haveSimpleNameEndingWith("Adapter")
                     // Source connectors are a first-class outbound-port family
                     // (KnowledgeSourceConnector); their adapters keep the Connector suffix.
-                    .orShould().haveSimpleNameEndingWith("Connector");
+                    .orShould().haveSimpleNameEndingWith("Connector")
+                    // JPA persistence artifacts follow JPA naming (Entity + composite-key Id).
+                    .orShould().haveSimpleNameEndingWith("Entity")
+                    .orShould().haveSimpleNameEndingWith("Id");
 
     @ArchTest
     static final ArchRule portsShouldBeNamedCorrectly =
