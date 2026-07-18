@@ -19,6 +19,8 @@ public class PgVectorStoreAdapter implements VectorStorePort {
         this.vectorStore = vectorStore;
     }
 
+    // One-shot ingest path: stores content without source_type/source_id, so these chunks
+    // are intentionally outside the sync deletion-diff lifecycle (manual, ad-hoc content).
     @Override
     public void store(String content, String source, String section, int chunkIndex, String domain) {
         Map<String, Object> metadata = new HashMap<>();

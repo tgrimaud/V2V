@@ -5,6 +5,8 @@ import java.util.Objects;
 
 public class KbSourceStateId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private String sourceType;
     private String sourceId;
 
