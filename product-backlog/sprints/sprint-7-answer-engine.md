@@ -567,9 +567,39 @@ already calls.
   bucket — removes the cross-caller context-bleed privacy risk. Added
   `ConversationServiceTest.blankConversationIdIsStateless` +
   `ConverseControllerTest.missingConversationIdIsAccepted`. Tests now **123** green.
-- **Status:** implementation + 123 tests + live multi-turn validation + adversarial review
-  (92/100, remediated) done. Pending: QA functional + latency acceptance. Merge on the
-  user's explicit request.
+- **QA functional + latency (2026-07-19): GO.** Regression: 123 automated tests green
+  (unit + `@WebMvcTest` contract + BDD). Live acceptance (Postgres pgvector 5433 + Ollama
+  embeddings + real Mistral `mistral-small-latest`, web/local, warm):
+
+  | # | Scenario | Result |
+  |---|---|---|
+  | F1 | First-turn `Bonjour` | Greeting, `grounded=false`, guardrail short-circuit (no LLM) |
+  | F2 | `Pourquoi ma facture a augmenté ?` | Grounded (`conf≈0.74`), **no invented amount** |
+  | F3 | Follow-up `Comment éviter cela ?` | Resolves `cela` → F2 (**context honored**); grounded |
+  | F4 | `Combien exactement vais-je payer ?` | Safe hand-off, **no figure** (DEC-002) |
+  | F5 | Off-topic (capitale de l'Australie) | Safe non-grounded domain refusal |
+  | F6 | Blank transcript | Safe listen prompt (200) |
+  | F7 | Missing `conversation_id` | Stateless, grounded answer (200) — no shared bucket |
+  | K1/K2/K3 | `x-api-key` absent / wrong / correct | 401 / 401 / 200 (secret never logged) |
+
+  - **DEC-002 nuance validated:** F3 voiced "pack international (5€/mois)" — this figure is
+    **grounded** in `commercial-faq.md` (KB catalog tariff), so the output guardrail
+    correctly allowed it, while F4 (customer-specific invoice amount) is still refused.
+    Behavior is correct: KB-backed tariffs pass, fabricated invoice figures never do.
+
+- **Latency (live, warm; server-side `[CONVERSE] duration_ms`):**
+
+  | Slice | p50 | p95 | p99 | Sample | Warm/Cold | Notes |
+  |---|---:|---:|---:|---:|---|---|
+  | Grounded converse turn (retrieval + LLM wording + guardrails) | 570 ms | 1338 ms | 1460 ms | 15 | Warm | Mistral cloud dominates; retrieval ~tens of ms |
+  | Guardrail short-circuit (greeting/off-topic/blank) | 0 ms | 0 ms | 0 ms | 6 | Warm | No embed/retrieval/LLM — deterministic keyword path |
+
+  Correlation-id continuity verified (all `[CONVERSE]` lines carried the id, none `n/a` for
+  identified turns). No sensitive data in logs (transcript/answer text and api-key absent).
+- **QA recommendation: GO for BE-006.** Residuals unchanged and ticketed: OTel spans+metrics
+  (BE-009), Java-side LLM timeout + global degraded contract (BE-012). Not pilot blockers.
+- **Status:** implementation + 123 tests + adversarial review (92/100, remediated) + QA
+  functional & latency (GO) done. **Merge-ready** — awaiting the user's explicit merge request.
 
 ### TASK-BE-007 — Streaming-token answer (SSE, ADR-0013)
 
