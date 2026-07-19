@@ -493,6 +493,9 @@ safe.
   (OQ-002 / a future guardrail follow-up), not a BE-005 blocker.
 - **Recommendation:** GO for BE-005. Merge-ready on the user's explicit request.
 
+**User validation (2026-07-19): validated.** All gates passed (implementation → 105
+tests → adversarial review 93/100 → QA GO). Merged into `feat/sprint-7-answer-engine`.
+
 ### TASK-BE-006 — Conversation endpoint (ADR-0021 contract) + memory
 
 **Goal:** Expose the answer engine over the exact HTTP contract the voice runtime
