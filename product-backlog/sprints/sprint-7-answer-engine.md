@@ -653,6 +653,31 @@ for runtime work; DEC-010 / ADR-0010 / ADR-0018).
 - p50/p95/p99 are reportable for retrieval and LLM from collected samples.
 - No sensitive data in any log/metric/span attribute.
 
+**Implementation (2026-07-19, `task/TASK-BE-009-observability`, ADR-0028):**
+- `shared/observability`: `CorrelationIdFilter` (reuse `X-Correlation-Id` header or
+  generate a UUID; MDC + response echo; always cleared) + `CorrelationId` helper.
+  `/converse` uses the runtime's **body** `correlation_id` as authoritative (overwrites
+  the response header) and propagates the `channel`, so a turn shares one id end to end.
+- `BackendTelemetry`: records the `voice_support.slice` Micrometer timer tagged
+  `slice`/`channel`/`provider`/`outcome` with client-side p50/p95/p99, plus a privacy-safe
+  `[TELEMETRY]` structured log (durations only — no transcript/answer/secret). Slices:
+  `retrieval` (seam adapter), `llm_wording` (provider adapter, provider tag),
+  `backend_request` (composite, `ConverseController`). The deterministic input/output
+  guardrail decision stays captured as the request `grounded` outcome + `[GROUNDING]`
+  log (no separate timer until it carries real latency).
+- Exposed via `spring-boot-starter-actuator` (`health,info,metrics`); no exporter for
+  the pilot — a Micrometer Tracing→OTel bridge is the documented upgrade path to spans.
+- `ContextBoundaryTest` extended so the knowledge seam may depend on context-agnostic
+  `com.voicesupport.shared..` (`sharedMustNotDependOnAnyContext` still forbids the reverse).
+- Tests: `CorrelationIdFilterTest`, `BackendTelemetryTest`, `ConverseController` header
+  echo; adapter/config wiring updated. **`mvn test` 130 green.**
+- **Live-verified** (pgvector 5433 + Ollama + Mistral, warm): one correlation id
+  (`cid-be009-live`) across `retrieval`/`llm_wording`/`backend_request` slice logs;
+  header echo confirmed; `/actuator/metrics/voice_support.slice.percentile` reported
+  retrieval p50 63 ms / p95 703 ms and LLM p50 906 ms / p95 1040 ms by `phi` tag.
+- **Status:** implementation + 130 tests + live verification done; pending adversarial
+  review + QA acceptance before merge-ready.
+
 ### TASK-BE-010 — QA functional + latency report + adversarial review
 
 **Goal:** Validate the real answer engine functionally and measure its latency
@@ -756,9 +781,10 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
 | TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | ✅ Validated by user (2026-07-18) — adversarial review 94/100 + QA PASS; `mvn test` 42 green (5 Cucumber BDD scenarios); live latency cold sync p50 1422 ms / warm 5 ms / one-shot ingest 27 ms; merge-ready (awaiting explicit merge) |
 | TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated + merged into `feat/sprint-7-answer-engine` (2026-07-19, ff; branch deleted) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms |
-| TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
-| TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | Planned |
+| TASK-BE-005 | `task/TASK-BE-005-llm-wording` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19) — provider-agnostic grounded LLM wording (DEC-002); adversarial review + QA GO |
+| TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | Planned (Medium; may defer) |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
-| TASK-BE-009 | `task/TASK-BE-009-observability` | Planned |
+| TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Implemented + 130 tests + live-verified (2026-07-19), ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); pending adversarial review + QA before merge-ready |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
+| TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Implemented + 134 tests + live-verified (2026-07-19), branched from BE-009 — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; pending adversarial review + QA before merge-ready |

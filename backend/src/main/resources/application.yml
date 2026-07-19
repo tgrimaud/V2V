@@ -84,3 +84,6 @@ voice-support:
     #   ollama      = local/offline alternative (llama3.1:8b)
     # Embeddings always stay on Ollama (nomic-embed-text, 768d); this only selects chat.
     provider: ${LLM_PROVIDER:mistral-api}
+    # Hard timeout for the LLM wording call (TASK-BE-012). A slower/hung provider degrades to a
+    # sanitized 503 ERR_UPSTREAM (the voice runtime then speaks a safe degraded turn). 0 disables.
+    timeout-ms: ${LLM_TIMEOUT_MS:8000}

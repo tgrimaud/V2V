@@ -1,6 +1,12 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
-public record RetrievalRequest(String question, String domain, Integer topK, Boolean alreadyGreeted) {
+import jakarta.validation.constraints.NotBlank;
+
+public record RetrievalRequest(
+        @NotBlank(message = "question must not be blank") String question,
+        String domain,
+        Integer topK,
+        Boolean alreadyGreeted) {
 
     private static final int DEFAULT_TOP_K = 4;
 

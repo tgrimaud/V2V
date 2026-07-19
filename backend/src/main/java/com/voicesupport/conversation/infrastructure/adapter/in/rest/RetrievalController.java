@@ -3,6 +3,7 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +31,7 @@ public class RetrievalController {
     }
 
     @PostMapping("/retrieve")
-    public ResponseEntity<RetrievalResponse> retrieve(@RequestBody RetrievalRequest request) {
+    public ResponseEntity<RetrievalResponse> retrieve(@Valid @RequestBody RetrievalRequest request) {
         long start = System.nanoTime();
         GroundingResult result = groundQueryUseCase.ground(
                 request.question(), request.domain(), request.effectiveTopK(), request.effectiveAlreadyGreeted());

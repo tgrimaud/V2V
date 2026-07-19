@@ -47,7 +47,7 @@ class AbstractChatClientAnswerAdapterTest {
 
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
         TestAdapter() {
-            super(null, null);
+            super(null, null, 0);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {

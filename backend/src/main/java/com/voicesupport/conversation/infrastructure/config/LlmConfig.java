@@ -69,13 +69,17 @@ public class LlmConfig {
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public AnswerGeneratorPort mistralAnswerGenerator(ChatClient answerChatClient, BackendTelemetry telemetry) {
-        return new MistralAnswerAdapter(answerChatClient, telemetry);
+    public AnswerGeneratorPort mistralAnswerGenerator(
+            ChatClient answerChatClient, BackendTelemetry telemetry,
+            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
+        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs);
     }
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama")
-    public AnswerGeneratorPort ollamaAnswerGenerator(ChatClient answerChatClient, BackendTelemetry telemetry) {
-        return new OllamaAnswerAdapter(answerChatClient, telemetry);
+    public AnswerGeneratorPort ollamaAnswerGenerator(
+            ChatClient answerChatClient, BackendTelemetry telemetry,
+            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
+        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs);
     }
 }
