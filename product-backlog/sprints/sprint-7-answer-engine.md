@@ -518,6 +518,89 @@ already calls.
   greeting logic behaves (empty history detected correctly).
 - No raw transcript/answer or secret appears in responses/logs.
 
+**Implementation (2026-07-19) — branch `task/TASK-BE-006-conversation-endpoint`:**
+- **Endpoint:** `POST /api/conversation/converse` (`ConverseController`) binds the
+  ADR-0021 snake_case contract (`transcript`, `conversation_id`, `correlation_id`,
+  `channel`) via the shared `JacksonConfig` and returns `{text, confidence?}`
+  (`confidence` omitted when the answer is a guardrail fallback, `NON_NULL`). A
+  blank transcript short-circuits to a safe, digit-free listen prompt (no
+  embedding/LLM). `x-api-key` is enforced only when
+  `voice-support.conversation.api-key` is set (open on the pilot host otherwise).
+- **Memory:** `ConversationTurn` VO + `ConversationMemoryPort` (out) +
+  `InMemoryConversationMemoryAdapter` (process-local, bounded: `max-turns`
+  exchanges/conversation, LRU cap `max-conversations`, thread-safe). Prior turns
+  are read **before** the current turn is appended, so the history passed to the
+  LLM **excludes the current turn** and `already_greeted` is derived from
+  non-empty history — closing the greeting/duplication bugs in project history.
+- **Orchestration:** `ConverseUseCase` / `ConversationService` reuses the BE-005
+  pipeline. `AnswerQuestionUseCase.answer(...)` gained a `history` parameter
+  (placed in the system message by the wording adapter); retrieval spans all
+  domains (`domain=null`, `topK=4`, no classifier in V1 here). Grounding, DEC-002
+  output guardrail and safe fallbacks are inherited unchanged.
+- **Observability:** privacy-safe `[CONVERSE]` structured log per turn
+  (`channel`, `conversation_id`, `correlation_id`, `grounded`, `confidence`,
+  `chars`, `duration_ms`) — never the raw transcript/answer or a secret.
+- **Tests:** +16 (total **121**, `mvn test` green, no DB/Ollama needed):
+  `ConversationServiceTest` (history/greeting/isolation/record),
+  `InMemoryConversationMemoryAdapterTest` (bounded, LRU, blank-id safe, ordering),
+  `ConverseControllerTest` (contract + blank prompt), `ConverseControllerApiKeyTest`
+  (401 missing/wrong, 200 matching), BDD `conversation-memory.feature` (3 scenarios).
+- **Live validation (Postgres pgvector 5433 + Ollama embeddings + real Mistral
+  `mistral-small-latest`, warm; server-side `[CONVERSE] duration_ms`):**
+  - T1 `Bonjour` → greeting, `grounded=false`, no LLM (guardrail short-circuit, ~1 ms).
+  - T2 `Pourquoi ma facture a augmenté ce mois-ci ?` → grounded answer
+    (`confidence≈0.74`, 2.14 s), **no invented amount** (points to the customer area / 3900).
+  - T3 `Et comment puis-je éviter cela le mois prochain ?` → the follow-up correctly
+    resolves `cela` to T2's bill increase (**multi-turn context honored**),
+    `grounded=true` (`confidence≈0.68`, 1.21 s).
+  - DEC-002 spot-check `Combien exactement vais-je payer ?` → safe hand-off, **no figure**.
+  - Blank transcript → safe listen prompt (200). `[CONVERSE]` logs carry lengths
+    + correlation id only (no transcript/answer text).
+- **Adversarial review (2026-07-19): 92/100, QA gate Pass.** No blocking finding, no
+  functional bug, no boundary violation; tests at every level; behavior observable via
+  privacy-safe `[CONVERSE]` logs. Residuals (all ticketed/accepted): OTel spans+metrics
+  deferred to BE-009 (latency still derivable from `duration_ms`), Java-side LLM
+  timeout + global degraded contract deferred to BE-012 (a hard failure returns 500 and
+  the voice runtime degrades it to a safe spoken turn), non-constant-time api-key compare.
+- **Review remediation (Medium finding fixed):** a missing/blank `conversation_id` is now
+  **stateless** (empty history, no persistence) instead of a shared `"default"` memory
+  bucket — removes the cross-caller context-bleed privacy risk. Added
+  `ConversationServiceTest.blankConversationIdIsStateless` +
+  `ConverseControllerTest.missingConversationIdIsAccepted`. Tests now **123** green.
+- **QA functional + latency (2026-07-19): GO.** Regression: 123 automated tests green
+  (unit + `@WebMvcTest` contract + BDD). Live acceptance (Postgres pgvector 5433 + Ollama
+  embeddings + real Mistral `mistral-small-latest`, web/local, warm):
+
+  | # | Scenario | Result |
+  |---|---|---|
+  | F1 | First-turn `Bonjour` | Greeting, `grounded=false`, guardrail short-circuit (no LLM) |
+  | F2 | `Pourquoi ma facture a augmenté ?` | Grounded (`conf≈0.74`), **no invented amount** |
+  | F3 | Follow-up `Comment éviter cela ?` | Resolves `cela` → F2 (**context honored**); grounded |
+  | F4 | `Combien exactement vais-je payer ?` | Safe hand-off, **no figure** (DEC-002) |
+  | F5 | Off-topic (capitale de l'Australie) | Safe non-grounded domain refusal |
+  | F6 | Blank transcript | Safe listen prompt (200) |
+  | F7 | Missing `conversation_id` | Stateless, grounded answer (200) — no shared bucket |
+  | K1/K2/K3 | `x-api-key` absent / wrong / correct | 401 / 401 / 200 (secret never logged) |
+
+  - **DEC-002 nuance validated:** F3 voiced "pack international (5€/mois)" — this figure is
+    **grounded** in `commercial-faq.md` (KB catalog tariff), so the output guardrail
+    correctly allowed it, while F4 (customer-specific invoice amount) is still refused.
+    Behavior is correct: KB-backed tariffs pass, fabricated invoice figures never do.
+
+- **Latency (live, warm; server-side `[CONVERSE] duration_ms`):**
+
+  | Slice | p50 | p95 | p99 | Sample | Warm/Cold | Notes |
+  |---|---:|---:|---:|---:|---|---|
+  | Grounded converse turn (retrieval + LLM wording + guardrails) | 570 ms | 1338 ms | 1460 ms | 15 | Warm | Mistral cloud dominates; retrieval ~tens of ms |
+  | Guardrail short-circuit (greeting/off-topic/blank) | 0 ms | 0 ms | 0 ms | 6 | Warm | No embed/retrieval/LLM — deterministic keyword path |
+
+  Correlation-id continuity verified (all `[CONVERSE]` lines carried the id, none `n/a` for
+  identified turns). No sensitive data in logs (transcript/answer text and api-key absent).
+- **QA recommendation: GO for BE-006.** Residuals unchanged and ticketed: OTel spans+metrics
+  (BE-009), Java-side LLM timeout + global degraded contract (BE-012). Not pilot blockers.
+- **Status:** implementation + 123 tests + adversarial review (92/100, remediated) + QA
+  functional & latency (GO) done. **Merge-ready** — awaiting the user's explicit merge request.
+
 ### TASK-BE-007 — Streaming-token answer (SSE, ADR-0013)
 
 **Goal:** Stream the answer tokens so the voice runtime can start TTS on the first

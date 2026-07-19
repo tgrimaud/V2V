@@ -58,7 +58,7 @@ public class AnswerWordingSteps {
 
     @When("the customer asks the assistant {string}")
     public void theCustomerAsksTheAssistant(String question) {
-        answer = service.answer(question, "billing", 4, true);
+        answer = service.answer(question, "billing", 4, true, java.util.List.of());
     }
 
     @Then("the assistant voices the generated answer")

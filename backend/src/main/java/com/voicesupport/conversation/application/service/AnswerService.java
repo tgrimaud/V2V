@@ -32,13 +32,14 @@ public class AnswerService implements AnswerQuestionUseCase {
     }
 
     @Override
-    public GeneratedAnswer answer(String question, String domain, int topK, boolean alreadyGreeted) {
+    public GeneratedAnswer answer(
+            String question, String domain, int topK, boolean alreadyGreeted, List<String> history) {
         GroundingResult grounding = groundQueryUseCase.ground(question, domain, topK, alreadyGreeted);
         if (!grounding.answerable()) {
             return GeneratedAnswer.fallback(grounding.decision().fallbackMessage());
         }
         List<RetrievedEvidence> evidence = grounding.evidence();
-        String text = answerGenerator.generate(question, evidence, List.of());
+        String text = answerGenerator.generate(question, evidence, history == null ? List.of() : history);
         GuardrailDecision outputDecision = outputGuardrail.check(question, text, evidence);
         if (outputDecision.blocked()) {
             return GeneratedAnswer.fallback(outputDecision.fallbackMessage());
