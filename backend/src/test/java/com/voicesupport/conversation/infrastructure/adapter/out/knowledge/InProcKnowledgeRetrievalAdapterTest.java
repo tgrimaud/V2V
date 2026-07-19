@@ -3,6 +3,8 @@ package com.voicesupport.conversation.infrastructure.adapter.out.knowledge;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.fake.FakeKnowledgeRetrievalUseCase;
 import com.voicesupport.knowledge.domain.model.valueobject.KnowledgeChunk;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @DisplayName("InProc knowledge retrieval seam (ACL)")
 class InProcKnowledgeRetrievalAdapterTest {
 
+    private final BackendTelemetry telemetry = new BackendTelemetry(new SimpleMeterRegistry());
+
     @Test
     @DisplayName("maps knowledge chunks to conversation evidence through the ACL")
     void mapsChunksToEvidence() {
@@ -21,7 +25,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         fake.setChunks(List.of(
                 new KnowledgeChunk("proration explained", "billing-faq#1", "billing", 0.82),
                 new KnowledgeChunk("late fee explained", "billing-faq#2", "billing", 0.71)));
-        var adapter = new InProcKnowledgeRetrievalAdapter(fake);
+        var adapter = new InProcKnowledgeRetrievalAdapter(fake, telemetry);
 
         // WHEN the conversation context retrieves through the seam
         List<RetrievedEvidence> evidence = adapter.retrieve("why is my bill higher", "billing", 5);
@@ -43,7 +47,7 @@ class InProcKnowledgeRetrievalAdapterTest {
                 new KnowledgeChunk("a", "s1", "general", 0.9),
                 new KnowledgeChunk("b", "s2", "general", 0.8),
                 new KnowledgeChunk("c", "s3", "general", 0.7)));
-        var adapter = new InProcKnowledgeRetrievalAdapter(fake);
+        var adapter = new InProcKnowledgeRetrievalAdapter(fake, telemetry);
 
         // WHEN retrieving with topK = 2
         List<RetrievedEvidence> evidence = adapter.retrieve("q", "general", 2);

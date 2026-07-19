@@ -3,6 +3,9 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.shared.config.JacksonConfig;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.observability.CorrelationId;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,6 +37,11 @@ class ConverseControllerTest {
         ConverseUseCase converseUseCase() {
             return (transcript, conversationId) -> GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
         }
+
+        @Bean
+        BackendTelemetry backendTelemetry() {
+            return new BackendTelemetry(new SimpleMeterRegistry());
+        }
     }
 
     @Test
@@ -45,6 +54,17 @@ class ConverseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.text").value("La proration explique l'écart."))
                 .andExpect(jsonPath("$.confidence").value(0.83));
+    }
+
+    @Test
+    @DisplayName("echoes the runtime correlation id (from the body) on the response header")
+    void echoesCorrelationIdHeader() throws Exception {
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transcript\":\"Pourquoi ma facture change ?\","
+                                + "\"conversation_id\":\"c1\",\"correlation_id\":\"corr-42\",\"channel\":\"web\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(CorrelationId.HEADER, "corr-42"));
     }
 
     @Test

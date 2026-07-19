@@ -2,6 +2,10 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.observability.CorrelationId;
+import com.voicesupport.shared.observability.Slices;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,22 +31,32 @@ public class ConverseController {
     private static final String LISTEN_PROMPT = "Je vous écoute, posez-moi votre question.";
 
     private final ConverseUseCase converseUseCase;
+    private final BackendTelemetry telemetry;
     private final String apiKey;
 
     public ConverseController(
             ConverseUseCase converseUseCase,
+            BackendTelemetry telemetry,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseUseCase = converseUseCase;
+        this.telemetry = telemetry;
         this.apiKey = apiKey;
     }
 
     @PostMapping("/converse")
     public ResponseEntity<ConverseResponse> converse(
             @RequestBody ConverseRequest request,
-            @RequestHeader(value = "x-api-key", required = false) String providedKey) {
+            @RequestHeader(value = "x-api-key", required = false) String providedKey,
+            HttpServletResponse httpResponse) {
         if (!authorized(providedKey)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        // Align backend logs/metrics with the runtime's correlation id (authoritative, from the
+        // body) and the originating channel, so this turn's slices share one id end to end, and
+        // echo that id back (overwriting the filter's default) for runtime -> backend continuity.
+        CorrelationId.set(request.correlationId());
+        CorrelationId.setChannel(request.channel());
+        httpResponse.setHeader(CorrelationId.HEADER, CorrelationId.current());
         if (!request.hasTranscript()) {
             return ResponseEntity.ok(ConverseResponse.of(LISTEN_PROMPT));
         }
@@ -50,7 +64,8 @@ public class ConverseController {
         // A missing/blank conversation id is treated as stateless (no shared memory bucket):
         // the memory adapter returns empty history and skips persistence, so callers that omit
         // the id can never see each other's turns.
-        GeneratedAnswer answer = converseUseCase.converse(request.transcript(), request.conversationId());
+        GeneratedAnswer answer = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
+                () -> converseUseCase.converse(request.transcript(), request.conversationId()));
         logTurn(request, answer, elapsedMs(start));
         return ResponseEntity.ok(ConverseResponse.from(answer));
     }

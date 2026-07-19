@@ -46,6 +46,10 @@ class ContextBoundaryTest {
                             CONVERSATION,
                             "com.voicesupport.knowledge.domain.port.in..",
                             "com.voicesupport.knowledge.domain.model..",
+                            // Cross-cutting, context-agnostic shared utilities (e.g. observability)
+                            // are allowed like Spring/JDK; `sharedMustNotDependOnAnyContext` keeps
+                            // `shared` from ever depending back on a bounded context.
+                            "com.voicesupport.shared..",
                             "java..",
                             "jakarta..",
                             "org.springframework..");

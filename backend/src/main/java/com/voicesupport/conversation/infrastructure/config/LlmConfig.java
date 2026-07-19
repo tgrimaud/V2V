@@ -3,6 +3,7 @@ package com.voicesupport.conversation.infrastructure.config;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.infrastructure.adapter.out.llm.MistralAnswerAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.llm.OllamaAnswerAdapter;
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.mistralai.MistralAiChatModel;
@@ -68,13 +69,13 @@ public class LlmConfig {
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public AnswerGeneratorPort mistralAnswerGenerator(ChatClient answerChatClient) {
-        return new MistralAnswerAdapter(answerChatClient);
+    public AnswerGeneratorPort mistralAnswerGenerator(ChatClient answerChatClient, BackendTelemetry telemetry) {
+        return new MistralAnswerAdapter(answerChatClient, telemetry);
     }
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama")
-    public AnswerGeneratorPort ollamaAnswerGenerator(ChatClient answerChatClient) {
-        return new OllamaAnswerAdapter(answerChatClient);
+    public AnswerGeneratorPort ollamaAnswerGenerator(ChatClient answerChatClient, BackendTelemetry telemetry) {
+        return new OllamaAnswerAdapter(answerChatClient, telemetry);
     }
 }

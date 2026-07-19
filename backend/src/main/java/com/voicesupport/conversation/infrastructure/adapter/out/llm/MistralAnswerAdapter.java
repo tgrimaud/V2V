@@ -1,9 +1,12 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.ai.chat.client.ChatClient;
 
 // Mistral wording adapter (mistral-small-latest), the development default provider (DEC-011).
 public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
+
+    private static final String PROVIDER = "mistral-api";
 
     private static final String SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI (box internet, mobile, \
@@ -25,12 +28,17 @@ public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
             {context}
             """;
 
-    public MistralAnswerAdapter(ChatClient chatClient) {
-        super(chatClient);
+    public MistralAnswerAdapter(ChatClient chatClient, BackendTelemetry telemetry) {
+        super(chatClient, telemetry);
     }
 
     @Override
     protected String systemPromptTemplate() {
         return SYSTEM_PROMPT;
+    }
+
+    @Override
+    protected String providerName() {
+        return PROVIDER;
     }
 }

@@ -1,10 +1,13 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.ai.chat.client.ChatClient;
 
 // Ollama wording adapter, the local/offline alternative provider (DEC-011). Same grounded,
 // DEC-002-safe contract as the Mistral adapter; only the provider wiring differs.
 public class OllamaAnswerAdapter extends AbstractChatClientAnswerAdapter {
+
+    private static final String PROVIDER = "ollama";
 
     private static final String SYSTEM_PROMPT = """
             Tu es un agent de support client pour un opérateur Telecom/FAI (box internet, mobile, \
@@ -26,12 +29,17 @@ public class OllamaAnswerAdapter extends AbstractChatClientAnswerAdapter {
             {context}
             """;
 
-    public OllamaAnswerAdapter(ChatClient chatClient) {
-        super(chatClient);
+    public OllamaAnswerAdapter(ChatClient chatClient, BackendTelemetry telemetry) {
+        super(chatClient, telemetry);
     }
 
     @Override
     protected String systemPromptTemplate() {
         return SYSTEM_PROMPT;
+    }
+
+    @Override
+    protected String providerName() {
+        return PROVIDER;
     }
 }

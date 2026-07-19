@@ -3,6 +3,8 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.shared.config.JacksonConfig;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,11 @@ class ConverseControllerApiKeyTest {
         @Bean
         ConverseUseCase converseUseCase() {
             return (transcript, conversationId) -> GeneratedAnswer.grounded("Réponse groundée.", 0.8);
+        }
+
+        @Bean
+        BackendTelemetry backendTelemetry() {
+            return new BackendTelemetry(new SimpleMeterRegistry());
         }
     }
 

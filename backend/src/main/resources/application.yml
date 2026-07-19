@@ -41,6 +41,23 @@ spring:
 server:
   port: 8080
 
+# Observability (TASK-BE-009): expose Micrometer metrics via actuator so per-slice latency
+# (voice_support.slice, tagged slice/channel/provider/outcome) is queryable locally with
+# client-side p50/p95/p99 percentiles. No external exporter is wired for the pilot.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles:
+        voice_support.slice: 0.5, 0.95, 0.99
+
 voice-support:
   knowledge:
     chunk-size: 500

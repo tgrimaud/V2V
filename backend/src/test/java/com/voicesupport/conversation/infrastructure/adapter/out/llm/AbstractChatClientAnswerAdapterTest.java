@@ -47,7 +47,7 @@ class AbstractChatClientAnswerAdapterTest {
 
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
         TestAdapter() {
-            super(null);
+            super(null, null);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {
@@ -57,6 +57,11 @@ class AbstractChatClientAnswerAdapterTest {
         @Override
         protected String systemPromptTemplate() {
             return "Prompt de test.\nCONTEXTE :\n{context}";
+        }
+
+        @Override
+        protected String providerName() {
+            return "test";
         }
     }
 }
