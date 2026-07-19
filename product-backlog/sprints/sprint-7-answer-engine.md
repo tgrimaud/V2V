@@ -355,6 +355,37 @@ after retrieval.
   `mvn test` green (80). Deferred non-blocking findings: correlation id + OTel →
   **TASK-BE-009**; REST error contract / degraded-mode leak → **TASK-BE-012** (created).
 
+**QA — functional + latency (2026-07-19): GO.**
+- **Functional (BDD):** `conversation-grounding.feature` — 6 product-observable
+  Cucumber scenarios wired to domain services + fakes (no infra), all green in
+  `mvn test` (**86 tests**, BDD suite 11 = 5 KB ingestion + 6 grounding): in-domain →
+  grounded answer; off-topic → refused, no retrieval; unsafe → refused; greeting →
+  handled directly; weak evidence → low-confidence + advisor offer; shared `general`
+  chunk grounds a cross-domain answer.
+
+  | Acceptance criterion | Status | Evidence |
+  |---|---|---|
+  | In-domain question returns relevant chunks | PASS | BDD `in-domain`; live scenario 1 |
+  | Off-topic refused, no LLM/retrieval call | PASS | BDD `no retrieval`; live `duration_ms=0` |
+  | Shared `general` chunks included | PASS | BDD `shared general`; live scenario 5 |
+  | Guardrail decisions observable | PASS (interim) | `[GROUNDING]` logs; full OTel → BE-009 |
+
+- **Latency (live, Postgres pgvector 5433 + native Ollama `nomic-embed-text`, web/local,
+  provider=ollama embeddings, warm cache):**
+
+  | Slice | p50 | p95 | p99 | Sample | Warm/Cold | Notes |
+  |---|---:|---:|---:|---:|---|---|
+  | RAG retrieval (query-embed + pgvector top-k) | 30 ms | 37 ms | 37 ms | 26 | Warm | `verdict=PASS`; tight band |
+  | Input-guardrail refusal (no retrieval) | 0 ms | 0 ms | 0 ms | 10 | Warm | `OFF_TOPIC`; proves no embed/search on block |
+  | First embed after idle (Ollama load) | — | — | — | 1 | Cold | one-off ~685–791 ms model warm-up, not per-call |
+
+  RAG retrieval slice is well within budget; it is one contributor to the ADR-0018
+  voice composite (STT/LLM/TTS measured separately). Cold cost is a one-off Ollama
+  warm-up. No sensitive data in logs (question/evidence text not logged).
+- **Residual risks:** correlation id + OTel spans/metrics (BE-009); degraded-mode error
+  contract if Ollama/pgvector down (BE-012); definitive answer/confidence threshold
+  (OQ-002 — provisional 0.5 in effect).
+
 ### TASK-BE-005 — LLM wording step (provider-agnostic, grounded)
 
 **Goal:** Produce the spoken answer text from retrieved chunks, grounded and
