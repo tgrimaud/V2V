@@ -16,8 +16,6 @@ public abstract class AbstractChatClientAnswerAdapter implements AnswerGenerator
     private static final String CONTEXT_PLACEHOLDER = "{context}";
     private static final String HISTORY_HEADER =
             "\n\nHistorique de la conversation (ne répète PAS de salutation si un échange a déjà eu lieu) :\n";
-    private static final String SAFE_TRANSFER =
-            "Je n'ai pas cette information, je vous transfère à un conseiller.";
 
     private final ChatClient chatClient;
 
@@ -35,7 +33,10 @@ public abstract class AbstractChatClientAnswerAdapter implements AnswerGenerator
                 .user(question == null ? "" : question)
                 .call()
                 .content();
-        return (text == null || text.isBlank()) ? SAFE_TRANSFER : text.strip();
+        // Return the raw text (empty when the model produced nothing); classifying an empty or
+        // refusal answer as a safe hand-off is the OutputGuardrail's job, so it is never voiced
+        // as a grounded answer with a confidence signal.
+        return text == null ? "" : text.strip();
     }
 
     protected String buildSystemMessage(List<RetrievedEvidence> evidence, List<String> history) {

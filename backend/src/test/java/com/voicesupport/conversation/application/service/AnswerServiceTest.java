@@ -86,6 +86,39 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("an empty LLM answer becomes a safe fallback, never a grounded answer")
+    void emptyAnswerBecomesFallback() {
+        // GIVEN strong evidence but the LLM returns nothing
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.88))));
+        generator.setNextAnswer("   ");
+
+        // WHEN answering
+        GeneratedAnswer answer = service.answer("Pourquoi ma facture change ?", "billing", 4, true);
+
+        // THEN a safe hand-off is returned without a misleading confidence signal
+        assertFalse(answer.grounded());
+        assertNull(answer.confidence());
+        assertTrue(answer.text().toLowerCase().contains("conseiller"));
+    }
+
+    @Test
+    @DisplayName("an explicit LLM refusal is reported as a fallback, not grounded")
+    void refusalAnswerBecomesFallback() {
+        // GIVEN strong evidence but the LLM emits the canned transfer sentence
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("Contenu de support.", "support-faq#1", "support", 0.9))));
+        generator.setNextAnswer("Je n'ai pas cette information, je vous transfère à un conseiller.");
+
+        // WHEN answering
+        GeneratedAnswer answer = service.answer("Question obscure ?", "support", 4, true);
+
+        // THEN it is a non-grounded fallback
+        assertFalse(answer.grounded());
+        assertNull(answer.confidence());
+    }
+
+    @Test
     @DisplayName("grounding parameters are forwarded unchanged")
     void forwardsParameters() {
         // GIVEN an answerable result

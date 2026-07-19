@@ -65,13 +65,31 @@ class OutputGuardrailTest {
     }
 
     @Test
-    @DisplayName("a blank answer is left to the caller (no false amount block)")
-    void blankAnswerPasses() {
+    @DisplayName("a blank answer is surfaced as a safe hand-off, not a grounded answer")
+    void blankAnswerBlocked() {
         // WHEN the generated answer is blank
-        GuardrailDecision decision = guardrail.check("question", "  ", List.of());
+        GuardrailDecision decision = guardrail.check("Ma box ne marche plus", "  ", List.of());
 
-        // THEN the guardrail passes (blank handling is the wording adapter's concern)
-        assertFalse(decision.blocked());
+        // THEN it is blocked with a low-confidence hand-off (never voiced as grounded)
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
+        assertTrue(decision.fallbackMessage().toLowerCase().contains("conseiller"));
+    }
+
+    @Test
+    @DisplayName("an explicit transfer/refusal answer is surfaced as a hand-off")
+    void refusalAnswerBlocked() {
+        // GIVEN evidence with no amount and the model emits the canned transfer sentence
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Contenu de support.", "support-faq#1", "support", 0.8));
+
+        // WHEN the answer is the instructed refusal
+        GuardrailDecision decision = guardrail.check(
+                "Question obscure ?", "Je n'ai pas cette information, je vous transfère à un conseiller.", evidence);
+
+        // THEN it is blocked rather than reported as a grounded answer
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
     }
 
     @Test

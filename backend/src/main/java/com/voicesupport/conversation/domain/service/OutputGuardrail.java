@@ -4,6 +4,7 @@ import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,8 +22,8 @@ public class OutputGuardrail {
                     + "|\\d\\s?(?:[€$£]|eur|euros?|dollars?|usd|gbp|cents?))");
 
     public GuardrailDecision check(String question, String answer, List<RetrievedEvidence> evidence) {
-        if (answer == null || answer.isBlank()) {
-            return GuardrailDecision.pass();
+        if (isNonAnswer(answer)) {
+            return GuardrailDecision.lowConfidence(GuardrailMessages.lowConfidence(safe(question)));
         }
         Set<String> groundedAmounts = amountsIn(concatenate(evidence));
         for (String amount : amountsIn(answer)) {
@@ -31,6 +32,18 @@ public class OutputGuardrail {
             }
         }
         return GuardrailDecision.pass();
+    }
+
+    // An empty answer, or an explicit "I don't have this, I transfer you to an advisor" refusal,
+    // is a hand-off rather than a grounded answer: surface it as a safe fallback (grounded=false,
+    // no confidence) instead of voicing it with a misleading confidence signal.
+    private boolean isNonAnswer(String answer) {
+        if (answer == null || answer.isBlank()) {
+            return true;
+        }
+        String normalized = answer.toLowerCase(Locale.ROOT);
+        return normalized.contains("transfère à un conseiller")
+                || normalized.contains("transfere a un conseiller");
     }
 
     private Set<String> amountsIn(String text) {

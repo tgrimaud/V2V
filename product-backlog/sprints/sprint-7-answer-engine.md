@@ -450,9 +450,16 @@ safe.
   gated on OpenAI credentials (not yet available)**; `ollama` chat = local alternative
   (selectable, `llama3.1:8b` not pulled on this machine). Swap is config-only, no domain
   change (unit-covered).
+- **Adversarial review 93/100 (QA gate PASS).** No blocking finding. Remediated Low
+  finding: an empty LLM output or an explicit transfer/refusal answer is now surfaced as a
+  safe hand-off (`grounded=false`, no confidence) via `OutputGuardrail.isNonAnswer` instead
+  of being voiced as a grounded answer with a confidence signal (the adapter no longer
+  substitutes a canned sentence). `mvn test` green (**105**, OutputGuardrail 6 / AnswerService
+  6). Non-blocking findings deferred: LLM call timeout + degraded-mode contract → **BE-012**;
+  correlation id + OTel → **BE-009**; provider-swap not automated-tested (covered by design).
 - **Residual risks:** correlation id + OTel spans/metrics (BE-009); degraded-mode error
-  contract if Mistral/Ollama/pgvector down (BE-012); definitive answer/confidence
-  threshold (OQ-002 — provisional 0.5 in effect); conversation memory (BE-006).
+  contract + LLM timeout if Mistral/Ollama/pgvector down or slow (BE-012); definitive
+  answer/confidence threshold (OQ-002 — provisional 0.5 in effect); conversation memory (BE-006).
 
 ### TASK-BE-006 — Conversation endpoint (ADR-0021 contract) + memory
 
