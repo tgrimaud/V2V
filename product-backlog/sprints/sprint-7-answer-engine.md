@@ -588,7 +588,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
 | TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
 | TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | ✅ Validated by user (2026-07-18) — adversarial review 94/100 + QA PASS; `mvn test` 42 green (5 Cucumber BDD scenarios); live latency cold sync p50 1422 ms / warm 5 ms / one-shot ingest 27 ms; merge-ready (awaiting explicit merge) |
-| TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated by user (2026-07-19) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms; merge-ready (awaiting explicit merge) |
+| TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated + merged into `feat/sprint-7-answer-engine` (2026-07-19, ff; branch deleted) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | Planned |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | Planned |
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | Planned (Medium; may defer) |
