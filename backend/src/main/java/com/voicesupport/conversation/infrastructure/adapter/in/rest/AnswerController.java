@@ -31,7 +31,8 @@ public class AnswerController {
     public ResponseEntity<AnswerResponse> answer(@RequestBody AnswerRequest request) {
         long start = System.nanoTime();
         GeneratedAnswer answer = answerQuestionUseCase.answer(
-                request.question(), request.domain(), request.effectiveTopK(), request.effectiveAlreadyGreeted());
+                request.question(), request.domain(), request.effectiveTopK(),
+                request.effectiveAlreadyGreeted(), java.util.List.of());
         logAnswer(request, answer, elapsedMs(start));
         return ResponseEntity.ok(AnswerResponse.from(answer));
     }

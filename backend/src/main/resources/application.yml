@@ -52,6 +52,15 @@ voice-support:
     # best similarity score reaches this threshold. Provisional value per ADR-0021;
     # the definitive answer threshold is gated by OQ-002.
     confidence-threshold: ${CONVERSATION_CONFIDENCE_THRESHOLD:0.5}
+    # ADR-0021 conversation endpoint (POST /api/conversation/converse). Optional shared
+    # secret: when set, requests must carry a matching x-api-key header. Empty = open (pilot).
+    api-key: ${CONVERSATION_API_KEY:}
+    memory:
+      # Short conversation memory (TASK-BE-006): prior turns per conversation placed in the
+      # LLM system message (current turn excluded). Process-local; a shared store is a later
+      # concern. max-turns = retained exchanges/conversation; max-conversations = LRU cap.
+      max-turns: ${CONVERSATION_MEMORY_MAX_TURNS:6}
+      max-conversations: ${CONVERSATION_MEMORY_MAX_CONVERSATIONS:10000}
   llm:
     # LLM wording provider (DEC-011), selectable without any domain change:
     #   mistral-api = development default (mistral-small-latest)

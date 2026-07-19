@@ -518,6 +518,47 @@ already calls.
   greeting logic behaves (empty history detected correctly).
 - No raw transcript/answer or secret appears in responses/logs.
 
+**Implementation (2026-07-19) — branch `task/TASK-BE-006-conversation-endpoint`:**
+- **Endpoint:** `POST /api/conversation/converse` (`ConverseController`) binds the
+  ADR-0021 snake_case contract (`transcript`, `conversation_id`, `correlation_id`,
+  `channel`) via the shared `JacksonConfig` and returns `{text, confidence?}`
+  (`confidence` omitted when the answer is a guardrail fallback, `NON_NULL`). A
+  blank transcript short-circuits to a safe, digit-free listen prompt (no
+  embedding/LLM). `x-api-key` is enforced only when
+  `voice-support.conversation.api-key` is set (open on the pilot host otherwise).
+- **Memory:** `ConversationTurn` VO + `ConversationMemoryPort` (out) +
+  `InMemoryConversationMemoryAdapter` (process-local, bounded: `max-turns`
+  exchanges/conversation, LRU cap `max-conversations`, thread-safe). Prior turns
+  are read **before** the current turn is appended, so the history passed to the
+  LLM **excludes the current turn** and `already_greeted` is derived from
+  non-empty history — closing the greeting/duplication bugs in project history.
+- **Orchestration:** `ConverseUseCase` / `ConversationService` reuses the BE-005
+  pipeline. `AnswerQuestionUseCase.answer(...)` gained a `history` parameter
+  (placed in the system message by the wording adapter); retrieval spans all
+  domains (`domain=null`, `topK=4`, no classifier in V1 here). Grounding, DEC-002
+  output guardrail and safe fallbacks are inherited unchanged.
+- **Observability:** privacy-safe `[CONVERSE]` structured log per turn
+  (`channel`, `conversation_id`, `correlation_id`, `grounded`, `confidence`,
+  `chars`, `duration_ms`) — never the raw transcript/answer or a secret.
+- **Tests:** +16 (total **121**, `mvn test` green, no DB/Ollama needed):
+  `ConversationServiceTest` (history/greeting/isolation/record),
+  `InMemoryConversationMemoryAdapterTest` (bounded, LRU, blank-id safe, ordering),
+  `ConverseControllerTest` (contract + blank prompt), `ConverseControllerApiKeyTest`
+  (401 missing/wrong, 200 matching), BDD `conversation-memory.feature` (3 scenarios).
+- **Live validation (Postgres pgvector 5433 + Ollama embeddings + real Mistral
+  `mistral-small-latest`, warm; server-side `[CONVERSE] duration_ms`):**
+  - T1 `Bonjour` → greeting, `grounded=false`, no LLM (guardrail short-circuit, ~1 ms).
+  - T2 `Pourquoi ma facture a augmenté ce mois-ci ?` → grounded answer
+    (`confidence≈0.74`, 2.14 s), **no invented amount** (points to the customer area / 3900).
+  - T3 `Et comment puis-je éviter cela le mois prochain ?` → the follow-up correctly
+    resolves `cela` to T2's bill increase (**multi-turn context honored**),
+    `grounded=true` (`confidence≈0.68`, 1.21 s).
+  - DEC-002 spot-check `Combien exactement vais-je payer ?` → safe hand-off, **no figure**.
+  - Blank transcript → safe listen prompt (200). `[CONVERSE]` logs carry lengths
+    + correlation id only (no transcript/answer text).
+- **Status:** implementation + 121 tests + live multi-turn validation done. Pending:
+  adversarial review, then QA acceptance. Merge on the user's explicit request.
+
 ### TASK-BE-007 — Streaming-token answer (SSE, ADR-0013)
 
 **Goal:** Stream the answer tokens so the voice runtime can start TTS on the first

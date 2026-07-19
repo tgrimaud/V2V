@@ -1,14 +1,18 @@
 package com.voicesupport.conversation.infrastructure.config;
 
 import com.voicesupport.conversation.application.service.AnswerService;
+import com.voicesupport.conversation.application.service.ConversationService;
 import com.voicesupport.conversation.application.service.RetrievalGroundingService;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
+import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
+import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,5 +50,19 @@ public class ConversationConfig {
             AnswerGeneratorPort answerGeneratorPort,
             OutputGuardrail outputGuardrail) {
         return new AnswerService(groundQueryUseCase, answerGeneratorPort, outputGuardrail);
+    }
+
+    @Bean
+    public ConversationMemoryPort conversationMemoryPort(
+            @Value("${voice-support.conversation.memory.max-turns:6}") int maxTurns,
+            @Value("${voice-support.conversation.memory.max-conversations:10000}") int maxConversations) {
+        return new InMemoryConversationMemoryAdapter(maxTurns, maxConversations);
+    }
+
+    @Bean
+    public ConverseUseCase converseUseCase(
+            AnswerQuestionUseCase answerQuestionUseCase,
+            ConversationMemoryPort conversationMemoryPort) {
+        return new ConversationService(answerQuestionUseCase, conversationMemoryPort);
     }
 }

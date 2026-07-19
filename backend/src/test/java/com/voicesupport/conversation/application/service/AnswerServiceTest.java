@@ -39,7 +39,7 @@ class AnswerServiceTest {
         grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Hors domaine.")));
 
         // WHEN answering
-        GeneratedAnswer answer = service.answer("Quel temps fait-il ?", "billing", 4, true);
+        GeneratedAnswer answer = service.answer("Quel temps fait-il ?", "billing", 4, true, List.of());
 
         // THEN the fallback is returned, not grounded, and the LLM was never invoked
         assertFalse(answer.grounded());
@@ -58,7 +58,7 @@ class AnswerServiceTest {
         generator.setNextAnswer("Votre facture varie à cause de la proration lors d'un changement d'offre.");
 
         // WHEN answering
-        GeneratedAnswer answer = service.answer("Pourquoi ma facture change ?", "billing", 4, true);
+        GeneratedAnswer answer = service.answer("Pourquoi ma facture change ?", "billing", 4, true, List.of());
 
         // THEN it is grounded, confidence is the best evidence score, LLM saw the evidence
         assertTrue(answer.grounded());
@@ -77,7 +77,7 @@ class AnswerServiceTest {
         generator.setNextAnswer("Votre facture est de 39,99 € ce mois-ci.");
 
         // WHEN answering
-        GeneratedAnswer answer = service.answer("Combien je paie ?", "billing", 4, true);
+        GeneratedAnswer answer = service.answer("Combien je paie ?", "billing", 4, true, List.of());
 
         // THEN the invented amount is not voiced; a safe fallback is returned instead
         assertFalse(answer.grounded());
@@ -94,7 +94,7 @@ class AnswerServiceTest {
         generator.setNextAnswer("   ");
 
         // WHEN answering
-        GeneratedAnswer answer = service.answer("Pourquoi ma facture change ?", "billing", 4, true);
+        GeneratedAnswer answer = service.answer("Pourquoi ma facture change ?", "billing", 4, true, List.of());
 
         // THEN a safe hand-off is returned without a misleading confidence signal
         assertFalse(answer.grounded());
@@ -111,7 +111,7 @@ class AnswerServiceTest {
         generator.setNextAnswer("Je n'ai pas cette information, je vous transfère à un conseiller.");
 
         // WHEN answering
-        GeneratedAnswer answer = service.answer("Question obscure ?", "support", 4, true);
+        GeneratedAnswer answer = service.answer("Question obscure ?", "support", 4, true, List.of());
 
         // THEN it is a non-grounded fallback
         assertFalse(answer.grounded());
@@ -126,7 +126,7 @@ class AnswerServiceTest {
                 new RetrievedEvidence("ctx", "s1", "support", 0.7))));
 
         // WHEN answering with explicit parameters
-        service.answer("Comment configurer ma box ?", "support", 6, true);
+        service.answer("Comment configurer ma box ?", "support", 6, true, List.of());
 
         // THEN the grounding pipeline received them verbatim
         assertEquals("Comment configurer ma box ?", grounding.lastQuestion);

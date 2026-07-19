@@ -39,7 +39,8 @@ class AnswerControllerTest {
     // Stub: a grounded answer for billing questions, otherwise a non-grounded fallback.
     static class StubAnswerQuestionUseCase implements AnswerQuestionUseCase {
         @Override
-        public GeneratedAnswer answer(String question, String domain, int topK, boolean alreadyGreeted) {
+        public GeneratedAnswer answer(String question, String domain, int topK, boolean alreadyGreeted,
+                                      java.util.List<String> history) {
             if (question != null && question.toLowerCase().contains("facture")) {
                 return GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
             }
