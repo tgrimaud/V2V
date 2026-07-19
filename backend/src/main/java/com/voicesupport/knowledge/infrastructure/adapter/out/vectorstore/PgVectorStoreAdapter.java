@@ -78,11 +78,15 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
 
     // Restrict results to the requested domain plus the shared "general" domain.
     // A null/blank domain means no domain restriction (search the whole store).
+    // An explicit "general" resolves to the shared domain only (never cross-domain).
     private Filter.Expression buildDomainFilter(String domain) {
-        if (domain == null || domain.isBlank() || SHARED_DOMAIN.equals(domain)) {
+        if (domain == null || domain.isBlank()) {
             return null;
         }
         FilterExpressionBuilder fb = new FilterExpressionBuilder();
+        if (SHARED_DOMAIN.equals(domain)) {
+            return fb.eq("domain", SHARED_DOMAIN).build();
+        }
         return fb.or(fb.eq("domain", domain), fb.eq("domain", SHARED_DOMAIN)).build();
     }
 

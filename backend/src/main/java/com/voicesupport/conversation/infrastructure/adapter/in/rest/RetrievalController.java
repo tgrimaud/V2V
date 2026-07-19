@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Locale;
 
 // Retrieval + guardrails validation surface (TASK-BE-004). Runs the pre-LLM grounding
 // pipeline and returns the guardrail decision plus grounded evidence. The full
@@ -43,7 +44,7 @@ public class RetrievalController {
         log.info("[GROUNDING] domain={} top_k={} answerable={} verdict={} hits={} best_score={} duration_ms={}",
                 request.domain() != null ? request.domain() : "any", request.effectiveTopK(),
                 result.answerable(), result.decision().verdict(), evidence.size(),
-                String.format("%.4f", bestScore), durationMs);
+                String.format(Locale.ROOT, "%.4f", bestScore), durationMs);
     }
 
     private static long elapsedMs(long startNanos) {
