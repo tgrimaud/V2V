@@ -116,6 +116,8 @@ against the new empty-codebase plan.
 | TASK-BE-008 | Wire `voice-agent --backend http` end to end to the real endpoint (stub → real) | V1 core | Planned (Sprint 7) | High |
 | TASK-BE-009 | Backend observability: OTel traces/metrics/logs across guardrails, retrieval, LLM (DEC-010, ADR-0010) | V1 pilot gate | Planned (Sprint 7) | High |
 | TASK-BE-010 | QA functional + latency report (RAG + LLM slices; composite with real backend) + adversarial review | V1 pilot gate | Planned (Sprint 7) | High |
+| TASK-BE-011 | CSV article connector — bulk KB ingestion from `articles.csv` (HTML→text, batch embedding) | V1 core (KB content) | Planned (out of Sprint 7 theme) | High |
+| TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`, sanitized, correlation id) | V1 hardening | Planned (out of Sprint 7 core theme) | Medium |
 
 ## Planned Sprints
 

@@ -348,6 +348,12 @@ after retrieval.
   `InputGuardrailTest` (23), `RetrievalConfidenceGuardrailTest` (4),
   `RetrievalGroundingServiceTest` (5), `KnowledgeRetrievalServiceTest` (4). ArchUnit
   context boundary held (seam wiring moved into the seam package `KnowledgeSeamConfig`).
+- **Adversarial review 93/100 (QA gate PASS)** after remediation (commit `4de737f`):
+  added `RetrievalControllerTest` (`@WebMvcTest`, imports `JacksonConfig` so the
+  snake_case contract is exercised); `domain="general"` now filters to the shared
+  domain only (no cross-domain leak); `[GROUNDING]` score formatted with `Locale.ROOT`.
+  `mvn test` green (80). Deferred non-blocking findings: correlation id + OTel →
+  **TASK-BE-009**; REST error contract / degraded-mode leak → **TASK-BE-012** (created).
 
 ### TASK-BE-005 — LLM wording step (provider-agnostic, grounded)
 
