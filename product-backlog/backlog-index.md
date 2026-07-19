@@ -109,7 +109,7 @@ against the new empty-codebase plan.
 | TASK-BE-001 | Decide the backend answer-engine framework (Spring AI vs LangChain4J vs other) + ADR (closes OQ-007) | Decision / Architecture | ✅ Done (2026-07-18) — Spring Boot + Spring AI (ADR-0026) + Hive-light decomposition (ADR-0027); OpenJDK 17 baseline | High |
 | TASK-BE-002 | Scaffold the Java backend module on the restart branch (hexagonal skeleton, build + ArchUnit green) | V1 enabler | ✅ Validated by user (2026-07-18) — context-first ADR-0027 scaffold, 19 tests green on OpenJDK 17, review 94/100 + QA PASS; merge-ready | High |
 | TASK-BE-003 | Knowledge-base ingestion socle (pivot + Markdown connector + idempotent sync + pgvector 768 + swappable embedding adapter) | V1 enabler | Planned (Sprint 7) | High |
-| TASK-BE-004 | RAG retrieval + domain guardrails before/after (ADR-0014) | V1 core | Planned (Sprint 7) | High |
+| TASK-BE-004 | RAG retrieval + domain guardrails before/after (ADR-0014) | V1 core | ✅ Validated by user (2026-07-19) — review 93/100 + QA GO; `mvn test` 86 green; live RAG retrieval p95 37 ms warm; merge-ready | High |
 | TASK-BE-005 | Provider-agnostic LLM wording (Mistral API default, Ollama alt), grounded + no invented amounts (DEC-002) | V1 core | Planned (Sprint 7) | High |
 | TASK-BE-006 | Conversation endpoint implementing the ADR-0021 contract + short conversation memory | V1 core | Planned (Sprint 7) | High |
 | TASK-BE-007 | Streaming-token answer (SSE) per ADR-0013 — `backend.first_token` ≠ `backend.request` (RF-021) | V1 core | Planned (Sprint 7; Medium, may defer) | Medium |
