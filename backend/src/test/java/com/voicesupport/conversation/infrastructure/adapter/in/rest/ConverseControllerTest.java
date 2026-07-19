@@ -48,6 +48,16 @@ class ConverseControllerTest {
     }
 
     @Test
+    @DisplayName("a request without a conversation id is answered (stateless), not rejected")
+    void missingConversationIdIsAccepted() throws Exception {
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transcript\":\"Pourquoi ma facture change ?\",\"channel\":\"web\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("La proration explique l'écart."));
+    }
+
+    @Test
     @DisplayName("a blank transcript returns a safe listen prompt without an amount")
     void blankTranscriptReturnsListenPrompt() throws Exception {
         mockMvc.perform(post("/api/conversation/converse")

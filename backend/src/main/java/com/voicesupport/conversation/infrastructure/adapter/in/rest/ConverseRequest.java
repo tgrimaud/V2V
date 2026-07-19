@@ -12,7 +12,7 @@ public record ConverseRequest(
         return transcript != null && !transcript.isBlank();
     }
 
-    public String safeConversationId() {
-        return conversationId == null || conversationId.isBlank() ? "default" : conversationId;
+    public boolean hasConversationId() {
+        return conversationId != null && !conversationId.isBlank();
     }
 }

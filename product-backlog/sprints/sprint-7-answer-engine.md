@@ -556,8 +556,20 @@ already calls.
   - DEC-002 spot-check `Combien exactement vais-je payer ?` → safe hand-off, **no figure**.
   - Blank transcript → safe listen prompt (200). `[CONVERSE]` logs carry lengths
     + correlation id only (no transcript/answer text).
-- **Status:** implementation + 121 tests + live multi-turn validation done. Pending:
-  adversarial review, then QA acceptance. Merge on the user's explicit request.
+- **Adversarial review (2026-07-19): 92/100, QA gate Pass.** No blocking finding, no
+  functional bug, no boundary violation; tests at every level; behavior observable via
+  privacy-safe `[CONVERSE]` logs. Residuals (all ticketed/accepted): OTel spans+metrics
+  deferred to BE-009 (latency still derivable from `duration_ms`), Java-side LLM
+  timeout + global degraded contract deferred to BE-012 (a hard failure returns 500 and
+  the voice runtime degrades it to a safe spoken turn), non-constant-time api-key compare.
+- **Review remediation (Medium finding fixed):** a missing/blank `conversation_id` is now
+  **stateless** (empty history, no persistence) instead of a shared `"default"` memory
+  bucket — removes the cross-caller context-bleed privacy risk. Added
+  `ConversationServiceTest.blankConversationIdIsStateless` +
+  `ConverseControllerTest.missingConversationIdIsAccepted`. Tests now **123** green.
+- **Status:** implementation + 123 tests + live multi-turn validation + adversarial review
+  (92/100, remediated) done. Pending: QA functional + latency acceptance. Merge on the
+  user's explicit request.
 
 ### TASK-BE-007 — Streaming-token answer (SSE, ADR-0013)
 

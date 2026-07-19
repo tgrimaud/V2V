@@ -47,7 +47,10 @@ public class ConverseController {
             return ResponseEntity.ok(ConverseResponse.of(LISTEN_PROMPT));
         }
         long start = System.nanoTime();
-        GeneratedAnswer answer = converseUseCase.converse(request.transcript(), request.safeConversationId());
+        // A missing/blank conversation id is treated as stateless (no shared memory bucket):
+        // the memory adapter returns empty history and skips persistence, so callers that omit
+        // the id can never see each other's turns.
+        GeneratedAnswer answer = converseUseCase.converse(request.transcript(), request.conversationId());
         logTurn(request, answer, elapsedMs(start));
         return ResponseEntity.ok(ConverseResponse.from(answer));
     }
@@ -59,7 +62,7 @@ public class ConverseController {
     private void logTurn(ConverseRequest request, GeneratedAnswer answer, long durationMs) {
         log.info("[CONVERSE] channel={} conversation_id={} correlation_id={} grounded={} confidence={} "
                         + "chars={} duration_ms={}",
-                nullSafe(request.channel()), request.safeConversationId(), nullSafe(request.correlationId()),
+                nullSafe(request.channel()), nullSafe(request.conversationId()), nullSafe(request.correlationId()),
                 answer.grounded(), formatConfidence(answer.confidence()),
                 answer.text() != null ? answer.text().length() : 0, durationMs);
     }

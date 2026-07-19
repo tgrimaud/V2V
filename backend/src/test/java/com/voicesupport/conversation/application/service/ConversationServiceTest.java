@@ -77,6 +77,20 @@ class ConversationServiceTest {
     }
 
     @Test
+    @DisplayName("a missing conversation id is stateless: no history in, nothing recorded")
+    void blankConversationIdIsStateless() {
+        // WHEN two turns are answered without a conversation id
+        service.converse("Première question", "");
+        service.converse("Deuxième question", "");
+
+        // THEN neither turn sees prior history nor is flagged greeted (no shared bucket)
+        assertTrue(answerUseCase.lastHistory.isEmpty());
+        assertFalse(answerUseCase.lastAlreadyGreeted);
+        // AND nothing is persisted under the blank id
+        assertTrue(memory.recentTurns("").isEmpty());
+    }
+
+    @Test
     @DisplayName("conversations are isolated: one conversation's history never leaks into another")
     void conversationsAreIsolated() {
         // GIVEN a turn recorded on c1
