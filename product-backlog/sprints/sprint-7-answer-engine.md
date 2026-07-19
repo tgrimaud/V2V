@@ -461,6 +461,38 @@ safe.
   contract + LLM timeout if Mistral/Ollama/pgvector down or slow (BE-012); definitive
   answer/confidence threshold (OQ-002 — provisional 0.5 in effect); conversation memory (BE-006).
 
+**QA — functional + latency (2026-07-19): GO.**
+- **Functional (BDD):** `answer-wording.feature` — 3 product-observable Cucumber scenarios
+  wired to domain fakes (no infra), green in `mvn test` (**105 tests**, BDD suite 14):
+  grounded wording from strong evidence; DEC-002 amount block → safe hand-off; blocked
+  input never calls the LLM.
+
+  | Acceptance criterion | Status | Evidence |
+  |---|---|---|
+  | Answers grounded in KB, never a specific invoice amount | PASS | BDD amount-block; live: "combien exactement" → hand-off, **no figure** |
+  | Provider swappable via config, no domain change | PASS (design) | `voice-support.llm.provider` → `LlmConfig`; embeddings stay Ollama. OpenAI **gated creds**; Ollama chat not pulled |
+  | Low/absent-evidence → safe non-committal answer | PASS | live: off-topic + obscure → hand-off (`grounded=false`), never invented |
+  | Answer in caller's language, concise for voice | PASS | live: EN question → grounded EN answer |
+
+- **Latency (live, Postgres pgvector 5433 + Ollama embeddings, **real Mistral API
+  `mistral-small-latest`**, web/local, warm cache; server-side `[ANSWER] duration_ms`):**
+
+  | Slice | p50 | p95 | p99 | Sample | Warm/Cold | Notes |
+  |---|---:|---:|---:|---:|---|---|
+  | Grounded answer (retrieval + LLM wording + guardrails) | 1088 ms | 1592 ms | 1865 ms | 17 | Warm | Mistral cloud is the dominant contributor (retrieval ~40 ms) |
+  | Input-guardrail short-circuit (no LLM/retrieval) | 0 ms | 0 ms | 0 ms | 6 | Warm | off-topic caught by keywords → 0 ms, proves no embed/LLM on block |
+  | Post-LLM safe hand-off (off-topic passthrough) | 649 ms | 1515 ms | — | 5 | Warm | novel off-topic not caught by keywords → retrieval+LLM → refusal → `grounded=false` |
+
+  LLM wording (~1.1 s p50 / ~1.6 s p95) is the dominant slice of the ADR-0018 voice
+  composite; model/provider choice is the latency lever (STT/TTS measured separately).
+  No sensitive data in logs (question/answer/evidence text not logged).
+- **QA finding (Low, non-blocking):** the input guardrail is keyword-based, so a novel
+  off-topic question (recipe, sports) it does not recognize still reaches retrieval + LLM
+  and is handled as a **safe non-grounded hand-off** (never a wrong grounded answer), but at
+  LLM latency + token cost. Product-safe; flag for guardrail-coverage / semantic-gate tuning
+  (OQ-002 / a future guardrail follow-up), not a BE-005 blocker.
+- **Recommendation:** GO for BE-005. Merge-ready on the user's explicit request.
+
 ### TASK-BE-006 — Conversation endpoint (ADR-0021 contract) + memory
 
 **Goal:** Expose the answer engine over the exact HTTP contract the voice runtime
