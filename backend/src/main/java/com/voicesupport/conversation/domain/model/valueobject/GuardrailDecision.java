@@ -7,7 +7,8 @@ public record GuardrailDecision(Verdict verdict, String fallbackMessage) {
         GREETING,
         OFF_TOPIC,
         INAPPROPRIATE,
-        LOW_CONFIDENCE
+        LOW_CONFIDENCE,
+        UNGROUNDED
     }
 
     public boolean blocked() {
@@ -32,5 +33,9 @@ public record GuardrailDecision(Verdict verdict, String fallbackMessage) {
 
     public static GuardrailDecision lowConfidence(String message) {
         return new GuardrailDecision(Verdict.LOW_CONFIDENCE, message);
+    }
+
+    public static GuardrailDecision ungrounded(String message) {
+        return new GuardrailDecision(Verdict.UNGROUNDED, message);
     }
 }

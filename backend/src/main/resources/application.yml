@@ -19,6 +19,16 @@ spring:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       embedding:
         model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+      chat:
+        model: ${OLLAMA_CHAT_MODEL:llama3.1:8b}
+        options:
+          temperature: 0.3
+    mistralai:
+      api-key: ${MISTRAL_API_KEY:}
+      chat:
+        options:
+          model: ${MISTRAL_CHAT_MODEL:mistral-small-latest}
+          temperature: 0.3
     vectorstore:
       pgvector:
         # Embedding dimension is fixed at table creation. Changing the embedding
@@ -42,3 +52,9 @@ voice-support:
     # best similarity score reaches this threshold. Provisional value per ADR-0021;
     # the definitive answer threshold is gated by OQ-002.
     confidence-threshold: ${CONVERSATION_CONFIDENCE_THRESHOLD:0.5}
+  llm:
+    # LLM wording provider (DEC-011), selectable without any domain change:
+    #   mistral-api = development default (mistral-small-latest)
+    #   ollama      = local/offline alternative (llama3.1:8b)
+    # Embeddings always stay on Ollama (nomic-embed-text, 768d); this only selects chat.
+    provider: ${LLM_PROVIDER:mistral-api}

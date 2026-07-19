@@ -53,4 +53,16 @@ final class GuardrailMessages {
                 : "Je n'ai pas assez d'informations fiables pour répondre à cette question. "
                   + "Souhaitez-vous que je vous mette en relation avec un conseiller ?";
     }
+
+    // DEC-002: the assistant must never state a specific billing amount that is not backed
+    // by source evidence. When the output guardrail catches an ungrounded amount, we drop
+    // the generated text and offer a safe hand-off rather than voicing an invented figure.
+    static String ungroundedAmount(String text) {
+        return isEnglish(text)
+                ? "I can't confirm a specific amount without checking your account. "
+                  + "Would you like me to connect you with a support agent who can review your billing details?"
+                : "Je ne peux pas confirmer de montant précis sans vérifier votre dossier. "
+                  + "Souhaitez-vous que je vous mette en relation avec un conseiller qui pourra "
+                  + "consulter le détail de votre facturation ?";
+    }
 }

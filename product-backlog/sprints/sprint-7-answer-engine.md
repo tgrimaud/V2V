@@ -412,6 +412,48 @@ safe.
 - A low/absent-evidence case yields a safe, non-committal answer (not an invented
   one).
 
+**Result (2026-07-19) — implementation + tests + live validation done (branch
+`task/TASK-BE-005-llm-wording`); adversarial review + QA gate next.**
+- **Wording port + adapters (conversation infra):** `AnswerGeneratorPort` (domain
+  out) with `AbstractChatClientAnswerAdapter` (builds the grounded system message from
+  `RetrievedEvidence`, history goes in the system message — not the user turn) +
+  `MistralAnswerAdapter` / `OllamaAnswerAdapter`. Provider selected by
+  `voice-support.llm.provider` in `LlmConfig` (Mistral chat model built manually);
+  `VoiceSupportApplication` now excludes the Mistral chat/embedding/moderation
+  auto-configs so **embeddings stay Ollama (768d)** and chat is wired by hand. Added the
+  `spring-ai-starter-model-mistral-ai` dependency.
+- **Output guardrail (DEC-002):** `OutputGuardrail` (domain) blocks any currency amount
+  present in the answer but absent from the evidence (`UNGROUNDED` verdict → safe
+  fr/en hand-off), so a fabricated figure is never voiced even if the model produces one.
+  The provider prompt also forbids stating an unbacked amount — two layers of DEC-002.
+- **Application + surface:** `AnswerService` (implements `AnswerQuestionUseCase`) composes
+  BE-004 grounding → LLM wording → output guardrail → `GeneratedAnswer(text, confidence,
+  grounded)`; confidence = retrieval best score (provisional, ADR-0021 / OQ-002). Blocked
+  or ungrounded cases return a safe fallback (`grounded=false`, no confidence), never an
+  invented answer. Exposed at `POST /api/conversation/answer` with structured `[ANSWER]`
+  logs (`domain / top_k / grounded / confidence / chars / duration_ms`); the full ADR-0021
+  contract (exact field names, api-key, memory, streaming) stays **BE-006**.
+- **Live validation** (Postgres `pgvector` 5433 + Ollama embeddings, **real Mistral API
+  `mistral-small-latest`**, 41 KB chunks): (1) in-domain billing → grounded FR answer,
+  `confidence≈0.75`, LLM ~1.7 s; (2) "combien exactement vais-je payer" → model refuses
+  and offers a conseiller, **no amount invented** (DEC-002); (3) off-topic → canned
+  fallback, `grounded=false`, no LLM (~0–3 ms); (4) English support question → grounded
+  **English** answer (`confidence≈0.70`), language follows the caller; (5) obscure
+  question → refused. Grounded LLM turns ~0.8–1.7 s (Mistral cloud is the dominant slice);
+  blocked inputs short-circuit with no LLM/retrieval.
+- `mvn test` green (**102 tests**, no infra): `OutputGuardrailTest` (5), `AnswerServiceTest`
+  (4), `AbstractChatClientAnswerAdapterTest` (2), `AnswerControllerTest` (`@WebMvcTest`,
+  imports `JacksonConfig`) (2); BDD suite 14 (added `answer-wording.feature`: grounded
+  wording / DEC-002 amount block / blocked input never calls the LLM). ArchUnit + context
+  boundary held.
+- **Provider swap:** `openai` = POC target, adapter to the same port, **live validation
+  gated on OpenAI credentials (not yet available)**; `ollama` chat = local alternative
+  (selectable, `llama3.1:8b` not pulled on this machine). Swap is config-only, no domain
+  change (unit-covered).
+- **Residual risks:** correlation id + OTel spans/metrics (BE-009); degraded-mode error
+  contract if Mistral/Ollama/pgvector down (BE-012); definitive answer/confidence
+  threshold (OQ-002 — provisional 0.5 in effect); conversation memory (BE-006).
+
 ### TASK-BE-006 — Conversation endpoint (ADR-0021 contract) + memory
 
 **Goal:** Expose the answer engine over the exact HTTP contract the voice runtime
