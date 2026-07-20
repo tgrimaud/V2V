@@ -1,6 +1,5 @@
 package com.voicesupport.conversation.infrastructure.config;
 
-import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.infrastructure.adapter.out.llm.MistralAnswerAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.llm.OllamaAnswerAdapter;
 import com.voicesupport.shared.observability.BackendTelemetry;
@@ -80,9 +79,12 @@ public class LlmConfig {
         return ChatClient.builder(chatModel).build();
     }
 
+    // Returns the concrete adapter type so the single instance resolves for both the sync
+    // AnswerGeneratorPort and the StreamingAnswerGeneratorPort (TASK-BE-007); both are implemented
+    // by AbstractChatClientAnswerAdapter.
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
-    public AnswerGeneratorPort mistralAnswerGenerator(
+    public MistralAnswerAdapter mistralAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
         return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs);
@@ -90,7 +92,7 @@ public class LlmConfig {
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama")
-    public AnswerGeneratorPort ollamaAnswerGenerator(
+    public OllamaAnswerAdapter ollamaAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
         return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs);

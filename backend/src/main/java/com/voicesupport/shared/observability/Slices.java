@@ -8,6 +8,11 @@ public final class Slices {
     public static final String BACKEND_REQUEST = "backend_request";
     public static final String RETRIEVAL = "retrieval";
     public static final String LLM_WORDING = "llm_wording";
+    // Streaming first-token slices (TASK-BE-007): time-to-first-token from the LLM stream and
+    // time-to-first-emitted-chunk from the backend, distinct from the full-completion slices
+    // above so first-token latency (RF-021) is reported separately from total answer time.
+    public static final String LLM_FIRST_TOKEN = "llm_first_token";
+    public static final String BACKEND_FIRST_TOKEN = "backend_first_token";
 
     private Slices() {
     }

@@ -53,6 +53,13 @@ public class BackendTelemetry {
                 .filter(s -> !s.isBlank()).collect(Collectors.toUnmodifiableSet());
     }
 
+    // One-shot latency recording for streamed slices (TASK-BE-007): first-token and stream-total
+    // timings are measured by the caller (there is no Supplier to wrap around a push stream), so
+    // they are recorded on the same timer/log as time(...) with an explicit outcome.
+    public void recordLatency(String slice, String provider, String outcome, Duration elapsed) {
+        record(slice, provider, outcome == null ? OUTCOME_SUCCESS : outcome, elapsed.toNanos());
+    }
+
     public <T> T time(String slice, String provider, Supplier<T> work) {
         long start = System.nanoTime();
         String outcome = OUTCOME_SUCCESS;

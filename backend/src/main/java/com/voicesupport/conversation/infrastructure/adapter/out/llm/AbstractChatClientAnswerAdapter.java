@@ -2,11 +2,13 @@ package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.Slices;
 import org.springframework.ai.chat.client.ChatClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -15,6 +17,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 // Provider-agnostic base for the LLM wording step: builds a grounded system message from the
@@ -23,7 +26,8 @@ import java.util.stream.Collectors;
 // the provider-specific system prompt and provider name. The domain talks to AnswerGeneratorPort,
 // never to the SDK. The LLM call is timed as the ADR-0018 LLM slice (TASK-BE-009) and bounded by
 // a hard timeout so a slow/hung provider degrades to a sanitized 503 (TASK-BE-012).
-public abstract class AbstractChatClientAnswerAdapter implements AnswerGeneratorPort {
+public abstract class AbstractChatClientAnswerAdapter
+        implements AnswerGeneratorPort, StreamingAnswerGeneratorPort {
 
     private static final String CONTEXT_PLACEHOLDER = "{context}";
     private static final String HISTORY_HEADER =
@@ -97,6 +101,42 @@ public abstract class AbstractChatClientAnswerAdapter implements AnswerGenerator
 
     private String invoke(String systemMessage, String question) {
         return chatClient.prompt().system(systemMessage).user(question).call().content();
+    }
+
+    // Streaming generation (TASK-BE-007): drives the provider's reactive stream as a blocking Java
+    // Stream (toStream) so Reactor never leaks past this adapter, forwarding each raw token to the
+    // domain consumer. Records llm_first_token (start -> first token) and llm_wording (full stream)
+    // separately so first-token latency is reported apart from total answer time.
+    @Override
+    public void generate(
+            String question, List<RetrievedEvidence> evidence, List<String> history, Consumer<String> onToken) {
+        String systemMessage = buildSystemMessage(evidence, history);
+        long start = System.nanoTime();
+        boolean[] firstSeen = {false};
+        try {
+            streamContent(systemMessage, question == null ? "" : question)
+                    .forEach(token -> forwardToken(token, onToken, firstSeen, start));
+            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "success", elapsed(start));
+        } catch (RuntimeException e) {
+            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "error", elapsed(start));
+            throw new UpstreamUnavailableException("LLM streaming call failed", e);
+        }
+    }
+
+    private java.util.stream.Stream<String> streamContent(String systemMessage, String question) {
+        return chatClient.prompt().system(systemMessage).user(question).stream().content().toStream();
+    }
+
+    private void forwardToken(String token, Consumer<String> onToken, boolean[] firstSeen, long start) {
+        if (!firstSeen[0]) {
+            firstSeen[0] = true;
+            telemetry.recordLatency(Slices.LLM_FIRST_TOKEN, providerName(), "success", elapsed(start));
+        }
+        onToken.accept(token);
+    }
+
+    private static Duration elapsed(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos);
     }
 
     protected String buildSystemMessage(List<RetrievedEvidence> evidence, List<String> history) {

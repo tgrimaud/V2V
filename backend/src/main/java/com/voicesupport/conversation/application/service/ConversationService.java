@@ -5,8 +5,8 @@ import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
+import com.voicesupport.conversation.domain.service.ConversationHistoryFormatter;
 
-import java.util.ArrayList;
 import java.util.List;
 
 // Stateful conversation orchestration (TASK-BE-006): loads the prior turns for a
@@ -31,17 +31,8 @@ public class ConversationService implements ConverseUseCase {
         List<ConversationTurn> priorTurns = memory.recentTurns(conversationId);
         boolean alreadyGreeted = !priorTurns.isEmpty();
         GeneratedAnswer answer = answerQuestionUseCase.answer(
-                transcript, null, DEFAULT_TOP_K, alreadyGreeted, formatHistory(priorTurns));
+                transcript, null, DEFAULT_TOP_K, alreadyGreeted, ConversationHistoryFormatter.format(priorTurns));
         memory.append(conversationId, new ConversationTurn(transcript, answer.text()));
         return answer;
-    }
-
-    private List<String> formatHistory(List<ConversationTurn> turns) {
-        List<String> lines = new ArrayList<>(turns.size() * 2);
-        for (ConversationTurn turn : turns) {
-            lines.add("Client : " + turn.userText());
-            lines.add("Assistant : " + turn.assistantText());
-        }
-        return lines;
     }
 }
