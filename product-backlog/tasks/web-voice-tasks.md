@@ -1399,3 +1399,103 @@ Scenario: Channel egress is folded into the perceived latency
 - Updated ADR-0018 / ADR-0029 evidence + streaming QA report go/no-go.
 - **Closes the ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known gap.**
 - No API key / raw audio / path leak.
+
+---
+
+## TASK-WEB-015 - Perceived-Latency Optimization Levers (Backend-Stream-To-TTS, Connect-Time Warm-Up, End-Of-Turn Hold)
+
+**Parent:** EPIC-010 (+ EPIC-004, EPIC-005)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop), US-040 (pilot readiness)
+**Related decisions:** ADR-0029 (pilot criterion: mouth-to-ear p95 ≤ 1.5 s /
+`time_to_first_audio` p95 ≤ 1.2 s — the target this ticket optimizes toward),
+ADR-0012 (**modular cascade reaffirmed for V1** — so lever 1 below is a keeper, not
+throwaway), OQ-005 ("OpenAI" in V1 = cascade chat provider, **not** Realtime
+speech-to-speech), TASK-WEB-011 (TTS pre-warm — the precedent for lever 2)
+**Depends on:** TASK-WEB-014 (mouth-to-ear measurement — **optimize against a real
+instrumented baseline, not blind**)
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** Proposed (2026-07-20, from the Sprint 7 demo) — **out-of-sprint
+pilot-readiness follow-up**, kept **off the Sprint 8 billing theme**
+(identity/BSS/PDF/comparison); schedule in the pilot-readiness latency pass, after
+TASK-WEB-014 has published the mouth-to-ear baseline.
+**Priority:** High
+**Branch:** `task/TASK-WEB-015-perceived-latency-levers` (to be created when scheduled)
+
+### Objective
+
+**Reduce** the perceived time-to-first-audio on the streaming WebRTC path (TASK-WEB-014
+**measures** it; this ticket **lowers** it), targeting the ADR-0029 sub-target
+`time_to_first_audio` p95 ≤ 1.2 s and contributing to the mouth-to-ear p95 ≤ 1.5 s
+primary criterion.
+
+### Context (measured baseline — Sprint 7 demo, 2026-07-20)
+
+Live streaming WebRTC turns against the **real backend** (Gradium STT/TTS streaming +
+Mistral chat + Ollama embeddings + pgvector), time-to-first-audio decomposed **from
+the instant the customer stops speaking**:
+
+| Slice | 1st turn (cold) | Warm turn | Note |
+|---|---:|---:|---|
+| End-of-turn hold (trailing silence) | 500 ms | 500 ms | fixed window, env-tunable |
+| STT finalize (`time_to_final`) | 851 ms | 496 ms | STT streaming session cold on turn 1 |
+| **Backend `/converse` (full answer)** | **1224 ms** | **1121 ms** | biggest slice; `backend.first_token == backend.request` → runtime waits the **whole** answer before TTS |
+| TTS first audio (`time_to_first_audio`) | 375 ms | 379 ms | already pre-warmed (TASK-WEB-011) ✅ |
+| **≈ time-to-first-audio** | **~2950 ms** | **~2496 ms** | excludes WebRTC client playback/jitter (see TASK-WEB-014) |
+
+Cold-start penalty ≈ **+450 ms** on turn 1 (STT session open + first LLM call);
+TTS is flat (~375 ms) thanks to TASK-WEB-011.
+
+### Scope (the three levers, largest impact first)
+
+1. **Backend answer streaming → TTS on the first sentence** (~ −700 to −900 ms,
+   every turn). Today the runtime calls the blocking `POST /api/conversation/converse`
+   and waits for the **complete** LLM answer (~1.1–1.2 s) before any TTS. The backend
+   already exposes an **SSE streaming** endpoint (`GET /api/conversation/ask-stream`)
+   that is unused by the voice path. Consume the stream and hand the **first
+   sentence-sized, guardrail-passing chunk** to the streaming TTS as soon as it is
+   ready, so first audio starts on the first sentence instead of the full answer.
+   Valid for V1 because ADR-0012 reaffirms the modular cascade (not caduc under the
+   OpenAI move — OQ-005: V1 OpenAI = cascade chat provider).
+2. **Connect-time warm-up of the STT streaming session + first LLM/embedding call**
+   (~ −450 ms on turn 1). Symmetric to TASK-WEB-011 (TTS pre-warm): when the WebRTC
+   session connects, open a throwaway STT stream and fire a tiny LLM/embedding warm
+   call so the **first real turn** is already warm. Provider-agnostic, low risk.
+3. **End-of-turn hold tuning** (~ −150 ms). Make the ~500 ms trailing-silence window
+   env-tunable down to ~350 ms and evaluate the premature-cut / false-endpoint
+   trade-off with real audio. Lowest-risk-to-implement but **highest behavioural
+   risk** (premature cuts) — gate on a measured false-cut rate.
+
+### Out Of Scope
+
+- **Measuring** mouth-to-ear (that is TASK-WEB-014, the prerequisite).
+- Speech-to-speech / Realtime evaluation (its own ADR per ADR-0029; not V1).
+- Provider swap to OpenAI chat (ADR-0006 / DEC-011 track).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Backend answer is streamed to TTS on the first sentence
+  Given a warm streaming WebRTC session on the web channel with the real backend
+  When the customer asks a KB-grounded question
+  Then TTS starts on the first guardrail-passing sentence, not on the full answer
+  And the measured time_to_first_audio p95 improves against the TASK-WEB-014 baseline
+  And grounding + guardrail behaviour (DEC-002, no invented amounts) is unchanged
+```
+
+```gherkin
+Scenario: The first turn no longer pays the full cold-start penalty
+  Given a freshly connected WebRTC session
+  When the very first turn is measured
+  Then its time-to-first-audio is within a stated margin of a warm turn
+  And no STT/LLM connection is leaked by the warm-up
+```
+
+### Required Evidence
+
+- Developer tests for the streaming-to-TTS first-sentence seam (fake SSE + fake TTS)
+  and the connect-time warm-up lifecycle (open-at-connect, reuse, no leak).
+- A warm + cold live sample with the **real backend**, per-slice + composite
+  p50/p95/p99, compared against the TASK-WEB-014 baseline (before/after per lever).
+- Updated ADR-0029 evidence + `docs/qa/streaming-voice-qa-report.md` go/no-go.
+- False-cut rate report for lever 3 if the hold is reduced.
+- No API key / raw audio / path leak.
