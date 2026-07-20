@@ -797,6 +797,47 @@ contribution.
   backend cost isolated.
 - Adversarial review ≥ 90% (or residual risk explicitly accepted).
 
+**Implementation (2026-07-20, `task/TASK-BE-010-qa-latency`):**
+- **QA report:** `docs/qa/answer-engine-qa-report.md` (functional + latency, real
+  backend). BE-010 adds no production feature code; its deliverable is the
+  consolidated QA/latency evidence + one defect fix surfaced by QA.
+- **Functional — GO.** All six behaviors verified twice: automated (backend **158**
+  incl. 17 Cucumber scenarios; voice-agent **315 unittest + 26 Behave**) **and**
+  first-hand live vs the real RAG+Mistral backend:
+  KB-grounded (`confidence≈0.75`), off-topic refusal (no retrieval, `confidence=null`),
+  degraded-on-LLM-failure (bad key → **503 `ERR_UPSTREAM`**, sanitized, no key leak,
+  `outcome=error`), no invented amount (DEC-002, offers human), multi-turn memory
+  (elliptical follow-up resolved to *facture*), confidence handling.
+- **Latency — real backend, warm, `web_voice`** (Micrometer `voice_support.slice`):
+
+  | Slice | p50 | p95 | p99 | N |
+  |---|---:|---:|---:|---:|
+  | retrieval | 59 ms | 65 ms | 115 ms | 27 |
+  | llm_wording | 956 ms | 1393 ms | 1460 ms | 27 |
+  | backend_request | 990 ms | 1460 ms | 1527 ms | 27 |
+  | llm_first_token | 294 ms | 696 ms | 2676 ms | 26 |
+  | backend_first_token | 453 ms | **789 ms** | 2936 ms | 26 |
+
+  Streaming halves the backend cost (`backend_first_token` p95 789 ms vs full
+  `backend_request` p95 1460 ms). **Composite `time_to_first_audio` (projected:
+  measured real backend slice + gated Sprint-6 STT/TTS) ≈ p95 1.54 s → NO-GO vs the
+  ADR-0018 800 ms gate** (stub baseline met it at 761.5 ms). The real RAG+LLM answer
+  is the now-quantified extra budget line, dominated by the Mistral first token.
+- **Defect found + fixed by QA (Medium):** `web_voice` metric channel collapsed to
+  `other` at runtime — BE-008 added `web_voice` only to the Java `@Value` default,
+  but `application.yml` explicitly overrode `allowed-channels` without it. Fixed the
+  yml default → `web,web_voice,phone,whatsapp,api`; live-re-verified (`channel` tag =
+  `web_voice`). Guarded by the `keepsWebVoiceChannelFirstClass` backend test.
+- **Adversarial self-review: 95/100 — QA gate Pass.** No blocking findings.
+  Non-blocking (accepted): the `application.yml` allow-list value isn't bound in a
+  `@SpringBootTest` (config-only, documented + live-verified); the end-to-end
+  streaming composite with `--backend http` is projected, not re-measured over
+  WebRTC (STT/TTS unchanged since the gated Sprint-6 baseline).
+- **Escalations:** OQ-005 (is 800 ms a hard pilot gate — the real backend exceeds it)
+  and OQ-002 (definitive confidence threshold) → Product/Architecture.
+- **Status:** implementation + QA report + defect fix + adversarial review (95/100)
+  done. Merge-ready — awaiting the user's explicit merge request.
+
 ## Out Of Scope (gated — stays for later sprints)
 
 | Item | Reason / Gate |
@@ -886,5 +927,5 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `fe7e0fc..5bf4503`) — adversarial review 94/100 + QA/latency GO. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `1749e7e..be71864`) — real Gradium STT → `/api/conversation/converse` → KB-grounded spoken WAV; `X-Answer-Provider: http-backend`, one correlation id (`e2e-be008-turn`) across all backend slices; outbound `X-Correlation-Id` header + `web_voice` first-class metric channel; docs/config fixed to `/converse`. Voice-agent 315 unittest + 26 behave green, backend 158 green |
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
-| TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
+| TASK-BE-010 | `task/TASK-BE-010-qa-latency` | ✅ Implemented (2026-07-20) — QA report `docs/qa/answer-engine-qa-report.md`; functional **GO** (6 behaviors, 158 backend + 315+26 voice-agent, all live-verified vs real Mistral); latency real backend warm/`web_voice`: retrieval p95 65 ms, llm_wording p95 1393 ms, backend_first_token p95 789 ms → composite `time_to_first_audio` p95 ≈1.54 s **NO-GO vs ADR-0018 800 ms** (escalated OQ-005). Medium defect fixed (web_voice channel allow-list). Adversarial self-review 95/100. Merge-ready (awaiting explicit merge) |
 | TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked on BE-009) — adversarial review 92/100 + QA GO — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; **Medium finding fixed pre-merge**: bounded LLM executor (max 16, reject→503) + provider HTTP read/connect timeout so a stalled socket is closed (live-verified `SocketTimeoutException`→sanitized 503); 137 tests green |

@@ -96,4 +96,6 @@ voice-support:
     # Allow-list bounding the `channel` metric tag cardinality (TASK-BE-009). A client-supplied
     # channel outside this list collapses to `other` on the metric tag; the raw value stays in
     # the [CONVERSE] log. Extend this list when onboarding a new channel (e.g. sms).
-    allowed-channels: ${OBSERVABILITY_ALLOWED_CHANNELS:web,phone,whatsapp,api}
+    # `web_voice` is the web Voice2Voice runtime channel (TASK-BE-008) — kept first-class so the
+    # real spoken path is reportable per channel instead of collapsing into `other`.
+    allowed-channels: ${OBSERVABILITY_ALLOWED_CHANNELS:web,web_voice,phone,whatsapp,api}
