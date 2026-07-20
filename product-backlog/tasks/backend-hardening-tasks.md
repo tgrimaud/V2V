@@ -15,11 +15,19 @@ pilot, unless pulled in earlier.
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** ✅ Implemented + 135 tests green + adversarial review 92/100 + QA GO
+**Status:** ✅ Implemented + 137 tests green + adversarial review 92/100 + QA GO
 (2026-07-20) on `task/TASK-BE-012-backend-error-contract` (cut from
 `task/TASK-BE-009-observability`); merge-ready (awaiting the user's explicit merge).
 Review fixed one acceptance gap: a provider `RestClientException` (e.g. embedding
 endpoint down) now maps to 503 `ERR_UPSTREAM` instead of falling to 500.
+**Medium finding fixed pre-merge (2026-07-20):** the LLM timeout executor is now
+**bounded** (`ThreadPoolExecutor`, max 16 in-flight, `SynchronousQueue` +
+`AbortPolicy`; rejection → sanitized 503) instead of an unbounded cached pool, and the
+chat provider now carries a **HTTP read + connect timeout** (`RestClient` request
+factory) so a stalled socket is actually closed rather than left hanging on an
+abandoned thread. Live-verified with `LLM_TIMEOUT_MS=1`: `SocketTimeoutException: Read
+timed out` on the Mistral socket → `UpstreamUnavailableException` → sanitized 503
+(`llm_wording` slice `outcome=error`, ~79 ms, well below the 2 s executor backstop).
 **Priority:** Medium
 **Branch:** `task/TASK-BE-012-backend-error-contract`
 **Surfaced by:** TASK-BE-004 adversarial review (2026-07-18) — degraded-mode / privacy
@@ -94,11 +102,17 @@ reuses the `CorrelationId` source, per the note above):
 - `@NotBlank` on `RetrievalRequest.question` + `@Valid` on `/retrieve` → a blank/missing
   question is a 400, not a silent `LOW_CONFIDENCE` 200.
 - Hard LLM timeout in `AbstractChatClientAnswerAdapter` (`voice-support.llm.timeout-ms`,
-  default 8000, 0 disables): the chat call runs on a bounded daemon executor with
-  `future.get(timeout)`; a timeout/failure throws `UpstreamUnavailableException` →
-  sanitized 503 (the voice runtime then speaks the safe degraded turn). The timed-out
-  LLM slice is recorded with `outcome=error` (BE-009 telemetry), keeping the
-  `tts/llm` success p95 clean.
+  default 8000, 0 disables): the chat call runs on a **bounded** daemon executor
+  (`ThreadPoolExecutor`, max 16 in-flight, `SynchronousQueue` + `AbortPolicy` — overflow
+  is rejected and degrades to 503, never piling up) with
+  `future.get(timeout + 2 s backstop)`; a timeout/failure/rejection throws
+  `UpstreamUnavailableException` → sanitized 503 (the voice runtime then speaks the safe
+  degraded turn). The provider chat API (`LlmConfig`) also sets a **HTTP read timeout =
+  `timeout-ms`** and **connect timeout = `voice-support.llm.connect-timeout-ms`
+  (default 3000)** on its `RestClient`, so the read timeout normally fires first and
+  closes the socket cleanly (the executor timeout is only a backstop for pre-read hangs).
+  The timed-out LLM slice is recorded with `outcome=error` (BE-009 telemetry), keeping
+  the `tts/llm` success p95 clean.
 - Tests (`mvn test` 134 green): `GlobalExceptionHandlerTest` (400 validation, malformed
   JSON, 503 upstream **no-leak**), `ConverseDegradedTest` (upstream → sanitized 503 with
   the runtime correlation id in body + header, no leak).

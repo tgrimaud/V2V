@@ -680,6 +680,14 @@ for runtime work; DEC-010 / ADR-0010 / ADR-0018).
   tag (cardinality risk — bounded today, our own runtime; recommend allow-listing),
   unauthenticated `/actuator/metrics` (fine local pilot), `retrieval` provider tag
   `pgvector` folds the embedding sub-step (documented in ADR-0028).
+- **Medium finding fixed (2026-07-20, pre-merge):** the `channel` metric tag is now
+  bounded by a configurable allow-list (`voice-support.observability.allowed-channels`,
+  default `web,phone,whatsapp,api`) in `BackendTelemetry.normalizeChannel` — an unknown
+  or client-injected channel collapses to `other` (raw value still logged in
+  `[CONVERSE]`), removing the cardinality-explosion vector. Live-verified: metric
+  `channel` tag values = `{web, other}`; an injected `evil-injection-xyz` channel never
+  created a series (`?tag=channel:evil-injection-xyz` → 404). +2 tests (137 green).
+  Actuator exposure stays local-only for the pilot (accepted; no external exporter).
 - **QA functional + latency (2026-07-20): GO.** Regression 135 tests green. Live
   (pgvector 5433 + Ollama + real Mistral, web, warm): one correlation id across
   `retrieval`/`llm_wording`/`backend_request` slices + `[CONVERSE]` per turn, header
@@ -801,6 +809,6 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | Planned (Medium; may defer) |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
-| TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Adversarial review 93/100 + QA GO (2026-07-20), ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); 135 tests green; merge-ready (awaiting explicit merge) |
+| TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Adversarial review 93/100 + QA GO (2026-07-20), ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green; merge-ready (awaiting explicit merge) |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
-| TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Adversarial review 92/100 + QA GO (2026-07-20), branched from BE-009 — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; 135 tests green; merge-ready (awaiting explicit merge) |
+| TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Adversarial review 92/100 + QA GO (2026-07-20), branched from BE-009 — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; **Medium finding fixed pre-merge**: bounded LLM executor (max 16, reject→503) + provider HTTP read/connect timeout so a stalled socket is closed (live-verified `SocketTimeoutException`→sanitized 503); 137 tests green; merge-ready (awaiting explicit merge) |
