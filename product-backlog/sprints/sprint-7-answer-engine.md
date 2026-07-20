@@ -836,8 +836,9 @@ contribution.
   WebRTC (STT/TTS unchanged since the gated Sprint-6 baseline).
 - **Escalations:** OQ-005 (is 800 ms a hard pilot gate — the real backend exceeds it)
   and OQ-002 (definitive confidence threshold) → Product/Architecture.
-- **Status:** implementation + QA report + defect fix + adversarial review (95/100)
-  done. Merge-ready — awaiting the user's explicit merge request.
+- **Status:** ✅ Validated by user + merged into `feat/sprint-7-answer-engine`
+  (2026-07-20, ff; stacked under BE-011). Implementation + QA report + defect fix +
+  adversarial review (95/100).
 
 ### TASK-BE-011 — Backend latency reduction (top-K + prompt trim + prompt-size telemetry)
 
@@ -893,8 +894,9 @@ open Product/Architecture decision (OQ-005) — **not** in this ticket's scope.
   Composite `time_to_first_audio` p95 ≈ **1.41 s** (was ~1.54 s) — improved but
   still **NO-GO vs the ADR-0018 800 ms gate**. Closing that gap is not a backend
   concern; the gate itself remains the open **OQ-005** Product/Architecture decision.
-- **Status:** implemented + latency remeasured + 160 tests green. Adversarial review
-  + user validation pending; merge-ready after review.
+- **Status:** ✅ Validated by user + merged into `feat/sprint-7-answer-engine`
+  (2026-07-20, ff; stacked on BE-010). Implemented + latency remeasured + adversarial
+  review 94/100 + 160 tests green.
 
 ## Out Of Scope (gated — stays for later sprints)
 
@@ -985,6 +987,6 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `fe7e0fc..5bf4503`) — adversarial review 94/100 + QA/latency GO. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `1749e7e..be71864`) — real Gradium STT → `/api/conversation/converse` → KB-grounded spoken WAV; `X-Answer-Provider: http-backend`, one correlation id (`e2e-be008-turn`) across all backend slices; outbound `X-Correlation-Id` header + `web_voice` first-class metric channel; docs/config fixed to `/converse`. Voice-agent 315 unittest + 26 behave green, backend 158 green |
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
-| TASK-BE-010 | `task/TASK-BE-010-qa-latency` | ✅ Implemented (2026-07-20) — QA report `docs/qa/answer-engine-qa-report.md`; functional **GO** (6 behaviors, 158 backend + 315+26 voice-agent, all live-verified vs real Mistral); latency real backend warm/`web_voice`: retrieval p95 65 ms, llm_wording p95 1393 ms, backend_first_token p95 789 ms → composite `time_to_first_audio` p95 ≈1.54 s **NO-GO vs ADR-0018 800 ms** (escalated OQ-005). Medium defect fixed (web_voice channel allow-list). Adversarial self-review 95/100. Merge-ready (awaiting explicit merge) |
+| TASK-BE-010 | `task/TASK-BE-010-qa-latency` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked under BE-011) — QA report `docs/qa/answer-engine-qa-report.md`; functional **GO** (6 behaviors, 158 backend + 315+26 voice-agent, all live-verified vs real Mistral); latency real backend warm/`web_voice`: retrieval p95 65 ms, llm_wording p95 1393 ms, backend_first_token p95 789 ms → composite `time_to_first_audio` p95 ≈1.54 s **NO-GO vs ADR-0018 800 ms** (escalated OQ-005). Medium defect fixed (web_voice channel allow-list). Adversarial self-review 95/100 |
 | TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked on BE-009) — adversarial review 92/100 + QA GO — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; **Medium finding fixed pre-merge**: bounded LLM executor (max 16, reject→503) + provider HTTP read/connect timeout so a stalled socket is closed (live-verified `SocketTimeoutException`→sanitized 503); 137 tests green |
-| TASK-BE-011 | `task/TASK-BE-011-latency-prompt-topk` | 🚧 In progress (2026-07-20, stacked on BE-010) — configurable retrieval top-K (`voice-support.conversation.retrieval.top-k`, default 4) on `/converse[-stream]`, trimmed system prompt (~989→~593 chars, DEC-002 rules kept), prompt-size telemetry (`voice_support.prompt_chars` + `[PROMPT]` log). 160 backend tests green. Remeasured (top-K 4, trimmed): `backend_first_token` p95 789→**653** ms / p99 2936→**680** ms; top-K sweep shows no reliable TTFT gain below 4. Composite p95 ≈1.41 s — still NO-GO vs 800 ms (OQ-005). Adversarial review + user validation pending |
+| TASK-BE-011 | `task/TASK-BE-011-latency-prompt-topk` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked on BE-010) — configurable retrieval top-K (`voice-support.conversation.retrieval.top-k`, default 4) on `/converse[-stream]`, trimmed system prompt (~989→~593 chars, DEC-002 rules kept), prompt-size telemetry (`voice_support.prompt_chars` + `[PROMPT]` log). Adversarial review 94/100. 160 backend tests green. Remeasured (top-K 4, trimmed): `backend_first_token` p95 789→**653** ms / p99 2936→**680** ms; top-K sweep shows no reliable TTFT gain below 4. Composite p95 ≈1.41 s — still NO-GO vs 800 ms (OQ-005) |
