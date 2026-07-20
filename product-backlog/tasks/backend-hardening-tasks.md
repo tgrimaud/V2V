@@ -7,7 +7,7 @@ pilot, unless pulled in earlier.
 
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
-| TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | Planned (out of Sprint 7 core theme) |
+| TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 
 ---
 
@@ -15,9 +15,10 @@ pilot, unless pulled in earlier.
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** ✅ Implemented + 137 tests green + adversarial review 92/100 + QA GO
-(2026-07-20) on `task/TASK-BE-012-backend-error-contract` (cut from
-`task/TASK-BE-009-observability`); merge-ready (awaiting the user's explicit merge).
+**Status:** ✅ Validated by user + merged into `feat/sprint-7-answer-engine`
+(2026-07-20, ff; stacked on BE-009) — 137 tests green + adversarial review 92/100 +
+QA GO on `task/TASK-BE-012-backend-error-contract` (cut from
+`task/TASK-BE-009-observability`).
 Review fixed one acceptance gap: a provider `RestClientException` (e.g. embedding
 endpoint down) now maps to 503 `ERR_UPSTREAM` instead of falling to 500.
 **Medium finding fixed pre-merge (2026-07-20):** the LLM timeout executor is now
