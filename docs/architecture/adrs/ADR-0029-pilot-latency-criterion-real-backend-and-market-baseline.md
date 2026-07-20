@@ -37,7 +37,7 @@ Two structural facts drove this ADR:
 2. **The 800 ms number was never validated against the way the market measures
    latency.** ADR-0018 defines `time_to_first_audio` from **end-of-turn acceptance**
    to first playable frame — it **excludes** the ~500 ms end-of-turn silence hold and
-   the WebRTC/browser `channel_egress` (both still uninstrumented, TASK-WEB-009). The
+   the WebRTC/browser `channel_egress` (both still uninstrumented, TASK-WEB-014). The
    industry measures **"mouth-to-ear"**: from the instant the user stops speaking to
    the instant they hear the first audio. Our comparable mouth-to-ear number today is
    ~500 ms (endpointing) + ~1.41 s (composite) + egress ≈ **~2 s** — we were
@@ -95,7 +95,7 @@ publishes ~800 ms, lands 1–1.4 s in EU). Takeaways:
 2. **Prerequisite to any pilot sign-off or SLO claim:** instrument true mouth-to-ear
    — fold `channel_egress` (WebRTC first frame → audible in the browser) and the
    end-of-turn hold into one correlation-id timeline and report p50/p95/p99
-   (**TASK-WEB-009**, the ADR-0018 known gap). No latency acceptance is recorded
+   (**TASK-WEB-014**, the ADR-0018 known gap). No latency acceptance is recorded
    against a partial composite.
 
 3. **Reaffirm ADR-0012 (modular cascade) for V1.** We do **not** chase sub-800 ms by
@@ -124,12 +124,12 @@ publishes ~800 ms, lands 1–1.4 s in EU). Takeaways:
   the acceptance **number** and the addition of the mouth-to-ear metric change.
 - The current real-backend path (~1.41 s `time_to_first_audio` p95, BE-011) is
   **within the revised engineering sub-target's neighborhood but not yet inside it**;
-  the mouth-to-ear number is unknown until TASK-WEB-009 lands and is the true gate.
+  the mouth-to-ear number is unknown until TASK-WEB-014 lands and is the true gate.
 - A production SLO still requires the ADR-0010 operational controls (dashboards,
   alerting, degraded-mode + provider-outage tests) on top of the measured baseline.
 - OQ-005 is resolved: acceptance conditions, metrics, and the cascade decision are now
   recorded; remaining OQ-005 sub-items (which journeys count, fixture-vs-live provider
-  mix, barge-in authority) are folded into TASK-WEB-009 and the QA latency plan.
+  mix, barge-in authority) are folded into TASK-WEB-014 and the QA latency plan.
 
 ## Alternatives Considered
 

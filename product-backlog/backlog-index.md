@@ -106,6 +106,7 @@ against the new empty-codebase plan.
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |
 | TASK-WEB-012 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | Gated (OQ-002 + billing answer engine) | Medium |
 | TASK-WEB-013 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | Planned (opportunistic) | Low |
+| TASK-WEB-014 | Instrument true mouth-to-ear latency — fold `channel_egress` (WebRTC) + end-of-turn hold into a perceived-latency metric and evaluate vs ADR-0029 (closes the ADR-0018/TASK-WEB-009 known gap) | V1 pilot gate | Proposed (2026-07-20, from ADR-0029; unscheduled) | High |
 | TASK-BE-001 | Decide the backend answer-engine framework (Spring AI vs LangChain4J vs other) + ADR (closes OQ-007) | Decision / Architecture | ✅ Done (2026-07-18) — Spring Boot + Spring AI (ADR-0026) + Hive-light decomposition (ADR-0027); OpenJDK 17 baseline | High |
 | TASK-BE-002 | Scaffold the Java backend module on the restart branch (hexagonal skeleton, build + ArchUnit green) | V1 enabler | ✅ Validated by user (2026-07-18) — context-first ADR-0027 scaffold, 19 tests green on OpenJDK 17, review 94/100 + QA PASS; merge-ready | High |
 | TASK-BE-003 | Knowledge-base ingestion socle (pivot + Markdown connector + idempotent sync + pgvector 768 + swappable embedding adapter) | V1 enabler | Planned (Sprint 7) | High |
@@ -161,7 +162,7 @@ The recommended first implementation sequence is:
 | OQ-002 | Minimum proof threshold for answering without escalation | Product / Billing SME / Legal | Open |
 | OQ-003 | BSS data availability and granularity | BSS owner | Open |
 | OQ-004 | Invoice PDF extraction reliability and fixture coverage | Product / BSS / QA | Open |
-| OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | ✅ Decided (2026-07-20) — ADR-0029 (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s; cascade reaffirmed; TASK-WEB-009 prerequisite) |
+| OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | ✅ Decided (2026-07-20) — ADR-0029 (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s; cascade reaffirmed; TASK-WEB-014 prerequisite) |
 | OQ-006 | Genesys handoff integration shape | Product / Contact Center / Architecture / Security | Open |
 | OQ-007 | Backend AI/RAG framework (Spring AI vs LangChain4J vs other) | Architecture / Backend | ✅ Decided (2026-07-17) — Spring Boot + Spring AI (ADR-0026); TASK-BE-001 implements |
 

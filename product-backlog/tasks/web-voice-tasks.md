@@ -1292,3 +1292,105 @@ explicit Product/Architecture revision of the ADR-0018 criterion recorded in the
 - **Residual risk accepted:** gate measured with a **stub backend**, **N=8**, and
   `channel_egress` excluded — the pilot gate is met for the EOT→first-audio
   streaming path as specified, not an end-to-end production SLO.
+
+---
+
+## TASK-WEB-014 - Instrument True Mouth-To-Ear Latency (Fold Channel-Egress + End-Of-Turn Hold)
+
+**Parent:** EPIC-010 (+ EPIC-006)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop), US-021 (barge-in timing)
+**Related decisions:** ADR-0029 (pilot criterion revised to mouth-to-ear p95 ≤ 1.5 s /
+`time_to_first_audio` p95 ≤ 1.2 s — this ticket is its **measurement prerequisite**),
+ADR-0018 (latency taxonomy + the `channel_egress` / end-of-turn known gap), DEC-010
+(per-step latency before any SLO claim), ADR-0010 (industrialization gates)
+**Depends on:** TASK-WEB-007 (WebRTC transport), TASK-WEB-009 (streaming composite
+report — done), TASK-BE-010 (real-backend composite baseline)
+**Classification:** V1 pilot gate
+**Status:** Proposed (2026-07-20) — created from ADR-0029; unscheduled
+**Priority:** High
+**Branch:** `task/TASK-WEB-014-mouth-to-ear-latency` (to be created when scheduled)
+
+### Objective
+
+Measure and report the **true perceived (mouth-to-ear) latency** — from the instant
+the customer stops speaking to the instant they **hear** the first agent audio — over
+the streaming WebRTC path, by folding in the two slices currently **excluded** from
+ADR-0018's `time_to_first_audio` composite: the **end-of-turn silence hold** and
+**`channel_egress`** (WebRTC first frame → audible at the browser). This is the
+ADR-0029 prerequisite: no pilot latency acceptance is recorded against a partial
+composite.
+
+### Context (why this is needed)
+
+ADR-0018's `time_to_first_audio` starts at **end-of-turn acceptance** and ends at the
+**first playable frame emitted by the runtime**. It therefore excludes:
+
+- the ~500 ms trailing-silence **`end_of_turn` hold** before acceptance (measured as
+  its own span, but not part of the composite); and
+- **`channel_egress` on WebRTC** — the `web.voice.egress` span is emitted only on the
+  **batch HTTP** path; the WebRTC transport egress → browser-audible add-on is not
+  folded in (ADR-0018 "known gap").
+
+The market measures **mouth-to-ear** (ADR-0029 baseline). Comparing our middle-of-chain
+composite (~1.41 s p95, real backend, BE-011) to end-to-end market numbers understates
+real perceived latency (~2 s today once the hold + egress are added). ADR-0029 revises
+the pilot criterion to **mouth-to-ear p95 ≤ 1.5 s** (primary) plus a
+**`time_to_first_audio` p95 ≤ 1.2 s** engineering sub-target, so the perceived metric
+must actually be instrumented before any go/no-go.
+
+### Scope
+
+- Define and emit a **mouth-to-ear** composite (`voice_to_first_audio` =
+  `end_of_turn` hold + `time_to_first_audio` + `channel_egress`) per turn under one
+  correlation id, in `voice_common/pipeline_timing.py`, **alongside** the existing
+  `time_to_first_audio` composite (do not overwrite it).
+- Instrument **`channel_egress` on the WebRTC streaming path** (first synthesized
+  frame handed to the transport → audible at the browser). Browser-audible timing may
+  require a small client-side measurement (first-audio playback timestamp) posted back
+  or logged; if true browser-audible is not reachable, measure **runtime egress**
+  (first frame written to the transport) and state the residual gap honestly.
+- Report **p50/p95/p99** for the mouth-to-ear metric and every slice (`end_of_turn`,
+  `stt`, `backend_first_token`, `tts_first_audio`, `channel_egress`) with sample size,
+  min/max/mean, warm/cold, channel and provider config — measured with the **real
+  backend** (not the stub).
+- Evaluate against **ADR-0029**: mouth-to-ear p95 ≤ 1.5 s (primary) and
+  `time_to_first_audio` p95 ≤ 1.2 s (engineering). Publish a go/no-go.
+- Fold in the remaining **OQ-005** sub-items: which journeys count toward the pilot
+  metric, the fixture-vs-live provider mix, and which component is authoritative for
+  barge-in cancellation timing.
+- Update the ADR-0018 evidence + ADR-0029 + `docs/qa/streaming-voice-qa-report.md` +
+  `docs/observability/voice-journey-timing.md`.
+
+### Out Of Scope
+
+- **Reducing** latency (answer-engine + provider work) — this ticket **measures**.
+- Speech-to-speech evaluation (its own ADR per ADR-0029).
+- Production SLO operational controls (ADR-0010).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Mouth-to-ear latency is measured end to end
+  Given a warm streaming WebRTC session on the web channel with the real backend
+  When a reviewed sample of turns is measured
+  Then the mouth-to-ear latency (end-of-turn hold + composite + channel egress) is reported p50/p95/p99 under one correlation id
+  And it is evaluated against the ADR-0029 criteria (mouth-to-ear p95 <= 1.5 s, time_to_first_audio p95 <= 1.2 s)
+  And no slice is silently omitted (a missing slice is marked measured=false with a reason)
+```
+
+```gherkin
+Scenario: Channel egress is folded into the perceived latency
+  Given the WebRTC streaming path
+  When a turn produces spoken audio
+  Then channel_egress is measured on the WebRTC path (not only the batch HTTP path)
+  And it is included in the mouth-to-ear metric, or the residual gap is stated honestly
+```
+
+### Required Evidence
+
+- Developer tests for the mouth-to-ear composite computation (fake spans) and for
+  `channel_egress` emission on the WebRTC path.
+- A warm live sample with the **real backend**; per-slice + mouth-to-ear p50/p95/p99.
+- Updated ADR-0018 / ADR-0029 evidence + streaming QA report go/no-go.
+- **Closes the ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known gap.**
+- No API key / raw audio / path leak.
