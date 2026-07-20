@@ -165,3 +165,40 @@ code). The dominant new cost is the Mistral cloud LLM first token.
 - **Required before an SLO claim (ADR-0010):** per-channel dashboards, alerting,
   degraded-mode + provider-outage tests, and a fully-measured end-to-end streaming
   composite with the real backend.
+
+## Addendum — TASK-BE-011 latency reduction (2026-07-20)
+
+Follow-up to the BE-010 NO-GO. Backend-only levers (top-K, prompt, telemetry); the
+800 ms gate decision stays OQ-005.
+
+**Changes.** Retrieval top-K made configurable (`voice-support.conversation.retrieval.top-k`,
+default 4) on `/converse[-stream]`; system prompt trimmed ~989 → ~593 chars (all
+DEC-002 rules + the exact `transfère à un conseiller` hand-off sentence preserved);
+prompt-size telemetry added (`voice_support.prompt_chars` summary + `[PROMPT]` log
+with system/context/history chars + chunk count, correlation id, **no content**).
+
+**Remeasured** (real Mistral, warm, `web_voice`, fresh conversation per call, server-side
+`[TELEMETRY]` slices):
+
+| Config | prompt system_chars | backend_first_token p50/p95/p99 | llm_first_token p50/p95/p99 | N |
+|---|---:|---:|---:|---:|
+| **top-K 4, trimmed** | 2111 | **444 / 653 / 680 ms** | 334 / 582 / 585 ms | 25 |
+| BE-010 baseline (top-K 4, old prompt) | ~2507 | 453 / 789 / 2936 ms | 294 / 696 / 2676 ms | 26 |
+
+top-K sweep (N=12): `backend_first_token` p95 — k4 474 / k3 559 / k2 491 ms → **within
+noise; no reliable TTFT gain below top-K 4**, so the default stays 4 (top-K is an ops
+dial, not a latency fix).
+
+**Findings.**
+- The trimmed prompt reduced prompt size ~16 % and tightened the tail
+  (`backend_first_token` p95 789 → 653 ms, p99 2936 → 680 ms).
+- The **~330 ms LLM median TTFT is a Mistral-cloud network/prefill floor** — not
+  reducible by backend prompt levers; prompt size only moves the tail.
+- Composite `time_to_first_audio` p95 ≈ **1.41 s** (was ~1.54 s): improved but still
+  **NO-GO vs 800 ms**. Closing the gap requires a faster provider/model (DEC-011
+  benchmark) and/or the STT/TTS path — not further backend prompt trimming — plus the
+  OQ-005 gate decision. Cross-session comparison caveat: BE-010 and this run were
+  measured at different times, so treat the tail deltas as indicative, not exact.
+
+**Recommendation: GO for BE-011 as a backend latency improvement + observability
+enabler.** It does not, and was not scoped to, close the 800 ms gate (OQ-005).

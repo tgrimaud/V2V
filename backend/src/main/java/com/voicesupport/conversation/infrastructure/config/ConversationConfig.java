@@ -71,8 +71,9 @@ public class ConversationConfig {
     @Bean
     public ConverseUseCase converseUseCase(
             AnswerQuestionUseCase answerQuestionUseCase,
-            ConversationMemoryPort conversationMemoryPort) {
-        return new ConversationService(answerQuestionUseCase, conversationMemoryPort);
+            ConversationMemoryPort conversationMemoryPort,
+            @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
+        return new ConversationService(answerQuestionUseCase, conversationMemoryPort, topK);
     }
 
     @Bean
@@ -80,9 +81,10 @@ public class ConversationConfig {
             GroundQueryUseCase groundQueryUseCase,
             StreamingAnswerGeneratorPort streamingAnswerGeneratorPort,
             OutputGuardrail outputGuardrail,
-            ConversationMemoryPort conversationMemoryPort) {
+            ConversationMemoryPort conversationMemoryPort,
+            @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
         return new StreamingConversationService(
-                groundQueryUseCase, streamingAnswerGeneratorPort, outputGuardrail, conversationMemoryPort);
+                groundQueryUseCase, streamingAnswerGeneratorPort, outputGuardrail, conversationMemoryPort, topK);
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a

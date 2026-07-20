@@ -24,22 +24,25 @@ import java.util.function.Consumer;
 // fallback with no LLM call.
 public class StreamingConversationService implements ConverseStreamUseCase {
 
-    private static final int DEFAULT_TOP_K = 4;
-
     private final GroundQueryUseCase groundQueryUseCase;
     private final StreamingAnswerGeneratorPort streamingGenerator;
     private final OutputGuardrail outputGuardrail;
     private final ConversationMemoryPort memory;
+    // Retrieval top-K for the streaming voice path (TASK-BE-011): configurable so the RAG context
+    // size (a driver of LLM time-to-first-token) can be tuned without a code change.
+    private final int topK;
 
     public StreamingConversationService(
             GroundQueryUseCase groundQueryUseCase,
             StreamingAnswerGeneratorPort streamingGenerator,
             OutputGuardrail outputGuardrail,
-            ConversationMemoryPort memory) {
+            ConversationMemoryPort memory,
+            int topK) {
         this.groundQueryUseCase = groundQueryUseCase;
         this.streamingGenerator = streamingGenerator;
         this.outputGuardrail = outputGuardrail;
         this.memory = memory;
+        this.topK = topK;
     }
 
     @Override
@@ -49,7 +52,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
 
     private GeneratedAnswer runPipeline(String transcript, String conversationId, Consumer<String> onChunk) {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
-        GroundingResult grounding = groundQueryUseCase.ground(transcript, null, DEFAULT_TOP_K, !prior.isEmpty());
+        GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty());
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, ConversationHistoryFormatter.format(prior), onChunk)
                 : emitFallback(grounding.decision().fallbackMessage(), onChunk);

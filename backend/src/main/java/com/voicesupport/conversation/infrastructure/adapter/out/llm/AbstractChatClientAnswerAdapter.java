@@ -144,9 +144,14 @@ public abstract class AbstractChatClientAnswerAdapter
                 .map(RetrievedEvidence::text)
                 .collect(Collectors.joining("\n---\n"));
         String systemMessage = systemPromptTemplate().replace(CONTEXT_PLACEHOLDER, context);
+        String historyBlock = "";
         if (history != null && !history.isEmpty()) {
-            systemMessage += HISTORY_HEADER + String.join("\n", history);
+            historyBlock = HISTORY_HEADER + String.join("\n", history);
+            systemMessage += historyBlock;
         }
+        int chunkCount = evidence == null ? 0 : evidence.size();
+        telemetry.recordPromptSize(
+                providerName(), systemMessage.length(), context.length(), historyBlock.length(), chunkCount);
         return systemMessage;
     }
 }

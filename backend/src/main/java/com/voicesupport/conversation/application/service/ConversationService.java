@@ -16,14 +16,16 @@ import java.util.List;
 // domain classifier here); the answer stays grounded and DEC-002-safe by construction.
 public class ConversationService implements ConverseUseCase {
 
-    private static final int DEFAULT_TOP_K = 4;
-
     private final AnswerQuestionUseCase answerQuestionUseCase;
     private final ConversationMemoryPort memory;
+    // Retrieval top-K for the voice conversation path (TASK-BE-011): configurable so the RAG
+    // context size (a driver of LLM time-to-first-token) can be tuned without a code change.
+    private final int topK;
 
-    public ConversationService(AnswerQuestionUseCase answerQuestionUseCase, ConversationMemoryPort memory) {
+    public ConversationService(AnswerQuestionUseCase answerQuestionUseCase, ConversationMemoryPort memory, int topK) {
         this.answerQuestionUseCase = answerQuestionUseCase;
         this.memory = memory;
+        this.topK = topK;
     }
 
     @Override
@@ -31,7 +33,7 @@ public class ConversationService implements ConverseUseCase {
         List<ConversationTurn> priorTurns = memory.recentTurns(conversationId);
         boolean alreadyGreeted = !priorTurns.isEmpty();
         GeneratedAnswer answer = answerQuestionUseCase.answer(
-                transcript, null, DEFAULT_TOP_K, alreadyGreeted, ConversationHistoryFormatter.format(priorTurns));
+                transcript, null, topK, alreadyGreeted, ConversationHistoryFormatter.format(priorTurns));
         memory.append(conversationId, new ConversationTurn(transcript, answer.text()));
         return answer;
     }

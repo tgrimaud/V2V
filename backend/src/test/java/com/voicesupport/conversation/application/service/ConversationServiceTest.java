@@ -26,7 +26,7 @@ class ConversationServiceTest {
     void setUp() {
         answerUseCase = new RecordingAnswerUseCase();
         memory = new InMemoryConversationMemoryAdapter(6, 100);
-        service = new ConversationService(answerUseCase, memory);
+        service = new ConversationService(answerUseCase, memory, 4);
     }
 
     @Test

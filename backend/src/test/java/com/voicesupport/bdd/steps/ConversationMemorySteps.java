@@ -30,7 +30,7 @@ public class ConversationMemorySteps {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
         AnswerService answerService = new AnswerService(grounding, generator, new OutputGuardrail());
-        service = new ConversationService(answerService, new InMemoryConversationMemoryAdapter(6, 100));
+        service = new ConversationService(answerService, new InMemoryConversationMemoryAdapter(6, 100), 4);
     }
 
     @Given("a fresh conversation memory")

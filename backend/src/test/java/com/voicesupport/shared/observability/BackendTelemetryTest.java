@@ -1,5 +1,6 @@
 package com.voicesupport.shared.observability;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +21,21 @@ class BackendTelemetryTest {
     @AfterEach
     void clearMdc() {
         MDC.clear();
+    }
+
+    @Test
+    @DisplayName("records prompt-size as a provider-tagged distribution summary (TASK-BE-011)")
+    void recordsPromptSize() {
+        // WHEN a prompt-size breakdown is recorded for a provider
+        telemetry.recordPromptSize("mistral-api", 700, 400, 90, 3);
+
+        // THEN a distribution summary carries the total system-message chars under that provider
+        DistributionSummary summary = registry.find("voice_support.prompt_chars")
+                .tag("provider", "mistral-api")
+                .summary();
+        assertNotNull(summary);
+        assertEquals(1, summary.count());
+        assertEquals(700.0, summary.totalAmount());
     }
 
     @Test

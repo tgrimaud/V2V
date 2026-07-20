@@ -161,6 +161,7 @@ Later extraction = swap `InProcKnowledgeRetrievalAdapter` for a
 | TASK-BE-008 | Wire `voice-agent --backend http` end to end to the real endpoint (stub → real) | Integration | High | BE-006 |
 | TASK-BE-009 | Observability: OTel traces/metrics/logs across guardrails, retrieval, LLM (DEC-010, ADR-0010) | Pilot gate | High | BE-004…BE-006 |
 | TASK-BE-010 | QA functional + latency report (RAG + LLM slices; composite with a real backend) + adversarial review | Pilot gate | High | BE-006…BE-009 |
+| TASK-BE-011 | Backend latency reduction — configurable retrieval top-K + trimmed system prompt + prompt-size telemetry (reduce `backend_first_token`) | Latency | Medium | BE-010 |
 
 ## Ticket Detail
 
@@ -838,6 +839,63 @@ contribution.
 - **Status:** implementation + QA report + defect fix + adversarial review (95/100)
   done. Merge-ready — awaiting the user's explicit merge request.
 
+### TASK-BE-011 — Backend latency reduction (top-K + prompt trim + prompt-size telemetry)
+
+**Goal:** Reduce the backend contribution to `backend_first_token` / `llm_first_token`
+(the dominant term in the BE-010 composite NO-GO) with safe, in-our-control levers,
+and add observability to make prompt size a tunable, data-driven dial. The 800 ms
+gate itself (structurally unreachable with a real LLM + current STT/TTS) stays an
+open Product/Architecture decision (OQ-005) — **not** in this ticket's scope.
+
+**Scope (backend only, DEC-002/DEC-011 preserved):**
+- **Configurable retrieval top-K** on the voice paths: new
+  `voice-support.conversation.retrieval.top-k` (env `CONVERSATION_RETRIEVAL_TOP_K`,
+  default 4) replaces the hardcoded `DEFAULT_TOP_K` in `ConversationService` and
+  `StreamingConversationService`. Fewer chunks ⇒ shorter prompt ⇒ faster first token,
+  at the cost of grounding breadth — tunable without a code change.
+- **Trimmed system prompt** (Mistral + Ollama adapters): ~989 → ~560 chars, all
+  ABSOLUTE DEC-002 rules preserved verbatim in intent, and the exact hand-off
+  sentence the `OutputGuardrail` matches (`transfère à un conseiller`) kept.
+- **Prompt-size telemetry** (0 latency): `BackendTelemetry.recordPromptSize(...)`
+  emits a provider-tagged `voice_support.prompt_chars` distribution summary + a
+  `[PROMPT]` structured log (system/context/history chars + chunk count, correlation
+  id, **no content**) so a slow `llm_first_token` can be correlated with prompt size.
+
+**Acceptance:**
+- top-K is config-driven on `/converse` + `/converse-stream`; default behavior (4)
+  unchanged; unit test asserts the configured value reaches retrieval grounding.
+- All DEC-002 guardrail behavior intact; `mvn test` green.
+- Prompt-size telemetry recorded per turn; remeasure `backend_first_token` vs the
+  BE-010 baseline across top-K 4/3/2, warm, `web_voice`, with the honest delta.
+
+**Implementation (2026-07-20, `task/TASK-BE-011-latency-prompt-topk`):**
+- Configurable top-K wired via `ConversationConfig` `@Value` into both conversation
+  services; property + env documented in `application.yml`.
+- System prompt trimmed in `MistralAnswerAdapter` + `OllamaAnswerAdapter`.
+- `recordPromptSize` added to `BackendTelemetry`; `buildSystemMessage` records the
+  breakdown once per turn (sync + streaming paths).
+- Tests: **160** backend green (+`forwardsConfiguredTopK`, +`recordsPromptSize`).
+- **Latency remeasured** (real Mistral, warm, `web_voice`, fresh conversation so
+  only RAG context varies; server-side `[TELEMETRY]` slices):
+
+  | Config | prompt system_chars | backend_first_token p50/p95/p99 | llm_first_token p50/p95/p99 | N |
+  |---|---:|---:|---:|---:|
+  | **top-K 4, trimmed prompt** | 2111 (tmpl ~593 + ctx 1518) | **444 / 653 / 680 ms** | 334 / 582 / 585 ms | 25 |
+  | _BE-010 baseline (top-K 4, ~989-char prompt)_ | ~2507 | _453 / 789 / 2936 ms_ | _294 / 696 / 2676 ms_ | 26 |
+
+  top-K sweep (N=12 each): `backend_first_token` p95 — k4 **474** / k3 559 / k2 491 ms
+  → **within noise; reducing top-K below 4 gives no reliable TTFT gain** (TTFT is
+  dominated by Mistral network/prefill, not prompt size at these sizes), so the
+  default stays **4** and top-K is kept as an ops dial, not a latency fix.
+- **Outcome:** the trimmed prompt cut prompt size ~16 % and tightened the tail
+  (`backend_first_token` p95 789 → 653 ms, p99 2936 → 680 ms); the **~330 ms LLM
+  median TTFT is a Mistral cloud floor** not reducible by backend prompt levers.
+  Composite `time_to_first_audio` p95 ≈ **1.41 s** (was ~1.54 s) — improved but
+  still **NO-GO vs the ADR-0018 800 ms gate**. Closing that gap is not a backend
+  concern; the gate itself remains the open **OQ-005** Product/Architecture decision.
+- **Status:** implemented + latency remeasured + 160 tests green. Adversarial review
+  + user validation pending; merge-ready after review.
+
 ## Out Of Scope (gated — stays for later sprints)
 
 | Item | Reason / Gate |
@@ -929,3 +987,4 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | ✅ Implemented (2026-07-20) — QA report `docs/qa/answer-engine-qa-report.md`; functional **GO** (6 behaviors, 158 backend + 315+26 voice-agent, all live-verified vs real Mistral); latency real backend warm/`web_voice`: retrieval p95 65 ms, llm_wording p95 1393 ms, backend_first_token p95 789 ms → composite `time_to_first_audio` p95 ≈1.54 s **NO-GO vs ADR-0018 800 ms** (escalated OQ-005). Medium defect fixed (web_voice channel allow-list). Adversarial self-review 95/100. Merge-ready (awaiting explicit merge) |
 | TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked on BE-009) — adversarial review 92/100 + QA GO — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; **Medium finding fixed pre-merge**: bounded LLM executor (max 16, reject→503) + provider HTTP read/connect timeout so a stalled socket is closed (live-verified `SocketTimeoutException`→sanitized 503); 137 tests green |
+| TASK-BE-011 | `task/TASK-BE-011-latency-prompt-topk` | 🚧 In progress (2026-07-20, stacked on BE-010) — configurable retrieval top-K (`voice-support.conversation.retrieval.top-k`, default 4) on `/converse[-stream]`, trimmed system prompt (~989→~593 chars, DEC-002 rules kept), prompt-size telemetry (`voice_support.prompt_chars` + `[PROMPT]` log). 160 backend tests green. Remeasured (top-K 4, trimmed): `backend_first_token` p95 789→**653** ms / p99 2936→**680** ms; top-K sweep shows no reliable TTFT gain below 4. Composite p95 ≈1.41 s — still NO-GO vs 800 ms (OQ-005). Adversarial review + user validation pending |

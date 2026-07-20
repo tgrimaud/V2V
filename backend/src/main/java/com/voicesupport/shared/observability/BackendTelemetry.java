@@ -1,5 +1,6 @@
 package com.voicesupport.shared.observability;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ public class BackendTelemetry {
 
     private static final Logger log = LoggerFactory.getLogger(BackendTelemetry.class);
     private static final String TIMER = "voice_support.slice";
+    private static final String PROMPT_CHARS = "voice_support.prompt_chars";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
     private static final String CHANNEL_NONE = "n/a";
@@ -60,6 +62,23 @@ public class BackendTelemetry {
     // they are recorded on the same timer/log as time(...) with an explicit outcome.
     public void recordLatency(String slice, String provider, String outcome, Duration elapsed) {
         record(slice, provider, outcome == null ? OUTCOME_SUCCESS : outcome, elapsed.toNanos());
+    }
+
+    // Prompt-size observability (TASK-BE-011): records the char breakdown of the LLM system
+    // message (fixed instructions + RAG context + history) and the retrieved chunk count as a
+    // DistributionSummary (voice_support.prompt_chars) plus a [PROMPT] log, so a slow
+    // llm_first_token can be correlated with prompt size when tuning top-K / prompt length.
+    // Records lengths and counts only — never prompt content — and carries the correlation id.
+    public void recordPromptSize(String provider, int systemChars, int contextChars, int historyChars, int chunkCount) {
+        String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
+        DistributionSummary.builder(PROMPT_CHARS)
+                .tag("provider", safeProvider)
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .register(registry)
+                .record(systemChars);
+        log.info("[PROMPT] provider={} system_chars={} context_chars={} history_chars={} chunk_count={} "
+                        + "correlation_id={}",
+                safeProvider, systemChars, contextChars, historyChars, chunkCount, CorrelationId.current());
     }
 
     public <T> T time(String slice, String provider, Supplier<T> work) {

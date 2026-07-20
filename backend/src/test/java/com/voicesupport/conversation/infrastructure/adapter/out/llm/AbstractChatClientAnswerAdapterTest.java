@@ -1,6 +1,8 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +49,7 @@ class AbstractChatClientAnswerAdapterTest {
 
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
         TestAdapter() {
-            super(null, null, 0);
+            super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {

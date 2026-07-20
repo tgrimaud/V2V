@@ -35,7 +35,22 @@ class StreamingConversationServiceTest {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeStreamingAnswerGeneratorPort();
         memory = new InMemoryConversationMemoryAdapter(6, 100);
-        service = new StreamingConversationService(grounding, generator, new OutputGuardrail(), memory);
+        service = new StreamingConversationService(grounding, generator, new OutputGuardrail(), memory, 3);
+    }
+
+    @Test
+    @DisplayName("the configured top-K is forwarded to retrieval grounding (TASK-BE-011)")
+    void forwardsConfiguredTopK() {
+        // GIVEN an answerable grounding result
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("ctx", "s1", "billing", 0.8))));
+        generator.setNextTokens(List.of("Réponse. "));
+
+        // WHEN the stream is consumed
+        consume("Pourquoi ma facture change ?", "c1");
+
+        // THEN grounding was asked with the configured top-K, not a hardcoded default
+        assertEquals(3, grounding.lastTopK);
     }
 
     @Test
