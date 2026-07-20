@@ -675,8 +675,24 @@ for runtime work; DEC-010 / ADR-0010 / ADR-0018).
   (`cid-be009-live`) across `retrieval`/`llm_wording`/`backend_request` slice logs;
   header echo confirmed; `/actuator/metrics/voice_support.slice.percentile` reported
   retrieval p50 63 ms / p95 703 ms and LLM p50 906 ms / p95 1040 ms by `phi` tag.
-- **Status:** implementation + 130 tests + live verification done; pending adversarial
-  review + QA acceptance before merge-ready.
+- **Adversarial review (2026-07-20): 93/100 — QA gate Pass.** No blocking findings.
+  Non-blocking (all ticketed/accepted): client-controlled `channel` used as a metric
+  tag (cardinality risk — bounded today, our own runtime; recommend allow-listing),
+  unauthenticated `/actuator/metrics` (fine local pilot), `retrieval` provider tag
+  `pgvector` folds the embedding sub-step (documented in ADR-0028).
+- **QA functional + latency (2026-07-20): GO.** Regression 135 tests green. Live
+  (pgvector 5433 + Ollama + real Mistral, web, warm): one correlation id across
+  `retrieval`/`llm_wording`/`backend_request` slices + `[CONVERSE]` per turn, header
+  echoed; no transcript/answer/secret in logs (only `provider=mistral-api` tag). Live
+  per-slice latency (warm, 16 samples, client-side percentile buckets are coarse):
+
+  | Slice | p50 | p95 | Sample | Notes |
+  |---|---:|---:|---:|---|
+  | retrieval | 63 ms | 703 ms | 16 | pgvector + Ollama embed; p95 skewed by first cold call |
+  | llm_wording | 1107 ms | 2919 ms | 16 | Mistral cloud dominates |
+  | backend_request | 1107 ms | 2919 ms | 16 | LLM-bound; retrieval ~tens of ms |
+- **Status:** implementation + 135 tests + adversarial review (93/100) + QA (GO) done.
+  **Merge-ready** — awaiting the user's explicit merge request.
 
 ### TASK-BE-010 — QA functional + latency report + adversarial review
 
@@ -785,6 +801,6 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | Planned (Medium; may defer) |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
-| TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Implemented + 130 tests + live-verified (2026-07-19), ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); pending adversarial review + QA before merge-ready |
+| TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Adversarial review 93/100 + QA GO (2026-07-20), ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); 135 tests green; merge-ready (awaiting explicit merge) |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
-| TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Implemented + 134 tests + live-verified (2026-07-19), branched from BE-009 — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; pending adversarial review + QA before merge-ready |
+| TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Adversarial review 92/100 + QA GO (2026-07-20), branched from BE-009 — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; 135 tests green; merge-ready (awaiting explicit merge) |

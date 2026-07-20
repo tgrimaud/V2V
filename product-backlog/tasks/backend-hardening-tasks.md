@@ -15,9 +15,11 @@ pilot, unless pulled in earlier.
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** ✅ Implemented + 134 tests green + live-verified (2026-07-19) on
-`task/TASK-BE-012-backend-error-contract` (cut from `task/TASK-BE-009-observability`);
-pending adversarial review + QA acceptance before merge-ready.
+**Status:** ✅ Implemented + 135 tests green + adversarial review 92/100 + QA GO
+(2026-07-20) on `task/TASK-BE-012-backend-error-contract` (cut from
+`task/TASK-BE-009-observability`); merge-ready (awaiting the user's explicit merge).
+Review fixed one acceptance gap: a provider `RestClientException` (e.g. embedding
+endpoint down) now maps to 503 `ERR_UPSTREAM` instead of falling to 500.
 **Priority:** Medium
 **Branch:** `task/TASK-BE-012-backend-error-contract`
 **Surfaced by:** TASK-BE-004 adversarial review (2026-07-18) — degraded-mode / privacy
