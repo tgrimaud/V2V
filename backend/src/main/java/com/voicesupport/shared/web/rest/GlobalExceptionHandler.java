@@ -11,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientException;
 
 // Shared, sanitized REST error contract for both bounded contexts (TASK-BE-012). Client bodies
 // carry only a stable error_code, a generic message and the correlation_id (TASK-BE-009); the
@@ -35,7 +36,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ERR_400, MSG_400);
     }
 
-    @ExceptionHandler({UpstreamUnavailableException.class, DataAccessException.class})
+    // Dependency failures map to a sanitized 503: our own UpstreamUnavailableException (e.g. LLM
+    // timeout), a vector-store failure (DataAccessException), and any REST client failure raised
+    // by an embedding/LLM provider adapter on the retrieval path (RestClientException, incl.
+    // ResourceAccessException for connection refused/read timeouts).
+    @ExceptionHandler({UpstreamUnavailableException.class, DataAccessException.class, RestClientException.class})
     public ResponseEntity<ErrorResponse> handleUpstream(Exception ex) {
         // Full detail (cause, message) server-side only; the client never sees the upstream text.
         log.error("[ERROR] code={} correlation_id={} type={}",

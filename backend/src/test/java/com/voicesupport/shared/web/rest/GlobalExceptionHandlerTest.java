@@ -6,6 +6,7 @@ import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -38,8 +39,12 @@ class GlobalExceptionHandlerTest {
         @Bean
         GroundQueryUseCase groundQueryUseCase() {
             // Throws an upstream failure carrying sensitive-looking detail; the advice must never
-            // echo it to the client.
+            // echo it to the client. domain=restfail simulates a provider REST failure on the
+            // retrieval path (e.g. embedding endpoint down) which must also map to 503.
             return (question, domain, topK, alreadyGreeted) -> {
+                if ("restfail".equals(domain)) {
+                    throw new ResourceAccessException("I/O error " + LEAK_MARKER);
+                }
                 throw new UpstreamUnavailableException("connect " + LEAK_MARKER);
             };
         }
@@ -81,5 +86,19 @@ class GlobalExceptionHandlerTest {
         assertFalse(body.contains("ollama-internal"), "response leaked an internal host");
         assertFalse(body.contains("SECRET-Dptoken"), "response leaked a secret-like token");
         assertFalse(body.contains("refused"), "response leaked upstream error text");
+    }
+
+    @Test
+    @DisplayName("a provider REST failure on the retrieval path also maps to a sanitized 503 ERR_UPSTREAM")
+    void restClientFailureReturns503() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/conversation/retrieve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"Pourquoi ma facture change ?\",\"domain\":\"restfail\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error_code").value("ERR_UPSTREAM"))
+                .andReturn();
+
+        assertFalse(result.getResponse().getContentAsString().contains("ollama-internal"),
+                "response leaked an internal host");
     }
 }
