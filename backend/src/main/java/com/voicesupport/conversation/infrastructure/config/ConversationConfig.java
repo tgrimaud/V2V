@@ -21,8 +21,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class ConversationConfig {
@@ -84,15 +86,19 @@ public class ConversationConfig {
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a
-    // worker for the whole stream, so the ceiling caps concurrent streams; excess turns queue.
+    // worker for the whole stream, so max-threads caps concurrent streams and a bounded queue caps
+    // the backlog. Beyond both, submissions are rejected (AbortPolicy) and the controller degrades
+    // to a sanitized 503 rather than queueing unboundedly — same fail-fast stance as the LLM pool.
     @Bean(destroyMethod = "shutdown")
     public ExecutorService sseStreamExecutor(
-            @Value("${voice-support.conversation.stream.max-threads:16}") int maxThreads) {
+            @Value("${voice-support.conversation.stream.max-threads:16}") int maxThreads,
+            @Value("${voice-support.conversation.stream.queue-capacity:32}") int queueCapacity) {
         ThreadFactory factory = runnable -> {
             Thread thread = new Thread(runnable, "sse-stream");
             thread.setDaemon(true);
             return thread;
         };
-        return Executors.newFixedThreadPool(maxThreads, factory);
+        return new ThreadPoolExecutor(maxThreads, maxThreads, 60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(queueCapacity), factory, new ThreadPoolExecutor.AbortPolicy());
     }
 }

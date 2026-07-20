@@ -62,7 +62,7 @@ class ConverseStreamSession {
             stream();
             emitter.complete();
         } catch (SseSendException e) {
-            outcome = "error";
+            outcome = "cancelled";
             log.info("[CONVERSE-STREAM] client_disconnected correlation_id={}", CorrelationId.current());
             emitter.completeWithError(e);
         } catch (RuntimeException e) {

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 // SSE streaming counterpart of ConverseController (ADR-0013 / TASK-BE-007): POST /converse-stream
 // with the same ConverseRequest body. The servlet thread returns the SseEmitter immediately; a
@@ -58,7 +59,12 @@ public class ConverseStreamController {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         ConverseStreamSession session =
                 new ConverseStreamSession(emitter, converseStreamUseCase, telemetry, request, correlationId);
-        streamExecutor.execute(session::run);
+        try {
+            streamExecutor.execute(session::run);
+        } catch (RejectedExecutionException e) {
+            // Concurrent-stream ceiling reached: fail fast with a sanitized 503 instead of queueing.
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
         return ResponseEntity.ok(emitter);
     }
 

@@ -620,6 +620,51 @@ token, reducing perceived latency (RF-021: `backend.first_token` diverges from
 > Priority Medium: if time-constrained, this can slip to the tentative Sprint 8;
 > BE-006 (sync) is enough for a functional real answer. Flag at mid-sprint.
 
+**Implementation (2026-07-20, `task/TASK-BE-007-streaming-tokens`, ADR-0013):**
+- **Guarded sentence-level streaming (option A).** Raw token streaming would let the
+  voice runtime speak an ungrounded amount before any check; instead the LLM tokens
+  are buffered into sentences and each completed sentence is vetted by the
+  `OutputGuardrail` (DEC-002 amount + non-answer) **before** it is emitted. A sentence
+  with an ungrounded amount is never emitted; the stream then emits the safe hand-off
+  and ends as a fallback. DEC-002 holds on the streamed path by construction.
+- **Domain (pure):** `TokenStream` contract (`domain/model`), `ConverseStreamUseCase`,
+  `StreamingAnswerGeneratorPort`, `SentenceSegmenter` (never splits a decimal amount),
+  `GuardedSentenceEmitter`, shared `ConversationHistoryFormatter` (DRY with the sync path).
+- **Application:** `StreamingConversationService` — same ground → LLM → output-guardrail
+  → memory pipeline as the sync path; memory records the final voiced answer.
+- **Adapter:** `AbstractChatClientAnswerAdapter.generate(...,Consumer)` drives Spring AI
+  `.stream().content().toStream()` so Reactor stays confined to infrastructure.
+- **REST:** `POST /api/conversation/converse-stream` (`ConverseStreamController` +
+  `ConverseStreamSession`) — same `ConverseRequest` body; emits `chunk` (per safe
+  sentence), a terminal `done` (`{text, confidence?, grounded}`), and a sanitized
+  `error` event; api-key + correlation-id echo; bounded worker pool (reject → 503).
+  The sync `/converse` stays the non-streaming fallback.
+- **Observability (ADR-0028):** new `voice_support.slice` slices `llm_first_token`
+  (LLM start → first token) and `backend_first_token` (request start → first emitted
+  chunk), distinct from `llm_wording` / `backend_request`; `[TELEMETRY]` logs carry the
+  correlation id, provider and outcome (client disconnect recorded as `cancelled`).
+- **Tests:** `SentenceSegmenterTest`, `GuardedSentenceEmitterTest`,
+  `StreamingConversationServiceTest`, `ConverseStreamControllerTest` (open),
+  `ConverseStreamControllerAuthTest` (api-key), `ConverseStreamControllerRejectionTest`
+  (503). **`mvn test` 157 green.**
+
+**Adversarial review: 94/100 — QA gate Pass.** No blocking findings. Non-blocking:
+(1) provider streaming uses the SDK's default WebClient, so the BE-012 read timeout
+covers only the sync path — a streaming inter-chunk timeout is a tracked follow-up;
+(2) a sentence ending in a bare digit+period (`… reste 5.`) is not split (granularity
+only, safety unaffected — documented in `SentenceSegmenter`). Both accepted for the pilot.
+
+**QA functional + latency (live, Mistral + pgvector + Ollama):** GO.
+- First chunk streamed ~850 ms before full completion (`backend_first_token` 1371 ms vs
+  `backend_request` 2217 ms); `llm_first_token` 618 ms. RF-021 satisfied
+  (`backend.first_token` ≠ `backend.request`).
+- DEC-002: an explicit "prix exact en euros" request voiced **no** ungrounded amount
+  (bot deferred to a dossier check / hand-off).
+- Sync `/converse` unchanged.
+
+**Status:** implementation + 157 tests + adversarial review (94/100) + QA functional &
+latency (GO) done. **Merge-ready** — awaiting the user's explicit merge request.
+
 ### TASK-BE-008 — Wire `voice-agent --backend http` end to end
 
 **Goal:** Replace the stub with the real engine in the running Voice2Voice loop.
@@ -807,7 +852,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated + merged into `feat/sprint-7-answer-engine` (2026-07-19, ff; branch deleted) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19) — provider-agnostic grounded LLM wording (DEC-002); adversarial review + QA GO |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
-| TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | Planned (Medium; may defer) |
+| TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Implementation + adversarial review (94/100) + QA/latency GO — **merge-ready**, awaiting the user's explicit merge request. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
