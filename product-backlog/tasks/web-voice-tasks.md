@@ -1306,7 +1306,12 @@ ADR-0018 (latency taxonomy + the `channel_egress` / end-of-turn known gap), DEC-
 **Depends on:** TASK-WEB-007 (WebRTC transport), TASK-WEB-009 (streaming composite
 report — done), TASK-BE-010 (real-backend composite baseline)
 **Classification:** V1 pilot gate
-**Status:** Proposed (2026-07-20) — created from ADR-0029; unscheduled
+**Status:** Proposed (2026-07-20) — created from ADR-0029. **Out-of-sprint
+pilot-readiness follow-up** (EPIC-010, feeds US-040 pilot readiness report): kept
+**off the Sprint 8 billing theme** (identity/BSS/PDF/comparison); schedule in the
+pilot-readiness latency pass **before the pilot**. No urgency — the voice path
+(STT/TTS/WebRTC, Sprint 6) and the real backend (Sprint 7) are frozen, so the
+mouth-to-ear measurement stays valid whenever it is run.
 **Priority:** High
 **Branch:** `task/TASK-WEB-014-mouth-to-ear-latency` (to be created when scheduled)
 
