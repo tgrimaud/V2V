@@ -84,3 +84,8 @@ voice-support:
     #   ollama      = local/offline alternative (llama3.1:8b)
     # Embeddings always stay on Ollama (nomic-embed-text, 768d); this only selects chat.
     provider: ${LLM_PROVIDER:mistral-api}
+  observability:
+    # Allow-list bounding the `channel` metric tag cardinality (TASK-BE-009). A client-supplied
+    # channel outside this list collapses to `other` on the metric tag; the raw value stays in
+    # the [CONVERSE] log. Extend this list when onboarding a new channel (e.g. sms).
+    allowed-channels: ${OBSERVABILITY_ALLOWED_CHANNELS:web,phone,whatsapp,api}

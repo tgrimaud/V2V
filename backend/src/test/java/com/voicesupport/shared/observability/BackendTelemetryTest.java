@@ -79,4 +79,30 @@ class BackendTelemetryTest {
                 .timer();
         assertNotNull(timer);
     }
+
+    @Test
+    @DisplayName("collapses a client-supplied unknown channel to 'other' to bound tag cardinality")
+    void boundsUnknownChannelCardinality() {
+        // GIVEN a client-controlled channel outside the allow-list (cardinality-attack shape)
+        CorrelationId.setChannel("evil-" + "x".repeat(500));
+
+        // WHEN a slice is timed
+        telemetry.time(Slices.BACKEND_REQUEST, "pgvector", () -> "ok");
+
+        // THEN the raw value is not used as a tag; it collapses to the bounded 'other' bucket
+        assertNotNull(registry.find("voice_support.slice").tag("channel", "other").timer());
+    }
+
+    @Test
+    @DisplayName("normalizes an allow-listed channel case-insensitively")
+    void normalizesAllowedChannelCase() {
+        // GIVEN an allow-listed channel supplied in mixed case
+        CorrelationId.setChannel("Phone");
+
+        // WHEN a slice is timed
+        telemetry.time(Slices.BACKEND_REQUEST, "pgvector", () -> "ok");
+
+        // THEN the tag is the normalized lower-case allow-list value
+        assertNotNull(registry.find("voice_support.slice").tag("channel", "phone").timer());
+    }
 }
