@@ -27,7 +27,7 @@ from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_pipeline.answer import answer_with_telemetry  # noqa: E402
 
 API_KEY = "sk-super-secret-123456"
-ENDPOINT = "https://backend.internal/api/conversation/ask"
+ENDPOINT = "https://backend.internal/api/conversation/converse"
 
 
 def _request(transcript: str = "pourquoi ma facture augmente") -> AnswerRequest:
@@ -88,6 +88,8 @@ class HttpBackendMappingTest(unittest.TestCase):
         call = transport.calls[0]
         self.assertEqual(call["url"], ENDPOINT)
         self.assertEqual(call["headers"]["x-api-key"], API_KEY)
+        # The correlation id is propagated as a header too (one id end to end).
+        self.assertEqual(call["headers"]["X-Correlation-Id"], "corr-1")
         sent = json.loads(call["body"])
         self.assertEqual(sent["transcript"], "bonjour")
         self.assertEqual(sent["conversation_id"], "conv-1")

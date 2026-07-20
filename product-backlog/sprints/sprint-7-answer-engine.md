@@ -681,6 +681,35 @@ post-merge.
   placeholder), under one correlation id end to end.
 - The batch/stub paths remain available as fallback.
 
+**Implementation (2026-07-20, `task/TASK-BE-008-wire-http-backend`):**
+- The `HttpBackendAdapter` + `--backend {stub,http}` seam already implemented the
+  ADR-0021 `/converse` contract (Sprint 5, TASK-WEB-003-C). BE-008 completes the
+  live wiring rather than adding a new client:
+  - `HttpBackendAdapter._headers` now also sends the turn's `correlation_id` as the
+    `X-Correlation-Id` request header (not a secret) so the backend's request filter
+    logs the same id from its first line — one id end to end even before the
+    controller reads it from the body (the body value stays authoritative).
+  - `BackendTelemetry` default channel allow-list gains **`web_voice`** so the real
+    web Voice2Voice channel is reported as its own metric series instead of
+    collapsing to `other` (TASK-BE-009 cardinality guard preserved for unknowns).
+  - Docs/config fixed to the real endpoint: `.env.example` + `development-guide.md`
+    now use `…/api/conversation/converse` (was the stale `/answer`); `voice-agent/README.md`
+    gains a full-stack run recipe (pgvector + Ollama + Java backend + voice-agent).
+- **Live-verified end to end** (pgvector 5433 + Ollama `nomic-embed-text` + real
+  Mistral + real Gradium STT/TTS): a spoken billing turn (`fixtures/long/billing-question.pcm`)
+  → real STT transcript → `POST /api/conversation/converse` → KB-grounded French
+  billing answer spoken back as WAV. Response headers `X-Answer-Provider: http-backend`,
+  `X-Answer-Outcome: success`, `X-Correlation-Id: e2e-be008-turn`. The **same**
+  correlation id appears across the backend `retrieval` / `llm_wording` /
+  `backend_request` slice logs and `[CONVERSE] grounded=true confidence=0.79`.
+  `--backend stub` remains the offline default fallback.
+- Tests: voice-agent **315 unittest + 26 behave scenarios** green (adds the
+  outbound `X-Correlation-Id` assertion); backend **158 tests** green (adds the
+  `web_voice` first-class channel test). No new blocking findings.
+- **Status:** implementation + wiring + docs + live e2e + tests done; adversarial
+  review self-run 95/100 (no blocking findings). Merge-ready (awaiting explicit
+  merge).
+
 ### TASK-BE-009 — Observability across guardrails, retrieval, LLM
 
 **Goal:** Make the backend's behavior and latency observable per slice (mandatory
@@ -855,7 +884,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19) — provider-agnostic grounded LLM wording (DEC-002); adversarial review + QA GO |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
 | TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `fe7e0fc..5bf4503`) — adversarial review 94/100 + QA/latency GO. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
-| TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
+| TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | ✅ Implemented + live e2e (2026-07-20) — real Gradium STT → `/api/conversation/converse` → KB-grounded spoken WAV; `X-Answer-Provider: http-backend`, one correlation id (`e2e-be008-turn`) across all backend slices; outbound `X-Correlation-Id` header + `web_voice` first-class metric channel; docs/config fixed to `/converse`. Voice-agent 315 unittest + 26 behave green, backend 158 green. Merge-ready (awaiting explicit merge) |
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
 | TASK-BE-012 | `task/TASK-BE-012-backend-error-contract` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; stacked on BE-009) — adversarial review 92/100 + QA GO — sanitized `GlobalExceptionHandler`/`ErrorResponse` (400/503, no leak) + `@NotBlank` + hard LLM timeout; RestClient→503 gap fixed in review; **Medium finding fixed pre-merge**: bounded LLM executor (max 16, reject→503) + provider HTTP read/connect timeout so a stalled socket is closed (live-verified `SocketTimeoutException`→sanitized 503); 137 tests green |

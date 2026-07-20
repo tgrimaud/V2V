@@ -94,6 +94,19 @@ class BackendTelemetryTest {
     }
 
     @Test
+    @DisplayName("keeps the web_voice runtime channel first-class (TASK-BE-008)")
+    void keepsWebVoiceChannelFirstClass() {
+        // GIVEN the web Voice2Voice runtime channel
+        CorrelationId.setChannel("web_voice");
+
+        // WHEN a slice is timed
+        telemetry.time(Slices.BACKEND_REQUEST, "pgvector", () -> "ok");
+
+        // THEN it is reported under its own tag, not collapsed to 'other'
+        assertNotNull(registry.find("voice_support.slice").tag("channel", "web_voice").timer());
+    }
+
+    @Test
     @DisplayName("normalizes an allow-listed channel case-insensitively")
     void normalizesAllowedChannelCase() {
         // GIVEN an allow-listed channel supplied in mixed case

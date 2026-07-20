@@ -303,6 +303,35 @@ export VOICE_BACKEND_API_KEY=...    # optional; sent as x-api-key, never logged
 python3 -m web_voice.server --provider gradium --backend http
 ```
 
+### Full stack end to end (TASK-BE-008)
+
+Wire the running Voice2Voice loop to the real Java answer engine (KB-grounded
+answers instead of the stub). From the repository root:
+
+```bash
+# 1. Infra: pgvector (5433) + Ollama (11434), then pull the embedding model
+docker compose up -d postgres ollama
+docker exec -it voice-support-bot-ollama-1 ollama pull nomic-embed-text   # first run only
+
+# 2. Java answer engine on :8080 (Mistral chat + Ollama embeddings + pgvector)
+cd backend && set -a && . ../.env && set +a && mvn spring-boot:run
+#    First run only: sync the knowledge base once the app is up
+curl -s -X POST http://localhost:8080/api/knowledge/sync
+
+# 3. Voice runtime on :8090, pointed at the real endpoint
+cd voice-agent
+export VOICE_BACKEND_URL=http://127.0.0.1:8080/api/conversation/converse
+export VOICE_BACKEND_API_KEY="$CONVERSATION_API_KEY"   # only if the backend sets one
+./.venv/bin/python -m web_voice.server --provider gradium --backend http
+# open http://127.0.0.1:8090/ and speak, or drive one turn:
+#   curl -s -X POST "http://127.0.0.1:8090/api/voice/turn?correlation_id=e2e-1" \
+#     --data-binary @fixtures/<clip>.pcm -H 'Content-Type: application/octet-stream' -D -
+```
+
+The same `correlation_id` flows runtime → backend (body + `X-Correlation-Id`
+header) so a turn is traceable end to end. `--backend stub` remains the offline
+fallback.
+
 - `--backend {stub,http}` (env `VOICE_BACKEND`, default `stub`) selects the answer
   engine via `build_backend`. `StubBackendAdapter` is deterministic and digit-free;
   `HttpBackendAdapter` posts JSON to `VOICE_BACKEND_URL` with an **injectable

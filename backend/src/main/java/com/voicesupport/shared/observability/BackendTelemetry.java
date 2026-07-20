@@ -29,7 +29,9 @@ public class BackendTelemetry {
     private static final String OUTCOME_ERROR = "error";
     private static final String CHANNEL_NONE = "n/a";
     private static final String CHANNEL_OTHER = "other";
-    private static final String DEFAULT_ALLOWED_CHANNELS = "web,phone,whatsapp,api";
+    // `web_voice` is the web Voice2Voice runtime channel (TASK-BE-008) — kept first-class so the
+    // real spoken path is reportable per channel instead of collapsing into `other`.
+    private static final String DEFAULT_ALLOWED_CHANNELS = "web,web_voice,phone,whatsapp,api";
 
     private final MeterRegistry registry;
     // Bounds the `channel` tag to a known allow-list so a client-supplied value cannot explode

@@ -75,15 +75,20 @@ class HttpBackendAdapter:
             # Nothing to answer: stays UNAVAILABLE upstream, never a fabricated turn.
             raise EmptyTranscriptError("No transcript to answer")
         try:
-            response = self._transport(self._url, self._headers(), self._payload(request), self._timeout_s)
+            response = self._transport(self._url, self._headers(request), self._payload(request), self._timeout_s)
         except Exception as exc:  # noqa: BLE001 - any transport fault degrades to a safe reply
             return self._degraded(request, exc)
         return self._map_response(request, response)
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, request: AnswerRequest) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["x-api-key"] = self._api_key
+        # Propagate the turn's correlation id as a header too (not a secret), so the backend's
+        # request filter logs the same id from the very first line — one id end to end even
+        # before the controller reads it from the body (the body value stays authoritative).
+        if request.correlation_id:
+            headers["X-Correlation-Id"] = request.correlation_id
         return headers
 
     def _payload(self, request: AnswerRequest) -> bytes:
