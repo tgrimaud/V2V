@@ -86,4 +86,14 @@ voice-support:
     provider: ${LLM_PROVIDER:mistral-api}
     # Hard timeout for the LLM wording call (TASK-BE-012). A slower/hung provider degrades to a
     # sanitized 503 ERR_UPSTREAM (the voice runtime then speaks a safe degraded turn). 0 disables.
+    # This value is also applied as the provider HTTP read timeout so a stalled socket is closed
+    # (not just abandoned by the executor); raise it when selecting the slower local ollama chat.
     timeout-ms: ${LLM_TIMEOUT_MS:8000}
+    # Provider HTTP connect timeout for the chat call (TASK-BE-012). Bounds the pre-read handshake
+    # so a dead/unreachable endpoint fails fast rather than hanging a bounded LLM worker thread.
+    connect-timeout-ms: ${LLM_CONNECT_TIMEOUT_MS:3000}
+  observability:
+    # Allow-list bounding the `channel` metric tag cardinality (TASK-BE-009). A client-supplied
+    # channel outside this list collapses to `other` on the metric tag; the raw value stays in
+    # the [CONVERSE] log. Extend this list when onboarding a new channel (e.g. sms).
+    allowed-channels: ${OBSERVABILITY_ALLOWED_CHANNELS:web,phone,whatsapp,api}
