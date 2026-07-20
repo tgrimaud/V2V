@@ -161,7 +161,7 @@ The recommended first implementation sequence is:
 | OQ-002 | Minimum proof threshold for answering without escalation | Product / Billing SME / Legal | Open |
 | OQ-003 | BSS data availability and granularity | BSS owner | Open |
 | OQ-004 | Invoice PDF extraction reliability and fixture coverage | Product / BSS / QA | Open |
-| OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | Open |
+| OQ-005 | Pilot latency acceptance context | Product / Architecture / Operations | ✅ Decided (2026-07-20) — ADR-0029 (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s; cascade reaffirmed; TASK-WEB-009 prerequisite) |
 | OQ-006 | Genesys handoff integration shape | Product / Contact Center / Architecture / Security | Open |
 | OQ-007 | Backend AI/RAG framework (Spring AI vs LangChain4J vs other) | Architecture / Backend | ✅ Decided (2026-07-17) — Spring Boot + Spring AI (ADR-0026); TASK-BE-001 implements |
 

@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Accepted — the latency **taxonomy** and measurement method below remain in force,
+but the pilot acceptance **number** (`p95 < 800 ms`) is **revised by
+[ADR-0029](ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+for the real-backend cascade (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio`
+p95 ≤ 1.2 s). The 800 ms figure recorded here was validated against a **stub**
+backend; read this ADR together with ADR-0029.
 
 ## Context
 

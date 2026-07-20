@@ -105,7 +105,20 @@ is `parseable`, `partial` or `unusable`.
 
 ## OQ-005 - Pilot Latency Acceptance Context
 
-**Status:** Open  
+**Status:** ✅ Decided (2026-07-20) — resolved by
+[ADR-0029](../../docs/architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md).
+The stub-era `p95 < 800 ms` is revised for the real-backend Gradium cascade to a
+**mouth-to-ear p95 ≤ 1.5 s** primary criterion (market production-viability ceiling)
+and a **`time_to_first_audio` p95 ≤ 1.2 s** engineering sub-target; ~700 ms stays an
+aspirational experience target reachable only via speech-to-speech. Prerequisite to
+sign-off: instrument true mouth-to-ear (`channel_egress` + end-of-turn hold,
+**TASK-WEB-009**). STT/TTS are at the Gradium floor, so the latency lever is the
+answer engine and the criterion — not the voice edges; ADR-0012 (modular cascade) is
+reaffirmed and "OpenAI" for V1 means the cascade chat provider (ADR-0006/DEC-011),
+not Realtime speech-to-speech. Remaining OQ-005 sub-items (journeys counted,
+fixture-vs-live provider mix, barge-in authority) fold into TASK-WEB-009 and the QA
+latency plan.
+
 **Owner:** Product / Architecture / Operations  
 **Impacts:** EPIC-004, EPIC-005, EPIC-009
 
