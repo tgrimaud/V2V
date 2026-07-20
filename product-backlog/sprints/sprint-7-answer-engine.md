@@ -18,16 +18,22 @@ chain stays gated by its open questions (see Out Of Scope).
 
 ## Status
 
-**Status:** Planned — **not started.** Preparation only. This sprint must not start
-until **Sprint 6 is finished and validated** (see Entry Condition).
+**Status:** ✅ **Done (closed 2026-07-20)** — all 12 tickets (TASK-BE-001…012)
+validated by the user and merged into `feat/restart-from-scratch` (fast-forward,
+`49ded02..6ab8b78`). Closure checks rerun green: backend `mvn test` **160** (JDK 17,
+BUILD SUCCESS), voice-agent **315** unittest + **26** Behave (10 features / 120 steps).
+The real KB-grounded answer engine is live behind the ADR-0021 contract. The latency
+fil (composite p95 ≈1.41 s NO-GO vs the stub-era 800 ms) was closed by **ADR-0029**
+(pilot criterion revised to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s;
+resolves OQ-005); the perceived-latency measurement is tracked out-of-sprint as
+TASK-WEB-014.
 **Created:** 2026-07-17
+**Closed:** 2026-07-20
 **Predecessor:** [`sprint-6-streaming.md`](sprint-6-streaming.md) (Sprint 6 — ✅ Done,
 closed 2026-07-17; ADR-0018 latency gate MET via TASK-STT-013, `time_to_first_audio`
 p95 761.5 ms < 800 ms)
-**Working branch:** `feat/sprint-7-answer-engine` (to be cut from
-`feat/restart-from-scratch` once Sprint 6 is merged/validated)
-**Final validator:** User
-**Merge rule:** no branch is merged unless the user explicitly asks.
+**Working branch:** `feat/sprint-7-answer-engine` (merged → `feat/restart-from-scratch`)
+**Final validator:** User (validated per-ticket; sprint closure requested 2026-07-20)
 
 ## Entry Condition (hard gate before this sprint starts)
 
@@ -46,7 +52,7 @@ p95 761.5 ms < 800 ms)
 | Sprint 1–4 | STT validation → hardening → TTS → Pipecat batch | ✅ Done |
 | Sprint 5 | Backend answer bridge (stub/http contract, US-019 close) | ✅ Done |
 | Sprint 6 | Streaming voice loop + latency (WebRTC/streaming/barge-in) | ✅ Done (closed 2026-07-17) — ADR-0018 gate MET (p95 761.5 ms) via TASK-STT-013 |
-| **Sprint 7** | **Real answer engine — RAG over the knowledge base (EPIC-005) — this sprint** | 📋 Planned (prep only; gated on Sprint 6 close) |
+| **Sprint 7** | **Real answer engine — RAG over the knowledge base (EPIC-005) — this sprint** | ✅ Done (closed 2026-07-20) — merged → `feat/restart-from-scratch`; latency fil closed by ADR-0029 (OQ-005) |
 | Sprint 8 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) → customer-specific invoice explanation | Planned — gated by OQ-001/003/004 |
 | Sprint 9 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 

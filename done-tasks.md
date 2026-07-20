@@ -515,3 +515,70 @@ stub backend (real answer time is a separate budget line), `channel_egress` excl
 - `product-backlog/sprints/sprint-6-streaming.md`, `product-backlog/backlog-index.md` — sprint ✅ Done
 - `done-tasks.md` — this entry
 - (implementation + tests + ADR-0023/0024/0025 + QA docs landed via the merged sprint stack)
+
+## 2026-07-20 — Sprint 7 closed: real KB-grounded answer engine (EPIC-005)
+
+**Summary:**
+
+Sprint 7 turned the Voice2Voice loop's deterministic **stub** answer into a real,
+**KB-grounded** answer engine — a Spring Boot + Spring AI backend behind the ADR-0021
+conversation contract, RAG over `knowledge-base/`, guardrails before/after retrieval,
+provider-agnostic LLM wording (DEC-002, no invented amounts), a conversation endpoint
+with short memory, guarded sentence-level SSE streaming, real HTTP wiring of the voice
+runtime, backend observability, a sanitized REST error contract, and backend latency
+levers. All 12 tickets were validated by the user and merged into the sprint branch.
+
+- **TASK-BE-001** — framework decision: **Spring Boot + Spring AI** (ADR-0026) +
+  Hive-light modular decomposition, two context-first bounded contexts (ADR-0027);
+  closes OQ-007.
+- **TASK-BE-002** — hexagonal backend scaffold (context-first), ArchUnit green, JDK 17.
+- **TASK-BE-003** — KB ingestion socle: pivot `SourceDocument` + Markdown connector +
+  idempotent sync + pgvector 768 + swappable Ollama embedding adapter.
+- **TASK-BE-004** — RAG retrieval + domain guardrails before/after (ADR-0014).
+- **TASK-BE-005** — provider-agnostic grounded LLM wording (Mistral default / Ollama alt), DEC-002.
+- **TASK-BE-006** — conversation endpoint (ADR-0021) + short conversation memory.
+- **TASK-BE-007** — guarded sentence-level SSE token streaming (ADR-0013); new
+  `llm_first_token` / `backend_first_token` slices.
+- **TASK-BE-008** — wired `voice-agent --backend http` end to end to the live
+  `/api/conversation/converse` (real Gradium STT → KB-grounded spoken WAV, one correlation id).
+- **TASK-BE-009** — backend observability: correlation-id continuity + `voice_support.slice`
+  metrics (retrieval/LLM/request p50/p95/p99), ADR-0028; channel tag bounded by allow-list.
+- **TASK-BE-010** — QA functional (GO) + per-slice latency report with the real backend;
+  surfaced composite `time_to_first_audio` p95 ≈1.54 s NO-GO vs the stub-era 800 ms → escalated OQ-005.
+- **TASK-BE-012** — sanitized `GlobalExceptionHandler` / `ErrorResponse` (400/503, no leak)
+  + `@NotBlank` + bounded LLM executor + provider HTTP timeouts.
+- **TASK-BE-011** — backend latency levers: configurable retrieval top-K
+  (`voice-support.conversation.retrieval.top-k`, default 4), trimmed system prompt
+  (~989→~593 chars, DEC-002 rules kept), prompt-size telemetry; `backend_first_token`
+  p95 789→**653** ms; composite p95 ≈1.41 s.
+
+### Latency decision (closes the sprint's latency fil)
+
+- **ADR-0029** revised the ADR-0018 pilot criterion for a real backend and **resolved
+  OQ-005**: the stub-era `p95 < 800 ms` becomes **mouth-to-ear p95 ≤ 1.5 s** (primary,
+  market-viability ceiling) + **`time_to_first_audio` p95 ≤ 1.2 s** engineering
+  sub-target, grounded in a 2026 market baseline. STT/TTS are at the Gradium floor;
+  sub-second is a speech-to-speech property, so ADR-0012 (modular cascade) is reaffirmed
+  and "OpenAI" for V1 means the cascade chat provider, not Realtime S2S.
+- **TASK-WEB-014** (fold `channel_egress` + end-of-turn hold into a true mouth-to-ear
+  metric) created as an **out-of-sprint pilot-readiness follow-up** (EPIC-010 / US-040).
+
+### Gates (closure checks rerun 2026-07-20)
+
+- **Backend `mvn test`: 160 tests, BUILD SUCCESS** (JDK 17, no DB/Ollama needed — manual fakes).
+- **voice-agent: 315 unittest OK** + **26 Behave scenarios** (10 features / 120 steps) green.
+- Per-ticket: adversarial review ≥ 92/100 + QA GO + user validation (recorded in `sprint-7-answer-engine.md`).
+
+### Sprint closure
+
+- Merged **fast-forward** `feat/sprint-7-answer-engine` → `feat/restart-from-scratch`
+  (`49ded02..6ab8b78`, 158 files, +9642 lines: backend module + ADR-0026/0027/0028/0029
+  + QA report + backlog updates).
+- Sprint status flipped to ✅ Done in `sprints/sprint-7-answer-engine.md` (header + roadmap)
+  and the `backlog-index.md` sprint registry.
+- Scope held: customer identity / BSS / PDF / comparison stay gated (OQ-001/003/004) for Sprint 8.
+
+### Files changed (closure)
+- `product-backlog/sprints/sprint-7-answer-engine.md`, `product-backlog/backlog-index.md` — sprint ✅ Done
+- `done-tasks.md` — this entry
+- (implementation + tests + ADR-0026/0027/0028/0029 + QA docs landed via the merged sprint stack)
