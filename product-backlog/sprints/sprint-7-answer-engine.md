@@ -662,8 +662,10 @@ only, safety unaffected — documented in `SentenceSegmenter`). Both accepted fo
   (bot deferred to a dossier check / hand-off).
 - Sync `/converse` unchanged.
 
-**Status:** implementation + 157 tests + adversarial review (94/100) + QA functional &
-latency (GO) done. **Merge-ready** — awaiting the user's explicit merge request.
+**Status:** ✅ Validated by user + merged into `feat/sprint-7-answer-engine`
+(2026-07-20, fast-forward `fe7e0fc..5bf4503`) — 157 tests + adversarial review
+(94/100) + QA functional & latency (GO). `mvn test` re-run green on the sprint branch
+post-merge.
 
 ### TASK-BE-008 — Wire `voice-agent --backend http` end to end
 
@@ -852,7 +854,7 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated + merged into `feat/sprint-7-answer-engine` (2026-07-19, ff; branch deleted) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19) — provider-agnostic grounded LLM wording (DEC-002); adversarial review + QA GO |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |
-| TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Implementation + adversarial review (94/100) + QA/latency GO — **merge-ready**, awaiting the user's explicit merge request. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
+| TASK-BE-007 | `task/TASK-BE-007-streaming-tokens` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff; `fe7e0fc..5bf4503`) — adversarial review 94/100 + QA/latency GO. Guarded sentence-level SSE (`/converse-stream`, ADR-0013) preserving DEC-002; new `llm_first_token`/`backend_first_token` slices; 157 tests green. Live: first chunk ~850 ms before completion (`backend_first_token` 1371 ms vs `backend_request` 2217 ms), no ungrounded amount voiced, sync path intact |
 | TASK-BE-008 | `task/TASK-BE-008-wire-http-backend` | Planned |
 | TASK-BE-009 | `task/TASK-BE-009-observability` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-20, ff) — adversarial review 93/100 + QA GO, ADR-0028 — correlation-id continuity + `voice_support.slice` metrics (retrieval/LLM/request, p50/p95/p99); **Medium finding fixed pre-merge**: `channel` metric tag bounded by allow-list (unknown→`other`, live-verified); 137 tests green |
 | TASK-BE-010 | `task/TASK-BE-010-qa-latency` | Planned |
