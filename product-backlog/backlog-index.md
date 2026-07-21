@@ -182,6 +182,12 @@ dependency (RF-006 → OQ-001 / TASK-WEB-003). RF-003 became actionable once Gra
 was selected (DEC-005, TASK-STT-008); RF-007 (chunked/streaming ingress) → TASK-STT-010;
 RF-008 (WER normalization, surfaced by the first live Gradium run) → TASK-STT-011.
 
+## Bugs
+
+| Bug | Title | Severity | Status | Notes |
+|-----|-------|:--------:|--------|-------|
+| [BUG-001](bugs/BUG-001-input-guardrail-blocks-legitimate-phishing-support.md) | Input guardrail refuses legitimate phishing/scam-call support questions | Medium | New (P2) | Surfaced in Sprint 8 live test; belongs to Sprint 7 guardrail (ADR-0014). Tracked as a Sprint 8 out-of-sprint follow-up. |
+
 ## Decisions
 
 | Key | Decision | Status |

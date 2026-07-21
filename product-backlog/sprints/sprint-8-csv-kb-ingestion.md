@@ -72,6 +72,16 @@ Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-task
   time; separate sprint after this one.
 - Generic PDF/Confluence/DB connectors (post-MVP roadmap).
 
+### Follow-ups (Out Of Sprint)
+
+Findings surfaced while testing the Sprint 8 KB but **not** part of the CSV-ingestion theme —
+tracked here, prioritized separately, not in this sprint's delivery scope.
+
+| Ticket | Finding (where it surfaced) | Owning area | Priority |
+|---|---|---|---|
+| [BUG-001](../bugs/BUG-001-input-guardrail-blocks-legitimate-phishing-support.md) | Input guardrail refuses legitimate "phishing/scam calls" support questions (live converse test on the full corpus) — `phishing` is in the unsafe blocklist | Answer engine / guardrails (Sprint 7, ADR-0014) | P2 |
+| TASK-BE-015 | Answer language: bot answers in FR on EN corpus/questions (live converse test) | Answer engine wording / language | TBD |
+
 ## Exit criteria
 
 - A sync run ingests all CSV articles; a second run is a no-op (idempotent via
