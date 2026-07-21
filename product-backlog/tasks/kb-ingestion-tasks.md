@@ -211,8 +211,9 @@ and expose ingestion progress/throughput for monitoring.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related:** TASK-BE-013 / TASK-BE-014 (English Eir corpus now ingested), Sprint 7 answer engine
 **Classification:** V1 core — answer quality; runtime-affecting (requires observability).
-**Status:** In progress — implemented 2026-07-21 (backend + 199 tests green, infra-free);
-pending adversarial review + QA + user validation.
+**Status:** Merge-ready 2026-07-21 — implemented (backend + 210 tests green, infra-free),
+adversarial review closed, QA passed (9 BDD acceptance scenarios,
+`docs/qa/task-be-015-answer-language-qa-report.md`); pending user validation/merge.
 **Priority:** High
 **Branch:** `task/TASK-BE-015-answer-language`
 
