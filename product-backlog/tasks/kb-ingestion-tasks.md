@@ -29,10 +29,10 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 `DomainClassifier`)
 **Classification:** V1 core — provides the real operator KB content the answer
 engine retrieves from.
-**Status:** In review — implemented; adversarial code review 92/100 (satisfied);
-QA functional PASS; bulk latency deferred to TASK-BE-014; awaiting user validation.
+**Status:** ✅ Validated by user (2026-07-21) — adversarial 92/100, QA PASS, live-validated.
+Merge-ready; merge awaiting explicit user request.
 **Priority:** High
-**Branch:** `task/TASK-BE-013-csv-article-connector`
+**Branch:** `task/TASK-BE-013-csv-article-connector` (included in `task/TASK-BE-014-batch-embedding`)
 
 ### Review & QA outcome
 
@@ -138,7 +138,8 @@ retrieve grounded operator content at scale.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related enabler:** TASK-BE-003 (ingestion socle), TASK-BE-013 (CSV connector)
 **Classification:** V1 core — makes bulk CSV ingestion viable (performance).
-**Status:** In review — adversarial **93/100 (gate Pass)**, **QA PASS** + live-validated; awaiting user validation.
+**Status:** ✅ Validated by user (2026-07-21) — adversarial 93/100 (gate Pass), QA PASS, live-validated.
+Merge-ready; merge awaiting explicit user request.
 **Priority:** High
 **Branch:** `task/TASK-BE-014-batch-embedding`
 
