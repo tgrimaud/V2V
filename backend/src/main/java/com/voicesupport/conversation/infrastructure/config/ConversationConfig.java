@@ -18,6 +18,7 @@ import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -69,8 +70,10 @@ public class ConversationConfig {
             GroundQueryUseCase groundQueryUseCase,
             AnswerGeneratorPort answerGeneratorPort,
             OutputGuardrail outputGuardrail,
-            LanguageDetector languageDetector) {
-        return new AnswerService(groundQueryUseCase, answerGeneratorPort, outputGuardrail, languageDetector);
+            LanguageDetector languageDetector,
+            BackendTelemetry backendTelemetry) {
+        return new AnswerService(
+                groundQueryUseCase, answerGeneratorPort, outputGuardrail, languageDetector, backendTelemetry);
     }
 
     @Bean
@@ -95,9 +98,10 @@ public class ConversationConfig {
             OutputGuardrail outputGuardrail,
             ConversationMemoryPort conversationMemoryPort,
             LanguageDetector languageDetector,
+            BackendTelemetry backendTelemetry,
             @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
         return new StreamingConversationService(groundQueryUseCase, streamingAnswerGeneratorPort,
-                outputGuardrail, conversationMemoryPort, languageDetector, topK);
+                outputGuardrail, conversationMemoryPort, languageDetector, backendTelemetry, topK);
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a

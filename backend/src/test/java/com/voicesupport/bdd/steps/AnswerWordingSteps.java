@@ -10,6 +10,8 @@ import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeAnswerGeneratorPort;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -36,7 +38,8 @@ public class AnswerWordingSteps {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
         service = new AnswerService(
-                grounding, generator, new OutputGuardrail(), new LanguageDetector(AnswerLanguage.ENGLISH));
+                grounding, generator, new OutputGuardrail(),
+                new LanguageDetector(AnswerLanguage.ENGLISH), new BackendTelemetry(new SimpleMeterRegistry()));
         answer = null;
         llmReply = null;
     }

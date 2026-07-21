@@ -10,6 +10,8 @@ import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeAnswerGeneratorPort;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
@@ -32,7 +34,8 @@ public class ConversationMemorySteps {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
         AnswerService answerService = new AnswerService(
-                grounding, generator, new OutputGuardrail(), new LanguageDetector(AnswerLanguage.ENGLISH));
+                grounding, generator, new OutputGuardrail(),
+                new LanguageDetector(AnswerLanguage.ENGLISH), new BackendTelemetry(new SimpleMeterRegistry()));
         service = new ConversationService(answerService, new InMemoryConversationMemoryAdapter(6, 100), 4);
     }
 

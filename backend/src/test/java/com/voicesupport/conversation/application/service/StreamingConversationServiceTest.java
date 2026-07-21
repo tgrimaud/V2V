@@ -12,6 +12,8 @@ import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
 import com.voicesupport.conversation.fake.FakeStreamingAnswerGeneratorPort;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ class StreamingConversationServiceTest {
     private FakeGroundQueryUseCase grounding;
     private FakeStreamingAnswerGeneratorPort generator;
     private InMemoryConversationMemoryAdapter memory;
+    private SimpleMeterRegistry meterRegistry;
     private StreamingConversationService service;
     private final List<String> chunks = new ArrayList<>();
 
@@ -37,8 +40,9 @@ class StreamingConversationServiceTest {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeStreamingAnswerGeneratorPort();
         memory = new InMemoryConversationMemoryAdapter(6, 100);
+        meterRegistry = new SimpleMeterRegistry();
         service = new StreamingConversationService(grounding, generator, new OutputGuardrail(), memory,
-                new LanguageDetector(AnswerLanguage.ENGLISH), 3);
+                new LanguageDetector(AnswerLanguage.ENGLISH), new BackendTelemetry(meterRegistry), 3);
     }
 
     @Test
@@ -142,6 +146,25 @@ class StreamingConversationServiceTest {
 
         // THEN the streaming LLM is instructed to answer in English
         assertEquals(AnswerLanguage.ENGLISH, generator.lastLanguage);
+    }
+
+    @Test
+    @DisplayName("a guardrail-fallback stream still records the answer language (no provider) (TASK-BE-015)")
+    void fallbackStreamRecordsAnswerLanguage() {
+        // GIVEN the grounding pipeline blocks an English off-topic question
+        grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Out of scope.")));
+
+        // WHEN the stream is consumed (no LLM call happens)
+        consume("What's the weather like today?", "c1");
+
+        // THEN per-turn language observability is still emitted for the fallback, tagged provider=n/a
+        double count = meterRegistry.get("voice_support.answer_language")
+                .tag("provider", "n/a")
+                .tag("language", "en")
+                .counter()
+                .count();
+        assertEquals(1.0, count);
+        assertEquals(0, generator.callCount);
     }
 
     private GeneratedAnswer consume(String transcript, String conversationId) {

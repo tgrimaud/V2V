@@ -14,6 +14,7 @@ import com.voicesupport.conversation.domain.service.ConversationHistoryFormatter
 import com.voicesupport.conversation.domain.service.GuardedSentenceEmitter;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
+import com.voicesupport.shared.observability.BackendTelemetry;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -31,6 +32,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
     private final OutputGuardrail outputGuardrail;
     private final ConversationMemoryPort memory;
     private final LanguageDetector languageDetector;
+    private final BackendTelemetry telemetry;
     // Retrieval top-K for the streaming voice path (TASK-BE-011): configurable so the RAG context
     // size (a driver of LLM time-to-first-token) can be tuned without a code change.
     private final int topK;
@@ -41,12 +43,14 @@ public class StreamingConversationService implements ConverseStreamUseCase {
             OutputGuardrail outputGuardrail,
             ConversationMemoryPort memory,
             LanguageDetector languageDetector,
+            BackendTelemetry telemetry,
             int topK) {
         this.groundQueryUseCase = groundQueryUseCase;
         this.streamingGenerator = streamingGenerator;
         this.outputGuardrail = outputGuardrail;
         this.memory = memory;
         this.languageDetector = languageDetector;
+        this.telemetry = telemetry;
         this.topK = topK;
     }
 
@@ -57,25 +61,30 @@ public class StreamingConversationService implements ConverseStreamUseCase {
 
     private GeneratedAnswer runPipeline(String transcript, String conversationId, Consumer<String> onChunk) {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
+        List<String> history = ConversationHistoryFormatter.format(prior);
+        AnswerLanguage language = languageDetector.resolve(transcript, history);
         GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty());
         GeneratedAnswer answer = grounding.answerable()
-                ? streamGrounded(transcript, grounding, ConversationHistoryFormatter.format(prior), onChunk)
-                : emitFallback(grounding.decision().fallbackMessage(), onChunk);
+                ? streamGrounded(transcript, grounding, history, language, onChunk)
+                : emitFallback(language, grounding.decision().fallbackMessage(), onChunk);
         memory.append(conversationId, new ConversationTurn(transcript, answer.text()));
         return answer;
     }
 
     private GeneratedAnswer streamGrounded(
-            String question, GroundingResult grounding, List<String> history, Consumer<String> onChunk) {
+            String question, GroundingResult grounding, List<String> history,
+            AnswerLanguage language, Consumer<String> onChunk) {
         List<RetrievedEvidence> evidence = grounding.evidence();
-        AnswerLanguage language = languageDetector.resolve(question, history);
         GuardedSentenceEmitter emitter = new GuardedSentenceEmitter(
                 question, evidence, outputGuardrail, onChunk, bestScore(evidence));
         streamingGenerator.generate(question, evidence, history, language, emitter::accept);
         return emitter.finish();
     }
 
-    private GeneratedAnswer emitFallback(String message, Consumer<String> onChunk) {
+    private GeneratedAnswer emitFallback(AnswerLanguage language, String message, Consumer<String> onChunk) {
+        // Guardrail-fallback turns skip the streaming LLM, so record the answer language here (no
+        // provider) to keep per-turn language observability complete on the voice path (TASK-BE-015).
+        telemetry.recordAnswerLanguage(null, language.code());
         onChunk.accept(message);
         return GeneratedAnswer.fallback(message);
     }

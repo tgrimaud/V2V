@@ -9,6 +9,8 @@ import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeAnswerGeneratorPort;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,14 +27,17 @@ class AnswerServiceTest {
 
     private FakeGroundQueryUseCase grounding;
     private FakeAnswerGeneratorPort generator;
+    private SimpleMeterRegistry meterRegistry;
     private AnswerService service;
 
     @BeforeEach
     void setUp() {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
+        meterRegistry = new SimpleMeterRegistry();
         service = new AnswerService(
-                grounding, generator, new OutputGuardrail(), new LanguageDetector(AnswerLanguage.ENGLISH));
+                grounding, generator, new OutputGuardrail(),
+                new LanguageDetector(AnswerLanguage.ENGLISH), new BackendTelemetry(meterRegistry));
     }
 
     @Test
@@ -156,5 +161,24 @@ class AnswerServiceTest {
 
         // THEN the LLM is instructed to answer in French
         assertEquals(AnswerLanguage.FRENCH, generator.lastLanguage);
+    }
+
+    @Test
+    @DisplayName("a guardrail-fallback turn still records the answer language (no provider) (TASK-BE-015)")
+    void fallbackTurnRecordsAnswerLanguage() {
+        // GIVEN the grounding pipeline blocks an English off-topic question
+        grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Out of scope.")));
+
+        // WHEN answering (no LLM call happens)
+        service.answer("What's the weather like today?", "billing", 4, true, List.of());
+
+        // THEN per-turn language observability is still emitted for the fallback, tagged provider=n/a
+        double count = meterRegistry.get("voice_support.answer_language")
+                .tag("provider", "n/a")
+                .tag("language", "en")
+                .counter()
+                .count();
+        assertEquals(1.0, count);
+        assertEquals(0, generator.callCount);
     }
 }

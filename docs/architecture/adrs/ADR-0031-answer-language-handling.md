@@ -68,8 +68,12 @@ French one (BR7).
 
 `BackendTelemetry.recordAnswerLanguage(provider, language)` emits a counter
 `voice_support.answer_language{provider,language}` and a `[LANGUAGE]` structured log with the
-correlation id, recorded when the LLM system message is built. The chosen answer language is
-therefore observable per turn for QA, with no transcript/answer content logged.
+correlation id. It is recorded for **every** turn: LLM answer turns record it when the system
+message is built (tagged with the real `provider`, e.g. `mistral-api`), and guardrail-only
+fallback turns (off-topic / unsafe / greeting / insufficient evidence — no LLM call) record it in
+the application service tagged `provider=n/a`, so the fallback path is distinguishable yet fully
+covered. The chosen answer language is therefore observable per turn for QA on both paths, with no
+transcript/answer content logged.
 
 ## Consequences
 
@@ -85,8 +89,8 @@ therefore observable per turn for QA, with no transcript/answer content logged.
 
 ## Known Limitations / Follow-ups
 
-- Per-turn language is recorded on the **LLM answer path**; guardrail-only fallback turns follow
-  the same detector but are not separately counted — a lightweight extension if QA needs it.
+- Per-turn language is recorded on **both** the LLM answer path (`provider=<llm>`) and
+  guardrail-only fallback turns (`provider=n/a`), so QA has complete per-turn language coverage.
 - The heuristic covers FR/EN; adding a language means extending the enum's marker sets (and a
   stronger detector, e.g. a language-id model, can replace the heuristic behind the same API).
 - **Voice STT/TTS language** on the spoken path must match the answered language — a voice-runtime

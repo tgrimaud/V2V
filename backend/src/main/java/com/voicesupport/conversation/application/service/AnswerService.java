@@ -10,6 +10,7 @@ import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
+import com.voicesupport.shared.observability.BackendTelemetry;
 
 import java.util.List;
 
@@ -24,28 +25,34 @@ public class AnswerService implements AnswerQuestionUseCase {
     private final AnswerGeneratorPort answerGenerator;
     private final OutputGuardrail outputGuardrail;
     private final LanguageDetector languageDetector;
+    private final BackendTelemetry telemetry;
 
     public AnswerService(
             GroundQueryUseCase groundQueryUseCase,
             AnswerGeneratorPort answerGenerator,
             OutputGuardrail outputGuardrail,
-            LanguageDetector languageDetector) {
+            LanguageDetector languageDetector,
+            BackendTelemetry telemetry) {
         this.groundQueryUseCase = groundQueryUseCase;
         this.answerGenerator = answerGenerator;
         this.outputGuardrail = outputGuardrail;
         this.languageDetector = languageDetector;
+        this.telemetry = telemetry;
     }
 
     @Override
     public GeneratedAnswer answer(
             String question, String domain, int topK, boolean alreadyGreeted, List<String> history) {
+        List<String> safeHistory = history == null ? List.of() : history;
+        AnswerLanguage language = languageDetector.resolve(question, safeHistory);
         GroundingResult grounding = groundQueryUseCase.ground(question, domain, topK, alreadyGreeted);
         if (!grounding.answerable()) {
+            // Guardrail-fallback turns skip the LLM, so record the answer language here (no provider)
+            // to keep per-turn language observability complete, not just on LLM turns (TASK-BE-015).
+            telemetry.recordAnswerLanguage(null, language.code());
             return GeneratedAnswer.fallback(grounding.decision().fallbackMessage());
         }
         List<RetrievedEvidence> evidence = grounding.evidence();
-        List<String> safeHistory = history == null ? List.of() : history;
-        AnswerLanguage language = languageDetector.resolve(question, safeHistory);
         String text = answerGenerator.generate(question, evidence, safeHistory, language);
         GuardrailDecision outputDecision = outputGuardrail.check(question, text, evidence);
         if (outputDecision.blocked()) {

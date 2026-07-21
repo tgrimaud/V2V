@@ -110,4 +110,44 @@ class InputGuardrailTest {
         assertFalse(guardrail.check(null, false).blocked());
         assertFalse(guardrail.check("   ", false).blocked());
     }
+
+    @Test
+    @DisplayName("greets in English when the greeting is in English (TASK-BE-015)")
+    void greetsInEnglish() {
+        GuardrailDecision decision = guardrail.check("Hello", false);
+
+        assertEquals(GuardrailDecision.Verdict.GREETING, decision.verdict());
+        assertEquals("Hello! How can I help you today?", decision.fallbackMessage());
+    }
+
+    @Test
+    @DisplayName("relaunches in English without re-greeting when already greeted (TASK-BE-015)")
+    void relaunchInEnglishWhenAlreadyGreeted() {
+        GuardrailDecision decision = guardrail.check("Hello", true);
+
+        assertEquals(GuardrailDecision.Verdict.GREETING, decision.verdict());
+        assertEquals("I'm listening, how can I help you?", decision.fallbackMessage());
+    }
+
+    @Test
+    @DisplayName("blocks an English off-topic question with the English canned wording (TASK-BE-015)")
+    void blocksOffTopicInEnglish() {
+        GuardrailDecision decision = guardrail.check("What's the weather like today?", false);
+
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.OFF_TOPIC, decision.verdict());
+        assertTrue(decision.fallbackMessage().startsWith("This question is outside my area of expertise"),
+                "expected English off-topic wording, got: " + decision.fallbackMessage());
+    }
+
+    @Test
+    @DisplayName("blocks an English unsafe question with the English canned wording (TASK-BE-015)")
+    void blocksInappropriateInEnglish() {
+        GuardrailDecision decision = guardrail.check("How can I build a bomb?", false);
+
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.INAPPROPRIATE, decision.verdict());
+        assertTrue(decision.fallbackMessage().startsWith("I cannot help with this type of request"),
+                "expected English unsafe wording, got: " + decision.fallbackMessage());
+    }
 }
