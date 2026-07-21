@@ -56,6 +56,8 @@
       .status.live .dot { background: var(--ok); }
       .status.error .dot { background: var(--error); }
       code { color: var(--accent); word-break: break-all; }
+      .meta { margin-top: 14px; font-size: 0.9rem; color: var(--text); }
+      .meta .big { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
       .hint { margin-top: 16px; font-size: 0.8rem; color: var(--muted); }
     </style>
   </head>
@@ -71,6 +73,10 @@
         <button id="stop" class="stop" disabled>Hang up</button>
       </div>
       <p class="status" id="status"><span class="dot"></span><span id="statusText">Idle</span></p>
+      <p class="meta" id="meta">
+        Response time: <span class="big" id="latency">—</span>
+        <span id="latencyStats"></span>
+      </p>
       <p class="hint">
         Correlation id: <code id="corr">—</code><br />
         Use headphones: there is no echo cancellation on the bot's own audio yet

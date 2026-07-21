@@ -13,13 +13,113 @@ const statusEl = document.getElementById("status");
 const statusText = document.getElementById("statusText");
 const corrEl = document.getElementById("corr");
 const remoteAudio = document.getElementById("remote");
+const latencyEl = document.getElementById("latency");
+const latencyStatsEl = document.getElementById("latencyStats");
 
 let pc = null;
 let micStream = null;
 
+// ---- Per-turn response-time measurement (client-side, perceived latency) ----
+// WebRTC playback is a continuous media stream, so there is no per-turn HTTP
+// response to time (unlike index.html). Instead we watch two energy envelopes —
+// the mic (user) and the remote track (bot) — and report the gap between the end
+// of the user's speech and the first bot audio. That is the latency the caller
+// actually perceives. Thresholds are RMS on [-1,1] float samples.
+const USER_ON = 0.02;      // mic RMS above this = user is speaking
+const USER_OFF = 0.012;    // mic RMS below this = user is silent
+const BOT_ON = 0.015;      // remote RMS above this = bot started answering
+const SILENCE_HANGOVER_MS = 500; // sustained silence before a turn is "ended"
+const POLL_MS = 40;
+
+let analysisCtx = null;
+let micAnalyser = null;
+let botAnalyser = null;
+let pollTimer = null;
+
+let userWasSpeaking = false;
+let lastLoudTs = 0;        // last time mic was above USER_OFF
+let awaitingBot = false;   // user finished, waiting for the bot to start
+let userEndTs = 0;
+const latencies = [];
+
 function setStatus(text, cls) {
   statusText.textContent = text;
   statusEl.className = "status" + (cls ? " " + cls : "");
+}
+
+function rms(analyser, buf) {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  return Math.sqrt(sum / buf.length);
+}
+
+function makeAnalyser(stream) {
+  const src = analysisCtx.createMediaStreamSource(stream);
+  const analyser = analysisCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  src.connect(analyser); // analysis only — not connected to destination
+  return analyser;
+}
+
+function startLatencyPolling() {
+  const micBuf = new Float32Array(micAnalyser.fftSize);
+  const botBuf = new Float32Array(1024);
+  resetTurnState();
+  pollTimer = setInterval(() => {
+    const now = performance.now();
+    const micRms = rms(micAnalyser, micBuf);
+    const botRms = botAnalyser ? rms(botAnalyser, botBuf) : 0;
+    trackUserTurn(micRms, botRms, now);
+    detectBotOnset(botRms, now);
+  }, POLL_MS);
+}
+
+// Ignore mic energy while the bot is speaking so its speaker->mic echo is not
+// mistaken for a new user turn (echoCancellation reduces but never removes it).
+function trackUserTurn(micRms, botRms, now) {
+  if (botRms > BOT_ON) return;
+  if (micRms > USER_OFF) lastLoudTs = now;
+  if (micRms > USER_ON) {
+    if (!userWasSpeaking) setStatus("Listening…", "live");
+    userWasSpeaking = true;
+    awaitingBot = false;
+  } else if (userWasSpeaking && now - lastLoudTs > SILENCE_HANGOVER_MS) {
+    userWasSpeaking = false;
+    awaitingBot = true;
+    userEndTs = lastLoudTs;
+    setStatus("Thinking…", "live");
+  }
+}
+
+function detectBotOnset(botRms, now) {
+  if (!awaitingBot || botRms <= BOT_ON) return;
+  awaitingBot = false;
+  reportLatency(Math.round(now - userEndTs));
+  setStatus("Bot answering…", "live");
+}
+
+function reportLatency(ms) {
+  latencyEl.textContent = ms + " ms";
+  latencies.push(ms);
+  const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
+  latencyStatsEl.textContent = " · avg " + avg + " ms · " + latencies.length + " turn" + (latencies.length > 1 ? "s" : "");
+}
+
+function resetTurnState() {
+  userWasSpeaking = false;
+  awaitingBot = false;
+  lastLoudTs = performance.now();
+  userEndTs = 0;
+}
+
+function stopLatencyPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  micAnalyser = null;
+  botAnalyser = null;
+  if (analysisCtx && analysisCtx.state !== "closed") analysisCtx.close();
+  analysisCtx = null;
 }
 
 async function waitForIceGathering(peer) {
@@ -50,9 +150,13 @@ async function startCall() {
   setStatus("Requesting microphone…");
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
+    analysisCtx = new AudioContext();
+    micAnalyser = makeAnalyser(micStream);
     pc = new RTCPeerConnection();
     pc.addEventListener("track", (event) => {
       remoteAudio.srcObject = event.streams[0];
+      botAnalyser = makeAnalyser(event.streams[0]);
+      startLatencyPolling();
     });
     pc.addEventListener("connectionstatechange", () => {
       if (pc.connectionState === "connected") setStatus("Live — speak now", "live");
@@ -85,6 +189,7 @@ async function startCall() {
 function stopCall() {
   stopBtn.disabled = true;
   startBtn.disabled = false;
+  stopLatencyPolling();
   if (pc) {
     pc.close();
     pc = null;
