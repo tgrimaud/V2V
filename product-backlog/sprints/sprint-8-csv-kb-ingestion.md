@@ -19,8 +19,9 @@ sprint (EPIC-011, after this one). It reuses the Sprint 7 answer engine unchange
 
 **Status:** In progress (opened 2026-07-21). Core tickets **TASK-BE-013 + TASK-BE-014
 validated by user and merged** into `feat/restart-from-scratch` (2026-07-21, fast-forward);
-their ticket branches are deleted. Sprint kept open pending TASK-BE-015 (answer language)
-scoping. BUG-001 tracked as an out-of-sprint follow-up. Theme set by user decision: the
+their ticket branches are deleted. **TASK-BE-015 (answer language) scoped 2026-07-21 and
+pulled into this sprint** (user decisions captured); implementation not started. Sprint kept
+open pending TASK-BE-015. BUG-001 tracked as an out-of-sprint follow-up. Theme set by user decision: the
 billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 
 ## Roadmap Context
@@ -50,6 +51,7 @@ billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifierPort` — bulk KB ingestion from `articles.csv` (CommonsCSV parse, jsoup HTML→text, `sourceId=document_id`, `language=en`, domain classified vs anchors) | V1 core (KB content) | TASK-BE-003 | ✅ **Validated by user (2026-07-21)** — adversarial 92/100, QA PASS, live-validated (threshold 0.55); merge-ready |
 | TASK-BE-014 | Batch embedding/insert — extend `VectorStorePort` with a batched `storeChunks` + sync progress metrics/logs (perf, batched embedding/insert) | V1 core (KB content) | TASK-BE-013 | ✅ **Validated by user (2026-07-21)** — adversarial 93/100, QA PASS, live-validated (75s→44.7s; full corpus ~73s, idempotent re-sync 306 skipped), 184 tests green; merge-ready |
+| TASK-BE-015 | Answer language handling — assistant answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn with session stickiness | V1 core (answer quality) | TASK-BE-013 | Planned — scoped 2026-07-21 (user decisions captured); not started |
 
 Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-tasks.md).
 
@@ -68,9 +70,6 @@ Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-task
 
 ## Out of scope / follow-ups
 
-- **TASK-BE-015 — answer language handling** (bot answers in the question/content
-  language, English default): tracked as a follow-up; decision pending (include here
-  or later). See OQ on FR(dev)/EN(prod) mix in the same vector store.
 - **EPIC-011 — orchestration / domain routing**: consumes these domain tags at query
   time; separate sprint after this one.
 - Generic PDF/Confluence/DB connectors (post-MVP roadmap).
@@ -83,7 +82,9 @@ tracked here, prioritized separately, not in this sprint's delivery scope.
 | Ticket | Finding (where it surfaced) | Owning area | Priority |
 |---|---|---|---|
 | [BUG-001](../bugs/BUG-001-input-guardrail-blocks-legitimate-phishing-support.md) | Input guardrail refuses legitimate "phishing/scam calls" support questions (live converse test on the full corpus) — `phishing` is in the unsafe blocklist | Answer engine / guardrails (Sprint 7, ADR-0014) | P2 |
-| TASK-BE-015 | Answer language: bot answers in FR on EN corpus/questions (live converse test) | Answer engine wording / language | TBD |
+
+> Note: TASK-BE-015 (answer language) was initially surfaced here as a follow-up; scoped
+> 2026-07-21 and **pulled into this sprint's delivery scope** (see the Tickets table above).
 
 ## Exit criteria
 
@@ -92,6 +93,10 @@ tracked here, prioritized separately, not in this sprint's delivery scope.
 - Stored chunk content is plain text (no HTML); every chunk carries a classified
   `domain` and `source_type = "csv-article"`.
 - Bulk ingest uses batched embedding/insert; total ingest time + throughput reported.
+- The assistant answers in the customer's question language (FR/EN) — consistently across
+  answers, insufficient-evidence fallback, off-topic refusal and escalation — with English as
+  the configurable default for the Eir pilot; the chosen language is observable per turn
+  (TASK-BE-015).
 - `mvn test` stays infra-free (domain fakes for connector, sync and classifier); a
   small live/IT run validates the real corpus against Postgres + Ollama.
 - Adversarial review ≥ 90 % + QA per ticket; docs (`docs/knowledge-base/…`,

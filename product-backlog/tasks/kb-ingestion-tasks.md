@@ -203,3 +203,125 @@ and expose ingestion progress/throughput for monitoring.
 - Optimal batch size vs Ollama embedding throughput and Postgres insert size.
 - Whether to make sync asynchronous (job + status) if the bound is still too long
   for a single HTTP request.
+
+---
+
+## TASK-BE-015 — Answer Language Handling
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related:** TASK-BE-013 / TASK-BE-014 (English Eir corpus now ingested), Sprint 7 answer engine
+**Classification:** V1 core — answer quality; runtime-affecting (requires observability).
+**Status:** Planned — scoped 2026-07-21 (in Sprint 8 scope, user decision).
+**Priority:** High
+**Branch:** `task/TASK-BE-015-answer-language` (to create)
+
+### Context
+
+The Eir knowledge base is in **English**; the development default framing is **French**.
+In the Sprint 8 live test, an **English** question received a **French** answer, and the
+insufficient-evidence, off-topic and escalation messages are currently tied to a fixed
+language. This produces answers the customer cannot reliably understand and erodes trust.
+
+### Product Objective
+
+The customer always hears the assistant **in their own language**, consistently across
+grounded answers, fallbacks, refusals and human-escalation wording — for both French and
+English — so the pilot (English) and development (French) both behave correctly.
+
+### Target Users
+
+End customers (voice and text) of the operator support assistant, in French or English.
+
+### In Scope
+
+- Answering each customer turn in the **language of that turn's question**.
+- Consistent language across **all** assistant utterances in a turn: grounded answer,
+  insufficient-evidence fallback, off-topic refusal, and the human-escalation sentence.
+- A **configurable default language** used when the turn's language cannot be confidently
+  determined (English for the Eir pilot).
+- **Per-turn** language decision with **session stickiness** as the tie-breaker on ambiguity.
+- Answering in the **customer's language even when the relevant knowledge is only available
+  in the other language** (FR↔EN) for V1.
+- **French and English** support, designed to allow adding languages later without reworking
+  the flow.
+
+### Out Of Scope
+
+- Languages beyond French and English.
+- Translating or storing the knowledge base in multiple languages (KB stays as ingested).
+- Any change to which documents are retrieved (retrieval scope is unchanged).
+
+### Business Rules
+
+- **BR1** — The assistant answers a customer turn in the language of that turn's question.
+- **BR2** — When the turn's language is not confidently determined (very short/ambiguous
+  input, or a first greeting with no question), the assistant uses the deployment default
+  language (English for the Eir pilot; the default is configurable per deployment).
+- **BR3** — Language is decided per turn; on ambiguity the assistant keeps the current
+  conversation language rather than switching arbitrarily (session stickiness).
+- **BR4** — Every assistant utterance in a turn is in the chosen language: grounded answer,
+  insufficient-evidence fallback, off-topic refusal, and the escalation/hand-off sentence.
+- **BR5** — If the relevant knowledge exists only in the other supported language, the
+  assistant still answers in the customer's language based on that content (FR↔EN).
+- **BR6** — V1 supports French and English; adding a language must not require reworking the
+  conversation flow.
+- **BR7** — Escalation and safety behaviors (human hand-off, unsafe/off-topic refusal) must
+  trigger identically in every supported language.
+
+### Non-Functional Expectations
+
+- The chosen answer language is **observable per turn** (correlation id) for QA and
+  troubleshooting (OpenTelemetry: structured log + attribute; metric by language when enough
+  samples exist).
+- The language decision must **not materially degrade the voice latency SLO**
+  (`time_to_first_audio`); any added step is measured per the latency slices.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: English question gets an English answer
+  Given the knowledge base contains the relevant English content
+  When the customer asks a support question in English
+  Then the assistant answers in English
+
+Scenario: French question gets a French answer
+  When the customer asks a support question in French
+  Then the assistant answers in French
+
+Scenario: Fallbacks and escalation follow the customer's language
+  Given the assistant cannot find enough evidence to answer
+  When the customer asked in English
+  Then the insufficient-evidence message and the human-escalation offer are in English
+
+Scenario: Off-topic refusal follows the customer's language
+  When the customer asks an out-of-scope question in English
+  Then the refusal is in English
+
+Scenario: Customer language wins over content language
+  Given the only relevant knowledge is in English
+  When the customer asks in French
+  Then the assistant answers in French based on that content
+
+Scenario: Ambiguous turn uses the default / current language
+  Given the customer's turn is too short to determine a language
+  Then the assistant replies in the current conversation language, or the deployment
+    default (English for the Eir pilot) if none is established yet
+```
+
+### Dependencies
+
+- English corpus ingested (TASK-BE-013 / TASK-BE-014) — done.
+- Voice runtime STT/TTS must operate in the answered language on the voice path — see open
+  question (a mismatch would make the customer hear the wrong-language voice regardless of
+  the text answer).
+
+### Risks / Open Questions
+
+- **Voice STT/TTS language** (Architecture / voice runtime): does the voice path select
+  STT/TTS per language, and how does the chosen answer language propagate to TTS so the
+  spoken reply matches? Escalate to `software-architect` / voice runtime before the voice
+  acceptance run.
+- **Fidelity of a French answer grounded on English content** (and vice-versa): QA to
+  validate comprehension quality.
+- Detection approach and prompt/guardrail changes are implementation details owned by the
+  backend developer (kept out of this product ticket).
