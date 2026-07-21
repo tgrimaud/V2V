@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -47,13 +48,34 @@ class AbstractChatClientAnswerAdapterTest {
         assertFalse(withoutHistory.contains("Historique de la conversation"));
     }
 
+    @Test
+    @DisplayName("the answer-language directive is appended per call (TASK-BE-015)")
+    void appendsLanguageDirective() {
+        // GIVEN one evidence chunk
+        List<RetrievedEvidence> evidence = List.of(new RetrievedEvidence("ctx", "s", "d", 0.9));
+
+        // WHEN building for English and for French
+        String english = adapter.systemMessage(evidence, List.of(), AnswerLanguage.ENGLISH);
+        String french = adapter.systemMessage(evidence, List.of(), AnswerLanguage.FRENCH);
+
+        // THEN each carries the matching forceful language directive
+        assertTrue(english.contains("You MUST answer ONLY in English"));
+        assertTrue(english.contains("I'll transfer you to an advisor"));
+        assertTrue(french.contains("répondre UNIQUEMENT en français"));
+        assertTrue(french.contains("je vous transfère à un conseiller"));
+    }
+
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
         TestAdapter() {
             super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {
-            return buildSystemMessage(evidence, history);
+            return buildSystemMessage(evidence, history, AnswerLanguage.ENGLISH);
+        }
+
+        String systemMessage(List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
+            return buildSystemMessage(evidence, history, language);
         }
 
         @Override

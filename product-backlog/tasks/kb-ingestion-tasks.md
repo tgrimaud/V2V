@@ -211,9 +211,26 @@ and expose ingestion progress/throughput for monitoring.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related:** TASK-BE-013 / TASK-BE-014 (English Eir corpus now ingested), Sprint 7 answer engine
 **Classification:** V1 core — answer quality; runtime-affecting (requires observability).
-**Status:** Planned — scoped 2026-07-21 (in Sprint 8 scope, user decision).
+**Status:** In progress — implemented 2026-07-21 (backend + 199 tests green, infra-free);
+pending adversarial review + QA + user validation.
 **Priority:** High
-**Branch:** `task/TASK-BE-015-answer-language` (to create)
+**Branch:** `task/TASK-BE-015-answer-language`
+
+### Implementation notes (2026-07-21)
+
+- `AnswerLanguage` value object (FR/EN): detection heuristic (`detect`), per-call LLM directive
+  (with the exact hand-off sentence), hand-off markers, `fromCode` for config.
+- `LanguageDetector` domain service: per-turn decision = question language → session stickiness
+  (from history) → configured default; `@Bean` reading `voice-support.conversation.default-language`
+  (`en`, Eir pilot).
+- Language threaded through `AnswerGeneratorPort` / `StreamingAnswerGeneratorPort` to the LLM
+  adapter, which appends the directive last (recency overrides the French base prompt). Mistral/
+  Ollama prompts dropped the old language line + hardcoded FR refusal.
+- `GuardrailMessages` uses the shared detector; `OutputGuardrail` matches every language's hand-off
+  markers (English refusal caught like French). Ambiguous default flipped FR → EN (pilot).
+- Observability: `voice_support.answer_language{provider,language}` counter + `[LANGUAGE]` log
+  (correlation id) recorded per LLM turn.
+- ADR-0031 records the decision; closes the ADR-0030 answer-language open question.
 
 ### Context
 

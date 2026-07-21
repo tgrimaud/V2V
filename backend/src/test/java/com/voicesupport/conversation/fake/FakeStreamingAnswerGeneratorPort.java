@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.fake;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 
@@ -13,6 +14,7 @@ public class FakeStreamingAnswerGeneratorPort implements StreamingAnswerGenerato
     public int callCount;
     public List<RetrievedEvidence> lastEvidence = List.of();
     public List<String> lastHistory = List.of();
+    public AnswerLanguage lastLanguage;
 
     public void setNextTokens(List<String> tokens) {
         this.tokens = List.copyOf(tokens);
@@ -23,11 +25,12 @@ public class FakeStreamingAnswerGeneratorPort implements StreamingAnswerGenerato
     }
 
     @Override
-    public void generate(
-            String question, List<RetrievedEvidence> evidence, List<String> history, Consumer<String> onToken) {
+    public void generate(String question, List<RetrievedEvidence> evidence, List<String> history,
+            AnswerLanguage language, Consumer<String> onToken) {
         this.callCount++;
         this.lastEvidence = List.copyOf(evidence);
         this.lastHistory = List.copyOf(history);
+        this.lastLanguage = language;
         for (String token : tokens) {
             onToken.accept(token);
         }

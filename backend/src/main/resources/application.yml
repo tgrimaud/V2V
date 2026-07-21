@@ -89,6 +89,12 @@ voice-support:
     # best similarity score reaches this threshold. Provisional value per ADR-0021;
     # the definitive answer threshold is gated by OQ-002.
     confidence-threshold: ${CONVERSATION_CONFIDENCE_THRESHOLD:0.5}
+    # Answer-language default (TASK-BE-015, ADR-0031). The assistant answers in the language of the
+    # customer's question (FR/EN); this default is used only when a turn is too ambiguous to detect
+    # and no session language is established yet. English for the Eir pilot; set to fr for a French
+    # deployment. This is the ANSWER language, distinct from voice-support.knowledge.default-language
+    # (the KB ingestion language tag).
+    default-language: ${CONVERSATION_DEFAULT_LANGUAGE:en}
     retrieval:
       # Number of KB chunks injected as LLM context on the voice /converse[-stream] paths
       # (TASK-BE-011). This is the main driver of prompt size, hence of LLM time-to-first-token:

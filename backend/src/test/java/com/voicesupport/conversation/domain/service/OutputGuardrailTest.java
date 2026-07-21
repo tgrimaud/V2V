@@ -93,6 +93,22 @@ class OutputGuardrailTest {
     }
 
     @Test
+    @DisplayName("an English transfer/refusal answer is caught like the French one (TASK-BE-015)")
+    void englishRefusalAnswerBlocked() {
+        // GIVEN evidence and the model emits the English instructed refusal
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Support content.", "support-faq#1", "support", 0.8));
+
+        // WHEN the answer is the English hand-off sentence
+        GuardrailDecision decision = guardrail.check(
+                "Obscure question?", "I don't have this information, I'll transfer you to an advisor.", evidence);
+
+        // THEN it is blocked as a hand-off, not reported as a grounded answer
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
+    }
+
+    @Test
     @DisplayName("an English question yields an English hand-off message")
     void englishFallback() {
         // GIVEN evidence with no amount and an English question

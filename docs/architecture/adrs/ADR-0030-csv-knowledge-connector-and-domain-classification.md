@@ -111,8 +111,9 @@ order-of-magnitude larger corpus (embedding, not insert, is the dominant cost).
   now the dominant cost; the full 306-article corpus ingests in ~73–92 s (async ingest only
   needed for a far larger corpus).
 - English content coexists with the French dev FAQ in one vector store. Answer
-  language handling and any `language` retrieval filter are out of scope here
-  (tracked as TASK-BE-015 + an open question on FR/EN mixing).
+  language handling is resolved by TASK-BE-015 /
+  [ADR-0031](ADR-0031-answer-language-handling.md) (answer in the customer's FR/EN
+  language, EN pilot default); a `language` retrieval filter remains out of scope.
 
 ## Alternatives Considered
 

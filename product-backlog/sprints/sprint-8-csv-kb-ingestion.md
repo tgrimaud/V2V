@@ -51,7 +51,7 @@ billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifierPort` — bulk KB ingestion from `articles.csv` (CommonsCSV parse, jsoup HTML→text, `sourceId=document_id`, `language=en`, domain classified vs anchors) | V1 core (KB content) | TASK-BE-003 | ✅ **Validated by user (2026-07-21)** — adversarial 92/100, QA PASS, live-validated (threshold 0.55); merge-ready |
 | TASK-BE-014 | Batch embedding/insert — extend `VectorStorePort` with a batched `storeChunks` + sync progress metrics/logs (perf, batched embedding/insert) | V1 core (KB content) | TASK-BE-013 | ✅ **Validated by user (2026-07-21)** — adversarial 93/100, QA PASS, live-validated (75s→44.7s; full corpus ~73s, idempotent re-sync 306 skipped), 184 tests green; merge-ready |
-| TASK-BE-015 | Answer language handling — assistant answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn with session stickiness | V1 core (answer quality) | TASK-BE-013 | Planned — scoped 2026-07-21 (user decisions captured); not started |
+| TASK-BE-015 | Answer language handling — assistant answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn with session stickiness | V1 core (answer quality) | TASK-BE-013 | 🔧 In progress — implemented 2026-07-21 (backend + 199 tests green, ADR-0031); pending adversarial review + QA + user validation |
 
 Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-tasks.md).
 

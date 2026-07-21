@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.port.out;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 
 import java.util.List;
@@ -11,5 +12,6 @@ import java.util.function.Consumer;
 // implements both and confines the provider's reactive stream to the infrastructure layer.
 public interface StreamingAnswerGeneratorPort {
 
-    void generate(String question, List<RetrievedEvidence> evidence, List<String> history, Consumer<String> onToken);
+    void generate(String question, List<RetrievedEvidence> evidence, List<String> history,
+            AnswerLanguage language, Consumer<String> onToken);
 }

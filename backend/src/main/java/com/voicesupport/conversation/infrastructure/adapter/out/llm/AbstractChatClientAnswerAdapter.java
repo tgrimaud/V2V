@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
@@ -66,8 +67,9 @@ public abstract class AbstractChatClientAnswerAdapter
     protected abstract String providerName();
 
     @Override
-    public String generate(String question, List<RetrievedEvidence> evidence, List<String> history) {
-        String systemMessage = buildSystemMessage(evidence, history);
+    public String generate(
+            String question, List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
+        String systemMessage = buildSystemMessage(evidence, history, language);
         String text = telemetry.time(Slices.LLM_WORDING, providerName(),
                 () -> callProvider(systemMessage, question == null ? "" : question));
         // Return the raw text (empty when the model produced nothing); classifying an empty or
@@ -109,8 +111,9 @@ public abstract class AbstractChatClientAnswerAdapter
     // separately so first-token latency is reported apart from total answer time.
     @Override
     public void generate(
-            String question, List<RetrievedEvidence> evidence, List<String> history, Consumer<String> onToken) {
-        String systemMessage = buildSystemMessage(evidence, history);
+            String question, List<RetrievedEvidence> evidence, List<String> history,
+            AnswerLanguage language, Consumer<String> onToken) {
+        String systemMessage = buildSystemMessage(evidence, history, language);
         long start = System.nanoTime();
         boolean[] firstSeen = {false};
         try {
@@ -139,7 +142,8 @@ public abstract class AbstractChatClientAnswerAdapter
         return Duration.ofNanos(System.nanoTime() - startNanos);
     }
 
-    protected String buildSystemMessage(List<RetrievedEvidence> evidence, List<String> history) {
+    protected String buildSystemMessage(
+            List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
         String context = evidence == null ? "" : evidence.stream()
                 .map(RetrievedEvidence::text)
                 .collect(Collectors.joining("\n---\n"));
@@ -149,6 +153,12 @@ public abstract class AbstractChatClientAnswerAdapter
             historyBlock = HISTORY_HEADER + String.join("\n", history);
             systemMessage += historyBlock;
         }
+        // Answer-language directive last for recency (TASK-BE-015): a strong, explicit instruction
+        // at the end reliably overrides the French framing of the base prompt, so an English turn
+        // is answered in English even when the RAG context is English and the prompt is French.
+        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
+        systemMessage += "\n\n" + target.llmDirective();
+        telemetry.recordAnswerLanguage(providerName(), target.code());
         int chunkCount = evidence == null ? 0 : evidence.size();
         telemetry.recordPromptSize(
                 providerName(), systemMessage.length(), context.length(), historyBlock.length(), chunkCount);

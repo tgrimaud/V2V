@@ -11,8 +11,10 @@ import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
@@ -53,12 +55,22 @@ public class ConversationConfig {
         return new OutputGuardrail();
     }
 
+    // Answer-language decision (TASK-BE-015): default language used when a turn is too ambiguous to
+    // detect and no session language is established. English for the Eir pilot; configurable per
+    // deployment via voice-support.conversation.default-language.
+    @Bean
+    public LanguageDetector languageDetector(
+            @Value("${voice-support.conversation.default-language:en}") String defaultLanguage) {
+        return new LanguageDetector(AnswerLanguage.fromCode(defaultLanguage));
+    }
+
     @Bean
     public AnswerQuestionUseCase answerQuestionUseCase(
             GroundQueryUseCase groundQueryUseCase,
             AnswerGeneratorPort answerGeneratorPort,
-            OutputGuardrail outputGuardrail) {
-        return new AnswerService(groundQueryUseCase, answerGeneratorPort, outputGuardrail);
+            OutputGuardrail outputGuardrail,
+            LanguageDetector languageDetector) {
+        return new AnswerService(groundQueryUseCase, answerGeneratorPort, outputGuardrail, languageDetector);
     }
 
     @Bean
@@ -82,9 +94,10 @@ public class ConversationConfig {
             StreamingAnswerGeneratorPort streamingAnswerGeneratorPort,
             OutputGuardrail outputGuardrail,
             ConversationMemoryPort conversationMemoryPort,
+            LanguageDetector languageDetector,
             @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
-        return new StreamingConversationService(
-                groundQueryUseCase, streamingAnswerGeneratorPort, outputGuardrail, conversationMemoryPort, topK);
+        return new StreamingConversationService(groundQueryUseCase, streamingAnswerGeneratorPort,
+                outputGuardrail, conversationMemoryPort, languageDetector, topK);
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a

@@ -4,7 +4,9 @@ import com.voicesupport.conversation.application.service.AnswerService;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeAnswerGeneratorPort;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
@@ -33,7 +35,8 @@ public class AnswerWordingSteps {
     public void setUp() {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
-        service = new AnswerService(grounding, generator, new OutputGuardrail());
+        service = new AnswerService(
+                grounding, generator, new OutputGuardrail(), new LanguageDetector(AnswerLanguage.ENGLISH));
         answer = null;
         llmReply = null;
     }

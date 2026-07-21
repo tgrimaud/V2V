@@ -5,7 +5,9 @@ import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
 import com.voicesupport.conversation.fake.FakeStreamingAnswerGeneratorPort;
@@ -35,7 +37,8 @@ class StreamingConversationServiceTest {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeStreamingAnswerGeneratorPort();
         memory = new InMemoryConversationMemoryAdapter(6, 100);
-        service = new StreamingConversationService(grounding, generator, new OutputGuardrail(), memory, 3);
+        service = new StreamingConversationService(grounding, generator, new OutputGuardrail(), memory,
+                new LanguageDetector(AnswerLanguage.ENGLISH), 3);
     }
 
     @Test
@@ -124,6 +127,21 @@ class StreamingConversationServiceTest {
         // THEN grounding was told the caller was already greeted and got the prior turn as history
         assertTrue(grounding.lastAlreadyGreeted);
         assertTrue(generator.lastHistory.contains("Client : Pourquoi ma facture change ?"));
+    }
+
+    @Test
+    @DisplayName("the streamed answer language matches the customer's question language (TASK-BE-015)")
+    void streamsInTheQuestionLanguage() {
+        // GIVEN an answerable grounding result
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("Prorating explains the difference.", "s1", "billing", 0.8))));
+        generator.setNextTokens(List.of("Your bill varies. "));
+
+        // WHEN the customer asks in English
+        consume("Why does my bill change this month?", "c1");
+
+        // THEN the streaming LLM is instructed to answer in English
+        assertEquals(AnswerLanguage.ENGLISH, generator.lastLanguage);
     }
 
     private GeneratedAnswer consume(String transcript, String conversationId) {

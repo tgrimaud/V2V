@@ -106,7 +106,9 @@ class GuardedSentenceEmitterTest {
     }
 
     private GuardedSentenceEmitter emitterFor(List<RetrievedEvidence> evidence) {
-        return new GuardedSentenceEmitter("Question ?", evidence, guardrail, emitted::add, 0.83);
+        // A clearly French question so the hand-off wording is French (contains "conseiller"); the
+        // ambiguous default is now English for the Eir pilot (TASK-BE-015).
+        return new GuardedSentenceEmitter("Pourquoi ma facture ?", evidence, guardrail, emitted::add, 0.83);
     }
 
     private String lastEmitted() {

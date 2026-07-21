@@ -1,6 +1,7 @@
 package com.voicesupport.conversation.application.service;
 
 import com.voicesupport.conversation.domain.model.TokenStream;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
@@ -11,6 +12,7 @@ import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 import com.voicesupport.conversation.domain.service.ConversationHistoryFormatter;
 import com.voicesupport.conversation.domain.service.GuardedSentenceEmitter;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 
 import java.util.List;
@@ -28,6 +30,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
     private final StreamingAnswerGeneratorPort streamingGenerator;
     private final OutputGuardrail outputGuardrail;
     private final ConversationMemoryPort memory;
+    private final LanguageDetector languageDetector;
     // Retrieval top-K for the streaming voice path (TASK-BE-011): configurable so the RAG context
     // size (a driver of LLM time-to-first-token) can be tuned without a code change.
     private final int topK;
@@ -37,11 +40,13 @@ public class StreamingConversationService implements ConverseStreamUseCase {
             StreamingAnswerGeneratorPort streamingGenerator,
             OutputGuardrail outputGuardrail,
             ConversationMemoryPort memory,
+            LanguageDetector languageDetector,
             int topK) {
         this.groundQueryUseCase = groundQueryUseCase;
         this.streamingGenerator = streamingGenerator;
         this.outputGuardrail = outputGuardrail;
         this.memory = memory;
+        this.languageDetector = languageDetector;
         this.topK = topK;
     }
 
@@ -63,9 +68,10 @@ public class StreamingConversationService implements ConverseStreamUseCase {
     private GeneratedAnswer streamGrounded(
             String question, GroundingResult grounding, List<String> history, Consumer<String> onChunk) {
         List<RetrievedEvidence> evidence = grounding.evidence();
+        AnswerLanguage language = languageDetector.resolve(question, history);
         GuardedSentenceEmitter emitter = new GuardedSentenceEmitter(
                 question, evidence, outputGuardrail, onChunk, bestScore(evidence));
-        streamingGenerator.generate(question, evidence, history, emitter::accept);
+        streamingGenerator.generate(question, evidence, history, language, emitter::accept);
         return emitter.finish();
     }
 

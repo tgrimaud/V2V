@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.fake;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 
@@ -12,6 +13,7 @@ public class FakeAnswerGeneratorPort implements AnswerGeneratorPort {
     public String lastQuestion;
     public List<RetrievedEvidence> lastEvidence;
     public List<String> lastHistory;
+    public AnswerLanguage lastLanguage;
     public int callCount;
 
     public void setNextAnswer(String nextAnswer) {
@@ -19,10 +21,12 @@ public class FakeAnswerGeneratorPort implements AnswerGeneratorPort {
     }
 
     @Override
-    public String generate(String question, List<RetrievedEvidence> evidence, List<String> history) {
+    public String generate(
+            String question, List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
         this.lastQuestion = question;
         this.lastEvidence = evidence;
         this.lastHistory = history;
+        this.lastLanguage = language;
         this.callCount++;
         return nextAnswer;
     }

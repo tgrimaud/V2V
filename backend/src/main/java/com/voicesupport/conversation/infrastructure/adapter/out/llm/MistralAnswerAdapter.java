@@ -9,8 +9,10 @@ public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
     private static final String PROVIDER = "mistral-api";
 
     // Trimmed for latency (TASK-BE-011): a shorter system prompt means fewer prefill tokens, hence
-    // a faster LLM time-to-first-token. All DEC-002 rules are preserved verbatim in intent, and the
-    // exact hand-off sentence the OutputGuardrail matches ("transfère à un conseiller") is kept.
+    // a faster LLM time-to-first-token. All DEC-002 rules are preserved. The answer language and the
+    // exact hand-off sentence are appended per call as the AnswerLanguage directive (TASK-BE-015),
+    // so the assistant answers in the customer's language (the OutputGuardrail matches both FR/EN
+    // hand-off markers) instead of being biased to French by this prompt.
     private static final String SYSTEM_PROMPT = """
             Tu es un agent de support client Telecom/FAI (box internet, mobile, facturation). \
             Réponds en style vocal : phrases courtes, claires, polies et empathiques.
@@ -19,9 +21,6 @@ public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
             - Réponds UNIQUEMENT à partir du CONTEXTE ci-dessous ; n'invente rien.
             - N'annonce JAMAIS un montant ou tarif absent du CONTEXTE ; propose plutôt de vérifier \
             le dossier avec un conseiller.
-            - Si le CONTEXTE ne contient pas la réponse, dis exactement : \
-            "Je n'ai pas cette information, je vous transfère à un conseiller."
-            - Réponds dans la langue de la question.
             - Ne salue pas si un échange a déjà eu lieu.
 
             CONTEXTE :

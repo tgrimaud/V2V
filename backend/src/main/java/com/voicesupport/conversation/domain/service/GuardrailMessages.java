@@ -1,20 +1,17 @@
 package com.voicesupport.conversation.domain.service;
 
-import java.util.regex.Pattern;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 
-// Canned fallback wording (fr/en) and lightweight language detection shared by the
-// input and post-retrieval guardrails. English is the fallback locale marker used by
-// callers that request an explicit English answer.
+// Canned fallback wording (fr/en) for the guardrails. Language detection is delegated to the
+// shared AnswerLanguage heuristic (TASK-BE-015) so the guardrail wording matches the language the
+// LLM answer would use; English is the fallback so an ambiguous turn defers to the pilot default.
 final class GuardrailMessages {
-
-    private static final Pattern ENGLISH_HINT = Pattern.compile(
-            "\\b(the|is|are|what|how|can|do|does|my|your)\\b", Pattern.CASE_INSENSITIVE);
 
     private GuardrailMessages() {
     }
 
     static boolean isEnglish(String text) {
-        return text.contains("(Please answer in English.)") || ENGLISH_HINT.matcher(text).find();
+        return AnswerLanguage.detect(text, AnswerLanguage.ENGLISH) == AnswerLanguage.ENGLISH;
     }
 
     static String greeting(String text, boolean alreadyGreeted) {

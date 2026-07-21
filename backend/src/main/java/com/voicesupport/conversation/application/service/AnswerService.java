@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.application.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
@@ -7,6 +8,7 @@ import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 
 import java.util.List;
@@ -21,14 +23,17 @@ public class AnswerService implements AnswerQuestionUseCase {
     private final GroundQueryUseCase groundQueryUseCase;
     private final AnswerGeneratorPort answerGenerator;
     private final OutputGuardrail outputGuardrail;
+    private final LanguageDetector languageDetector;
 
     public AnswerService(
             GroundQueryUseCase groundQueryUseCase,
             AnswerGeneratorPort answerGenerator,
-            OutputGuardrail outputGuardrail) {
+            OutputGuardrail outputGuardrail,
+            LanguageDetector languageDetector) {
         this.groundQueryUseCase = groundQueryUseCase;
         this.answerGenerator = answerGenerator;
         this.outputGuardrail = outputGuardrail;
+        this.languageDetector = languageDetector;
     }
 
     @Override
@@ -39,7 +44,9 @@ public class AnswerService implements AnswerQuestionUseCase {
             return GeneratedAnswer.fallback(grounding.decision().fallbackMessage());
         }
         List<RetrievedEvidence> evidence = grounding.evidence();
-        String text = answerGenerator.generate(question, evidence, history == null ? List.of() : history);
+        List<String> safeHistory = history == null ? List.of() : history;
+        AnswerLanguage language = languageDetector.resolve(question, safeHistory);
+        String text = answerGenerator.generate(question, evidence, safeHistory, language);
         GuardrailDecision outputDecision = outputGuardrail.check(question, text, evidence);
         if (outputDecision.blocked()) {
             return GeneratedAnswer.fallback(outputDecision.fallbackMessage());

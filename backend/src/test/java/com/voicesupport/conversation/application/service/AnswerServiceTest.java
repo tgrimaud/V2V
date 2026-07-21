@@ -1,9 +1,11 @@
 package com.voicesupport.conversation.application.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeAnswerGeneratorPort;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
@@ -29,7 +31,8 @@ class AnswerServiceTest {
     void setUp() {
         grounding = new FakeGroundQueryUseCase();
         generator = new FakeAnswerGeneratorPort();
-        service = new AnswerService(grounding, generator, new OutputGuardrail());
+        service = new AnswerService(
+                grounding, generator, new OutputGuardrail(), new LanguageDetector(AnswerLanguage.ENGLISH));
     }
 
     @Test
@@ -133,5 +136,25 @@ class AnswerServiceTest {
         assertEquals("support", grounding.lastDomain);
         assertEquals(6, grounding.lastTopK);
         assertTrue(grounding.lastAlreadyGreeted);
+    }
+
+    @Test
+    @DisplayName("the answer language matches the customer's question language (TASK-BE-015)")
+    void answersInTheQuestionLanguage() {
+        // GIVEN an answerable result
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("Prorating explains the difference.", "billing-faq#1", "billing", 0.8))));
+
+        // WHEN the customer asks in English
+        service.answer("Why does my bill change this month?", "billing", 4, true, List.of());
+
+        // THEN the LLM is instructed to answer in English
+        assertEquals(AnswerLanguage.ENGLISH, generator.lastLanguage);
+
+        // WHEN the customer asks in French
+        service.answer("Pourquoi ma facture change ce mois-ci ?", "billing", 4, true, List.of());
+
+        // THEN the LLM is instructed to answer in French
+        assertEquals(AnswerLanguage.FRENCH, generator.lastLanguage);
     }
 }

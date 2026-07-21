@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 
@@ -36,14 +37,21 @@ public class OutputGuardrail {
 
     // An empty answer, or an explicit "I don't have this, I transfer you to an advisor" refusal,
     // is a hand-off rather than a grounded answer: surface it as a safe fallback (grounded=false,
-    // no confidence) instead of voicing it with a misleading confidence signal.
+    // no confidence) instead of voicing it with a misleading confidence signal. Hand-off markers
+    // are language-independent (TASK-BE-015) so an English refusal is caught like a French one.
     private boolean isNonAnswer(String answer) {
         if (answer == null || answer.isBlank()) {
             return true;
         }
         String normalized = answer.toLowerCase(Locale.ROOT);
-        return normalized.contains("transfère à un conseiller")
-                || normalized.contains("transfere a un conseiller");
+        for (AnswerLanguage language : AnswerLanguage.values()) {
+            for (String marker : language.handoffMarkers()) {
+                if (normalized.contains(marker)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Set<String> amountsIn(String text) {

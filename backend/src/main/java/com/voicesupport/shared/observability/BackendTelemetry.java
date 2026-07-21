@@ -1,5 +1,6 @@
 package com.voicesupport.shared.observability;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -27,6 +28,7 @@ public class BackendTelemetry {
     private static final Logger log = LoggerFactory.getLogger(BackendTelemetry.class);
     private static final String TIMER = "voice_support.slice";
     private static final String PROMPT_CHARS = "voice_support.prompt_chars";
+    private static final String ANSWER_LANGUAGE = "voice_support.answer_language";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
     private static final String CHANNEL_NONE = "n/a";
@@ -79,6 +81,22 @@ public class BackendTelemetry {
         log.info("[PROMPT] provider={} system_chars={} context_chars={} history_chars={} chunk_count={} "
                         + "correlation_id={}",
                 safeProvider, systemChars, contextChars, historyChars, chunkCount, CorrelationId.current());
+    }
+
+    // Answer-language observability (TASK-BE-015): records the language the assistant answered in
+    // for the turn as a counter (voice_support.answer_language) tagged by provider + language, plus
+    // a [LANGUAGE] structured log with the correlation id. Records the language code only — never
+    // transcript or answer text — so QA can verify the customer was answered in the right language.
+    public void recordAnswerLanguage(String provider, String language) {
+        String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
+        String safeLanguage = language == null || language.isBlank() ? "n/a" : language;
+        Counter.builder(ANSWER_LANGUAGE)
+                .tag("provider", safeProvider)
+                .tag("language", safeLanguage)
+                .register(registry)
+                .increment();
+        log.info("[LANGUAGE] provider={} language={} correlation_id={}",
+                safeProvider, safeLanguage, CorrelationId.current());
     }
 
     public <T> T time(String slice, String provider, Supplier<T> work) {
