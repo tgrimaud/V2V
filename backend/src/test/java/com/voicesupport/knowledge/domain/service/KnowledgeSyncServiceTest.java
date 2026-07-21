@@ -4,6 +4,7 @@ import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
 import com.voicesupport.knowledge.domain.model.valueobject.SyncReport;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceConnector;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceStatePort;
+import com.voicesupport.knowledge.fake.FakeSyncObserver;
 import com.voicesupport.knowledge.fake.FakeVectorStorePort;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,8 @@ class KnowledgeSyncServiceTest {
 
     private static final String TYPE = "markdown";
 
+    private final FakeSyncObserver observer = new FakeSyncObserver();
+
     private static SourceDocument doc(String id, String body) {
         return SourceDocument.create(TYPE, id, id, null, body, "billing", "fr", Instant.EPOCH);
     }
@@ -26,7 +29,8 @@ class KnowledgeSyncServiceTest {
             FakeKnowledgeSourceConnector connector,
             FakeKnowledgeSourceStatePort state,
             FakeVectorStorePort vectorStore) {
-        return new KnowledgeSyncService(List.of(connector), state, vectorStore, new TextChunker(500, 50));
+        return new KnowledgeSyncService(
+                List.of(connector), state, vectorStore, new TextChunker(500, 50), observer);
     }
 
     @Test
@@ -117,5 +121,63 @@ class KnowledgeSyncServiceTest {
 
         // WHEN syncing an unregistered source type THEN it fails fast
         assertThrows(IllegalArgumentException.class, () -> service.sync("confluence"));
+    }
+
+    @Test
+    void eachDocumentIsStoredInOneBatchedCall() {
+        // GIVEN two documents to ingest
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+
+        // WHEN syncing
+        serviceWith(connector, state, vectorStore).syncAll();
+
+        // THEN the vector store is written once per document (batched), not once per chunk
+        assertEquals(2, vectorStore.storeChunksCalls);
+    }
+
+    @Test
+    void observerReceivesPerBatchTimingAndCompletionTotals() {
+        // GIVEN two documents to ingest
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+
+        // WHEN syncing
+        serviceWith(connector, state, vectorStore).syncAll();
+
+        // THEN one batch event per ingested document and a single completion with matching totals
+        assertEquals(2, observer.batches.size());
+        assertEquals(1, observer.completions.size());
+        FakeSyncObserver.Completion completion = observer.completions.get(0);
+        assertEquals(TYPE, completion.sourceType());
+        assertEquals(2, completion.report().ingested());
+        int chunksFromBatches = observer.batches.stream().mapToInt(FakeSyncObserver.Batch::chunkCount).sum();
+        assertEquals(chunksFromBatches, completion.totalChunks());
+        assertEquals(vectorStore.storedChunks.size(), completion.totalChunks());
+    }
+
+    @Test
+    void unchangedDocumentsEmitNoBatchButStillComplete() {
+        // GIVEN a source already synced once
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+        KnowledgeSyncService service = serviceWith(connector, state, vectorStore);
+        service.syncAll();
+        observer.batches.clear();
+        observer.completions.clear();
+
+        // WHEN syncing again with identical content
+        service.syncAll();
+
+        // THEN no batch is stored (idempotent) but the completion still fires with zero chunks
+        assertTrue(observer.batches.isEmpty());
+        assertEquals(1, observer.completions.size());
+        assertEquals(0, observer.completions.get(0).totalChunks());
     }
 }

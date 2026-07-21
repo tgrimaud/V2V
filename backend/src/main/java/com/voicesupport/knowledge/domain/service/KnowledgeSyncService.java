@@ -5,6 +5,7 @@ import com.voicesupport.knowledge.domain.model.valueobject.SyncReport;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceStatePort;
+import com.voicesupport.knowledge.domain.port.out.SyncObserverPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 
 import java.util.HashSet;
@@ -18,16 +19,19 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
     private final KnowledgeSourceStatePort statePort;
     private final VectorStorePort vectorStorePort;
     private final TextChunker textChunker;
+    private final SyncObserverPort observer;
 
     public KnowledgeSyncService(
             List<KnowledgeSourceConnector> connectors,
             KnowledgeSourceStatePort statePort,
             VectorStorePort vectorStorePort,
-            TextChunker textChunker) {
+            TextChunker textChunker,
+            SyncObserverPort observer) {
         this.connectors = connectors;
         this.statePort = statePort;
         this.vectorStorePort = vectorStorePort;
         this.textChunker = textChunker;
+        this.observer = observer;
     }
 
     @Override
@@ -50,23 +54,27 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
 
     private SyncReport syncConnector(KnowledgeSourceConnector connector) {
         String sourceType = connector.sourceType();
+        long start = System.nanoTime();
         List<SourceDocument> documents = connector.fetchAll();
         Set<String> seenIds = new HashSet<>();
         int ingested = 0;
         int skipped = 0;
+        int totalChunks = 0;
 
         for (SourceDocument document : documents) {
             seenIds.add(document.sourceId());
             if (isUnchanged(document)) {
                 skipped++;
             } else {
-                reingest(document);
+                totalChunks += reingest(document);
                 ingested++;
             }
         }
 
         int deleted = removeStale(sourceType, seenIds);
-        return new SyncReport(documents.size(), ingested, skipped, deleted);
+        SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted);
+        observer.syncCompleted(sourceType, report, totalChunks, elapsedMs(start));
+        return report;
     }
 
     private boolean isUnchanged(SourceDocument document) {
@@ -74,16 +82,20 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
         return knownHash.isPresent() && knownHash.get().equals(document.contentHash());
     }
 
-    private void reingest(SourceDocument document) {
+    private int reingest(SourceDocument document) {
         vectorStorePort.deleteBySource(document.sourceType(), document.sourceId());
         List<TextChunker.Chunk> chunks = textChunker.chunk(document.content());
-        int chunkIndex = 0;
-        for (TextChunker.Chunk chunk : chunks) {
-            vectorStorePort.storeChunk(document, chunk.content(), chunk.section(), chunkIndex++);
-        }
+        long start = System.nanoTime();
+        int stored = vectorStorePort.storeChunks(document, chunks);
+        observer.batchStored(document.sourceType(), document.sourceId(), stored, elapsedMs(start));
         statePort.upsertState(
                 document.sourceType(), document.sourceId(),
-                document.contentHash(), document.updatedAt(), chunks.size());
+                document.contentHash(), document.updatedAt(), stored);
+        return stored;
+    }
+
+    private static long elapsedMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
     private int removeStale(String sourceType, Set<String> seenIds) {

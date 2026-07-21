@@ -17,7 +17,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA functional PASS (bulk latency → BE-014); awaiting user validation |
-| TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | Planned (Sprint 8) |
+| TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 
 ---
 
@@ -138,9 +138,28 @@ retrieve grounded operator content at scale.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related enabler:** TASK-BE-003 (ingestion socle), TASK-BE-013 (CSV connector)
 **Classification:** V1 core — makes bulk CSV ingestion viable (performance).
-**Status:** Planned (Sprint 8)
+**Status:** In review — implemented + live-validated; awaiting adversarial review + QA acceptance.
 **Priority:** High
 **Branch:** `task/TASK-BE-014-batch-embedding`
+
+### Review & QA outcome
+
+- **Live run (2026-07-21, same 150-article Eir sample, real pgvector + Ollama):** batched
+  sync **75 s → 44.7 s** (~40% faster), throughput **42.7 chunks/s** (1 901 chunks), and
+  the classification distribution is **unchanged** (support 91 / billing 25 / general 18 /
+  commercial 16 @0.55) — batching is a pure performance change. Idempotent re-sync stays a
+  no-op (0 ingested / 150 skipped, no batch emitted).
+- **Observability:** `[KB-SYNC] op=sync-detail source_type=csv-article processed=150
+  ingested=150 skipped=0 deleted=0 total_chunks=1901 duration_ms=44504 chunks_per_sec=42.7`;
+  Micrometer meter `voice_support.kb_sync_batch` exposed via actuator (COUNT=150,
+  TOTAL_TIME=35.0 s, MAX=1.09 s, tag `source_type`), plus `kb_sync_chunks` and `kb_sync`.
+- **Tests:** 178 green (unit + Cucumber BDD + ArchUnit), infra-free — new tests assert one
+  batched `storeChunks` call per document and the observer's per-batch + completion events.
+- **QA report:** `docs/qa/task-be-014-batch-embedding-qa-report.md`.
+- **Remaining full-corpus bound:** ~44.7 s/150 → **~3.4 h extrapolated** for ~40 900 rows
+  (was ~5.7 h). Embedding (classification + chunk embeds on Ollama) is now the dominant cost,
+  not inserts. A single HTTP sync request is still impractical at full scale → the async
+  job / status open question below stays open (out of this ticket's acceptance).
 
 ### Context
 

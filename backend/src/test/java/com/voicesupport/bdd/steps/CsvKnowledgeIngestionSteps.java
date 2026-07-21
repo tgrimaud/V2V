@@ -5,6 +5,7 @@ import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.fake.FakeDomainClassifier;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceStatePort;
+import com.voicesupport.knowledge.fake.FakeSyncObserver;
 import com.voicesupport.knowledge.fake.FakeVectorStorePort;
 import com.voicesupport.knowledge.infrastructure.adapter.out.csv.CsvArticleConnector;
 import io.cucumber.java.en.Given;
@@ -34,7 +35,8 @@ public class CsvKnowledgeIngestionSteps {
     private final CsvArticleConnector connector =
             new CsvArticleConnector(csvFile.toString(), "en", classifier);
     private final KnowledgeSyncService service =
-            new KnowledgeSyncService(List.of(connector), statePort, vectorStore, new TextChunker(500, 50));
+            new KnowledgeSyncService(
+                    List.of(connector), statePort, vectorStore, new TextChunker(500, 50), new FakeSyncObserver());
 
     private SyncReport report;
 

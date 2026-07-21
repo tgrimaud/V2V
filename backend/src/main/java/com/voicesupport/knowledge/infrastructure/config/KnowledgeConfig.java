@@ -6,6 +6,7 @@ import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.out.DomainClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceStatePort;
+import com.voicesupport.knowledge.domain.port.out.SyncObserverPort;
 import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import com.voicesupport.knowledge.domain.service.KnowledgeIngestionService;
@@ -96,7 +97,9 @@ public class KnowledgeConfig {
             List<KnowledgeSourceConnector> connectors,
             KnowledgeSourceStatePort knowledgeSourceStatePort,
             VectorStorePort vectorStorePort,
-            TextChunker textChunker) {
-        return new KnowledgeSyncService(connectors, knowledgeSourceStatePort, vectorStorePort, textChunker);
+            TextChunker textChunker,
+            SyncObserverPort syncObserverPort) {
+        return new KnowledgeSyncService(
+                connectors, knowledgeSourceStatePort, vectorStorePort, textChunker, syncObserverPort);
     }
 }

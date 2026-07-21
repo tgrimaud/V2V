@@ -75,6 +75,27 @@ domain is part of the ingested document, it is only re-evaluated when the
 `content_hash` changes (idempotent). Connectors that do not classify (e.g.
 `MarkdownFolderConnector`) keep passing their own domain, defaulting to `general`.
 
+### 5. Bulk-ingest batching + sync observability (TASK-BE-014)
+
+The one-chunk-per-`add` write path is too slow for thousands of articles. The outbound
+`VectorStorePort` exposes a batched `storeChunks(document, chunks)` (replacing the
+per-chunk `storeChunk`): the `PgVectorStoreAdapter` builds all `Document`s for a
+document and issues a **single** `vectorStore.add(...)`, so Spring AI performs one
+embedding batch + one multi-row insert instead of one round-trip per chunk. Measured on
+the 150-article Eir sample: **75 s → 44.7 s** (~40% faster), 42.7 chunks/s, distribution
+unchanged (pure performance change).
+
+Observability is a **new domain out-port `SyncObserverPort`** (`batchStored`,
+`syncCompleted`) so `KnowledgeSyncService` stays pure and fake-testable; the infra
+`LoggingSyncObserverAdapter` turns the events into Micrometer meters
+(`voice_support.kb_sync_batch` per-document embed+insert latency p50/p95/p99,
+`voice_support.kb_sync_chunks`, `voice_support.kb_sync` full-sync wall clock, all tagged
+by `source_type`) plus `[KB-SYNC]` structured logs (per-batch at DEBUG, periodic
+progress at INFO, a completion line carrying throughput). Full-corpus (~40 900 rows)
+extrapolates to ~3.4 h; a single synchronous HTTP sync remains impractical at that scale,
+so an **async job + status** is left as an open follow-up (embedding, not insert, is now
+the dominant cost).
+
 ## Consequences
 
 - The answer engine can retrieve real operator content at scale; classified domains
@@ -83,8 +104,10 @@ domain is part of the ingested document, it is only re-evaluated when the
 - Two new third-party dependencies enter the backend; both are self-contained,
   widely used, and pinned. Dependency governance (code-guidelines) is satisfied by
   the explicit justification above.
-- Bulk volume makes the current one-chunk-per-`add` insert too slow; batching is a
-  separate concern (TASK-BE-014) so this ADR stays about the connector + classifier.
+- Bulk volume made the one-chunk-per-`add` insert too slow; batched `storeChunks` +
+  the `SyncObserverPort` metrics/logs (section 5, TASK-BE-014) address throughput and
+  observability. Embedding is now the dominant cost; full-corpus async ingest is the
+  remaining follow-up.
 - English content coexists with the French dev FAQ in one vector store. Answer
   language handling and any `language` retrieval filter are out of scope here
   (tracked as TASK-BE-015 + an open question on FR/EN mixing).

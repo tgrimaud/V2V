@@ -79,6 +79,11 @@ voice-support:
       # while keeping confident billing/support/commercial picks. See the TASK-BE-013 QA report.
       threshold: ${KB_CLASSIFIER_THRESHOLD:0.55}
       max-chars: ${KB_CLASSIFIER_MAX_CHARS:2000}
+    # Bulk-sync observability cadence (TASK-BE-014): every N ingested documents the sync emits a
+    # [KB-SYNC] op=progress line. Per-batch detail stays at DEBUG; per-batch timing + throughput
+    # are always exposed as Micrometer meters (voice_support.kb_sync_batch / kb_sync_chunks /
+    # kb_sync, tagged source_type). Raise it for very large corpora to keep the log quiet.
+    sync-progress-every: ${KB_SYNC_PROGRESS_EVERY:500}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

@@ -4,12 +4,14 @@ import com.voicesupport.knowledge.domain.model.valueobject.KnowledgeChunk;
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
 import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
+import com.voicesupport.knowledge.domain.service.TextChunker;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,11 +38,24 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         vectorStore.add(List.of(new Document(content, metadata)));
     }
 
+    // Batches all chunks of a document into a single vectorStore.add(...) so Spring AI issues one
+    // embedding batch + one multi-row insert instead of one round-trip per chunk (TASK-BE-014).
     @Override
-    public void storeChunk(SourceDocument document, String chunkContent, String section, int chunkIndex) {
+    public int storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
+        List<Document> documents = new ArrayList<>(chunks.size());
+        for (int chunkIndex = 0; chunkIndex < chunks.size(); chunkIndex++) {
+            documents.add(toDocument(document, chunks.get(chunkIndex), chunkIndex));
+        }
+        if (!documents.isEmpty()) {
+            vectorStore.add(documents);
+        }
+        return documents.size();
+    }
+
+    private Document toDocument(SourceDocument document, TextChunker.Chunk chunk, int chunkIndex) {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("source", document.sourceId());
-        metadata.put("section", section);
+        metadata.put("section", chunk.section());
         metadata.put("chunk_index", String.valueOf(chunkIndex));
         metadata.put("domain", document.domain());
         metadata.put("source_type", document.sourceType());
@@ -52,7 +67,7 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         if (document.updatedAt() != null) {
             metadata.put("updated_at", document.updatedAt().toString());
         }
-        vectorStore.add(List.of(new Document(chunkContent, metadata)));
+        return new Document(chunk.content(), metadata);
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceConnector;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceStatePort;
+import com.voicesupport.knowledge.fake.FakeSyncObserver;
 import com.voicesupport.knowledge.fake.FakeVectorStorePort;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -28,7 +29,8 @@ public class KnowledgeIngestionSteps {
     private final FakeKnowledgeSourceConnector connector =
             new FakeKnowledgeSourceConnector(TYPE, new ArrayList<>());
     private final KnowledgeSyncService service =
-            new KnowledgeSyncService(List.of(connector), statePort, vectorStore, new TextChunker(500, 50));
+            new KnowledgeSyncService(
+                    List.of(connector), statePort, vectorStore, new TextChunker(500, 50), new FakeSyncObserver());
 
     private SyncReport report;
 
