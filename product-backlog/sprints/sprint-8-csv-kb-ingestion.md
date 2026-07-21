@@ -37,7 +37,7 @@ identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
   language**) is delivered as a CSV export, not Markdown.
 - The socle was designed for exactly this (new sources plug in as connector beans,
   auto-collected by `KnowledgeSyncService`); this sprint exercises that extension
-  point at scale (~thousands of HTML articles) for the first time.
+  point at real corpus scale (306 HTML articles, ~40,900 lines) for the first time.
 - Domain tagging at ingestion is the prerequisite that makes the future orchestrator
   (EPIC-011) able to route a question to the right specialist domain.
 
@@ -46,7 +46,7 @@ identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifierPort` — bulk KB ingestion from `articles.csv` (CommonsCSV parse, jsoup HTML→text, `sourceId=document_id`, `language=en`, domain classified vs anchors) | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA PASS + live-validated (threshold calibrated 0.55); awaiting user validation |
-| TASK-BE-014 | Batch embedding/insert — extend `VectorStorePort` with a batched `storeChunks` + sync progress metrics/logs (perf, anti-timeout for thousands of articles) | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA |
+| TASK-BE-014 | Batch embedding/insert — extend `VectorStorePort` with a batched `storeChunks` + sync progress metrics/logs (perf, batched embedding/insert) | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (75s→44.7s, 42.7 chunks/s; full 306-article corpus ~73s), 178 tests green; awaiting adversarial review + QA |
 
 Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-tasks.md).
 

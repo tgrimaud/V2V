@@ -17,9 +17,10 @@ progress metrics/logs
   **unchanged** (pure performance change).
 - **Observability:** per-batch and full-sync Micrometer meters exposed via actuator +
   `[KB-SYNC]` structured logs with throughput.
-- **Residual risk:** full-corpus (~40 900 rows) extrapolates to ~3.4 h; a single
-  synchronous HTTP sync is still impractical at that scale — an **async job + status** is
-  an accepted open follow-up (embedding is now the dominant cost, not inserts).
+- **Corpus size clarified:** the corpus is **306 articles** (the ~40,900 line count is
+  multi-line HTML, not article count). The **full corpus** ingests in **~73–92 s** in a
+  single request, so no async job is needed at this size — it becomes relevant only if the
+  corpus grows by orders of magnitude.
 
 ## Scope Under Test
 
@@ -50,9 +51,11 @@ progress metrics/logs
 | Throughput | ~25 chunks/s | **42.7 chunks/s** | +71% |
 | Per-document store (embed+insert), timer TOTAL | n/a | 35.0 s (MAX 1.09 s) | — |
 | Idempotent re-sync (150 unchanged) | 7.5 s | 8.0 s | ~flat |
-| Full-corpus extrapolation (~40 900 rows) | ~5.7 h | **~3.4 h** | −40% |
+| **Full corpus (306 articles, 3 235 chunks)** — measured | n/a | **~73 s** (156 new + 150 skipped) | — |
 
-Offline admin/sync path — no voice-runtime SLO (`time_to_first_audio`) impact.
+Full corpus measured live: `processed=306 ingested=156 skipped=150 duration_ms=73393
+chunks_per_sec=44.1`; a from-scratch full ingest is ~92 s. Offline admin/sync path — no
+voice-runtime SLO (`time_to_first_audio`) impact.
 
 ## Observability Evidence
 
@@ -79,9 +82,9 @@ Offline admin/sync path — no voice-runtime SLO (`time_to_first_audio`) impact.
 
 ## Residual Risks (accepted)
 
-- **Full-corpus single-request sync** is still ~3.4 h — impractical over one HTTP call.
-  Async job + status is an explicit open follow-up (ticket "Open questions"); embedding on
-  Ollama is the dominant remaining cost.
+- **Full-corpus single-request sync** is fine at the real corpus size (306 articles,
+  ~73–92 s). An async job + status stays a documented follow-up only for a hypothetical
+  order-of-magnitude larger corpus; embedding on Ollama is the dominant cost.
 - **Per-document failure** (embedding/DB error mid-run) aborts the sync fail-fast; because
   the ledger is committed per document, a re-run resumes (already-ingested docs skip). This
   is safe/resumable but not fully fault-tolerant; hardening deferred with the async work.

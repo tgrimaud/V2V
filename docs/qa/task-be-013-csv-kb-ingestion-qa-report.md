@@ -8,10 +8,10 @@
   Eir corpus: end-to-end ingest, idempotency, clean text, domain classification and
   retrieval all confirmed. The classifier threshold was **calibrated to 0.55** on this
   run.
-- **Main blockers:** none for the BE-013 scope. **Full-corpus** (~40,900 rows) ingest
-  time/throughput is explicitly deferred to **TASK-BE-014** (batch embedding/insert) —
-  the live run measured ~0.5 s/article single-insert, i.e. ~5–6 h extrapolated, which
-  is exactly what BE-014 must fix.
+- **Main blockers:** none for the BE-013 scope. Bulk ingest time/throughput is deferred to
+  **TASK-BE-014** (batching). Note the corpus is **306 articles** — the ~40,900 line count
+  reflects multi-line HTML content, not the article count — so the single-insert path
+  (~0.5 s/article) means a full ingest is a couple of minutes, not hours.
 - **Residual risks:** classification is best-effort (anchor cosine, no ground-truth
   labels) — calibrated but not benchmarked; FR(dev)/EN(prod) mixing in one vector store
   (TASK-BE-015); one malformed CSV row aborts the whole sync (BE-014).
@@ -96,7 +96,7 @@ documented ingest-time bound are reported under TASK-BE-014.
 
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
-| Medium | Bulk ingest latency/throughput unmeasured at scale | Cannot claim full-corpus ingest bound yet | TASK-BE-014 |
+| Medium | Bulk ingest latency/throughput deferred to batching | Measured under TASK-BE-014 (full 306-article corpus ingests in ~73–92 s) | TASK-BE-014 |
 | Low | One malformed CSV row aborts the whole sync | Operational robustness on a 40k-row file | TASK-BE-014 (streaming/batch) |
 | Low | Classification quality unverified on real corpus (threshold calibration) | Possible mis-domained chunks; mitigated by `general` fallback + `OR general` retrieval | Live/IT run |
 | Low | FR(dev)/EN(prod) coexist in one vector store | Retrieval pollution risk | TASK-BE-015 |

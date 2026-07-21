@@ -55,9 +55,9 @@ QA functional PASS; bulk latency deferred to TASK-BE-014; awaiting user validati
   cross-cutting (GDPR, Right to be Forgotten, agent tooling, Eircodes). Distribution
   @0.55: support 91 / billing 25 / general 18 / commercial 16. Full details in the QA
   report.
-- **QA latency:** **full-corpus** (~40,900 rows) ingest time/throughput still owned by
-  TASK-BE-014 — the live run confirms the single-insert path (~0.5 s/article → ~5–6 h
-  extrapolated) is why batching is required (offline admin path, no voice-runtime SLO
+- **QA latency:** bulk ingest time/throughput owned by TASK-BE-014. The corpus is **306
+  articles** (~40,900 lines = multi-line HTML, not article count); the single-insert path
+  (~0.5 s/article) is why batching was applied (offline admin path, no voice-runtime SLO
   impact).
 
 ### Context
@@ -66,7 +66,7 @@ The seed dataset `articles.csv` (kept out of git — external ingestion input) i
 extract of all operator support articles to load into the KB. Observed shape:
 
 - Columns: `document_id, title, content`
-- ~40,900 lines / ~3.9 MB
+- **306 articles** / ~40,900 lines (HTML `content` is multi-line) / ~3.9 MB
 - **`content` is HTML** (operator support-site articles)
 - **No `domain` and no `language` column**
 
@@ -156,10 +156,12 @@ retrieve grounded operator content at scale.
 - **Tests:** 178 green (unit + Cucumber BDD + ArchUnit), infra-free — new tests assert one
   batched `storeChunks` call per document and the observer's per-batch + completion events.
 - **QA report:** `docs/qa/task-be-014-batch-embedding-qa-report.md`.
-- **Remaining full-corpus bound:** ~44.7 s/150 → **~3.4 h extrapolated** for ~40 900 rows
-  (was ~5.7 h). Embedding (classification + chunk embeds on Ollama) is now the dominant cost,
-  not inserts. A single HTTP sync request is still impractical at full scale → the async
-  job / status open question below stays open (out of this ticket's acceptance).
+- **Full corpus measured:** the corpus is **306 articles** (not ~40 900 — that is the
+  multi-line HTML line count). The full corpus ingests in **~73 s** live (156 new + 150
+  skipped; `chunks_per_sec=44.1`), ~92 s from scratch — well within one HTTP request.
+  Embedding (classification + chunk embeds on Ollama) is now the dominant cost, not inserts.
+  The async job / status open question is therefore **not needed at this size** (only for a
+  hypothetical far larger corpus).
 
 ### Context
 

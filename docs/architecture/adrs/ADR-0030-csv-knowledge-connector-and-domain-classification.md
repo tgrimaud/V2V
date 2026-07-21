@@ -18,7 +18,8 @@ default language) is delivered as a CSV export `articles.csv`:
 
 - Columns `document_id, title, content`; `content` is **rich HTML**
   (`<p>`, `<h1>`, `<a>`, `<img>`, escaped quotes `""`, embedded newlines).
-- ~3.9 MB, thousands of articles; kept out of git (external ingestion input).
+- ~3.9 MB, **306 articles** (~40,900 lines — HTML `content` spans many lines per article);
+  kept out of git (external ingestion input).
 - **No `domain` and no `language` column** — everything is mixed.
 
 Sprint 7 proved the answer engine on a small French Markdown FAQ ingested by
@@ -77,7 +78,7 @@ domain is part of the ingested document, it is only re-evaluated when the
 
 ### 5. Bulk-ingest batching + sync observability (TASK-BE-014)
 
-The one-chunk-per-`add` write path is too slow for thousands of articles. The outbound
+The one-chunk-per-`add` write path is too slow for hundreds of multi-chunk articles. The outbound
 `VectorStorePort` exposes a batched `storeChunks(document, chunks)` (replacing the
 per-chunk `storeChunk`): the `PgVectorStoreAdapter` builds all `Document`s for a
 document and issues a **single** `vectorStore.add(...)`, so Spring AI performs one
@@ -91,10 +92,11 @@ Observability is a **new domain out-port `SyncObserverPort`** (`batchStored`,
 (`voice_support.kb_sync_batch` per-document embed+insert latency p50/p95/p99,
 `voice_support.kb_sync_chunks`, `voice_support.kb_sync` full-sync wall clock, all tagged
 by `source_type`) plus `[KB-SYNC]` structured logs (per-batch at DEBUG, periodic
-progress at INFO, a completion line carrying throughput). Full-corpus (~40 900 rows)
-extrapolates to ~3.4 h; a single synchronous HTTP sync remains impractical at that scale,
-so an **async job + status** is left as an open follow-up (embedding, not insert, is now
-the dominant cost).
+progress at INFO, a completion line carrying throughput). The real corpus is **306
+articles** (the ~40,900 line count is multi-line HTML, not article count): the full corpus
+ingests in **~73–92 s** in a single request, so no async job is needed at this size. An
+**async job + status** stays a documented follow-up only for a hypothetical
+order-of-magnitude larger corpus (embedding, not insert, is the dominant cost).
 
 ## Consequences
 
@@ -104,10 +106,10 @@ the dominant cost).
 - Two new third-party dependencies enter the backend; both are self-contained,
   widely used, and pinned. Dependency governance (code-guidelines) is satisfied by
   the explicit justification above.
-- Bulk volume made the one-chunk-per-`add` insert too slow; batched `storeChunks` +
-  the `SyncObserverPort` metrics/logs (section 5, TASK-BE-014) address throughput and
-  observability. Embedding is now the dominant cost; full-corpus async ingest is the
-  remaining follow-up.
+- The one-chunk-per-`add` insert was slow; batched `storeChunks` + the `SyncObserverPort`
+  metrics/logs (section 5, TASK-BE-014) address throughput and observability. Embedding is
+  now the dominant cost; the full 306-article corpus ingests in ~73–92 s (async ingest only
+  needed for a far larger corpus).
 - English content coexists with the French dev FAQ in one vector store. Answer
   language handling and any `language` retrieval filter are out of scope here
   (tracked as TASK-BE-015 + an open question on FR/EN mixing).
