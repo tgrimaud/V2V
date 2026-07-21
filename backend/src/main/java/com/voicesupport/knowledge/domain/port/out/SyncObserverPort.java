@@ -14,4 +14,10 @@ public interface SyncObserverPort {
     // A connector sync finished: full counts, total chunks written and wall-clock duration so
     // throughput (chunks/s) can be reported for the bulk-ingest latency evidence.
     void syncCompleted(String sourceType, SyncReport report, int totalChunks, long durationMs);
+
+    // A connector sync aborted mid-run (e.g. an embedding/insert error). Carries the progress
+    // achieved before the failure so the failure path is observable (metric + structured log) and
+    // the resumable state is visible; errorCode is a sanitized, low-cardinality reason. Sync stays
+    // fail-fast (already-ingested documents are committed and skipped on the next idempotent run).
+    void syncFailed(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode);
 }

@@ -138,7 +138,7 @@ retrieve grounded operator content at scale.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related enabler:** TASK-BE-003 (ingestion socle), TASK-BE-013 (CSV connector)
 **Classification:** V1 core — makes bulk CSV ingestion viable (performance).
-**Status:** In review — implemented + live-validated; awaiting adversarial review + QA acceptance.
+**Status:** In review — adversarial **93/100 (gate Pass)**, **QA PASS** + live-validated; awaiting user validation.
 **Priority:** High
 **Branch:** `task/TASK-BE-014-batch-embedding`
 
@@ -153,9 +153,14 @@ retrieve grounded operator content at scale.
   ingested=150 skipped=0 deleted=0 total_chunks=1901 duration_ms=44504 chunks_per_sec=42.7`;
   Micrometer meter `voice_support.kb_sync_batch` exposed via actuator (COUNT=150,
   TOTAL_TIME=35.0 s, MAX=1.09 s, tag `source_type`), plus `kb_sync_chunks` and `kb_sync`.
-- **Tests:** 178 green (unit + Cucumber BDD + ArchUnit), infra-free — new tests assert one
-  batched `storeChunks` call per document and the observer's per-batch + completion events.
-- **QA report:** `docs/qa/task-be-014-batch-embedding-qa-report.md`.
+- **Tests:** **184 green** (unit + Cucumber BDD + ArchUnit), infra-free — assert one batched
+  `storeChunks` call per document, the observer's per-batch + completion events, and the
+  **failure path** (fault-injected sync aborts fail-fast, emits `syncFailed`, resumes via ledger).
+- **Adversarial review:** 93/100 (gate Pass) — `docs/qa/task-be-014-adversarial-review.md`. The
+  silent-failure-path finding was fixed in-loop (`SyncObserverPort.syncFailed` +
+  `voice_support.kb_sync_failures` counter + `[KB-SYNC] op=sync-failed` log).
+- **QA report:** `docs/qa/task-be-014-batch-embedding-qa-report.md` (idempotent full-corpus
+  re-sync 306 skipped in 16.7 s; retrieval `verdict=PASS`; recommendation **Go**).
 - **Full corpus measured:** the corpus is **306 articles** (not ~40 900 — that is the
   multi-line HTML line count). The full corpus ingests in **~73 s** live (156 new + 150
   skipped; `chunks_per_sec=44.1`), ~92 s from scratch — well within one HTTP request.
@@ -166,8 +171,9 @@ retrieve grounded operator content at scale.
 ### Context
 
 `PgVectorStoreAdapter` currently stores one chunk per `vectorStore.add(List.of(one))`
-call (~40 ms/chunk on CPU Ollama observed in BE-003). For thousands of CSV articles
-this is too slow and can time out the `POST /api/knowledge/sync` request.
+call (~40 ms/chunk on CPU Ollama observed in BE-003). Across the full CSV corpus
+(306 articles, ~3 235 chunks) this per-chunk round-trip is too slow, so chunks are batched
+per document to keep `POST /api/knowledge/sync` within one request.
 
 ### Objective
 

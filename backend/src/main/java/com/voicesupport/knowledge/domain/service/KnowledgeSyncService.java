@@ -61,20 +61,30 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
         int skipped = 0;
         int totalChunks = 0;
 
-        for (SourceDocument document : documents) {
-            seenIds.add(document.sourceId());
-            if (isUnchanged(document)) {
-                skipped++;
-            } else {
-                totalChunks += reingest(document);
-                ingested++;
+        try {
+            for (SourceDocument document : documents) {
+                seenIds.add(document.sourceId());
+                if (isUnchanged(document)) {
+                    skipped++;
+                } else {
+                    totalChunks += reingest(document);
+                    ingested++;
+                }
             }
+            int deleted = removeStale(sourceType, seenIds);
+            SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted);
+            observer.syncCompleted(sourceType, report, totalChunks, elapsedMs(start));
+            return report;
+        } catch (RuntimeException failure) {
+            // Fail-fast is intentional (ADR-0030): committed documents are skipped on the next
+            // idempotent run. Emit the failure so the aborted run is observable and resumable.
+            observer.syncFailed(sourceType, ingested, totalChunks, elapsedMs(start), errorCode(failure));
+            throw failure;
         }
+    }
 
-        int deleted = removeStale(sourceType, seenIds);
-        SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted);
-        observer.syncCompleted(sourceType, report, totalChunks, elapsedMs(start));
-        return report;
+    private static String errorCode(RuntimeException failure) {
+        return failure.getClass().getSimpleName();
     }
 
     private boolean isUnchanged(SourceDocument document) {

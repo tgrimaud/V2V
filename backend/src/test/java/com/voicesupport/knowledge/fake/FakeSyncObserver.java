@@ -14,8 +14,12 @@ public class FakeSyncObserver implements SyncObserverPort {
     public record Completion(String sourceType, SyncReport report, int totalChunks, long durationMs) {
     }
 
+    public record Failure(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode) {
+    }
+
     public final List<Batch> batches = new ArrayList<>();
     public final List<Completion> completions = new ArrayList<>();
+    public final List<Failure> failures = new ArrayList<>();
 
     @Override
     public void batchStored(String sourceType, String sourceId, int chunkCount, long elapsedMs) {
@@ -25,5 +29,10 @@ public class FakeSyncObserver implements SyncObserverPort {
     @Override
     public void syncCompleted(String sourceType, SyncReport report, int totalChunks, long durationMs) {
         completions.add(new Completion(sourceType, report, totalChunks, durationMs));
+    }
+
+    @Override
+    public void syncFailed(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode) {
+        failures.add(new Failure(sourceType, ingestedSoFar, totalChunksSoFar, durationMs, errorCode));
     }
 }

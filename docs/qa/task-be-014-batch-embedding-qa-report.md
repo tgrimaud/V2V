@@ -10,8 +10,11 @@ progress metrics/logs
 ## Executive Summary
 
 - **Overall readiness:** Functional acceptance **PASS** — batched write path implemented,
-  178 tests green (unit + Cucumber BDD + ArchUnit, infra-free), and **live-validated** on
-  the real Eir sample against Postgres (pgvector) + Ollama.
+  **184 tests green** (unit + Cucumber BDD + ArchUnit, infra-free), and **live-validated** on
+  the real Eir corpus against Postgres (pgvector) + Ollama.
+- **Adversarial review:** **93/100 — QA gate Pass** (`docs/qa/task-be-014-adversarial-review.md`).
+  The one material finding (silent failure path) was fixed in-loop: `SyncObserverPort.syncFailed`
+  now emits a failure metric + `[KB-SYNC] op=sync-failed` log with progress-so-far, covered by tests.
 - **Performance:** batched sync of 150 articles / 1 901 chunks dropped **75 s → 44.7 s
   (~40% faster)**, throughput **42.7 chunks/s**, with the classification distribution
   **unchanged** (pure performance change).
@@ -27,8 +30,8 @@ progress metrics/logs
 - `VectorStorePort.storeChunk` → **`storeChunks(document, chunks)`** (batched, returns count).
 - `PgVectorStoreAdapter`: one `vectorStore.add(...)` per document (batch embed + multi-row
   insert) via a `toDocument(...)` helper.
-- New domain out-port **`SyncObserverPort`** (`batchStored`, `syncCompleted`) driven by
-  `KnowledgeSyncService`; infra **`LoggingSyncObserverAdapter`** (Micrometer + logs).
+- New domain out-port **`SyncObserverPort`** (`batchStored`, `syncCompleted`, `syncFailed`)
+  driven by `KnowledgeSyncService`; infra **`LoggingSyncObserverAdapter`** (Micrometer + logs).
 - `KnowledgeSyncService`: per-document store timing, chunk totals, per-document ledger
   commit (resumable), completion event.
 
@@ -38,9 +41,11 @@ progress metrics/logs
 |---|---|
 | Batched write (one `add` per document) | PASS — unit test asserts one `storeChunks` call per document |
 | Chunk totals & observer events | PASS — batch events per ingested doc + one completion with matching totals |
-| Idempotency preserved | PASS — re-sync `0 ingested / 150 skipped`, no batch emitted (unit + live 8 s) |
+| Idempotency preserved | PASS — full-corpus re-sync `0 ingested / 306 skipped` (unit + live 16.7 s) |
 | Deletion-diff preserved | PASS — existing ledger-diff tests unchanged |
-| Classification unaffected | PASS — live distribution identical to BE-013 @0.55 (support 91 / billing 25 / general 18 / commercial 16) |
+| Retrieval correctness post-batching | PASS — live `verdict=PASS`, billing top hits ~0.75 for "credit vetting" |
+| Failure path observable + resumable | PASS — `syncFailed` metric + `[KB-SYNC] op=sync-failed` log; fault-injection test asserts fail-fast, progress-so-far, ledger resume |
+| Classification unaffected | PASS — full-corpus distribution support 181 / billing 56 / general 35 / commercial 34 @0.55 |
 | ArchUnit (hexagonal, naming, boundaries) | PASS — `SyncObserverPort` is a domain interface; `LoggingSyncObserverAdapter` respects the `*Adapter` naming rule |
 
 ## Latency / Throughput Results
@@ -50,12 +55,17 @@ progress metrics/logs
 | 150-article sync (1 901 chunks) | 75.0 s | **44.7 s** | −40% |
 | Throughput | ~25 chunks/s | **42.7 chunks/s** | +71% |
 | Per-document store (embed+insert), timer TOTAL | n/a | 35.0 s (MAX 1.09 s) | — |
-| Idempotent re-sync (150 unchanged) | 7.5 s | 8.0 s | ~flat |
+| Idempotent full-corpus re-sync (306 unchanged) | n/a | **16.7 s** (0 ingested) | — |
 | **Full corpus (306 articles, 3 235 chunks)** — measured | n/a | **~73 s** (156 new + 150 skipped) | — |
 
 Full corpus measured live: `processed=306 ingested=156 skipped=150 duration_ms=73393
 chunks_per_sec=44.1`; a from-scratch full ingest is ~92 s. Offline admin/sync path — no
 voice-runtime SLO (`time_to_first_audio`) impact.
+
+**Note (non-blocking):** an idempotent re-sync still costs ~16.7 s because the CSV connector
+classifies (embeds) every article in `fetchAll()` **before** the content-hash skip check, so
+domain classification is re-run even for unchanged articles. Cheap at 306 articles; a
+"skip classification when hash unchanged" optimization is a possible follow-up if the corpus grows.
 
 ## Observability Evidence
 
@@ -66,6 +76,7 @@ voice-runtime SLO (`time_to_first_audio`) impact.
     MAX 1.09 s, p50/p95/p99 published.
   - `voice_support.kb_sync_chunks{source_type=csv-article}` — chunks-per-document summary.
   - `voice_support.kb_sync{source_type=csv-article}` — full-sync wall clock.
+  - `voice_support.kb_sync_failures{source_type,error_code}` — aborted-run counter (bounded tags).
 - **Cadence:** per-batch detail at DEBUG (avoids 40k INFO lines); `op=progress` INFO every
   `voice-support.knowledge.sync-progress-every` (default 500) documents.
 - No sensitive data in logs (`source_id` is the article `document_id`, not PII).
@@ -87,5 +98,15 @@ voice-runtime SLO (`time_to_first_audio`) impact.
   order-of-magnitude larger corpus; embedding on Ollama is the dominant cost.
 - **Per-document failure** (embedding/DB error mid-run) aborts the sync fail-fast; because
   the ledger is committed per document, a re-run resumes (already-ingested docs skip). This
-  is safe/resumable but not fully fault-tolerant; hardening deferred with the async work.
+  is now **observable** (`syncFailed` → `voice_support.kb_sync_failures` counter +
+  `[KB-SYNC] op=sync-failed` log with progress-so-far). Per-article isolation (continue past
+  one bad article) is a possible hardening follow-up, not required at this corpus size.
+- **Idempotent re-sync re-classifies** all articles (~16.7 s) — see latency note; follow-up only.
 - FR(dev)/EN(prod) mixing in one vector store — tracked as TASK-BE-015.
+
+## Recommendation
+
+- **Go** — QA functional + latency acceptance **PASS**; adversarial review 93/100 (gate Pass).
+- No required fixes before merge. Follow-ups (non-blocking): TASK-BE-015 (answer language),
+  optional skip-classification-on-unchanged-hash, optional per-article failure isolation.
+- Merge remains gated on explicit user validation (user is the final validator).

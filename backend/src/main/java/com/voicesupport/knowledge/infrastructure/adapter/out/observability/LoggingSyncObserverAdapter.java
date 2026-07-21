@@ -28,6 +28,7 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
     private static final String BATCH_TIMER = "voice_support.kb_sync_batch";
     private static final String CHUNKS_SUMMARY = "voice_support.kb_sync_chunks";
     private static final String SYNC_TIMER = "voice_support.kb_sync";
+    private static final String SYNC_FAILURES = "voice_support.kb_sync_failures";
 
     private final MeterRegistry registry;
     private final int progressEvery;
@@ -66,5 +67,15 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
                 sourceType, report.processed(), report.ingested(), report.skipped(),
                 report.deleted(), totalChunks, durationMs,
                 String.format(Locale.ROOT, "%.1f", chunksPerSec));
+    }
+
+    @Override
+    public void syncFailed(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode) {
+        batchCounters.remove(sourceType);
+        // error_code is a bounded exception class name (e.g. RuntimeException); safe as a metric tag.
+        registry.counter(SYNC_FAILURES, "source_type", sourceType, "error_code", errorCode).increment();
+        log.warn("[KB-SYNC] op=sync-failed source_type={} ingested_so_far={} total_chunks_so_far={} "
+                        + "duration_ms={} error_code={} (fail-fast; committed documents resume on next sync)",
+                sourceType, ingestedSoFar, totalChunksSoFar, durationMs, errorCode);
     }
 }

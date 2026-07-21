@@ -15,6 +15,8 @@ public class FakeVectorStorePort implements VectorStorePort {
     public final List<String> deletedSources = new ArrayList<>();
     // Counts storeChunks(...) invocations so tests can assert one batched call per document.
     public int storeChunksCalls = 0;
+    // When set, storeChunks throws for this sourceId to exercise the fail-fast / failure-observability path.
+    public String failOnSourceId = null;
 
     @Override
     public void store(String content, String source, String section, int chunkIndex, String domain) {
@@ -26,6 +28,9 @@ public class FakeVectorStorePort implements VectorStorePort {
     @Override
     public int storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
         storeChunksCalls++;
+        if (document.sourceId().equals(failOnSourceId)) {
+            throw new IllegalStateException("vector store write failed for " + document.sourceId());
+        }
         for (int chunkIndex = 0; chunkIndex < chunks.size(); chunkIndex++) {
             TextChunker.Chunk chunk = chunks.get(chunkIndex);
             storedChunks.add(document.sourceType() + "/" + document.sourceId() + "#" + chunkIndex);

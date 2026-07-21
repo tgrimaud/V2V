@@ -161,6 +161,31 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
+    void failedBatchAbortsSyncButIsObservableAndResumable() {
+        // GIVEN two documents where the second fails to store
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+        vectorStore.failOnSourceId = "b.md";
+        KnowledgeSyncService service = serviceWith(connector, state, vectorStore);
+
+        // WHEN syncing THEN it fails fast (the exception propagates to the caller)
+        assertThrows(IllegalStateException.class, service::syncAll);
+
+        // AND the failure is observable with the progress achieved before the abort (no completion)
+        assertEquals(1, observer.failures.size());
+        FakeSyncObserver.Failure failure = observer.failures.get(0);
+        assertEquals(TYPE, failure.sourceType());
+        assertEquals(1, failure.ingestedSoFar());
+        assertEquals("IllegalStateException", failure.errorCode());
+        assertTrue(observer.completions.isEmpty());
+
+        // AND the first document is committed (ledger) so the next idempotent sync resumes it
+        assertEquals(List.of("a.md"), state.listSourceIds(TYPE));
+    }
+
+    @Test
     void unchangedDocumentsEmitNoBatchButStillComplete() {
         // GIVEN a source already synced once
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
