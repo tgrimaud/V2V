@@ -64,6 +64,17 @@ voice-support:
     chunk-overlap: 50
     markdown-path: ${KB_MARKDOWN_PATH:../knowledge-base}
     default-language: ${KB_DEFAULT_LANGUAGE:fr}
+    # CSV article connector (TASK-BE-013, ADR-0030). articles.csv (document_id,title,content
+    # with rich HTML) lives at the repo root; the backend runs from backend/, hence ../.
+    # A missing file degrades to an empty sync (no startup failure).
+    csv-path: ${KB_CSV_PATH:../articles.csv}
+    csv-language: ${KB_CSV_LANGUAGE:en}
+    classifier:
+      # Ingestion-time domain classification (ADR-0030): cosine of the article embedding vs
+      # per-domain anchors; below threshold the article stays "general". Both are tunable
+      # because the right cutoff depends on the corpus (best-effort, general is the safe default).
+      threshold: ${KB_CLASSIFIER_THRESHOLD:0.5}
+      max-chars: ${KB_CLASSIFIER_MAX_CHARS:2000}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

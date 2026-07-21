@@ -8,7 +8,7 @@ Accepted — extends the KB ingestion socle of
 connector and an ingestion-time domain classifier. Reuses the Ollama embedding
 model of [ADR-0006](ADR-0006-mistral-chat-and-ollama-embeddings.md). Implemented by
 TASK-BE-013 (+ TASK-BE-014 for batch insert). Feeds
-[EPIC-011](../../../product-backlog/epics/v1-epics.md) (the same `DomainClassifier`
+[EPIC-011](../../../product-backlog/epics/v1-epics.md) (the same `DomainClassifierPort`
 is reused for query-time routing).
 
 ## Context
@@ -55,29 +55,31 @@ Extract readable text only: strip tags, decode HTML entities, drop `<img>`, scri
 and styles, keep the visible text of links (not the URL). The cleaned text is what is
 hashed (`contentHash`), chunked and embedded — never the raw markup.
 
-### 4. Ingestion-time domain classification via a `DomainClassifier` port
+### 4. Ingestion-time domain classification via a `DomainClassifierPort`
 
-A new domain port `DomainClassifier.classify(title, content) -> domain` is called
-before `SourceDocument.create(...)`:
+A new domain port `DomainClassifierPort.classify(title, content) -> domain` is called
+by the connector before `SourceDocument.create(...)`:
 
-- **`EmbeddingDomainClassifier`** (retained default for the CSV connector): embed the
-  article text with the existing Ollama `nomic-embed-text` model (768d) and pick the
-  closest domain anchor (`billing` / `support` / `commercial`) by cosine similarity,
-  above a **configurable threshold**, else `general`. Domain anchors (short
-  representative texts) and the threshold are configuration.
-- **`DefaultGeneralClassifier`**: always `general` (preserves the prior behaviour,
-  used by connectors that do not classify).
+- **`EmbeddingDomainClassifierAdapter`** (retained default): embed the article text
+  with the existing Ollama `nomic-embed-text` model (768d) and pick the closest domain
+  anchor (`billing` / `support` / `commercial`) by cosine similarity, above a
+  **configurable threshold** (`voice-support.knowledge.classifier.threshold`), else
+  `general`. Domain anchors (short representative texts) and the threshold are
+  configuration; classification runs on the title plus a bounded prefix of the content
+  (`classifier.max-chars`) to keep the embedding call cheap.
 
-The port stays pure in the domain layer; the embedding access lives in an infra
-adapter. Classification is deterministic and unit-testable with a fake
-`EmbeddingModel` (no network). Because the domain is part of the ingested document,
-it is only re-evaluated when the `content_hash` changes (idempotent).
+The port stays pure in the domain layer (`..domain.port.out`); the embedding access
+lives in an infra adapter (`..adapter.out.classifier`). Classification is
+deterministic and unit-testable with a fake `EmbeddingModel` (no network). Because the
+domain is part of the ingested document, it is only re-evaluated when the
+`content_hash` changes (idempotent). Connectors that do not classify (e.g.
+`MarkdownFolderConnector`) keep passing their own domain, defaulting to `general`.
 
 ## Consequences
 
 - The answer engine can retrieve real operator content at scale; classified domains
   make it routable by the future orchestrator (EPIC-011), which reuses the same
-  `DomainClassifier` to classify the question at query time.
+  `DomainClassifierPort` to classify the question at query time.
 - Two new third-party dependencies enter the backend; both are self-contained,
   widely used, and pinned. Dependency governance (code-guidelines) is satisfied by
   the explicit justification above.
@@ -100,6 +102,6 @@ it is only re-evaluated when the `content_hash` changes (idempotent).
   we already compute. Deferred; the port allows swapping later.
 - **Source-provided category**: best if the real Eir export exposes a category/section
   (or a `document_id → domain` sidecar) — tracked as an open question; would become a
-  `DomainClassifier` implementation that reads the source field.
+  `DomainClassifierPort` implementation that reads the source field.
 - **Hand-rolled CSV parsing / regex HTML stripping**: rejected — unsafe on HTML with
   embedded newlines, escaped quotes and entities.
