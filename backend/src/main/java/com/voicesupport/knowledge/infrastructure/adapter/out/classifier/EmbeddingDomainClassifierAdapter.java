@@ -1,6 +1,8 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.classifier;
 
 import com.voicesupport.knowledge.domain.port.out.DomainClassifierPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
 
 import java.util.LinkedHashMap;
@@ -13,6 +15,8 @@ import java.util.Map;
 public class EmbeddingDomainClassifierAdapter implements DomainClassifierPort {
 
     public static final String GENERAL = "general";
+
+    private static final Logger log = LoggerFactory.getLogger(EmbeddingDomainClassifierAdapter.class);
 
     private final EmbeddingModel embeddingModel;
     private final Map<String, float[]> anchorVectors;
@@ -36,7 +40,17 @@ public class EmbeddingDomainClassifierAdapter implements DomainClassifierPort {
         if (text.isBlank() || anchorVectors.isEmpty()) {
             return GENERAL;
         }
-        float[] vector = embeddingModel.embed(text);
+        // A transient embedding failure on one article must not abort a bulk sync of
+        // thousands of rows; degrade that article to the safe "general" domain.
+        try {
+            return closestDomain(embeddingModel.embed(text));
+        } catch (RuntimeException e) {
+            log.warn("[KB-SYNC] domain classification failed, defaulting to general: {}", e.getMessage());
+            return GENERAL;
+        }
+    }
+
+    private String closestDomain(float[] vector) {
         String bestDomain = GENERAL;
         double bestScore = threshold;
         for (Map.Entry<String, float[]> anchor : anchorVectors.entrySet()) {

@@ -16,7 +16,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
-| TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | Planned (Sprint 8) |
+| TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA functional PASS (bulk latency → BE-014); awaiting user validation |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | Planned (Sprint 8) |
 
 ---
@@ -29,9 +29,26 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 `DomainClassifier`)
 **Classification:** V1 core — provides the real operator KB content the answer
 engine retrieves from.
-**Status:** Planned (Sprint 8)
+**Status:** In review — implemented; adversarial code review 92/100 (satisfied);
+QA functional PASS; bulk latency deferred to TASK-BE-014; awaiting user validation.
 **Priority:** High
 **Branch:** `task/TASK-BE-013-csv-article-connector`
+
+### Review & QA outcome
+
+- **Adversarial code review:** 92/100 — QA gate **Pass**. No blocking findings.
+  Remediations applied during review: classifier resilience (embedding failure →
+  `general`, sync continues) + ADR-0030 wording corrected (classification uses its own
+  embedding, not the storage vectors). Non-blocking items routed to TASK-BE-014
+  (bulk streaming/batch + per-row isolation + sync observability/throughput) and
+  TASK-BE-015 (FR/EN mixing).
+- **QA functional:** PASS — unit tests + Cucumber BDD (`csv-knowledge-ingestion.feature`,
+  3 scenarios) prove clean HTML→text, per-article domain classification, blank-row
+  skipping and idempotent `csv-article` sync. Report:
+  `docs/qa/task-be-013-csv-kb-ingestion-qa-report.md`.
+- **QA latency:** bulk-corpus ingest time/throughput **not measured** here — owned by
+  TASK-BE-014 + a live Postgres+Ollama run (offline admin path, no voice-runtime SLO
+  impact).
 
 ### Context
 

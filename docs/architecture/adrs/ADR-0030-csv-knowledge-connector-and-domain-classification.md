@@ -93,13 +93,18 @@ domain is part of the ingested document, it is only re-evaluated when the
 
 - **Default everything to `general`** (no classifier): functional (content stays
   retrievable) but loses domain routing precision; rejected as the target because the
-  operator corpus is large and mixed. Kept only as the `DefaultGeneral` fallback.
+  operator corpus is large and mixed. It remains the fallback whenever the classifier
+  cannot decide (below threshold, blank text, or an embedding failure) and for
+  connectors that pass their own domain (e.g. `MarkdownFolderConnector`).
 - **Keyword/rule-based classification**: cheap and deterministic, but brittle on real
   English operator content and needs curated keyword lists; can be added later behind
   the same port.
 - **LLM-based classification**: most accurate but one LLM call per article (thousands)
-  at ingestion; heavier and costlier than embedding similarity, which reuses vectors
-  we already compute. Deferred; the port allows swapping later.
+  at ingestion; heavier and costlier than an embedding-similarity call. Deferred; the
+  port allows swapping later. Note: classification currently issues its own
+  (article-level, truncated) embedding, distinct from the chunk-level storage
+  embeddings — reusing the storage vectors is a possible optimization (TASK-BE-014),
+  not the current behaviour.
 - **Source-provided category**: best if the real Eir export exposes a category/section
   (or a `document_id → domain` sidecar) — tracked as an open question; would become a
   `DomainClassifierPort` implementation that reads the source field.

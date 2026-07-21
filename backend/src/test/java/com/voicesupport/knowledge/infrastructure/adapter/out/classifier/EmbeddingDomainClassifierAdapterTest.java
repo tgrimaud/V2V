@@ -65,6 +65,20 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
+    void shouldDegradeToGeneralWhenEmbeddingFails() {
+        // GIVEN an embedding backend that fails on the article text (anchors still embed at construction)
+        FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors().failOn("invoice");
+        EmbeddingDomainClassifierAdapter classifier =
+                new EmbeddingDomainClassifierAdapter(model, ANCHORS, 0.5, 2000);
+
+        // WHEN classification hits the transient failure
+        String domain = classifier.classify("Bill", "A question about my invoice");
+
+        // THEN one failing article does not abort ingestion; it degrades to general
+        assertEquals("general", domain);
+    }
+
+    @Test
     void shouldReturnGeneralWhenNoAnchorsConfigured() {
         // GIVEN a classifier with no domain anchors
         EmbeddingDomainClassifierAdapter classifier =
