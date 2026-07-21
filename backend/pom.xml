@@ -23,6 +23,9 @@
         <archunit.version>1.2.1</archunit.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <cucumber.version>7.18.1</cucumber.version>
+        <!-- KB CSV ingestion (TASK-BE-013, ADR-0030): not managed by the Spring Boot BOM. -->
+        <jsoup.version>1.22.2</jsoup.version>
+        <commons-csv.version>1.14.1</commons-csv.version>
     </properties>
 
     <dependencyManagement>
@@ -84,6 +87,21 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- KB CSV ingestion (TASK-BE-013, ADR-0030): CsvArticleConnector.
+             commons-csv = RFC-4180 parser (the HTML `content` has embedded newlines +
+             escaped quotes, so a hand-rolled split is unsafe); jsoup = HTML -> plain text
+             so chunks/embeddings are clean. Neither is managed by the Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>${commons-csv.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
         </dependency>
 
         <dependency>
