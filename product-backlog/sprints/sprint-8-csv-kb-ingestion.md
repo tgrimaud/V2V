@@ -17,8 +17,11 @@ sprint (EPIC-011, after this one). It reuses the Sprint 7 answer engine unchange
 
 ## Status
 
-**Status:** Planned (opened 2026-07-21). Theme set by user decision: the billing /
-identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
+**Status:** In progress (opened 2026-07-21). Core tickets **TASK-BE-013 + TASK-BE-014
+validated by user and merged** into `feat/restart-from-scratch` (2026-07-21, fast-forward);
+their ticket branches are deleted. Sprint kept open pending TASK-BE-015 (answer language)
+scoping. BUG-001 tracked as an out-of-sprint follow-up. Theme set by user decision: the
+billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 
 ## Roadmap Context
 
