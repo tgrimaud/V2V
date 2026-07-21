@@ -8,6 +8,7 @@ pilot, unless pulled in earlier.
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
+| TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
 
 ---
 
@@ -121,3 +122,40 @@ reuses the `CorrelationId` source, per the note above):
   → 400 `ERR_400`; valid non-LLM retrieve still 200; converse LLM timeout → 503
   `ERR_UPSTREAM` (generic message, `correlation_id=cid-degraded-live` in body + header);
   server log kept the full `LLM provider timed out after 1 ms` stack under the id.
+
+---
+
+## TASK-BE-016 — OpenAPI/Swagger For The Java Backend
+
+**Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
+**Classification:** V1 hardening
+**Status:** Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme;
+schedule opportunistically before the pilot.
+**Priority:** Medium
+**Branch:** `task/TASK-BE-016-openapi-swagger`
+
+### Context
+
+No `springdoc`/`openapi`/`swagger` dependency exists in `backend/pom.xml`; the REST
+surface (`KnowledgeController`, `ConverseController`, `HealthController`, streaming)
+is undocumented as OpenAPI.
+
+### Objective
+
+Expose an OpenAPI 3 spec + Swagger UI for the backend so all project APIs are
+consistently documented (paired with TASK-WEB-016 for the Python voice runtime).
+
+### Scope
+
+- Add `springdoc-openapi-starter-webmvc-ui` (managed version) → `/swagger-ui.html`
+  + `/v3/api-docs`.
+- Annotate controllers/DTOs (`@Tag`, `@Operation`, `@Schema`) with concise
+  descriptions; keep JSON naming (snake_case) accurate in the spec.
+- Ensure the spec reflects the `ErrorResponse` contract (TASK-BE-012) and the
+  correlation-id headers.
+
+### Acceptance
+
+- `/v3/api-docs` returns a valid OpenAPI 3 document covering every endpoint;
+  Swagger UI renders it.
+- No secret/internal detail leaked in descriptions; `mvn test` + ArchUnit stay green.

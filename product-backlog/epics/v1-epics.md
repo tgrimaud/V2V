@@ -390,3 +390,53 @@ component contributes to latency before making any production SLO claim.
 ### Open Questions
 
 - OQ-005 - Pilot latency acceptance context.
+
+---
+
+## EPIC-011 - Multi-Agent Orchestration / Domain Routing
+
+**Status:** Draft
+**Priority:** High
+**Classification:** V1 core
+
+### Goal
+
+A customer question is routed to the right business domain (billing, technical
+support, commercial) so the answer engine retrieves and answers with the correct
+specialist context, instead of searching across all domains indiscriminately.
+
+### Context
+
+The restart-branch conversation engine currently passes `domain = null` to
+retrieval (`ConversationService` / `StreamingConversationService`), so it searches
+all domains. The multi-agent orchestrator that existed on `main` (intent
+classifier, per-domain agent profiles, session stickiness) has not been rebuilt.
+This EPIC rebuilds it and **consumes the domain tags produced at ingestion in
+Sprint 8** (TASK-BE-013 `DomainClassifier`).
+
+### Scope
+
+- Query-time intent classification, **reusing the embedding `DomainClassifier`** from
+  Sprint 8 to classify the question's domain.
+- `AgentProfile` per domain (specialist system prompt / persona).
+- Dispatch + session stickiness (prefer the current session agent on ties).
+- Pass the classified `domain` to `ground`/`answer` instead of `null`; reuse the
+  existing guardrails and escalation.
+
+### Business Rules
+
+| ID | Rule |
+|----|------|
+| BR-011-1 | Routing must never fabricate an answer; grounding + DEC-002 stay in force. |
+| BR-011-2 | On low classification confidence, fall back to a cross-domain (general) search rather than guessing a domain. |
+| BR-011-3 | Session stickiness must not trap a customer in the wrong domain when intent clearly changes. |
+
+### Dependencies
+
+- Sprint 8 domain tags (TASK-BE-013).
+- Verify scope boundary vs EPIC-005 (answer engine) at ticket-creation time.
+
+### Open Questions
+
+- Confidence threshold and tie-breaking policy for routing.
+- Whether classification is embedding-only or hybrid (keywords + embedding).

@@ -1308,7 +1308,7 @@ report — done), TASK-BE-010 (real-backend composite baseline)
 **Classification:** V1 pilot gate
 **Status:** Proposed (2026-07-20) — created from ADR-0029. **Out-of-sprint
 pilot-readiness follow-up** (EPIC-010, feeds US-040 pilot readiness report): kept
-**off the Sprint 8 billing theme** (identity/BSS/PDF/comparison); schedule in the
+**off the billing theme** (identity/BSS/PDF/comparison, now Sprint 9); schedule in the
 pilot-readiness latency pass **before the pilot**. No urgency — the voice path
 (STT/TTS/WebRTC, Sprint 6) and the real backend (Sprint 7) are frozen, so the
 mouth-to-ear measurement stays valid whenever it is run.
@@ -1415,9 +1415,9 @@ speech-to-speech), TASK-WEB-011 (TTS pre-warm — the precedent for lever 2)
 instrumented baseline, not blind**)
 **Classification:** V1 pilot gate (perceived latency)
 **Status:** Proposed (2026-07-20, from the Sprint 7 demo) — **out-of-sprint
-pilot-readiness follow-up**, kept **off the Sprint 8 billing theme**
-(identity/BSS/PDF/comparison); schedule in the pilot-readiness latency pass, after
-TASK-WEB-014 has published the mouth-to-ear baseline.
+pilot-readiness follow-up**, kept **off the billing theme**
+(identity/BSS/PDF/comparison, now Sprint 9); schedule in the pilot-readiness latency
+pass, after TASK-WEB-014 has published the mouth-to-ear baseline.
 **Priority:** High
 **Branch:** `task/TASK-WEB-015-perceived-latency-levers` (to be created when scheduled)
 
@@ -1499,3 +1499,41 @@ Scenario: The first turn no longer pays the full cold-start penalty
 - Updated ADR-0029 evidence + `docs/qa/streaming-voice-qa-report.md` go/no-go.
 - False-cut rate report for lever 3 if the hold is reduced.
 - No API key / raw audio / path leak.
+
+---
+
+## TASK-WEB-016 - OpenAPI Spec For The Python Voice Runtime (`web_voice`)
+
+**Parent:** EPIC-006 (Voice2Voice) — cross-cutting API hardening
+**Related:** TASK-BE-016 (OpenAPI for the Java backend)
+**Classification:** V1 hardening
+**Status:** Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme;
+schedule opportunistically before the pilot.
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-016-voice-openapi` (to be created when scheduled)
+
+### Context
+
+The Java backend can auto-generate OpenAPI via springdoc (TASK-BE-016), but the
+Python voice runtime (`web_voice`) serves `/api/voice/*` on the **stdlib
+`http.server`** with **no framework**, so there is no auto-generated spec.
+
+### Objective
+
+Publish an OpenAPI (Swagger) description for the voice runtime HTTP surface so all
+project APIs are documented consistently.
+
+### Scope
+
+- Hand-write an OpenAPI YAML for `/api/voice/stt`, `/api/voice/tts`,
+  `/api/voice/turn` and the WebRTC signaling route, derived from the single source of
+  truth [docs/architecture/voice-runtime-http-contract.md](../../docs/architecture/voice-runtime-http-contract.md)
+  (request/response shapes, headers, error contract, flags).
+- Serve/version the spec (static path or committed file) and keep it in sync with the
+  contract doc.
+
+### Acceptance
+
+- A valid OpenAPI document describes every `web_voice` endpoint (paths, params,
+  request/response, error shape, correlation-id headers).
+- The spec matches the HTTP contract doc; drift is caught in review.
