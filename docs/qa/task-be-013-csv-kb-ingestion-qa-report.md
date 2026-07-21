@@ -3,14 +3,18 @@
 ## Executive Summary
 
 - **Overall readiness:** Functional acceptance **PASS** for the connector + classifier
-  slice (unit + BDD, infra-free). **Not** yet validated at bulk scale against real
-  Postgres + Ollama — that latency evidence is owned by **TASK-BE-014** (batch
-  embedding/insert) and by a live/IT run, per the ticket.
-- **Main blockers:** none for the BE-013 scope. Bulk-corpus ingest time/throughput is
-  explicitly deferred to BE-014 (documented dependency, not a regression).
-- **Residual risks:** classification quality (embedding-anchor threshold) is
-  calibration-dependent and unverified on the real corpus; FR(dev)/EN(prod) mixing in
-  one vector store (TASK-BE-015); per-row parse failure aborts the whole sync.
+  slice (unit + BDD, infra-free) **and** validated on a **live run** against real
+  Postgres (pgvector) + Ollama (`nomic-embed-text`) on a 150-article sample of the real
+  Eir corpus: end-to-end ingest, idempotency, clean text, domain classification and
+  retrieval all confirmed. The classifier threshold was **calibrated to 0.55** on this
+  run.
+- **Main blockers:** none for the BE-013 scope. **Full-corpus** (~40,900 rows) ingest
+  time/throughput is explicitly deferred to **TASK-BE-014** (batch embedding/insert) —
+  the live run measured ~0.5 s/article single-insert, i.e. ~5–6 h extrapolated, which
+  is exactly what BE-014 must fix.
+- **Residual risks:** classification is best-effort (anchor cosine, no ground-truth
+  labels) — calibrated but not benchmarked; FR(dev)/EN(prod) mixing in one vector store
+  (TASK-BE-015); one malformed CSV row aborts the whole sync (BE-014).
 
 ## Scope Tested
 
@@ -40,15 +44,45 @@
 Test totals after change: **173** unit/integration + **20** BDD scenarios, 0 failures;
 ArchUnit (hexagonal + naming + context boundary) green.
 
+## Live Run (150-article sample, real Postgres + Ollama)
+
+- **Environment:** backend on this branch; pgvector `pg16` on :5433; Ollama
+  `nomic-embed-text` on :11434 (embed ~65 ms warm). Sample = first 150 valid records of
+  `articles.csv` (ids 196–932), extracted with a CSV-aware reader so embedded
+  newlines/quotes stay intact; kept out of git (`*.kb.csv`).
+- **Ingest:** `POST /api/knowledge/sync/csv-article` → `processed 150, ingested 150,
+  skipped 0` in **75 s** (~0.5 s/article; 150 articles → 1 901 chunks). Single-insert +
+  per-article classification embed — the known-slow path BE-014 must batch.
+- **Idempotency:** 2nd sync → `ingested 0, skipped 150` in **7.5 s** (content-hash
+  ledger; note it still re-classifies during `fetchAll` → BE-014 can skip that too).
+- **Clean text:** `0` rows with residual HTML tags among the 1 901 chunks.
+- **Classifier calibration:** max-cosine distribution on the sample (nomic, no task
+  prefix → compressed range) `min 0.49 / p25 0.58 / median 0.60 / p75 0.64 / max 0.80`.
+  Threshold sensitivity: `general` share = 1/150 @0.50, **20/150 @0.55**, 73/150 @0.60.
+  Chosen **0.55**: the low-confidence tail routed to `general` is genuinely
+  cross-cutting/off-domain (GDPR, Right to be Forgotten, Personal Injury Claims,
+  Genesys agent coaching, Address Search, Eircodes, Age Friendly Programme) — the
+  correct bucket. Their 2nd-best anchor score is near-tied with the best, confirming
+  those picks were unreliable and belong in `general`.
+- **Domain distribution @0.55 (articles / chunks):** support 91/1205, billing 25/280,
+  general 18/180, commercial 16/236. Support-heavy is expected for a support-site
+  corpus. (@0.50 it was support 99, billing 32, commercial 19, general 0 — everything
+  force-committed, which is why 0.50 was rejected.)
+- **Retrieval sanity (`POST /api/conversation/retrieve`, unfiltered):**
+  "unlock my mobile handset" → support (top score 0.79); "what is credit vetting?" →
+  billing (0.75); "WiFi no connection troubleshoot" → support (0.70). Correct domains,
+  strong scores.
+
 ## Latency Results
 
 | Slice | p50 | p95 | p99 | Sample | Warm/Cold | Notes |
 |---|---:|---:|---:|---:|---|---|
-| KB bulk ingest (full `articles.csv`) | n/a | n/a | n/a | 0 | — | **Not measured** — owned by TASK-BE-014 (batch insert) + a live Postgres+Ollama run. Current one-chunk-per-`add` path + per-article classification embedding is known-slow by design. |
+| KB ingest (per article, sample) | ~0.5 s | — | — | 150 | warm | Single-insert + classify embed; **full-corpus bound owned by TASK-BE-014** (batching). |
+| KB re-sync (idempotent, whole sample) | — | — | — | 1 | warm | 7.5 s for 150 unchanged (classification still runs in `fetchAll`). |
 
 This story is an **offline admin/sync path**, not the customer voice runtime critical
-path (no `time_to_first_audio` / mouth-to-ear impact). Per the ticket, bulk ingest
-time and throughput are reported under TASK-BE-014.
+path (no `time_to_first_audio` / mouth-to-ear impact). Full-corpus throughput and a
+documented ingest-time bound are reported under TASK-BE-014.
 
 ## Component Findings
 

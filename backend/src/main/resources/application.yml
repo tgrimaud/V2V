@@ -73,7 +73,11 @@ voice-support:
       # Ingestion-time domain classification (ADR-0030): cosine of the article embedding vs
       # per-domain anchors; below threshold the article stays "general". Both are tunable
       # because the right cutoff depends on the corpus (best-effort, general is the safe default).
-      threshold: ${KB_CLASSIFIER_THRESHOLD:0.5}
+      # Calibrated on a 150-article live run of the real Eir corpus (nomic-embed-text, no task
+      # prefix → compressed cosine range ~0.49-0.80, median ~0.60): 0.55 sends the genuinely
+      # cross-cutting/ambiguous tail (~13%: GDPR, privacy, internal agent tooling) to "general"
+      # while keeping confident billing/support/commercial picks. See the TASK-BE-013 QA report.
+      threshold: ${KB_CLASSIFIER_THRESHOLD:0.55}
       max-chars: ${KB_CLASSIFIER_MAX_CHARS:2000}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose

@@ -46,8 +46,18 @@ QA functional PASS; bulk latency deferred to TASK-BE-014; awaiting user validati
   3 scenarios) prove clean HTML→text, per-article domain classification, blank-row
   skipping and idempotent `csv-article` sync. Report:
   `docs/qa/task-be-013-csv-kb-ingestion-qa-report.md`.
-- **QA latency:** bulk-corpus ingest time/throughput **not measured** here — owned by
-  TASK-BE-014 + a live Postgres+Ollama run (offline admin path, no voice-runtime SLO
+- **Live run (2026-07-21):** 150-article sample of the real Eir corpus against real
+  pgvector + Ollama. Ingest `processed 150 / ingested 150` in **75 s** (~0.5 s/article,
+  1 901 chunks); idempotent re-sync `ingested 0 / skipped 150` in 7.5 s; **0** residual
+  HTML tags; retrieval returns the right domain with strong scores (handset→support 0.79,
+  credit vetting→billing 0.75, wifi→support 0.70). **Classifier threshold calibrated to
+  0.55** (was 0.50): the low-confidence tail routed to `general` is genuinely
+  cross-cutting (GDPR, Right to be Forgotten, agent tooling, Eircodes). Distribution
+  @0.55: support 91 / billing 25 / general 18 / commercial 16. Full details in the QA
+  report.
+- **QA latency:** **full-corpus** (~40,900 rows) ingest time/throughput still owned by
+  TASK-BE-014 — the live run confirms the single-insert path (~0.5 s/article → ~5–6 h
+  extrapolated) is why batching is required (offline admin path, no voice-runtime SLO
   impact).
 
 ### Context
@@ -79,10 +89,11 @@ retrieve grounded operator content at scale.
 - **HTML → plain text** via **jsoup** before the pivot, so chunks and embeddings are
   clean text (strip tags, decode entities, drop `<img>`/scripts, keep link text).
 - **Domain classification** (`articles.csv` is mixed — no domain column): a
-  `DomainClassifier` port populates `domain` before `SourceDocument.create(...)`.
-  Retained implementation: **`EmbeddingDomainClassifier`** — embed the article text
-  (Ollama `nomic-embed-text`, 768) and pick the closest domain anchor
-  (`billing`/`support`/`commercial`) above a configurable threshold, else `general`.
+  `DomainClassifierPort` populates `domain` before `SourceDocument.create(...)`.
+  Retained implementation: **`EmbeddingDomainClassifierAdapter`** — embed the article
+  text (Ollama `nomic-embed-text`, 768) and pick the closest domain anchor
+  (`billing`/`support`/`commercial`) above a configurable threshold (calibrated 0.55),
+  else `general`.
   A `DefaultGeneral` impl preserves the current behaviour. Port pure in the domain,
   embedding access in an infra adapter; anchors + threshold configurable; testable
   with a fake `EmbeddingModel` (no network). Reused later by EPIC-011 for query-time
