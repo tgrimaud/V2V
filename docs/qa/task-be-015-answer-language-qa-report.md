@@ -4,16 +4,22 @@ _Date: 2026-07-21 · Branch: `task/TASK-BE-015-answer-language` · Owner: QA_
 
 ## Executive Summary
 
-- **Overall readiness:** GO for merge readiness on the backend answer-language behavior
-  (FR/EN). All acceptance criteria are covered by automated, product-observable tests and
-  pass. One **cross-component dependency remains open** (voice STT/TTS language selection on
-  the spoken path) and is out of scope for this backend ticket.
-- **Main blockers:** None for the backend behavior.
+- **Overall readiness:** **CONDITIONAL** — the automated suite passes and the live run
+  (real Mistral + Ollama + corpus) confirms correct FR/EN behavior on all clear-language
+  turns and per-turn telemetry, **but the live run surfaced one Medium functional defect**
+  (`BUG-002`): on an **ambiguous** follow-up inside an established French conversation, the
+  turn language is *decided* and *recorded* as French (stickiness) yet the guardrail
+  **fallback wording is spoken in English**. This violates BR3/BR4 on the fallback path.
+- **Main blockers:** `BUG-002` (Medium) must be fixed for full BR2/BR3/BR4 compliance before
+  the ticket is merge-ready. Grounded answers and clear-language refusals are already correct.
 - **Residual risks:**
   - Voice path: STT/TTS must operate in the answered language so the customer *hears* the
     right language — a voice-runtime concern tracked as an open question, not validated here.
-  - Answer *fidelity* when a French answer is grounded on English content (and vice-versa) is
-    an LLM-quality dimension; it is not observable with a fake LLM and needs a small live run.
+  - Answer *fidelity* on the FR↔EN content mismatch: validated live (fluent, consistent
+    answers) — see Live Run Results.
+  - Retrieval-confidence asymmetry between the English CSV corpus and the French markdown KB
+    (an English billing phrasing fell to a low-confidence fallback while its French counterpart
+    grounded) — a **retrieval/KB** observation, not a language defect; owner = KB/retrieval.
 
 ## Scope Tested
 
@@ -80,6 +86,42 @@ and no network hop**, so it does not introduce a new external latency slice.
 Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live voice run
 (next phase) should confirm the voice slices are unchanged and validate STT/TTS language.
 
+## Live Run Results (real Mistral + Ollama + corpus)
+
+- **Environment:** backend `task/TASK-BE-015-answer-language` @ `46c1155` on port 8081; LLM
+  `mistral-api` (`mistral-small-latest`), embeddings Ollama `nomic-embed-text`; Postgres
+  pgvector with **5177 chunks** (5136 `csv-article` English Eir corpus + 41 `markdown` FR KB).
+- **Method:** `POST /api/conversation/converse`, one unique `correlation_id` per turn, language
+  cross-checked against the `[LANGUAGE]` structured log.
+
+| Turn | Question (lang) | Answer lang | Grounded | `[LANGUAGE]` telemetry | Verdict |
+|---|---|---|---|---|---|
+| L-EN-BILL | "Why is my bill higher…" (EN) | EN | fallback | `provider=mistral-api language=en` | ✅ language OK (see retrieval note) |
+| L-FR-BILL | "Pourquoi ma facture est-elle plus élevée…" (FR) | FR | ✅ (0.72) | `provider=mistral-api language=fr` | ✅ fluent FR, offers *conseiller* |
+| L-EN-TECH | "My internet connection keeps dropping…" (EN) | EN | ✅ (0.66) | `provider=mistral-api language=en` | ✅ fluent EN troubleshooting |
+| L-FR-TECH | "Ma connexion internet n'arrête pas de se couper…" (FR) | FR | ✅ (0.76) | `provider=mistral-api language=fr` | ✅ fluent FR troubleshooting |
+| L-EN-OFF | "What's the weather like today?" (EN) | EN | refusal | `provider=n/a language=en` | ✅ EN off-topic refusal |
+| L-FR-OFF | "Quel temps fera-t-il demain ?" (FR) | FR | refusal | `provider=n/a language=fr` | ✅ FR off-topic refusal |
+| L-AMBIG | "ok" (ambiguous, no context) | EN | fallback | `provider=n/a language=en` | ✅ default EN |
+| L-STICK-1 | "Pourquoi ma facture a-t-elle augmenté…" (FR) | FR | fallback | `provider=mistral-api language=fr` | ✅ FR |
+| L-STICK-2 | "ok" (ambiguous, after FR turn) | **EN message** / decided **fr** | fallback | `provider=n/a language=fr` | ❌ **BUG-002** — decided FR, spoke EN |
+
+**Findings:**
+- **BR1/BR4/BR5/BR7 confirmed live:** EN questions → fluent EN answers, FR questions → fluent
+  FR answers, off-topic refusals in the question language, all grounded on the mixed corpus.
+- **Fidelity (BR5) confirmed:** French answers grounded on the corpus are fluent and coherent
+  (proration, hors-forfait, congestion réseau…); English answers likewise. No cross-language
+  leakage observed.
+- **Per-turn observability confirmed live:** every turn emitted `[LANGUAGE]` with the correct
+  language; LLM turns tagged `provider=mistral-api`, guardrail-fallback turns `provider=n/a`.
+- **BUG-002 (Medium):** ambiguous follow-up in a French conversation → decided/recorded FR but
+  the guardrail fallback wording is English (root cause: `GuardrailMessages` detects per-message
+  with a hardcoded EN default, ignoring stickiness and the configurable default). See
+  `product-backlog/bugs/BUG-002-*.md`.
+- **Retrieval note (out of scope):** an English billing phrasing fell to a low-confidence
+  fallback while the French billing question grounded — a corpus/retrieval asymmetry, not a
+  language defect; language stayed correct.
+
 ## Component Findings
 
 | Brick | Status | Findings | Next action |
@@ -94,8 +136,10 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
 
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
-| Low | Answer *fidelity* of a FR answer grounded on EN content (and vice-versa) is not observable with a fake LLM. | Comprehension quality unproven (behavior/routing is proven). | QA (live run) |
+| **Medium** | **BUG-002** — ambiguous follow-up in a French conversation returns an **English** guardrail fallback (decided language is FR). Fallback wording ignores session stickiness and the configurable default. | French customer hears an English canned message mid-conversation (BR3/BR4 violation on the fallback path). | Backend developer |
+| Low (out of scope) | Retrieval-confidence asymmetry: an English billing phrasing fell to low-confidence while its French counterpart grounded. | Some EN questions get a fallback instead of a grounded answer; language stays correct. | KB / retrieval |
 | Medium (cross-team) | Voice STT/TTS language selection on the spoken path is unvalidated; a mismatch means the customer hears the wrong-language voice regardless of the text answer. | Voice UX correctness on the pilot. | Architecture / voice runtime |
+| Low (resolved) | Answer *fidelity* on FR↔EN content mismatch — **validated live** (fluent, coherent FR/EN answers on the mixed corpus). | — | QA (done) |
 
 ## Open Questions
 
@@ -106,9 +150,14 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
 
 ## Recommendation
 
-- **Go / No-go:** **GO** for the backend behavior — merge-ready on functional grounds
-  (pending the user's explicit merge request, per workflow).
+- **Go / No-go:** **CONDITIONAL GO** — the core FR/EN answer-language behavior, fidelity and
+  per-turn observability are validated live. **Fix `BUG-002` first** (ambiguous-follow-up
+  fallback wording must follow the decided language incl. stickiness + configurable default),
+  then QA retest, to be fully merge-ready. Grounded answers and clear-language refusals need no
+  further work.
+- **Live run: done** (real Mistral/Ollama + real corpus) — FR/EN fidelity confirmed, one Medium
+  defect found (`BUG-002`).
+- **Required before merge:**
+  1. Fix `BUG-002` + regression test (sync + streaming) + ADR-0031 update; QA retest.
 - **Required before pilot (not before merge):**
-  1. A short **live run** (real Mistral/Ollama + real corpus) to spot-check EN/FR answer
-     fidelity across the language↔content mismatch.
   2. **Voice STT/TTS language** validation on the spoken path (Architecture / voice runtime).
