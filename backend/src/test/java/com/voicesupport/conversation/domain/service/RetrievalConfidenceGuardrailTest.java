@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +20,7 @@ class RetrievalConfidenceGuardrailTest {
     @Test
     @DisplayName("blocks with low-confidence when no evidence was retrieved")
     void blocksWhenEmpty() {
-        GuardrailDecision decision = guardrail.check("Ma question", List.of());
+        GuardrailDecision decision = guardrail.check(List.of(), AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked());
         assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
@@ -32,7 +33,7 @@ class RetrievalConfidenceGuardrailTest {
                 new RetrievedEvidence("t1", "s1", "billing", 0.40),
                 new RetrievedEvidence("t2", "s2", "billing", 0.35));
 
-        GuardrailDecision decision = guardrail.check("Ma question", weak);
+        GuardrailDecision decision = guardrail.check(weak, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked());
         assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
@@ -45,7 +46,7 @@ class RetrievalConfidenceGuardrailTest {
                 new RetrievedEvidence("t1", "s1", "billing", 0.82),
                 new RetrievedEvidence("t2", "s2", "billing", 0.30));
 
-        GuardrailDecision decision = guardrail.check("Ma question", strong);
+        GuardrailDecision decision = guardrail.check(strong, AnswerLanguage.FRENCH);
 
         assertFalse(decision.blocked());
         assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
@@ -57,7 +58,7 @@ class RetrievalConfidenceGuardrailTest {
         RetrievalConfidenceGuardrail strict = new RetrievalConfidenceGuardrail(0.90);
         List<RetrievedEvidence> evidence = List.of(new RetrievedEvidence("t", "s", "billing", 0.85));
 
-        GuardrailDecision decision = strict.check("q", evidence);
+        GuardrailDecision decision = strict.check(evidence, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked());
     }

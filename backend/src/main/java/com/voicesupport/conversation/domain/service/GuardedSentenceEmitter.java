@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
@@ -14,27 +15,27 @@ import java.util.function.Consumer;
 // preserving DEC-002 on the streamed path exactly like the synchronous AnswerService does.
 public class GuardedSentenceEmitter {
 
-    private final String question;
     private final List<RetrievedEvidence> evidence;
     private final OutputGuardrail outputGuardrail;
     private final Consumer<String> onChunk;
     private final double groundedConfidence;
+    private final AnswerLanguage language;
     private final SentenceSegmenter segmenter = new SentenceSegmenter();
     private final StringBuilder voiced = new StringBuilder();
     private boolean blocked;
     private String fallbackMessage;
 
     public GuardedSentenceEmitter(
-            String question,
             List<RetrievedEvidence> evidence,
             OutputGuardrail outputGuardrail,
             Consumer<String> onChunk,
-            double groundedConfidence) {
-        this.question = question;
+            double groundedConfidence,
+            AnswerLanguage language) {
         this.evidence = evidence;
         this.outputGuardrail = outputGuardrail;
         this.onChunk = onChunk;
         this.groundedConfidence = groundedConfidence;
+        this.language = language;
     }
 
     public void accept(String token) {
@@ -58,7 +59,7 @@ public class GuardedSentenceEmitter {
             return GeneratedAnswer.fallback(fallbackMessage);
         }
         if (voiced.isEmpty()) {
-            String message = GuardrailMessages.lowConfidence(safe(question));
+            String message = GuardrailMessages.lowConfidence(language);
             onChunk.accept(message);
             return GeneratedAnswer.fallback(message);
         }
@@ -69,7 +70,7 @@ public class GuardedSentenceEmitter {
         if (blocked) {
             return;
         }
-        GuardrailDecision decision = outputGuardrail.check(question, sentence, evidence);
+        GuardrailDecision decision = outputGuardrail.check(sentence, evidence, language);
         if (decision.blocked()) {
             blocked = true;
             fallbackMessage = decision.fallbackMessage();
@@ -84,9 +85,5 @@ public class GuardedSentenceEmitter {
             voiced.append(' ');
         }
         voiced.append(sentence);
-    }
-
-    private String safe(String value) {
-        return value == null ? "" : value;
     }
 }

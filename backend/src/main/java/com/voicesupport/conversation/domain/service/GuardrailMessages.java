@@ -2,30 +2,32 @@ package com.voicesupport.conversation.domain.service;
 
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 
-// Canned fallback wording (fr/en) for the guardrails. Language detection is delegated to the
-// shared AnswerLanguage heuristic (TASK-BE-015) so the guardrail wording matches the language the
-// LLM answer would use; English is the fallback so an ambiguous turn defers to the pilot default.
+// Canned fallback wording (fr/en) for the guardrails. The answer language is DECIDED once per
+// turn by LanguageDetector (question language -> session stickiness -> configurable default) and
+// passed in here, so the guardrail wording always matches the language the LLM answer uses —
+// including on ambiguous turns where per-message detection alone would diverge (BUG-002).
 final class GuardrailMessages {
 
     private GuardrailMessages() {
     }
 
-    static boolean isEnglish(String text) {
-        return AnswerLanguage.detect(text, AnswerLanguage.ENGLISH) == AnswerLanguage.ENGLISH;
+    // French is the only non-default language in V1; anything else (English pilot default, or a
+    // future language before its wording is added) falls back to the English wording.
+    private static boolean english(AnswerLanguage language) {
+        return language != AnswerLanguage.FRENCH;
     }
 
-    static String greeting(String text, boolean alreadyGreeted) {
-        boolean english = isEnglish(text);
+    static String greeting(AnswerLanguage language, boolean alreadyGreeted) {
         if (alreadyGreeted) {
-            return english ? "I'm listening, how can I help you?"
+            return english(language) ? "I'm listening, how can I help you?"
                     : "Je vous écoute, que puis-je faire pour vous ?";
         }
-        return english ? "Hello! How can I help you today?"
+        return english(language) ? "Hello! How can I help you today?"
                 : "Bonjour ! Comment puis-je vous aider ?";
     }
 
-    static String inappropriate(String text) {
-        return isEnglish(text)
+    static String inappropriate(AnswerLanguage language) {
+        return english(language)
                 ? "I cannot help with this type of request. I am a customer support assistant. "
                   + "Can I help you with something else regarding your account or our services?"
                 : "Je ne suis pas en mesure de répondre à ce type de demande. "
@@ -33,8 +35,8 @@ final class GuardrailMessages {
                   + "Puis-je vous aider avec autre chose concernant votre compte ou nos services ?";
     }
 
-    static String offTopic(String text) {
-        return isEnglish(text)
+    static String offTopic(AnswerLanguage language) {
+        return english(language)
                 ? "This question is outside my area of expertise. I am a support assistant specialized "
                   + "in internet and telecom services. Can I help you with something else regarding your "
                   + "connection or our services?"
@@ -43,8 +45,8 @@ final class GuardrailMessages {
                   + "autre chose concernant votre connexion ou nos services ?";
     }
 
-    static String lowConfidence(String text) {
-        return isEnglish(text)
+    static String lowConfidence(AnswerLanguage language) {
+        return english(language)
                 ? "I don't have enough reliable information to answer this question. "
                   + "Would you like me to connect you with a support agent?"
                 : "Je n'ai pas assez d'informations fiables pour répondre à cette question. "
@@ -54,8 +56,8 @@ final class GuardrailMessages {
     // DEC-002: the assistant must never state a specific billing amount that is not backed
     // by source evidence. When the output guardrail catches an ungrounded amount, we drop
     // the generated text and offer a safe hand-off rather than voicing an invented figure.
-    static String ungroundedAmount(String text) {
-        return isEnglish(text)
+    static String ungroundedAmount(AnswerLanguage language) {
+        return english(language)
                 ? "I can't confirm a specific amount without checking your account. "
                   + "Would you like me to connect you with a support agent who can review your billing details?"
                 : "Je ne peux pas confirmer de montant précis sans vérifier votre dossier. "

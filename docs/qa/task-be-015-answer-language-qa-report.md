@@ -129,14 +129,14 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
 | `AnswerLanguage` (VO: detect + directive + hand-off markers) | ✅ | Deterministic FR/EN scoring; ambiguity returns empty so stickiness/default can decide; ArchUnit value-object rule satisfied (enum is implicitly final). | None |
 | `LanguageDetector` (domain service) | ✅ | question → history stickiness → configurable default; single per-turn decision. | None |
 | `AnswerService` / `StreamingConversationService` | ✅ | Decide language once per turn; thread to the LLM on the answerable path; record language (`provider=n/a`) on guardrail-fallback turns. | None |
-| Guardrails (`InputGuardrail` / `GuardrailMessages` / `OutputGuardrail`) | ✅ | Canned wording localizes from the turn text via the shared detector; English refusal hand-off is now caught like French. | None |
+| Guardrails (`InputGuardrail` / `GuardrailMessages` / `OutputGuardrail`) | ✅ | Canned wording now renders from the **decided** per-turn `AnswerLanguage` threaded into every guardrail (BUG-002 fix) — no per-message re-detection, so wording can't diverge from the answer language on ambiguous turns; English refusal hand-off still caught like French. | None |
 | Observability (`BackendTelemetry.recordAnswerLanguage`) | ✅ | Per-turn counter `voice_support.answer_language{provider,language}` + `[LANGUAGE]` log with correlation id, on **both** LLM and fallback paths; no transcript/answer content logged. | Confirm metric/log surface in a live run |
 
 ## Defects And Gaps
 
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
-| **Medium** | **BUG-002** — ambiguous follow-up in a French conversation returns an **English** guardrail fallback (decided language is FR). Fallback wording ignores session stickiness and the configurable default. | French customer hears an English canned message mid-conversation (BR3/BR4 violation on the fallback path). | Backend developer |
+| **Medium (fixed)** | **BUG-002** — ambiguous follow-up in a French conversation returned an **English** guardrail fallback. **Fixed** on `fix/BUG-002-fallback-language-stickiness`: the decided per-turn `AnswerLanguage` is threaded into every guardrail (single source of truth); regression tests added (unit + BDD), 212 tests green. Live retest pending. | French customer hears an English canned message mid-conversation (BR3/BR4 violation on the fallback path). | Backend developer |
 | Low (out of scope) | Retrieval-confidence asymmetry: an English billing phrasing fell to low-confidence while its French counterpart grounded. | Some EN questions get a fallback instead of a grounded answer; language stays correct. | KB / retrieval |
 | Medium (cross-team) | Voice STT/TTS language selection on the spoken path is unvalidated; a mismatch means the customer hears the wrong-language voice regardless of the text answer. | Voice UX correctness on the pilot. | Architecture / voice runtime |
 | Low (resolved) | Answer *fidelity* on FR↔EN content mismatch — **validated live** (fluent, coherent FR/EN answers on the mixed corpus). | — | QA (done) |
@@ -158,6 +158,26 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
 - **Live run: done** (real Mistral/Ollama + real corpus) — FR/EN fidelity confirmed, one Medium
   defect found (`BUG-002`).
 - **Required before merge:**
-  1. Fix `BUG-002` + regression test (sync + streaming) + ADR-0031 update; QA retest.
+  1. ~~Fix `BUG-002` + regression test (sync + streaming) + ADR-0031 update; QA retest.~~
+     **Done (code + docs + unit/BDD):** language threaded into all guardrails, ADR-0031 updated,
+     regression tests added, 212 tests green. **Live retest still pending** to close.
 - **Required before pilot (not before merge):**
   2. **Voice STT/TTS language** validation on the spoken path (Architecture / voice runtime).
+
+## BUG-002 Fix Retest (2026-07-22)
+
+- **Branch:** `fix/BUG-002-fallback-language-stickiness`
+- **Change:** one language decision per turn (`LanguageDetector`) is threaded into
+  `GroundQueryUseCase.ground(...)`, `InputGuardrail`, `RetrievalConfidenceGuardrail`,
+  `OutputGuardrail` and `GuardedSentenceEmitter`; `GuardrailMessages` renders wording from the
+  decided `AnswerLanguage` (no more per-message re-detection / hard-coded English default).
+- **Regression tests:**
+  - BDD `answer-language.feature` → *"An ambiguous follow-up keeps the language on a fallback turn
+    (BUG-002)"*: French history + ambiguous "ok" + insufficient evidence ⇒ **French** fallback +
+    human-advisor offer (fails on old code, passes on the fix).
+  - Unit `InputGuardrailTest.wordingFollowsDecidedLanguageNotInput`: canned wording follows the
+    DECIDED language, not the input text.
+- **Result:** `mvn -o test` → **212 tests, 0 failures** (unit + BDD + ArchUnit). Telemetry and
+  the returned message language now always agree by construction.
+- **Pending:** live retest (backend + Mistral/Ollama + corpus) reproducing the original
+  `L-STICK-2` flow to confirm the French fallback end-to-end.

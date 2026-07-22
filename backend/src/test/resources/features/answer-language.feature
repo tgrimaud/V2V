@@ -50,3 +50,10 @@ Feature: Answer language follows the customer's question language (TASK-BE-015)
     And the conversation so far has been in French
     When the customer's turn is "ok"
     Then the assistant answers in French
+
+  Scenario: An ambiguous follow-up keeps the language on a fallback turn (BUG-002)
+    Given the assistant cannot find enough evidence to answer
+    And the conversation so far has been in French
+    When the customer's turn is "ok"
+    Then the assistant's spoken reply is in French
+    And the assistant offers a human advisor

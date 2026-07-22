@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-002
 - **Title:** Ambiguous follow-up in a French conversation gets an English guardrail fallback message
-- **Status:** New
+- **Status:** Fixed — pending live QA retest
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** QA (live run)
@@ -90,16 +90,17 @@ follow-ups, so the decision must be revisited.
 
 ## Acceptance Criteria For Fix
 
-- [ ] An ambiguous follow-up in a French conversation returns the **French** fallback wording.
-- [ ] The fallback wording honors the **configurable default** language (non-EN deployments).
-- [ ] The fallback wording uses the **same** per-turn decision as the LLM path (single source
+- [x] An ambiguous follow-up in a French conversation returns the **French** fallback wording.
+- [x] The fallback wording honors the **configurable default** language (non-EN deployments).
+- [x] The fallback wording uses the **same** per-turn decision as the LLM path (single source
       of truth for the turn language).
-- [ ] A regression test covers ambiguous-follow-up stickiness on the fallback path (sync +
+- [x] A regression test covers ambiguous-follow-up stickiness on the fallback path (sync +
       streaming).
-- [ ] `[LANGUAGE]` telemetry and the returned message language always agree.
+- [x] `[LANGUAGE]` telemetry and the returned message language always agree.
 - [ ] Adversarial code review ≥ 90 %.
-- [ ] QA retest passes (unit + live).
-- [ ] ADR-0031 updated (reopen the "thread language into guardrails" alternative).
+- [ ] QA retest passes (unit + live). Unit + BDD done (212 tests green, incl. the BUG-002
+      scenario); **live retest pending** (needs backend + Mistral/Ollama + corpus).
+- [x] ADR-0031 updated (reopen the "thread language into guardrails" alternative).
 
 ## Developer Notes
 
@@ -110,6 +111,37 @@ follow-ups, so the decision must be revisited.
   the guardrail message factory. Keep one language decision per turn.
 - files likely changed: `GuardrailMessages`, `AnswerService`, `StreamingConversationService`
   (and possibly the grounding pipeline / `GroundQueryUseCase` signature + fakes).
+
+### Resolution (implemented)
+
+Chose the **single-source-of-truth** direction (the ADR-0031 alternative): the per-turn
+`AnswerLanguage` decided by `LanguageDetector` (question → stickiness → configurable default) is
+now **threaded into every guardrail**, and `GuardrailMessages` no longer re-detects language
+from the message text. There is now exactly **one** language decision per turn, reused by the
+LLM answer, the telemetry, and every canned guardrail message.
+
+- `GuardrailMessages`: all methods now take `AnswerLanguage` (removed per-message text detection
+  and the hard-coded English default).
+- `InputGuardrail.check(question, alreadyGreeted, language)`,
+  `RetrievalConfidenceGuardrail.check(evidence, language)`,
+  `OutputGuardrail.check(answer, evidence, language)` — language passed in; dead `question`
+  params removed where they only fed detection.
+- `GroundQueryUseCase.ground(..., language)` / `RetrievalGroundingService` forward the language.
+- `GuardedSentenceEmitter(evidence, guardrail, onChunk, confidence, language)` — streamed
+  fallback wording now uses the decided language (fixes the streamed path too).
+- `AnswerService` / `StreamingConversationService` already resolved the language before grounding;
+  they now pass it through. `RetrievalController` resolves via `LanguageDetector` (no history).
+- Fakes/tests updated (`FakeGroundQueryUseCase`, guardrail tests, controller `@WebMvcTest`
+  configs given a `LanguageDetector` bean).
+
+### Tests added
+
+- BDD regression (`answer-language.feature`): *"An ambiguous follow-up keeps the language on a
+  fallback turn (BUG-002)"* — French history + ambiguous "ok" + insufficient evidence → **French**
+  spoken fallback + human-advisor offer. Fails on the old code (English), passes on the fix.
+- Unit regression (`InputGuardrailTest.wordingFollowsDecidedLanguageNotInput`): the canned
+  wording follows the DECIDED language, not the input text.
+- Full suite: **212 tests green** (`mvn -o test`).
 
 ## QA Retest
 

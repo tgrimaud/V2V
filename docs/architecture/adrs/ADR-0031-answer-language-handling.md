@@ -58,11 +58,21 @@ directive. The domain still owns all wording; the SDK stays in infrastructure.
 
 ### 4. Consistent guardrail wording + language-independent hand-off
 
-`GuardrailMessages` delegates detection to `AnswerLanguage.detect(text, ENGLISH)` (the same
-heuristic and pilot default), so greeting / off-topic / insufficient-evidence wording matches the
-LLM answer language. `OutputGuardrail.isNonAnswer` matches the hand-off markers of **every**
+The per-turn `AnswerLanguage` decided by `LanguageDetector` (question → session stickiness →
+configurable default) is **threaded into every guardrail** and `GuardrailMessages` renders the
+greeting / off-topic / unsafe / insufficient-evidence / ungrounded-amount wording in that decided
+language. There is exactly **one** language decision per turn, reused by the LLM answer, the
+telemetry and every canned guardrail message — so the guardrail wording can never diverge from the
+answer language, even on an **ambiguous** turn where the message text alone carries no language
+(BR3/BR4). `OutputGuardrail.isNonAnswer` still matches the hand-off markers of **every**
 `AnswerLanguage`, so an English refusal is caught and surfaced as a safe hand-off exactly like the
 French one (BR7).
+
+> Superseded design (pre-BUG-002): `GuardrailMessages` used to re-detect the language from the
+> message text with a hard-coded English default. That was a **second, divergent** language
+> decision: on an ambiguous French follow-up ("ok") the LLM path decided French (stickiness) but
+> the fallback spoke English. Fixed by threading the single decided language into the guardrails
+> (see BUG-002).
 
 ### 5. Observability
 
@@ -84,6 +94,10 @@ transcript/answer content logged.
   question; per-deployment behavior is configurable.
 - `AnswerGeneratorPort` / `StreamingAnswerGeneratorPort` gained a parameter → all implementers
   and test fakes updated (no Mockito).
+- `GroundQueryUseCase.ground(...)` and the guardrail signatures (`InputGuardrail`,
+  `RetrievalConfidenceGuardrail`, `OutputGuardrail`, `GuardedSentenceEmitter`) gained the decided
+  `AnswerLanguage` (BUG-002) → all callers and test fakes updated; `RetrievalController` resolves
+  the language via `LanguageDetector` (no conversation history on that validation surface).
 - The detection heuristic is deterministic and cheap (regex marker scoring), adding negligible
   latency; the language decision is recorded per turn.
 
@@ -100,8 +114,16 @@ transcript/answer content logged.
 
 - **Keep the "answer in the question's language" prompt line only**: already present and proven
   unreliable with a French-framed prompt; rejected.
-- **Thread the language through every guardrail signature**: larger blast radius for no product
-  gain — the guardrails already localize from the turn text via the shared detector; rejected.
+- **Thread the language through every guardrail signature**: initially rejected as a larger blast
+  radius for no product gain, since the guardrails localized from the turn text. **Adopted after
+  BUG-002**: the live run proved there *is* product loss on ambiguous follow-ups (a French
+  conversation gets an English fallback), so the single per-turn decision is now threaded into the
+  guardrails. The blast radius (guardrail/`ground` signatures + fakes) is the accepted cost of a
+  single source of truth for the turn language.
+- **Re-localize only the blocked message in the application service** (by verdict, from the
+  decided language): smaller change, but it cannot fix the **streamed** path, where the fallback
+  wording is produced mid-stream inside `GuardedSentenceEmitter`/`OutputGuardrail`; rejected in
+  favor of threading the language everywhere for one consistent mechanism.
 - **Detect the language inside the adapter from the question**: loses session stickiness and the
   single per-turn decision point; rejected in favor of deciding in the application service.
 - **LLM/most-accurate language identification**: heavier per turn; the enum keeps the detector

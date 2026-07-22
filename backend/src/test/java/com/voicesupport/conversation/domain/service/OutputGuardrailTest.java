@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import org.junit.jupiter.api.DisplayName;
@@ -25,7 +26,7 @@ class OutputGuardrailTest {
 
         // WHEN the LLM voices a specific amount
         GuardrailDecision decision = guardrail.check(
-                "Combien je paie ?", "Votre facture est de 39,99 € ce mois-ci.", evidence);
+                "Votre facture est de 39,99 € ce mois-ci.", evidence, AnswerLanguage.FRENCH);
 
         // THEN it is blocked with an ungrounded verdict and a safe hand-off message
         assertTrue(decision.blocked());
@@ -42,7 +43,7 @@ class OutputGuardrailTest {
 
         // WHEN the answer repeats that grounded amount
         GuardrailDecision decision = guardrail.check(
-                "Quel est le prix de la Fibre ?", "L'offre Fibre coûte 39,99 € par mois.", evidence);
+                "L'offre Fibre coûte 39,99 € par mois.", evidence, AnswerLanguage.FRENCH);
 
         // THEN it is not blocked
         assertFalse(decision.blocked());
@@ -58,7 +59,7 @@ class OutputGuardrailTest {
 
         // WHEN the answer contains no monetary amount
         GuardrailDecision decision = guardrail.check(
-                "Ma box ne marche plus", "Redémarrez votre box puis patientez deux minutes.", evidence);
+                "Redémarrez votre box puis patientez deux minutes.", evidence, AnswerLanguage.FRENCH);
 
         // THEN it passes
         assertFalse(decision.blocked());
@@ -68,7 +69,7 @@ class OutputGuardrailTest {
     @DisplayName("a blank answer is surfaced as a safe hand-off, not a grounded answer")
     void blankAnswerBlocked() {
         // WHEN the generated answer is blank
-        GuardrailDecision decision = guardrail.check("Ma box ne marche plus", "  ", List.of());
+        GuardrailDecision decision = guardrail.check("  ", List.of(), AnswerLanguage.FRENCH);
 
         // THEN it is blocked with a low-confidence hand-off (never voiced as grounded)
         assertTrue(decision.blocked());
@@ -85,7 +86,7 @@ class OutputGuardrailTest {
 
         // WHEN the answer is the instructed refusal
         GuardrailDecision decision = guardrail.check(
-                "Question obscure ?", "Je n'ai pas cette information, je vous transfère à un conseiller.", evidence);
+                "Je n'ai pas cette information, je vous transfère à un conseiller.", evidence, AnswerLanguage.FRENCH);
 
         // THEN it is blocked rather than reported as a grounded answer
         assertTrue(decision.blocked());
@@ -101,7 +102,7 @@ class OutputGuardrailTest {
 
         // WHEN the answer is the English hand-off sentence
         GuardrailDecision decision = guardrail.check(
-                "Obscure question?", "I don't have this information, I'll transfer you to an advisor.", evidence);
+                "I don't have this information, I'll transfer you to an advisor.", evidence, AnswerLanguage.ENGLISH);
 
         // THEN it is blocked as a hand-off, not reported as a grounded answer
         assertTrue(decision.blocked());
@@ -109,7 +110,7 @@ class OutputGuardrailTest {
     }
 
     @Test
-    @DisplayName("an English question yields an English hand-off message")
+    @DisplayName("an English-decided turn yields an English hand-off message")
     void englishFallback() {
         // GIVEN evidence with no amount and an English question
         List<RetrievedEvidence> evidence = List.of(
@@ -117,7 +118,7 @@ class OutputGuardrailTest {
 
         // WHEN the answer invents an amount
         GuardrailDecision decision = guardrail.check(
-                "How much do I pay?", "Your bill is $42.00 this month.", evidence);
+                "Your bill is $42.00 this month.", evidence, AnswerLanguage.ENGLISH);
 
         // THEN the fallback is in English
         assertTrue(decision.blocked());

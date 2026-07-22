@@ -1,8 +1,10 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,16 +27,22 @@ public class RetrievalController {
     private static final Logger log = LoggerFactory.getLogger(RetrievalController.class);
 
     private final GroundQueryUseCase groundQueryUseCase;
+    private final LanguageDetector languageDetector;
 
-    public RetrievalController(GroundQueryUseCase groundQueryUseCase) {
+    public RetrievalController(GroundQueryUseCase groundQueryUseCase, LanguageDetector languageDetector) {
         this.groundQueryUseCase = groundQueryUseCase;
+        this.languageDetector = languageDetector;
     }
 
     @PostMapping("/retrieve")
     public ResponseEntity<RetrievalResponse> retrieve(@Valid @RequestBody RetrievalRequest request) {
         long start = System.nanoTime();
+        // This validation surface has no conversation history, so the language is decided from the
+        // question alone falling back to the configurable default (LanguageDetector, TASK-BE-015).
+        AnswerLanguage language = languageDetector.resolve(request.question(), List.of());
         GroundingResult result = groundQueryUseCase.ground(
-                request.question(), request.domain(), request.effectiveTopK(), request.effectiveAlreadyGreeted());
+                request.question(), request.domain(), request.effectiveTopK(),
+                request.effectiveAlreadyGreeted(), language);
         logDecision(request, result, elapsedMs(start));
         return ResponseEntity.ok(RetrievalResponse.from(result));
     }

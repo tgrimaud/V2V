@@ -1,6 +1,8 @@
 package com.voicesupport.shared.web.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.infrastructure.adapter.in.rest.RetrievalController;
 import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
@@ -41,12 +43,17 @@ class GlobalExceptionHandlerTest {
             // Throws an upstream failure carrying sensitive-looking detail; the advice must never
             // echo it to the client. domain=restfail simulates a provider REST failure on the
             // retrieval path (e.g. embedding endpoint down) which must also map to 503.
-            return (question, domain, topK, alreadyGreeted) -> {
+            return (question, domain, topK, alreadyGreeted, language) -> {
                 if ("restfail".equals(domain)) {
                     throw new ResourceAccessException("I/O error " + LEAK_MARKER);
                 }
                 throw new UpstreamUnavailableException("connect " + LEAK_MARKER);
             };
+        }
+
+        @Bean
+        LanguageDetector languageDetector() {
+            return new LanguageDetector(AnswerLanguage.ENGLISH);
         }
     }
 

@@ -63,7 +63,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
         List<String> history = ConversationHistoryFormatter.format(prior);
         AnswerLanguage language = languageDetector.resolve(transcript, history);
-        GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty());
+        GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty(), language);
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, history, language, onChunk)
                 : emitFallback(language, grounding.decision().fallbackMessage(), onChunk);
@@ -76,7 +76,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
             AnswerLanguage language, Consumer<String> onChunk) {
         List<RetrievedEvidence> evidence = grounding.evidence();
         GuardedSentenceEmitter emitter = new GuardedSentenceEmitter(
-                question, evidence, outputGuardrail, onChunk, bestScore(evidence));
+                evidence, outputGuardrail, onChunk, bestScore(evidence), language);
         streamingGenerator.generate(question, evidence, history, language, emitter::accept);
         return emitter.finish();
     }

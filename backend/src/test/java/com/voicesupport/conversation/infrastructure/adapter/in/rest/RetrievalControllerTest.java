@@ -1,9 +1,11 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.shared.config.JacksonConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,12 +40,18 @@ class RetrievalControllerTest {
         GroundQueryUseCase groundQueryUseCase() {
             return new StubGroundQueryUseCase();
         }
+
+        @Bean
+        LanguageDetector languageDetector() {
+            return new LanguageDetector(AnswerLanguage.ENGLISH);
+        }
     }
 
     // Stub returns an answerable result for billing questions, otherwise an off-topic block.
     static class StubGroundQueryUseCase implements GroundQueryUseCase {
         @Override
-        public GroundingResult ground(String question, String domain, int topK, boolean alreadyGreeted) {
+        public GroundingResult ground(String question, String domain, int topK, boolean alreadyGreeted,
+                AnswerLanguage language) {
             if (question != null && question.toLowerCase().contains("facture")) {
                 return GroundingResult.answerable(List.of(
                         new RetrievedEvidence("La proration explique l'écart", "billing-faq#1", "billing", 0.83)));

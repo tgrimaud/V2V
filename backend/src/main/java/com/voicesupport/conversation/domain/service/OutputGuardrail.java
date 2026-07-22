@@ -22,14 +22,16 @@ public class OutputGuardrail {
                     + "|\\d[\\d .,]*\\d\\s?(?:[€$£]|eur|euros?|dollars?|usd|gbp|cents?)"
                     + "|\\d\\s?(?:[€$£]|eur|euros?|dollars?|usd|gbp|cents?))");
 
-    public GuardrailDecision check(String question, String answer, List<RetrievedEvidence> evidence) {
+    // The answer language is decided once per turn upstream and passed in so the hand-off wording
+    // matches the language the LLM answered in (BUG-002), independent of the answer's own content.
+    public GuardrailDecision check(String answer, List<RetrievedEvidence> evidence, AnswerLanguage language) {
         if (isNonAnswer(answer)) {
-            return GuardrailDecision.lowConfidence(GuardrailMessages.lowConfidence(safe(question)));
+            return GuardrailDecision.lowConfidence(GuardrailMessages.lowConfidence(language));
         }
         Set<String> groundedAmounts = amountsIn(concatenate(evidence));
         for (String amount : amountsIn(answer)) {
             if (!groundedAmounts.contains(amount)) {
-                return GuardrailDecision.ungrounded(GuardrailMessages.ungroundedAmount(safe(question)));
+                return GuardrailDecision.ungrounded(GuardrailMessages.ungroundedAmount(language));
             }
         }
         return GuardrailDecision.pass();
@@ -71,9 +73,5 @@ public class OutputGuardrail {
 
     private String canonical(String amountToken) {
         return amountToken.replaceAll("[^0-9]", "");
-    }
-
-    private String safe(String question) {
-        return question == null ? "" : question;
     }
 }

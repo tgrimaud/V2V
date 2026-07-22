@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 
 import java.util.List;
@@ -43,22 +44,25 @@ public class InputGuardrail {
             compile("(tradui(s|re|ction)|translate)"),
             compile("(qui\\s+(est|a\\s+inventé|était)|who\\s+(is|was|invented))"));
 
-    public GuardrailDecision check(String question, boolean alreadyGreeted) {
+    // The answer language is decided once per turn upstream (LanguageDetector: question language,
+    // then session stickiness, then the configurable default) and passed in so the canned wording
+    // matches the language of the rest of the turn, even when the input itself is ambiguous.
+    public GuardrailDecision check(String question, boolean alreadyGreeted, AnswerLanguage language) {
         if (question == null || question.isBlank()) {
             return GuardrailDecision.pass();
         }
         String trimmed = question.trim();
         if (matchesAny(GREETING_PATTERNS, trimmed)) {
-            return GuardrailDecision.greeting(GuardrailMessages.greeting(trimmed, alreadyGreeted));
+            return GuardrailDecision.greeting(GuardrailMessages.greeting(language, alreadyGreeted));
         }
         if (trimmed.length() < MIN_QUESTION_LENGTH) {
             return GuardrailDecision.pass();
         }
         if (matchesAny(INAPPROPRIATE_PATTERNS, trimmed)) {
-            return GuardrailDecision.inappropriate(GuardrailMessages.inappropriate(trimmed));
+            return GuardrailDecision.inappropriate(GuardrailMessages.inappropriate(language));
         }
         if (matchesAny(OFF_TOPIC_PATTERNS, trimmed)) {
-            return GuardrailDecision.offTopic(GuardrailMessages.offTopic(trimmed));
+            return GuardrailDecision.offTopic(GuardrailMessages.offTopic(language));
         }
         return GuardrailDecision.pass();
     }

@@ -1,6 +1,7 @@
 package com.voicesupport.bdd.steps;
 
 import com.voicesupport.conversation.application.service.RetrievalGroundingService;
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
@@ -52,12 +53,16 @@ public class ConversationGroundingSteps {
 
     @When("the customer asks {string}")
     public void theCustomerAsks(String question) {
-        result = service.ground(question, "billing", 4, true);
+        result = service.ground(question, "billing", 4, true, languageOf(question));
     }
 
     @When("the customer says {string}")
     public void theCustomerSays(String question) {
-        result = service.ground(question, "billing", 4, false);
+        result = service.ground(question, "billing", 4, false, languageOf(question));
+    }
+
+    private AnswerLanguage languageOf(String question) {
+        return AnswerLanguage.detect(question).orElse(AnswerLanguage.ENGLISH);
     }
 
     @Then("the assistant is allowed to answer")

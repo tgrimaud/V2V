@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.domain.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import org.junit.jupiter.api.DisplayName;
@@ -106,9 +107,10 @@ class GuardedSentenceEmitterTest {
     }
 
     private GuardedSentenceEmitter emitterFor(List<RetrievedEvidence> evidence) {
-        // A clearly French question so the hand-off wording is French (contains "conseiller"); the
-        // ambiguous default is now English for the Eir pilot (TASK-BE-015).
-        return new GuardedSentenceEmitter("Pourquoi ma facture ?", evidence, guardrail, emitted::add, 0.83);
+        // The turn language is decided once upstream; here French, so the hand-off wording is French
+        // (contains "conseiller"). The emitter no longer re-detects language from the answer text,
+        // it uses the decided language passed in (BUG-002 / TASK-BE-015).
+        return new GuardedSentenceEmitter(evidence, guardrail, emitted::add, 0.83, AnswerLanguage.FRENCH);
     }
 
     private String lastEmitted() {

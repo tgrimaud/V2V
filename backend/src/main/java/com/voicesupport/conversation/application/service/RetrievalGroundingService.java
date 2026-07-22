@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.application.service;
 
+import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
@@ -30,13 +31,14 @@ public class RetrievalGroundingService implements GroundQueryUseCase {
     }
 
     @Override
-    public GroundingResult ground(String question, String domain, int topK, boolean alreadyGreeted) {
-        GuardrailDecision inputDecision = inputGuardrail.check(question, alreadyGreeted);
+    public GroundingResult ground(String question, String domain, int topK, boolean alreadyGreeted,
+            AnswerLanguage language) {
+        GuardrailDecision inputDecision = inputGuardrail.check(question, alreadyGreeted, language);
         if (inputDecision.blocked()) {
             return GroundingResult.blocked(inputDecision);
         }
         List<RetrievedEvidence> evidence = knowledgeRetrievalPort.retrieve(question, domain, topK);
-        GuardrailDecision confidenceDecision = confidenceGuardrail.check(question, evidence);
+        GuardrailDecision confidenceDecision = confidenceGuardrail.check(evidence, language);
         if (confidenceDecision.blocked()) {
             return GroundingResult.blocked(confidenceDecision);
         }
