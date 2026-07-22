@@ -1047,15 +1047,22 @@ Scenario: A closing word inside a longer request does not end the call
 
 **Parent:** EPIC-006 (Web voice journey) / related EPIC-005 (answer engine)
 **Classification:** V1 core — language control; runtime-affecting (STT/TTS/answer).
-**Status:** In progress (2026-07-22). **Answer-language layer DONE & live-verified**: UI FR/EN
-selector (`index.html`) → runtime forwards `language` → backend forces `AnswerLanguage`
-(overrides detection). Live: same French question answers in EN or FR per selection; forced
-language also drives fallbacks/refusals (BUG-002 consistency). Tests green (backend 217,
-runtime 315 unit + 26 BDD). **Remaining for full determinism**: (1) STT listening language +
-TTS speaking voice per session — providers are built once at startup (`GRADIUM_LANGUAGE` for STT,
-`GRADIUM_VOICE_ID` FR voice for TTS), so per-session language needs provider re-wiring **and a
-valid English Gradium voice id** (external dependency — OQ-042-a); (2) selector on the
-`webrtc.html` streaming path.
+**Status:** In progress (2026-07-22). **Batch web voice path (`index.html`) DONE & live-verified —
+deterministic end to end.**
+- **Answer language**: UI FR/EN selector → runtime forwards `language` → backend forces
+  `AnswerLanguage` (overrides detection). Live: same French question answers in EN or FR per
+  selection; forced language also drives fallbacks/refusals (BUG-002 consistency).
+- **STT (listening)**: per-session Gradium STT provider built per language (`fr`/`en`), selected
+  from `envelope.language` in `WebVoiceIngress`.
+- **TTS (speaking)**: per-session Gradium voice selected from `envelope.language` in
+  `WebVoiceEgress` — French uses the default voice, English uses `GRADIUM_VOICE_ID_EN`
+  (`vimnD4UQG_36P43U`, provided by the user, live-verified: `/api/voice/tts?language=en` returns
+  audio). Set `GRADIUM_VOICE_ID_EN` in the gitignored `.env`.
+- Tests green: backend **217**, runtime **315** unit + **26** BDD.
+
+**Remaining**: the `webrtc.html` streaming path (WebRTC uses separate streaming STT/TTS providers
+built in `_build_signaling`; language is not yet threaded through signaling) and its UI selector.
+OQ-042-a (per-session Gradium language) is resolved for the batch path.
 **Priority:** High
 **Branch:** `us/US-042-ui-language-selector` (stacked on `task/TASK-BE-017-fr-csv-translation`
 so the forced-French path can be tested against the translated FR corpus).
