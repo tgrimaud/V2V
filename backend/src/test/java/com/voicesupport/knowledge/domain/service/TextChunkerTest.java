@@ -23,6 +23,24 @@ class TextChunkerTest {
     }
 
     @Test
+    void shouldHardSplitASingleParagraphLongerThanChunkSize() {
+        // GIVEN a chunk size of 100 and one paragraph (no blank lines) far longer than that
+        // (reproduces the TASK-BE-017 embedder failure: a flattened article body as one paragraph)
+        TextChunker chunker = new TextChunker(100, 10);
+        String oneLongParagraph = "x".repeat(1000);
+
+        // WHEN chunking
+        List<TextChunker.Chunk> chunks = chunker.chunk(oneLongParagraph);
+
+        // THEN it is split into several chunks and none exceeds the chunk size (+ overlap margin)
+        assertTrue(chunks.size() > 1);
+        for (TextChunker.Chunk chunk : chunks) {
+            assertTrue(chunk.content().length() <= 110,
+                    "chunk length " + chunk.content().length() + " must not blow the embedder limit");
+        }
+    }
+
+    @Test
     void shouldSplitLongContentIntoMultipleChunks() {
         // GIVEN a small chunk size
         TextChunker chunker = new TextChunker(40, 5);

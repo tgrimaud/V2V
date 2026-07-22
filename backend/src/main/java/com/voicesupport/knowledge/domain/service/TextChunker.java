@@ -25,16 +25,19 @@ public class TextChunker {
 
     private List<String> splitIntoChunks(String content) {
         List<String> chunks = new ArrayList<>();
-        String[] paragraphs = content.split("\n\n+");
         StringBuilder currentChunk = new StringBuilder();
 
-        for (String paragraph : paragraphs) {
-            if (currentChunk.length() + paragraph.length() > chunkSize && !currentChunk.isEmpty()) {
-                chunks.add(currentChunk.toString().trim());
-                int overlapStart = Math.max(0, currentChunk.length() - chunkOverlap);
-                currentChunk = new StringBuilder(currentChunk.substring(overlapStart));
+        for (String paragraph : content.split("\n\n+")) {
+            // A single long paragraph (e.g. HTML-flattened article body, denser in French) must be
+            // hard-split so no chunk exceeds chunkSize and blows the embedder token limit.
+            for (String piece : hardSplit(paragraph)) {
+                if (currentChunk.length() + piece.length() > chunkSize && !currentChunk.isEmpty()) {
+                    chunks.add(currentChunk.toString().trim());
+                    int overlapStart = Math.max(0, currentChunk.length() - chunkOverlap);
+                    currentChunk = new StringBuilder(currentChunk.substring(overlapStart));
+                }
+                currentChunk.append(piece).append("\n\n");
             }
-            currentChunk.append(paragraph).append("\n\n");
         }
 
         if (!currentChunk.isEmpty()) {
@@ -42,6 +45,18 @@ public class TextChunker {
         }
 
         return chunks;
+    }
+
+    private List<String> hardSplit(String paragraph) {
+        if (paragraph.length() <= chunkSize) {
+            return List.of(paragraph);
+        }
+        List<String> pieces = new ArrayList<>();
+        int step = Math.max(1, chunkSize - chunkOverlap);
+        for (int start = 0; start < paragraph.length(); start += step) {
+            pieces.add(paragraph.substring(start, Math.min(paragraph.length(), start + chunkSize)));
+        }
+        return pieces;
     }
 
     private String extractSection(String chunk, String fallback) {
