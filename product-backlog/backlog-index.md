@@ -187,6 +187,7 @@ RF-008 (WER normalization, surfaced by the first live Gradium run) → TASK-STT-
 | Bug | Title | Severity | Status | Notes |
 |-----|-------|:--------:|--------|-------|
 | [BUG-001](bugs/BUG-001-input-guardrail-blocks-legitimate-phishing-support.md) | Input guardrail refuses legitimate phishing/scam-call support questions | Medium | New (P2) | Surfaced in Sprint 8 live test; belongs to Sprint 7 guardrail (ADR-0014). Tracked as a Sprint 8 out-of-sprint follow-up. |
+| [BUG-003](bugs/BUG-003-kb-chunking-brittle-retrieval-handoff.md) | Over-fragmented KB chunking evicts the answer chunk from top-K → LLM hand-off → "not enough info" on covered topics | High | New (P1) | Surfaced during US-042 live WebRTC test; language-independent (FR/EN), not a WebRTC/STT bug. `articles-fr.csv` ingested as 10 166 malformed chunks (mid-word splits, `X \n\n X` duplication, header-only chunks). EPIC-005. |
 
 ## Decisions
 

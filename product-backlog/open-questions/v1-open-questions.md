@@ -227,3 +227,48 @@ support, observability hooks (DEC-010) and team familiarity.
 - Deferred by the user until after Sprint 5 planning; **must not be forgotten** — to
   be discussed before the Java answer engine (HTTP backend behind TASK-WEB-003-C)
   is implemented.
+
+---
+
+## OQ-008 - Retrieval Quality Strategy And Vector Store (pgvector vs Qdrant, hybrid/rerank/scale)
+
+**Status:** Open (raised 2026-07-22 while triaging [BUG-003](../bugs/BUG-003-kb-chunking-brittle-retrieval-handoff.md))
+**Owner:** Architecture / Backend
+**Impacts:** EPIC-005 (answer engine / knowledge base), ADR-0006, ADR-0007, ADR-0030
+
+### Question
+
+Do we keep **pgvector** (current, one Postgres for `vector_store` + `kb_source_state`
+ledger + sessions) and improve retrieval quality on top of it (hybrid dense+sparse
+search, reranking, MMR/diversity), or do we move the vector store to **Qdrant**
+(native hybrid/sparse vectors, reranking, quantization, horizontal scale) — and if so,
+when and behind what trigger?
+
+### Why It Matters
+
+BUG-003 showed the current failure is **not** a vector-store limitation: it is caused by
+malformed chunking (mid-word splits, `X \n\n X` duplication, header-only chunks) plus a
+dense-only, brittle top-K where keyword-dense header chunks evict the answer chunk.
+Switching engines with the same corpus/strategy would reproduce the same failure — so the
+question is genuinely "retrieval **strategy**", where the store is only one lever.
+pgvector is amply sufficient for V1 volume (~10k chunks) and keeps a single datastore;
+Qdrant adds real capabilities but also new infra, a new adapter, a full re-sync, and loses
+the "one Postgres" simplicity.
+
+### Needed Decision
+
+- Confirm the lever order: (1) fix chunking, (2) topK/over-fetch + MMR, (3) hybrid
+  (keyword + dense, e.g. Postgres FTS `tsvector`), (4) cross-encoder reranker, (5) change
+  vector DB — with (5) gated on a concrete trigger.
+- Concrete trigger(s) that would justify Qdrant (native hybrid without hand-rolling,
+  volumetry ≫ V1, quantization, vector multitenancy, latency at scale).
+- Whether hybrid/rerank on pgvector is enough to meet the retrieval-quality bar after
+  BUG-003 is fixed (measure before deciding).
+- Whether the eventual decision warrants a full ADR (stubbed as ADR-0032, Proposed).
+
+### Notes
+
+- Vector store already sits behind `VectorStorePort` / `VectorSearchPort`, so a future
+  swap is feasible without touching the domain.
+- Do **not** couple this to BUG-003: BUG-003 is fixed on pgvector (chunking); this OQ is
+  the follow-up on retrieval-quality strategy and possible engine change.
