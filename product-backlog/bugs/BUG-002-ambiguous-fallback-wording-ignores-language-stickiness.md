@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-002
 - **Title:** Ambiguous follow-up in a French conversation gets an English guardrail fallback message
-- **Status:** Fixed — pending live QA retest
+- **Status:** Fixed — QA verified (live); pending user validation/merge
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** QA (live run)
@@ -97,9 +97,9 @@ follow-ups, so the decision must be revisited.
 - [x] A regression test covers ambiguous-follow-up stickiness on the fallback path (sync +
       streaming).
 - [x] `[LANGUAGE]` telemetry and the returned message language always agree.
-- [ ] Adversarial code review ≥ 90 %.
-- [ ] QA retest passes (unit + live). Unit + BDD done (212 tests green, incl. the BUG-002
-      scenario); **live retest pending** (needs backend + Mistral/Ollama + corpus).
+- [x] Adversarial code review ≥ 90 % (scored 94/100, QA gate Pass; dead-code remediation applied).
+- [x] QA retest passes (unit + live). Unit + BDD (211 tests green incl. the BUG-002 scenario);
+      **live retest passed** (real Mistral/Ollama + 5177-chunk corpus) — see QA Retest below.
 - [x] ADR-0031 updated (reopen the "thread language into guardrails" alternative).
 
 ## Developer Notes
@@ -145,14 +145,32 @@ LLM answer, the telemetry, and every canned guardrail message.
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
-- **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+- **Retested by:** QA (live run)
+- **Retest date:** 2026-07-22
+- **Environment:** local — backend `spring-boot:run` @ `fix/BUG-002-fallback-language-stickiness`
+  (`732cc82`), LLM `mistral-api` (`mistral-small-latest`), embeddings Ollama `nomic-embed-text`,
+  Postgres pgvector (5177 chunks), endpoint `POST /api/conversation/converse`.
+- **Scenarios rerun (decisive contrast — identical transcript "ok"):**
+
+  | Correlation id | Turn | History | Decided lang | Spoken reply | ✓ |
+  |---|---|---|---|---|---|
+  | `L-STICK-FR2` | "ok" | French convo (same `conversation_id`) | fr | "Je n'ai pas assez d'informations fiables… **un conseiller** ?" | ✅ (was EN before fix) |
+  | `L-AMBIG` | "ok" | none (fresh) | en | "I don't have enough reliable information… **a support agent**?" | ✅ control |
+  | `L-OT-FR` | "Quel temps fera-t-il demain ?" | none | fr | French off-topic refusal | ✅ |
+  | `L-OT-EN` | "What's the weather like today?" | none | en | English off-topic refusal | ✅ |
+  | `L-EN-GRD` | "How can I reset my router password?" | none | en | grounded English answer (conf 0.71) | ✅ grounded path intact |
+
+- **Result:** **PASS.** The same ambiguous transcript "ok" returns **French** wording inside a
+  French conversation (stickiness) and **English** with no history (configurable default) — the
+  exact divergence BUG-002 reported is gone. `[LANGUAGE]` telemetry matches the spoken language on
+  every turn (`L-STICK-FR2` → `provider=n/a language=fr`; `L-AMBIG` → `provider=n/a language=en`).
+- **Latency (indicative):** fallback turns 0–90 ms (no LLM); grounded EN turn ~1090 ms
+  (`llm_wording` 1011 ms). No regression.
+- **Retest evidence:** `/tmp/be002-live.log` (`[LANGUAGE]` + `[CONVERSE]` lines per correlation id).
 
 ## Closure
 
-- **Closed by:**
+- **Closed by:** pending user validation (final validator; merge on explicit request)
 - **Closed date:**
-- **Closure reason:**
+- **Closure reason:** Fix implemented, adversarial review 94/100, unit+BDD green (211), live QA
+  retest PASS. Ready to merge on the user's go.

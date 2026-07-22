@@ -150,11 +150,10 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
 
 ## Recommendation
 
-- **Go / No-go:** **CONDITIONAL GO** — the core FR/EN answer-language behavior, fidelity and
-  per-turn observability are validated live. **Fix `BUG-002` first** (ambiguous-follow-up
-  fallback wording must follow the decided language incl. stickiness + configurable default),
-  then QA retest, to be fully merge-ready. Grounded answers and clear-language refusals need no
-  further work.
+- **Go / No-go:** **GO (merge-ready, pending user validation)** — the core FR/EN answer-language
+  behavior, fidelity and per-turn observability are validated live, and **`BUG-002` is now fixed
+  and QA-verified live** (see Live retest 2026-07-22). Grounded answers and clear-language refusals
+  need no further work. Merge on the user's explicit request.
 - **Live run: done** (real Mistral/Ollama + real corpus) — FR/EN fidelity confirmed, one Medium
   defect found (`BUG-002`).
 - **Required before merge:**
@@ -177,7 +176,28 @@ Conclusion: BE-015 does **not** materially affect `time_to_first_audio`. A live 
     human-advisor offer (fails on old code, passes on the fix).
   - Unit `InputGuardrailTest.wordingFollowsDecidedLanguageNotInput`: canned wording follows the
     DECIDED language, not the input text.
-- **Result:** `mvn -o test` → **212 tests, 0 failures** (unit + BDD + ArchUnit). Telemetry and
-  the returned message language now always agree by construction.
-- **Pending:** live retest (backend + Mistral/Ollama + corpus) reproducing the original
-  `L-STICK-2` flow to confirm the French fallback end-to-end.
+- **Result:** `mvn -o test` → **211 tests, 0 failures** (unit + BDD + ArchUnit; a now-dead
+  `AnswerLanguage.detect(text, fallback)` overload + its test were removed during adversarial-review
+  remediation). Telemetry and the returned message language now always agree by construction.
+- **Adversarial review:** 94/100, QA gate **Pass**.
+
+### Live retest (2026-07-22) — PASS
+
+Real `mistral-api` + Ollama `nomic-embed-text` + pgvector (5177 chunks), `POST
+/api/conversation/converse`, branch `fix/BUG-002-fallback-language-stickiness`.
+
+| Correlation id | Transcript | History | Decided lang | Reply | Result |
+|---|---|---|---|---|---|
+| `L-STICK-FR2` | "ok" | French convo (same id) | fr | French low-confidence + "conseiller" | ✅ (was EN pre-fix) |
+| `L-AMBIG` | "ok" | none | en | English low-confidence + "support agent" | ✅ control |
+| `L-OT-FR` | "Quel temps fera-t-il demain ?" | none | fr | French off-topic refusal | ✅ |
+| `L-OT-EN` | "What's the weather like today?" | none | en | English off-topic refusal | ✅ |
+| `L-EN-GRD` | "How can I reset my router password?" | none | en | grounded EN answer (conf 0.71) | ✅ grounded intact |
+
+Decisive contrast: the **identical** transcript "ok" yields **French** wording in a French
+conversation (stickiness) and **English** with no history (configurable default) — BUG-002's
+divergence is eliminated. `[LANGUAGE]` telemetry matches the spoken language on every turn.
+Latency: fallback 0–90 ms (no LLM), grounded EN ~1090 ms (`llm_wording` 1011 ms) — no regression.
+
+**BUG-002 is fixed and QA-verified.** Remaining before pilot (not before merge): voice STT/TTS
+language on the spoken path (Architecture / voice runtime).
