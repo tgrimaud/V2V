@@ -19,6 +19,15 @@ public class LanguageDetector {
     }
 
     public AnswerLanguage resolve(String question, List<String> history) {
+        return resolve(question, history, null);
+    }
+
+    // US-042: when the UI forces a language, that explicit choice wins over auto-detection and
+    // session stickiness (a blank/unknown code falls back to the normal per-turn decision).
+    public AnswerLanguage resolve(String question, List<String> history, String forcedCode) {
+        if (forcedCode != null && !forcedCode.isBlank()) {
+            return AnswerLanguage.fromCode(forcedCode);
+        }
         return AnswerLanguage.detect(question)
                 .or(() -> stickyLanguage(history))
                 .orElse(defaultLanguage);

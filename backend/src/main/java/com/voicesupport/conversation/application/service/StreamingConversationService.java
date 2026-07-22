@@ -56,13 +56,19 @@ public class StreamingConversationService implements ConverseStreamUseCase {
 
     @Override
     public TokenStream converseStream(String transcript, String conversationId) {
-        return onChunk -> runPipeline(transcript, conversationId, onChunk);
+        return converseStream(transcript, conversationId, null);
     }
 
-    private GeneratedAnswer runPipeline(String transcript, String conversationId, Consumer<String> onChunk) {
+    @Override
+    public TokenStream converseStream(String transcript, String conversationId, String forcedLanguage) {
+        return onChunk -> runPipeline(transcript, conversationId, forcedLanguage, onChunk);
+    }
+
+    private GeneratedAnswer runPipeline(
+            String transcript, String conversationId, String forcedLanguage, Consumer<String> onChunk) {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
         List<String> history = ConversationHistoryFormatter.format(prior);
-        AnswerLanguage language = languageDetector.resolve(transcript, history);
+        AnswerLanguage language = languageDetector.resolve(transcript, history, forcedLanguage);
         GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty(), language);
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, history, language, onChunk)

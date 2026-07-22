@@ -62,4 +62,28 @@ class LanguageDetectorTest {
         LanguageDetector nullDefault = new LanguageDetector(null);
         assertEquals(AnswerLanguage.ENGLISH, nullDefault.resolve("42", List.of()));
     }
+
+    @Test
+    @DisplayName("a forced UI language overrides detection and stickiness (US-042 BR1/BR2)")
+    void forcedLanguageWins() {
+        // GIVEN a clearly French question and a French session history
+        List<String> frenchHistory = List.of("Client : Pourquoi ma facture augmente ?");
+
+        // WHEN English is forced by the UI selector
+        AnswerLanguage resolved = detector.resolve("Pourquoi ma facture augmente ?", frenchHistory, "en");
+
+        // THEN the forced language wins over the detected/sticky French
+        assertEquals(AnswerLanguage.ENGLISH, resolved);
+        // AND forcing French wins over a clearly English question
+        assertEquals(AnswerLanguage.FRENCH,
+                detector.resolve("Why is my bill higher this month?", List.of(), "fr"));
+    }
+
+    @Test
+    @DisplayName("a blank/null forced language falls back to normal detection (US-042 BR3)")
+    void blankForcedLanguageFallsBackToDetection() {
+        // WHEN the forced code is null or blank the per-turn decision is unchanged
+        assertEquals(AnswerLanguage.FRENCH, detector.resolve("Pourquoi ma facture augmente ?", List.of(), null));
+        assertEquals(AnswerLanguage.ENGLISH, detector.resolve("Why is my bill higher?", List.of(), "  "));
+    }
 }

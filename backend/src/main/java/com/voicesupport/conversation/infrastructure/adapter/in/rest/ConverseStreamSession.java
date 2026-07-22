@@ -80,7 +80,8 @@ class ConverseStreamSession {
             send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
             return;
         }
-        TokenStream tokenStream = converseStreamUseCase.converseStream(request.transcript(), request.conversationId());
+        TokenStream tokenStream = converseStreamUseCase.converseStream(
+                request.transcript(), request.conversationId(), request.language());
         GeneratedAnswer answer = tokenStream.consume(this::onChunk);
         send("done", StreamDoneEvent.from(answer));
         logTurn(answer);

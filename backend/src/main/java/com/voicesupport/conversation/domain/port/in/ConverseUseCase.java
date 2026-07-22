@@ -9,4 +9,10 @@ public interface ConverseUseCase {
     // excluded), then records the new turn. First-turn greeting logic derives from empty
     // history. Returns a safe, contract-shaped answer; never an invented one.
     GeneratedAnswer converse(String transcript, String conversationId);
+
+    // US-042: same stateful turn with an explicit forced answer language (UI selector) overriding
+    // detection; a null/blank code keeps the current behavior. Default delegates for compatibility.
+    default GeneratedAnswer converse(String transcript, String conversationId, String forcedLanguage) {
+        return converse(transcript, conversationId);
+    }
 }

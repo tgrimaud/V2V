@@ -65,7 +65,7 @@ public class ConverseController {
         // the memory adapter returns empty history and skips persistence, so callers that omit
         // the id can never see each other's turns.
         GeneratedAnswer answer = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
-                () -> converseUseCase.converse(request.transcript(), request.conversationId()));
+                () -> converseUseCase.converse(request.transcript(), request.conversationId(), request.language()));
         logTurn(request, answer, elapsedMs(start));
         return ResponseEntity.ok(ConverseResponse.from(answer));
     }

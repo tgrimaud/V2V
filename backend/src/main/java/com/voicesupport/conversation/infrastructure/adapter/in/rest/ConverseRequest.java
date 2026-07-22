@@ -6,7 +6,10 @@ public record ConverseRequest(
         String transcript,
         String conversationId,
         String correlationId,
-        String channel) {
+        String channel,
+        // US-042: optional UI-selected language ("fr"/"en"); when present it forces the answer
+        // language, overriding backend auto-detection. Null/blank keeps detection behavior.
+        String language) {
 
     public boolean hasTranscript() {
         return transcript != null && !transcript.isBlank();

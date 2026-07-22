@@ -30,10 +30,16 @@ public class ConversationService implements ConverseUseCase {
 
     @Override
     public GeneratedAnswer converse(String transcript, String conversationId) {
+        return converse(transcript, conversationId, null);
+    }
+
+    @Override
+    public GeneratedAnswer converse(String transcript, String conversationId, String forcedLanguage) {
         List<ConversationTurn> priorTurns = memory.recentTurns(conversationId);
         boolean alreadyGreeted = !priorTurns.isEmpty();
         GeneratedAnswer answer = answerQuestionUseCase.answer(
-                transcript, null, topK, alreadyGreeted, ConversationHistoryFormatter.format(priorTurns));
+                transcript, null, topK, alreadyGreeted,
+                ConversationHistoryFormatter.format(priorTurns), forcedLanguage);
         memory.append(conversationId, new ConversationTurn(transcript, answer.text()));
         return answer;
     }

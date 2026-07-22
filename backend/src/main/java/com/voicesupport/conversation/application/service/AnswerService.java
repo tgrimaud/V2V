@@ -43,8 +43,15 @@ public class AnswerService implements AnswerQuestionUseCase {
     @Override
     public GeneratedAnswer answer(
             String question, String domain, int topK, boolean alreadyGreeted, List<String> history) {
+        return answer(question, domain, topK, alreadyGreeted, history, null);
+    }
+
+    @Override
+    public GeneratedAnswer answer(
+            String question, String domain, int topK, boolean alreadyGreeted,
+            List<String> history, String forcedLanguage) {
         List<String> safeHistory = history == null ? List.of() : history;
-        AnswerLanguage language = languageDetector.resolve(question, safeHistory);
+        AnswerLanguage language = languageDetector.resolve(question, safeHistory, forcedLanguage);
         GroundingResult grounding = groundQueryUseCase.ground(question, domain, topK, alreadyGreeted, language);
         if (!grounding.answerable()) {
             // Guardrail-fallback turns skip the LLM, so record the answer language here (no provider)
