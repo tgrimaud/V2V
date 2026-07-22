@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-003
 - **Title:** Legitimate, KB-covered questions (technical support, résiliation) fall back to "Je n'ai pas assez d'informations fiables…" because the chunk holding the real answer is evicted from top-K
-- **Status:** New
+- **Status:** Fixed (pending QA + user validation)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test)
@@ -157,6 +157,52 @@ chunks, avoid mid-word cuts), re-ingest `articles-fr.csv` cleanly, and consider 
 the LLM should compose from partial evidence rather than hand off so eagerly (careful with DEC-002 —
 that constraint is about *amounts*, not troubleshooting steps). The off-topic block on "My internet
 connection is not working." is a distinct guardrail concern — track separately if confirmed.
+
+## Resolution (2026-07-22)
+
+**Root cause confirmed in `TextChunker` (backend, `knowledge/domain/service`), three defects:**
+
+1. **In-chunk duplication (`X \n\n X`).** `hardSplit` produced *overlapping* pieces
+   (`step = chunkSize - chunkOverlap`) and `splitIntoChunks` then added its own flush-time
+   overlap → the same window was re-stated inside a single chunk.
+2. **Header-only chunks.** Accumulated headings were flushed alone when the next body
+   paragraph overflowed; `extractSection` also ignored `###` (level-3) headings.
+3. **Mid-word cuts.** Both the hard split (`substring(start, start+chunkSize)`) and the
+   overlap tail (`substring(len - overlap)`) cut on raw character indices.
+
+**Fix (`fix(BUG-003)` commit):**
+
+- Rewrote `TextChunker`: **contiguous** hard split (single overlap, added once at flush) →
+  no in-chunk duplication; hard split and overlap tail **snap to word boundaries** → no
+  mid-word cuts; a buffer is flushed only when it already carries body text so **headings
+  attach to the following body** (never emitted alone); `latestHeading`/`isHeadingLine`
+  now recognize `#`…`######`.
+- Raised `voice-support.conversation.retrieval.top-k` **4 → 8** (over-fetch so the
+  answer chunk is not evicted).
+- Cleared `vector_store` + `kb_source_state` and re-synced all sources (idempotent sync
+  skips on unchanged source hash, so a chunker change requires a clean re-ingest).
+
+**Validation:**
+
+- `TextChunkerTest`: 5 → **9 tests** (new locks: no in-chunk duplication, no header-only
+  chunk, no mid-word cut, `###` section). Full backend suite **218 tests green**.
+- Corpus after re-ingest: **10 163 chunks** (csv-article-fr 5128 / csv-article 4996 /
+  markdown 39); **header-only chunks = 0**; length avg 448, ~99.99% ≤ 600 (one 901 outlier).
+- `/api/conversation/converse` (backend-only, deterministic):
+  - FR "problème de connexion internet" → grounded answer, conf **0.84–0.85**,
+    **with and without** the "Bonjour," prefix (was ❌/flipping).
+  - EN "internet connection problem" → grounded answer, conf **0.74**, stable with/without
+    "Hello,".
+  - The greeting no longer flips the outcome (FR1=FR2, FR3=FR4, EN1=EN2) — the specific
+    BUG-003 instability is resolved.
+
+**Residual (out of chunking scope — track separately):** "j'ai un problème avec ma box"
+still hand-offs even though retrieval now **PASSES** (verdict PASS, scores 0.78/0.76/0.76/0.75).
+This is a genuinely ambiguous query (TV box vs internet box, no stated symptom) where the
+**LLM hands off** rather than asking a clarifying question. It is the downstream
+handoff/clarification behaviour flagged in this ticket's Analysis, not the chunker. Suggest a
+follow-up: prefer a clarifying question over the low-confidence fallback when retrieval passes
+but the query is under-specified.
 
 ## QA Retest
 
