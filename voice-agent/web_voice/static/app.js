@@ -10,6 +10,18 @@ const recordButton = document.getElementById("record");
 const statusEl = document.getElementById("status");
 const transcriptEl = document.getElementById("transcript");
 const metaEl = document.getElementById("meta");
+const languageEl = document.getElementById("language");
+
+// US-042: the UI-selected language is forwarded to the runtime (query param), which
+// forces the backend answer language instead of auto-detecting it.
+function selectedLanguage() {
+  return languageEl && languageEl.value ? languageEl.value : "";
+}
+
+function turnUrl() {
+  const lang = selectedLanguage();
+  return lang ? TURN_ENDPOINT + "?language=" + encodeURIComponent(lang) : TURN_ENDPOINT;
+}
 
 let audioContext = null;
 let mediaStream = null;
@@ -83,7 +95,7 @@ async function sendAudio(pcmBuffer) {
   const started = performance.now();
   let response;
   try {
-    response = await fetch(TURN_ENDPOINT, {
+    response = await fetch(turnUrl(), {
       method: "POST",
       headers: { "Content-Type": "audio/pcm" },
       body: pcmBuffer,

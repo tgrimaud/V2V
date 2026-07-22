@@ -19,6 +19,9 @@ class ChannelEnvelope:
     external_session_id: str
     message_id: str
     correlation_id: str
+    # US-042: optional UI-selected language ("fr"/"en") carried through the turn so the
+    # backend can force the answer language. None keeps backend auto-detection.
+    language: str | None = None
 
     @classmethod
     def for_web_turn(
@@ -26,6 +29,7 @@ class ChannelEnvelope:
         conversation_id: str | None = None,
         external_session_id: str | None = None,
         correlation_id: str | None = None,
+        language: str | None = None,
     ) -> "ChannelEnvelope":
         return cls(
             channel=WEB_VOICE_CHANNEL,
@@ -33,13 +37,17 @@ class ChannelEnvelope:
             external_session_id=external_session_id or str(uuid4()),
             message_id=str(uuid4()),
             correlation_id=correlation_id or str(uuid4()),
+            language=language or None,
         )
 
     def as_attributes(self) -> dict[str, str]:
-        return {
+        attributes = {
             "channel": self.channel,
             "conversation_id": self.conversation_id,
             "external_session_id": self.external_session_id,
             "message_id": self.message_id,
             "correlation_id": self.correlation_id,
         }
+        if self.language:
+            attributes["language"] = self.language
+        return attributes

@@ -32,6 +32,9 @@ class AnswerRequest:
     correlation_id: str
     conversation_id: str
     channel: str
+    # US-042: optional UI-selected answer language ("fr"/"en"). Forwarded to the backend
+    # so it forces the answer language instead of auto-detecting; None keeps detection.
+    language: str | None = None
 
     @classmethod
     def from_envelope(cls, transcript: str, envelope: ConversationEnvelope) -> "AnswerRequest":
@@ -40,16 +43,18 @@ class AnswerRequest:
             correlation_id=envelope.correlation_id,
             conversation_id=envelope.conversation_id,
             channel=envelope.channel,
+            language=getattr(envelope, "language", None),
         )
 
     def to_dict(self) -> dict[str, Any]:
         # The transcript can carry personal data; expose only its length for
-        # telemetry/QA, never the raw text.
+        # telemetry/QA, never the raw text. Language is a non-sensitive selector.
         return {
             "channel": self.channel,
             "conversation_id": self.conversation_id,
             "correlation_id": self.correlation_id,
             "transcript_chars": len(self.transcript),
+            "language": self.language,
         }
 
 

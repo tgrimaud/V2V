@@ -98,6 +98,10 @@ class HttpBackendAdapter:
             "correlation_id": request.correlation_id,
             "channel": request.channel,
         }
+        # US-042: only send the language when the UI forced one, so the backend keeps
+        # auto-detecting otherwise (a null/blank field is ignored by the backend anyway).
+        if request.language:
+            body["language"] = request.language
         return json.dumps(body).encode("utf-8")
 
     def _map_response(self, request: AnswerRequest, response: HttpResponse) -> AnswerResult:
