@@ -1040,3 +1040,100 @@ Scenario: A closing word inside a longer request does not end the call
   **separate future story**, not in this ticket.
 - OQ-041-d: V1 channel boundary = **web session close only**; phone/Genesys hangup
   semantics deferred to the contact-center integration.
+
+---
+
+## US-042 - Choose The Conversation Language In The UI
+
+**Parent:** EPIC-006 (Web voice journey) / related EPIC-005 (answer engine)
+**Classification:** V1 core — language control; runtime-affecting (STT/TTS/answer).
+**Status:** In progress (2026-07-22).
+**Priority:** High
+**Branch:** `us/US-042-ui-language-selector` (stacked on `task/TASK-BE-017-fr-csv-translation`
+so the forced-French path can be tested against the translated FR corpus).
+**Related:** TASK-BE-015 (per-turn answer language + its open risk on voice STT/TTS language),
+TASK-BE-017 (FR corpus coverage — complementary, not a substitute).
+
+### User Story
+
+As a customer using the web voice/text UI, I want to explicitly choose my language
+(French or English), so that the assistant listens, answers and speaks in that
+language deterministically, instead of relying on automatic detection.
+
+### Context
+
+Today the language is inferred by the backend (`LanguageDetector`: question language →
+session stickiness → configured default). Voice STT/TTS language is a global runtime env
+(`GRADIUM_LANGUAGE`). This makes voice input/output language non-deterministic per user and
+leaves the TASK-BE-015 voice-language risk open. An explicit UI choice fixes the language on
+all three layers (STT, answer, TTS).
+
+**Scope note:** this story makes the I/O language deterministic; it does **not** by itself
+improve French retrieval coverage (an English-only corpus can still trigger the
+insufficient-evidence fallback for some French questions). It is complementary to TASK-BE-017.
+
+### In Scope
+
+- A language selector (FR/EN) in the web UI (`index.html` and `webrtc.html`).
+- The chosen language is sent to the voice runtime **per session** and drives Gradium STT
+  (listening) and TTS (speaking) language.
+- The chosen language is sent to the backend on `/converse` (and `/retrieve`) as an explicit
+  **override** of `LanguageDetector` (the forced language wins).
+- A configured default when the user makes no explicit choice (English for the Eir pilot).
+
+### Out Of Scope
+
+- Languages beyond French and English.
+- Auto-detecting the browser/OS language (explicit user choice only for V1).
+- Any change to which documents are retrieved (retrieval scope unchanged).
+
+### Business Rules
+
+- **BR1** — When the user selects a language, every layer uses it: STT listens in it, the LLM
+  answers in it, and TTS speaks in it.
+- **BR2** — The selected language overrides automatic per-turn detection for the whole session
+  until the user changes it.
+- **BR3** — With no explicit selection, the deployment default language applies (English pilot),
+  preserving today's detection behavior as the fallback.
+- **BR4** — Fallbacks, refusals and the escalation sentence follow the selected language
+  (consistent with TASK-BE-015 BR4).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Selecting French makes the assistant speak French
+  Given the customer selects French in the UI
+  When they ask a question by voice
+  Then the runtime transcribes with the French STT
+  And the assistant answers in French
+  And the reply is spoken with the French TTS voice
+
+Scenario: Selecting English makes the assistant speak English
+  Given the customer selects English in the UI
+  When they ask a question by voice
+  Then the assistant answers in English and the reply is spoken in English
+
+Scenario: Forced language overrides detection
+  Given the customer selected English
+  When they happen to phrase a question in French
+  Then the assistant still answers in English (the forced language wins)
+
+Scenario: No selection uses the deployment default
+  Given the customer made no language choice
+  Then the assistant behaves as today (default English, with per-turn detection)
+```
+
+### Non-Functional Expectations
+
+- The forced language is **observable per turn** (correlation id; the `[LANGUAGE]` log/metric
+  records it) so QA can confirm the override took effect.
+- The added contract field must not degrade the voice latency SLO (`time_to_first_audio`).
+
+### Open Questions
+
+- OQ-042-a: Does Gradium accept a per-request/per-session language for both STT and TTS, or
+  only a client-level default? (Determines whether the runtime re-instantiates providers per
+  session or passes language per call.)
+- OQ-042-b: Should changing the language mid-session reset the conversation memory bucket
+  (avoid mixed-language history), or keep it? Default assumption: keep, since answers are
+  forced to the new language anyway.
