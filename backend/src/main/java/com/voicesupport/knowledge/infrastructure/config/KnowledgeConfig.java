@@ -82,6 +82,19 @@ public class KnowledgeConfig {
         return new CsvArticleConnector(csvPath, csvLanguage, domainClassifier);
     }
 
+    // TASK-BE-017: dev-only French copy of the CSV corpus, ingested as a distinct
+    // source_type ("csv-article-fr", language fr) so FR questions retrieve FR content
+    // without touching the English csv-article source. Missing file → connector yields
+    // no documents (logged), so this is a no-op until articles-fr.csv is generated.
+    @Bean
+    public CsvArticleConnector csvArticleFrConnector(
+            @Value("${voice-support.knowledge.csv-fr-path:../articles-fr.csv}") String csvFrPath,
+            @Value("${voice-support.knowledge.csv-fr-language:fr}") String csvFrLanguage,
+            @Value("${voice-support.knowledge.csv-fr-source-type:csv-article-fr}") String csvFrSourceType,
+            DomainClassifierPort domainClassifier) {
+        return new CsvArticleConnector(csvFrPath, csvFrLanguage, csvFrSourceType, domainClassifier);
+    }
+
     @Bean
     public IngestKnowledgeUseCase ingestKnowledgeUseCase(VectorStorePort vectorStorePort, TextChunker textChunker) {
         return new KnowledgeIngestionService(vectorStorePort, textChunker);

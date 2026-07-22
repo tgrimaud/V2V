@@ -37,17 +37,27 @@ public class CsvArticleConnector implements KnowledgeSourceConnector {
 
     private final Path csvPath;
     private final String defaultLanguage;
+    private final String sourceType;
     private final DomainClassifierPort domainClassifier;
 
     public CsvArticleConnector(String csvPath, String defaultLanguage, DomainClassifierPort domainClassifier) {
+        this(csvPath, defaultLanguage, SOURCE_TYPE, domainClassifier);
+    }
+
+    // A parameterized source_type lets a second instance ingest a translated copy of the same
+    // corpus (e.g. "csv-article-fr") without a source_id collision, since the idempotent sync
+    // keys on (source_type, source_id) (TASK-BE-017).
+    public CsvArticleConnector(
+            String csvPath, String defaultLanguage, String sourceType, DomainClassifierPort domainClassifier) {
         this.csvPath = Path.of(csvPath);
         this.defaultLanguage = defaultLanguage;
+        this.sourceType = sourceType;
         this.domainClassifier = domainClassifier;
     }
 
     @Override
     public String sourceType() {
-        return SOURCE_TYPE;
+        return sourceType;
     }
 
     @Override
@@ -96,7 +106,7 @@ public class CsvArticleConnector implements KnowledgeSourceConnector {
         }
         String domain = domainClassifier.classify(title, content);
         return SourceDocument.create(
-                SOURCE_TYPE, sourceId, title, null, content, domain, defaultLanguage, Instant.now());
+                sourceType, sourceId, title, null, content, domain, defaultLanguage, Instant.now());
     }
 
     private String value(CSVRecord record, String column) {

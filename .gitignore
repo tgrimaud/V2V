@@ -27,6 +27,7 @@ backend/.env
 # KB source data — external ingestion inputs, not versioned (see TASK-BE-011).
 # Third-party operator content dumps fed into the CSV article connector at sync time.
 /articles.csv
+/articles-fr.csv
 *.kb.csv
 
 # Python
