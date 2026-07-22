@@ -142,10 +142,12 @@ def translate_text(text: str, key: str) -> str:
                 time.sleep(wait)
                 continue
             raise
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (urllib.error.URLError, OSError) as exc:
+            # OSError covers ConnectionResetError / ConnectionError / socket errors that
+            # can surface un-wrapped from getresponse(); all are transient -> retry.
             last_err = exc
             wait = BASE_BACKOFF_S * (2 ** attempt)
-            sys.stderr.write(f"  network error, retry in {wait:.0f}s\n")
+            sys.stderr.write(f"  network error ({type(exc).__name__}), retry in {wait:.0f}s\n")
             time.sleep(wait)
     raise RuntimeError(f"translation failed after {MAX_RETRIES} retries: {last_err}")
 
