@@ -1047,8 +1047,9 @@ Scenario: A closing word inside a longer request does not end the call
 
 **Parent:** EPIC-006 (Web voice journey) / related EPIC-005 (answer engine)
 **Classification:** V1 core — language control; runtime-affecting (STT/TTS/answer).
-**Status:** In progress (2026-07-22). **Batch web voice path (`index.html`) DONE & live-verified —
-deterministic end to end.**
+**Status:** ✅ **Validated by user (2026-07-22)** — manual live test of the FR/EN selector on the
+batch web voice path passed. Merge-ready; merge awaiting explicit user request. Batch web voice
+path (`index.html`) DONE & live-verified — deterministic end to end.
 - **Answer language**: UI FR/EN selector → runtime forwards `language` → backend forces
   `AnswerLanguage` (overrides detection). Live: same French question answers in EN or FR per
   selection; forced language also drives fallbacks/refusals (BUG-002 consistency).
