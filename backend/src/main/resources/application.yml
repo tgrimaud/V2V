@@ -100,7 +100,9 @@ voice-support:
       # (TASK-BE-011). This is the main driver of prompt size, hence of LLM time-to-first-token:
       # fewer chunks = shorter prompt = faster first token, at the cost of less grounding breadth.
       # Tunable without a code change; re-measure backend_first_token when adjusting.
-      top-k: ${CONVERSATION_RETRIEVAL_TOP_K:4}
+      # BUG-003: raised 4 -> 8 to over-fetch so the answer-bearing chunk is not evicted by
+      # near-duplicate keyword-dense chunks under a brittle dense-only top-K.
+      top-k: ${CONVERSATION_RETRIEVAL_TOP_K:8}
     # ADR-0021 conversation endpoint (POST /api/conversation/converse). Optional shared
     # secret: when set, requests must carry a matching x-api-key header. Empty = open (pilot).
     api-key: ${CONVERSATION_API_KEY:}
