@@ -42,20 +42,22 @@ def _build_gradium(language: str | None = None) -> GradiumSttProvider:
     )
 
 
-def build_streaming_provider(name: str = GRADIUM) -> GradiumStreamingSttProvider:
+def build_streaming_provider(name: str = GRADIUM, *, language: str | None = None) -> GradiumStreamingSttProvider:
     """Build the streaming (WebSocket) STT provider for the low-latency voice path.
 
     Only Gradium has a streaming variant (TASK-STT-010); the fixture provider stays
     batch-only, so the WebRTC path falls back to the batch aggregator when the
-    streaming provider is not available.
+    streaming provider is not available. US-042: an explicit language (per-session UI
+    selector) overrides the deployment default so streaming STT listens in it.
     """
     if name != GRADIUM:
         raise ValueError(f"Streaming STT is only available for the '{GRADIUM}' provider")
     api_key = os.environ.get("GRADIUM_API_KEY")
     if not api_key:
         raise ValueError("GRADIUM_API_KEY must be set to use the gradium streaming provider")
+    resolved = language or os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE)
     return GradiumStreamingSttProvider(
         api_key,
-        language=os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE),
+        language=resolved,
         input_format=os.environ.get("GRADIUM_INPUT_FORMAT", DEFAULT_INPUT_FORMAT),
     )

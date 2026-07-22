@@ -216,5 +216,42 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(logged, [record.telemetry])
 
 
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class WebRtcLanguageSelectionTest(unittest.TestCase):
+    """US-042: the per-session streaming STT/TTS providers are selected from the offer
+    language carried by the session envelope (fr/en), falling back to the default."""
+
+    def _service(self):
+        from web_voice.webrtc_signaling import WebRtcSignalingService
+
+        return WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=lambda _t: None,
+            streaming_provider=SimpleNamespace(name="stt-default"),
+            streaming_tts_provider=SimpleNamespace(name="tts-default"),
+            streaming_providers_by_language={
+                "fr": SimpleNamespace(name="stt-fr"), "en": SimpleNamespace(name="stt-en"),
+            },
+            streaming_tts_providers_by_language={
+                "fr": SimpleNamespace(name="tts-fr"), "en": SimpleNamespace(name="tts-en"),
+            },
+        )
+
+    def test_streaming_providers_selected_by_envelope_language(self) -> None:
+        from web_voice.envelope import ChannelEnvelope
+
+        service = self._service()
+        en = ChannelEnvelope.for_web_turn(language="en")
+        fr = ChannelEnvelope.for_web_turn(language="fr")
+        none = ChannelEnvelope.for_web_turn()
+        # THEN each half picks the language-specific provider, and the default when unset
+        self.assertEqual(service._streaming_provider_for(en).name, "stt-en")
+        self.assertEqual(service._streaming_provider_for(fr).name, "stt-fr")
+        self.assertEqual(service._streaming_provider_for(none).name, "stt-default")
+        self.assertEqual(service._streaming_tts_provider_for(en).name, "tts-en")
+        self.assertEqual(service._streaming_tts_provider_for(fr).name, "tts-fr")
+        self.assertEqual(service._streaming_tts_provider_for(none).name, "tts-default")
+
+
 if __name__ == "__main__":
     unittest.main()

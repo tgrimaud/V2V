@@ -319,8 +319,33 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
         ice_servers=ice,
         streaming_provider=_build_streaming_provider(args),
         streaming_tts_provider=_build_streaming_tts_provider(args),
+        streaming_providers_by_language=_streaming_stt_by_language(args),
+        streaming_tts_providers_by_language=_streaming_tts_by_language(args),
     )
     return signaling, loop
+
+
+def _streaming_stt_by_language(args) -> dict[str, Any]:
+    """Per-session streaming STT providers keyed by language (US-042, WebRTC path)."""
+    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+        return {}
+    return {
+        "fr": build_streaming_provider(args.provider, language="fr"),
+        "en": build_streaming_provider(args.provider, language="en"),
+    }
+
+
+def _streaming_tts_by_language(args) -> dict[str, Any]:
+    """Per-session streaming TTS voices keyed by language (US-042, WebRTC path). French uses the
+    default voice; English uses GRADIUM_VOICE_ID_EN when configured (Gradium picks language by voice).
+    """
+    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+        return {}
+    by_language = {"fr": build_streaming_tts_provider(args.provider)}
+    english_voice = os.environ.get("GRADIUM_VOICE_ID_EN")
+    if english_voice:
+        by_language["en"] = build_streaming_tts_provider(args.provider, voice_id=english_voice)
+    return by_language
 
 
 def _stt_by_language(provider_name: str) -> dict[str, Any]:

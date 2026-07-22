@@ -94,6 +94,8 @@ class WebRtcSignalingService:
         log: Callable[[TelemetryRecorder], None] = _log_telemetry,
         streaming_provider: Any = None,
         streaming_tts_provider: Any = None,
+        streaming_providers_by_language: dict[str, Any] | None = None,
+        streaming_tts_providers_by_language: dict[str, Any] | None = None,
     ) -> None:
         support = probe_webrtc_support()
         if not support.available:
@@ -115,7 +117,23 @@ class WebRtcSignalingService:
         # (incremental playback on the first chunk) instead of the batch TTS
         # processor. Independent of the STT mode, so it applies to both paths.
         self._streaming_tts_provider = streaming_tts_provider
+        # US-042: per-session streaming providers keyed by language ("fr"/"en"). Empty ->
+        # the single default streaming provider is used for every session.
+        self._streaming_providers_by_language = {
+            key.lower(): value for key, value in (streaming_providers_by_language or {}).items()
+        }
+        self._streaming_tts_providers_by_language = {
+            key.lower(): value for key, value in (streaming_tts_providers_by_language or {}).items()
+        }
         self._sessions: dict[str, _Session] = {}
+
+    def _streaming_provider_for(self, envelope: ChannelEnvelope) -> Any:
+        language = (getattr(envelope, "language", None) or "").lower()
+        return self._streaming_providers_by_language.get(language, self._streaming_provider)
+
+    def _streaming_tts_provider_for(self, envelope: ChannelEnvelope) -> Any:
+        language = (getattr(envelope, "language", None) or "").lower()
+        return self._streaming_tts_providers_by_language.get(language, self._streaming_tts_provider)
 
     def handle_offer(self, body: dict, *, timeout: float = 30.0) -> dict:
         """Blocking offer→answer for the HTTP handler (runs on the background loop)."""
@@ -141,7 +159,9 @@ class WebRtcSignalingService:
 
         connection = SmallWebRTCConnection(ice_servers=self._ice_servers)
         await connection.initialize(sdp=body["sdp"], type=body["type"])
-        envelope = ChannelEnvelope.for_web_turn()
+        # US-042: the UI-selected language rides on the offer body and is carried by the
+        # session envelope -> forces the backend answer language and selects the STT/TTS voice.
+        envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
         telemetry = self._telemetry_factory()
         session = self._build_session(connection, envelope, telemetry)
         record = _Session(connection, session, envelope, telemetry)
@@ -162,21 +182,23 @@ class WebRtcSignalingService:
         """Streaming TTS processor for the session, or None (batch TTS fallback)."""
         if self._streaming_tts_provider is None:
             return None
+        provider = self._streaming_tts_provider_for(envelope)
         return StreamingTtsProcessor(
-            self._streaming_tts_provider,
+            provider,
             envelope,
             telemetry,
-            provider_name=self._streaming_tts_provider.name,
+            provider_name=provider.name,
         )
 
     def _build_streaming_session(
         self, transport, envelope, telemetry, tts_processor
     ) -> StreamingVoiceSession:
+        provider = self._streaming_provider_for(envelope)
         stt = StreamingSttProcessor(
-            self._streaming_provider,
+            provider,
             envelope,
             telemetry,
-            provider_name=self._streaming_provider.name,
+            provider_name=provider.name,
             # Anti-echo barge-in gate, tunable without a code change (TASK-WEB-008): raise
             # VOICE_BARGE_IN_THRESHOLD on echoey speaker setups so the bot's own residual
             # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset

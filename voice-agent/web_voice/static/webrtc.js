@@ -9,6 +9,7 @@ const OFFER_URL = "/api/voice/webrtc/offer";
 
 const startBtn = document.getElementById("start");
 const stopBtn = document.getElementById("stop");
+const languageEl = document.getElementById("language");
 const statusEl = document.getElementById("status");
 const statusText = document.getElementById("statusText");
 const corrEl = document.getElementById("corr");
@@ -147,6 +148,9 @@ const AUDIO_CONSTRAINTS = {
 
 async function startCall() {
   startBtn.disabled = true;
+  // US-042: the language is fixed for the whole call (STT/answer/TTS), so lock the selector
+  // while live; it is sent once on the offer and carried by the session envelope.
+  if (languageEl) languageEl.disabled = true;
   setStatus("Requesting microphone…");
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
@@ -173,7 +177,11 @@ async function startCall() {
     const res = await fetch(OFFER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type }),
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp,
+        type: pc.localDescription.type,
+        language: languageEl && languageEl.value ? languageEl.value : undefined,
+      }),
     });
     if (!res.ok) throw new Error("signaling failed: " + res.status);
     const answer = await res.json();
@@ -189,6 +197,7 @@ async function startCall() {
 function stopCall() {
   stopBtn.disabled = true;
   startBtn.disabled = false;
+  if (languageEl) languageEl.disabled = false;
   stopLatencyPolling();
   if (pc) {
     pc.close();
