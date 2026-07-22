@@ -18,6 +18,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA functional PASS (bulk latency → BE-014); awaiting user validation |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
+| TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | In progress — parameterize connector `source_type` + FR bean, Mistral translation script `articles.csv → articles-fr.csv`, sync `csv-article-fr` |
 
 ---
 
@@ -345,3 +346,75 @@ Scenario: Ambiguous turn uses the default / current language
   validate comprehension quality.
 - Detection approach and prompt/guardrail changes are implementation details owned by the
   backend developer (kept out of this product ticket).
+
+---
+
+## TASK-BE-017 — French translation of the CSV corpus (dev FR RAG coverage)
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related enabler:** TASK-BE-013 / TASK-BE-014 (English `csv-article` corpus ingested),
+TASK-BE-015 (answer language — FR↔EN answers on an EN-only corpus)
+**Classification:** Dev tooling — KB content for development/testing only (not a prod
+data decision). Non-runtime-affecting at request time (offline admin ingestion path).
+**Status:** In progress (2026-07-22).
+**Priority:** Medium (dev enablement — reduces FR insufficient-evidence fallbacks in local testing)
+**Branch:** `task/TASK-BE-017-fr-csv-translation`
+
+### Context
+
+The KB is ~99% English: 5 136 `csv-article` chunks (306 Eir articles) in English vs 41
+hand-written French FAQ (`markdown`) chunks. TASK-BE-015 lets the assistant answer in
+French from English content, but in live testing many French questions still fall back to
+the insufficient-evidence hand-off: the retrieved English chunks are only loosely relevant
+to the French phrasing, so Mistral honestly declines. For **development testing** we want a
+French copy of the corpus so French questions retrieve French content directly.
+
+TASK-BE-015 explicitly kept "translating/storing the KB in multiple languages" out of
+scope; this task is the **dev-only** follow-up that does exactly that, for local testing —
+translation fidelity is explicitly *not* required to be production-grade.
+
+### Objective
+
+Provide a French-translated copy of the `articles.csv` corpus, ingested as a distinct
+`csv-article-fr` KB source (language `fr`), so French questions in local testing retrieve
+grounded French content and fall back less often — without touching the English source.
+
+### Scope
+
+- Parameterize `CsvArticleConnector.sourceType` (constructor arg; keep `csv-article` as the
+  EN default) so a second FR instance can register `csv-article-fr` without a source_id
+  collision (sync keys on `(source_type, source_id)`).
+- Second `@Bean` `csvArticleFrConnector` in `KnowledgeConfig`: path
+  `voice-support.knowledge.csv-fr-path` (default `../articles-fr.csv`), language `fr`,
+  `source_type = csv-article-fr`; auto-picked up by `KnowledgeSyncService`
+  (`List<KnowledgeSourceConnector>`).
+- A **translation script** (`scripts/translate_csv_kb.py`, stdlib + Mistral API via the
+  configured `MISTRAL_API_KEY`): read `articles.csv` (raise CSV field limit), HTML→text,
+  translate `title` + `content` to French, write `articles-fr.csv`
+  (`document_id,title,content`, same `document_id`). Resumable/idempotent (skip rows
+  already present in the output).
+- Ingest via `POST /api/knowledge/sync/csv-article-fr`.
+
+### Out Of Scope
+
+- Production KB language strategy (a real prod decision, not this dev task).
+- Human-quality translation / review of the French content.
+- Any change to retrieval scope, guardrails, or the English `csv-article` source.
+
+### Acceptance
+
+- `articles-fr.csv` exists with 306 French articles (same `document_id`s).
+- After sync, `vector_store` holds `csv-article-fr` chunks tagged `language=fr`; the English
+  `csv-article` source is unchanged.
+- A French question that previously fell back now grounds in French with a plausible answer
+  (live check on Mistral + Ollama + pgvector).
+- `mvn test` stays infra-free (the connector change is covered by the existing CSV connector
+  tests / a fake; the translation script is a dev tool, not wired into the app).
+
+### Risks / Open Questions
+
+- Machine-translation quality is dev-grade; some French chunks may be awkward — acceptable
+  for local testing, must not be promoted to prod without review.
+- Domain classifier anchors are English; FR articles are classified on their own embedding —
+  distribution may drift slightly vs the EN source (acceptable for dev).
+- Mistral rate/throughput on 306 articles: script batches/paces calls and is resumable.
