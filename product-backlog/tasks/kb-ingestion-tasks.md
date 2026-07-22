@@ -18,7 +18,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA functional PASS (bulk latency → BE-014); awaiting user validation |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
-| TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | In progress — parameterize connector `source_type` + FR bean, Mistral translation script `articles.csv → articles-fr.csv`, sync `csv-article-fr` |
+| TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 
 ---
 
@@ -356,9 +356,16 @@ Scenario: Ambiguous turn uses the default / current language
 TASK-BE-015 (answer language — FR↔EN answers on an EN-only corpus)
 **Classification:** Dev tooling — KB content for development/testing only (not a prod
 data decision). Non-runtime-affecting at request time (offline admin ingestion path).
-**Status:** In progress (2026-07-22).
+**Status:** ✅ Delivered (2026-07-22). 306 articles translated to `articles-fr.csv` (Mistral
+translation script), ingested as `csv-article-fr` = **4989 chunks** (vs 5136 EN, 41 markdown).
+A `TextChunker` fix (hard-split of oversized single paragraphs) was required: the FR corpus
+flattened article bodies into single paragraphs that exceeded the nomic-embed-text token limit;
+the chunker now guarantees no chunk exceeds `chunk-size`. Live: French questions
+(router setup, SIM activation, wifi password) now ground on FR content (conf ~0.76–0.83) where
+they previously fell back. Merge-ready; merge awaiting explicit user request.
 **Priority:** Medium (dev enablement — reduces FR insufficient-evidence fallbacks in local testing)
-**Branch:** `task/TASK-BE-017-fr-csv-translation`
+**Branch:** `task/TASK-BE-017-fr-csv-translation` (chunker fix committed on the stacked
+`us/US-042-ui-language-selector` branch alongside US-042).
 
 ### Context
 
