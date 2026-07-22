@@ -27,21 +27,23 @@ PROVIDER_NAMES = (FIXTURE, GRADIUM)
 _PLACEHOLDER_VOICE_IDS = frozenset({"", "default"})
 
 
-def build_provider(name: str = FIXTURE) -> TtsProvider:
+def build_provider(name: str = FIXTURE, *, voice_id: str | None = None) -> TtsProvider:
     if name == FIXTURE:
         return FixtureTtsProvider()
     if name == GRADIUM:
-        return _build_gradium()
+        return _build_gradium(voice_id)
     raise ValueError(f"Unknown TTS provider '{name}'; expected one of {PROVIDER_NAMES}")
 
 
-def _build_gradium() -> GradiumTtsProvider:
+def _build_gradium(voice_id: str | None = None) -> GradiumTtsProvider:
     api_key = os.environ.get("GRADIUM_API_KEY")
     if not api_key:
         raise ValueError("GRADIUM_API_KEY must be set to use the gradium provider")
+    # US-042: Gradium selects the spoken language through the voice, not a language code, so a
+    # per-session voice_id (from the UI selector) is how the TTS speaks the chosen language.
     return GradiumTtsProvider(
         api_key,
-        voice_id=_resolve_voice_id(os.environ.get("GRADIUM_VOICE_ID")),
+        voice_id=_resolve_voice_id(voice_id or os.environ.get("GRADIUM_VOICE_ID")),
         output_format=os.environ.get("GRADIUM_OUTPUT_FORMAT", DEFAULT_OUTPUT_FORMAT),
         model_name=os.environ.get("GRADIUM_MODEL_NAME", DEFAULT_MODEL),
     )

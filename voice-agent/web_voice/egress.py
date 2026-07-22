@@ -32,9 +32,23 @@ class VoiceResponse:
 
 
 class WebVoiceEgress:
-    def __init__(self, provider: TtsProvider) -> None:
+    def __init__(
+        self,
+        provider: TtsProvider,
+        *,
+        providers_by_language: dict[str, TtsProvider] | None = None,
+    ) -> None:
         self._provider = provider
         self._audio_format = getattr(provider, "audio_format", DEFAULT_AUDIO_FORMAT)
+        # US-042: per-session TTS voices keyed by language ("fr"/"en"); Gradium selects the
+        # spoken language through the voice. Empty on the fixture path -> single default voice.
+        self._providers_by_language = {
+            key.lower(): value for key, value in (providers_by_language or {}).items()
+        }
+
+    def _provider_for(self, envelope: ChannelEnvelope) -> TtsProvider:
+        language = (getattr(envelope, "language", None) or "").lower()
+        return self._providers_by_language.get(language, self._provider)
 
     def synthesize_turn(
         self,
@@ -43,7 +57,7 @@ class WebVoiceEgress:
         telemetry: TelemetryRecorder | None = None,
     ) -> VoiceResponse:
         telemetry = telemetry or TelemetryRecorder()
-        runner = TtsSynthesisRunner(self._provider, telemetry)
+        runner = TtsSynthesisRunner(self._provider_for(envelope), telemetry)
         result = runner.synthesize(text, envelope.correlation_id)
         if result.outcome is not TtsOutcome.SUCCESS:
             return VoiceResponse(result=result, wav=None)
@@ -70,7 +84,7 @@ class WebVoiceEgress:
         egress_ms = sent_ms if sent_ms is not None else Timer().elapsed_ms()
         attrs = {
             **envelope.as_attributes(),
-            "provider": self._provider.name,
+            "provider": self._provider_for(envelope).name,
             "audio_format": self._audio_format,
             "audio_bytes": len(response.wav),
         }

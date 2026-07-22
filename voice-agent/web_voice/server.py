@@ -323,6 +323,28 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     return signaling, loop
 
 
+def _stt_by_language(provider_name: str) -> dict[str, Any]:
+    """Per-session STT providers keyed by language (US-042). Gradium listens in the selected
+    language; the fixture provider is language-agnostic so the map stays empty (single provider).
+    """
+    if provider_name != GRADIUM:
+        return {}
+    return {"fr": build_provider(provider_name, language="fr"), "en": build_provider(provider_name, language="en")}
+
+
+def _tts_by_language(provider_name: str) -> dict[str, Any]:
+    """Per-session TTS voices keyed by language (US-042). Gradium speaks the language of the voice,
+    so French uses the default voice and English uses GRADIUM_VOICE_ID_EN when configured.
+    """
+    if provider_name != GRADIUM:
+        return {}
+    by_language = {"fr": build_tts_provider(provider_name)}
+    english_voice = os.environ.get("GRADIUM_VOICE_ID_EN")
+    if english_voice:
+        by_language["en"] = build_tts_provider(provider_name, voice_id=english_voice)
+    return by_language
+
+
 def _build_streaming_provider(args) -> Any:
     """Build the streaming STT provider for the WebRTC path, or None (batch fallback).
 
@@ -347,8 +369,12 @@ def _build_streaming_tts_provider(args) -> Any:
 
 def main() -> int:
     args = _parse_args()
-    ingress = WebVoiceIngress(build_provider(args.provider))
-    egress = WebVoiceEgress(build_tts_provider(args.provider))
+    ingress = WebVoiceIngress(
+        build_provider(args.provider), providers_by_language=_stt_by_language(args.provider)
+    )
+    egress = WebVoiceEgress(
+        build_tts_provider(args.provider), providers_by_language=_tts_by_language(args.provider)
+    )
     # `stub` (default) is the deterministic offline answer; `http` targets a real
     # conversation endpoint configured via VOICE_BACKEND_URL (TASK-WEB-003-C).
     backend = build_backend(args.backend)

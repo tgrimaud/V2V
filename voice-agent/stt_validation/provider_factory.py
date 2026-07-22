@@ -20,21 +20,24 @@ GRADIUM = "gradium"
 PROVIDER_NAMES = (FIXTURE, GRADIUM)
 
 
-def build_provider(name: str = FIXTURE) -> SttProvider:
+def build_provider(name: str = FIXTURE, *, language: str | None = None) -> SttProvider:
     if name == FIXTURE:
         return FixtureSttProvider()
     if name == GRADIUM:
-        return _build_gradium()
+        return _build_gradium(language)
     raise ValueError(f"Unknown STT provider '{name}'; expected one of {PROVIDER_NAMES}")
 
 
-def _build_gradium() -> GradiumSttProvider:
+def _build_gradium(language: str | None = None) -> GradiumSttProvider:
     api_key = os.environ.get("GRADIUM_API_KEY")
     if not api_key:
         raise ValueError("GRADIUM_API_KEY must be set to use the gradium provider")
+    # US-042: an explicit language (from the per-session UI selector) overrides the deployment
+    # default so the transcription listens in the language the customer picked.
+    resolved = language or os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE)
     return GradiumSttProvider(
         api_key,
-        language=os.environ.get("GRADIUM_LANGUAGE", DEFAULT_LANGUAGE),
+        language=resolved,
         input_format=os.environ.get("GRADIUM_INPUT_FORMAT", DEFAULT_INPUT_FORMAT),
     )
 
