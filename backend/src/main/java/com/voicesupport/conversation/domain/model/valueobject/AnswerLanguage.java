@@ -94,10 +94,6 @@ public enum AnswerLanguage {
         return Optional.empty();
     }
 
-    public static AnswerLanguage detect(String text, AnswerLanguage fallback) {
-        return detect(text).orElse(fallback);
-    }
-
     private static int accentSignal(String lower) {
         return FRENCH_ACCENTS.matcher(lower).find() ? 1 : 0;
     }

@@ -41,14 +41,6 @@ class AnswerLanguageTest {
     }
 
     @Test
-    @DisplayName("the fallback overload returns the fallback on ambiguity")
-    void fallbackOnAmbiguity() {
-        // WHEN detecting an ambiguous turn with an explicit fallback
-        assertEquals(AnswerLanguage.FRENCH, AnswerLanguage.detect("42", AnswerLanguage.FRENCH));
-        assertEquals(AnswerLanguage.ENGLISH, AnswerLanguage.detect("42", AnswerLanguage.ENGLISH));
-    }
-
-    @Test
     @DisplayName("a language code is parsed, defaulting to English for unknown values")
     void parsesCode() {
         assertEquals(AnswerLanguage.FRENCH, AnswerLanguage.fromCode("fr"));
