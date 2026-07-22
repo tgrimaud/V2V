@@ -1049,7 +1049,8 @@ Scenario: A closing word inside a longer request does not end the call
 **Classification:** V1 core — language control; runtime-affecting (STT/TTS/answer).
 **Status:** ✅ **Validated by user (2026-07-22)** — manual live test of the FR/EN selector on the
 batch web voice path passed. Merge-ready; merge awaiting explicit user request. Batch web voice
-path (`index.html`) DONE & live-verified — deterministic end to end.
+path (`index.html`) DONE & live-verified — deterministic end to end. WebRTC streaming path
+(`webrtc.html`) DONE (2026-07-22) — awaiting live browser mic verify.
 - **Answer language**: UI FR/EN selector → runtime forwards `language` → backend forces
   `AnswerLanguage` (overrides detection). Live: same French question answers in EN or FR per
   selection; forced language also drives fallbacks/refusals (BUG-002 consistency).
@@ -1059,11 +1060,19 @@ path (`index.html`) DONE & live-verified — deterministic end to end.
   `WebVoiceEgress` — French uses the default voice, English uses `GRADIUM_VOICE_ID_EN`
   (`vimnD4UQG_36P43U`, provided by the user, live-verified: `/api/voice/tts?language=en` returns
   audio). Set `GRADIUM_VOICE_ID_EN` in the gitignored `.env`.
-- Tests green: backend **217**, runtime **315** unit + **26** BDD.
+- **WebRTC streaming path (`webrtc.html`)** — DONE (2026-07-22). The UI FR/EN selector rides on the
+  WebRTC offer body; `WebRtcSignalingService._new_session` puts it on the session `ChannelEnvelope`
+  (`for_web_turn(language=...)`). The envelope then: (a) forces the backend answer language via the
+  shared `AnswerProcessor`; (b) selects the per-session **streaming** Gradium STT provider (fr/en maps
+  built once in `server._streaming_stt_by_language`); (c) selects the per-session **streaming** TTS
+  voice (fr = default, en = `GRADIUM_VOICE_ID_EN`, built in `server._streaming_tts_by_language`). The
+  selector is locked for the duration of a live call (language is fixed per session). The batch WebRTC
+  fallback path reuses the already language-aware `WebVoiceIngress`/`WebVoiceEgress`.
+- Tests green: backend **217**, runtime **320** unit (incl. `WebRtcLanguageSelectionTest`) + **26** BDD.
 
-**Remaining**: the `webrtc.html` streaming path (WebRTC uses separate streaming STT/TTS providers
-built in `_build_signaling`; language is not yet threaded through signaling) and its UI selector.
-OQ-042-a (per-session Gradium language) is resolved for the batch path.
+**Remaining**: live browser-mic verification of the WebRTC path in FR and EN (unit + startup validated:
+the server builds fr+en streaming STT/TTS maps at boot without error).
+OQ-042-a (per-session Gradium language) is resolved for both the batch and WebRTC paths.
 **Priority:** High
 **Branch:** `us/US-042-ui-language-selector` (stacked on `task/TASK-BE-017-fr-csv-translation`
 so the forced-French path can be tested against the translated FR corpus).
