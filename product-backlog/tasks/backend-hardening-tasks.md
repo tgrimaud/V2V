@@ -9,6 +9,7 @@ pilot, unless pulled in earlier.
 |---|---|---|---|---|
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
+| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | Proposed (2026-07-23) — out of Sprint 8 theme; latency follow-up |
 
 ---
 
@@ -159,3 +160,76 @@ consistently documented (paired with TASK-WEB-016 for the Python voice runtime).
 - `/v3/api-docs` returns a valid OpenAPI 3 document covering every endpoint;
   Swagger UI renders it.
 - No secret/internal detail leaked in descriptions; `mvn test` + ArchUnit stay green.
+
+---
+
+## TASK-BE-018 — Concise Voice-First Answers (Latency Lever)
+
+**Parent:** EPIC-005 (Answer engine) — answer quality / pilot latency
+**Classification:** V1 answer quality / latency lever
+**Status:** Proposed (2026-07-23) — cross-cutting, out of the Sprint 8 CSV theme;
+schedule opportunistically before the pilot.
+**Priority:** High
+**Branch:** `task/TASK-BE-018-concise-voice-answers`
+**Surfaced by:** BUG-004 live voice validation (2026-07-22/23) — grounded answers are
+now stable, but long grounded answers dominate synthesis time.
+**Relates to:** TASK-BE-005 (provider-agnostic LLM wording), TASK-BE-007 (SSE token
+streaming), ADR-0029 (pilot latency criterion), ADR-0033 (WebRTC single live transport).
+
+### Context
+
+With BUG-003 (chunking) and BUG-004 (spurious refusals) fixed, grounded answers are
+stable — but they are also **long**. Answer length is now the dominant driver of total
+TTS synthesis time:
+
+- **Batch `/turn` path (offline/tests, ADR-0033):** time-to-first-audio equals full
+  synthesis time and scales with answer length — a long grounded answer measures
+  **≈ 14 s** to first audio.
+- **WebRTC streaming path (live, ADR-0033):** first audio is already ≈ 360 ms, but the
+  **total** spoken duration and the tail still scale with answer length, and a verbose
+  answer degrades the conversational feel and mouth-to-ear perception (ADR-0029).
+
+The LLM currently has no explicit length/conciseness budget for the voice channel: the
+directive optimizes for grounded correctness (BUG-004) but not for spoken brevity.
+
+### Objective
+
+Make the answer engine produce **concise, voice-first** answers by default — short
+enough to be spoken naturally — **without regressing grounding** (DEC-002, BUG-004:
+still refuse/hand off only when context is empty or unrelated; never invent amounts).
+
+### Scope
+
+- Add a **conciseness directive** to the LLM system prompt (both `MistralAnswerAdapter`
+  and `OllamaAnswerAdapter`, kept in sync via the shared abstract adapter): answer in a
+  few short sentences suitable for speech, lead with the direct answer, no markdown, no
+  bullet lists, no restating the question.
+- Add a **configurable answer-length budget** (e.g. `voice-support.llm.max-answer-*`,
+  a sentence/word/char target) applied as a prompt constraint; keep it env-tunable so
+  the batch vs live trade-off can be tuned without a redeploy.
+- Ensure the cap is applied **at generation** (prompt), not by post-hoc truncation that
+  could cut mid-sentence or drop the grounded core.
+- Keep the multilingual behaviour (ADR-0031): the budget applies equally to FR and EN,
+  and the concise answer must still respect the language directive and hand-off wording.
+
+### Acceptance
+
+- A typical grounded question yields a spoken answer within the configured budget
+  (target to be set with QA, e.g. ≤ 3 short sentences) while still containing the
+  grounded facts — verified on a sample of FR + EN questions.
+- No grounding regression: the BUG-004 regression cases still answer (do not fall back)
+  when evidence is present, and still hand off when context is empty/unrelated
+  (`OutputGuardrail` markers unchanged).
+- Latency evidence: batch `/turn` time-to-first-audio and WebRTC total spoken duration
+  measurably drop for long-answer cases; report before/after with the ADR-0018 method
+  and check against the ADR-0029 criterion.
+- `mvn test` + ArchUnit green; a focused test locks the concise directive/budget wiring
+  in both adapters. Runtime-affecting → BE-009 telemetry still records the `llm_wording`
+  slice; note answer length alongside latency in the QA report.
+
+### Notes
+
+- This is a **prompt/answer-shaping** lever, complementary to TASK-BE-007 (SSE token
+  streaming) and the ADR-0029 latency work — not a substitute for either.
+- Do not lower grounding to hit brevity: if a question genuinely needs more detail,
+  concise-but-complete beats truncated. QA sets the concrete budget.
