@@ -14,6 +14,7 @@ from .end_of_turn import (
     EndOfTurnDetector,
     EndOfTurnResult,
 )
+from .channel_egress_probe import ChannelEgressProbe
 from .egress import CHANNEL_EGRESS_SPAN, VoiceResponse, WebVoiceEgress, pcm_to_wav
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
@@ -23,6 +24,7 @@ __all__ = [
     "END_OF_TURN_SPAN",
     "SIGNAL_CLIENT_STOP",
     "SIGNAL_SILENCE_WINDOW",
+    "ChannelEgressProbe",
     "ChannelEnvelope",
     "EndOfTurnDetector",
     "EndOfTurnResult",

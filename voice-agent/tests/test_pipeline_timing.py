@@ -14,9 +14,13 @@ from stt_validation.pipeline_timing import (  # noqa: E402
     TIME_TO_FIRST_AUDIO,
     TIME_TO_FIRST_AUDIO_SLICES,
     TTS_FIRST_AUDIO,
+    VOICE_TO_FIRST_AUDIO,
+    VOICE_TO_FIRST_AUDIO_SLICES,
     PipelineTimingReport,
     time_to_first_audio_report,
     time_to_first_audio_samples,
+    voice_to_first_audio_report,
+    voice_to_first_audio_samples,
 )
 from stt_validation.telemetry import Span  # noqa: E402
 from tts_synthesis import FixtureTtsProvider  # noqa: E402
@@ -314,6 +318,115 @@ class TimeToFirstAudioCompositeTest(unittest.TestCase):
         self.assertEqual(payload["component_slices"], list(TIME_TO_FIRST_AUDIO_SLICES))
         self.assertEqual(payload["latency"]["count"], 1)
         self.assertEqual(payload["latency"]["p50_ms"], 300.0)
+
+
+class VoiceToFirstAudioCompositeTest(unittest.TestCase):
+    """ADR-0029 mouth-to-ear: EOT hold + STT + backend + TTS + channel egress (TASK-WEB-014)."""
+
+    def _m2e_turn(
+        self,
+        correlation_id: str,
+        eot: float,
+        stt: float,
+        backend: float,
+        tts: float,
+        egress: float | None = None,
+    ) -> list[Span]:
+        attrs = {"correlation_id": correlation_id}
+        spans = [
+            Span("voice.end_of_turn", eot, attrs),
+            Span("stt.request", stt, attrs),
+            Span("backend.first_token", backend, attrs),
+            Span("voice.tts.first_audio", tts, attrs),
+        ]
+        if egress is not None:
+            spans.append(Span("web.voice.egress", egress, attrs))
+        return spans
+
+    def test_composite_folds_eot_hold_and_egress_into_the_sum(self) -> None:
+        # GIVEN one turn: EOT 500 + STT 120 + backend 200 + TTS 180 + egress 5
+        spans = self._m2e_turn("corr-1", eot=500.0, stt=120.0, backend=200.0, tts=180.0, egress=5.0)
+
+        # WHEN / THEN the mouth-to-ear composite sums all five slices
+        self.assertEqual(voice_to_first_audio_samples(spans), [1005.0])
+
+    def test_component_slices_are_eot_plus_post_eot_path_plus_egress(self) -> None:
+        # THEN the composite advertises all five ordered slices (egress last)
+        self.assertEqual(
+            VOICE_TO_FIRST_AUDIO_SLICES,
+            (END_OF_TURN, STT, BACKEND_FIRST_TOKEN, TTS_FIRST_AUDIO, CHANNEL_EGRESS),
+        )
+
+    def test_egress_is_optional_and_folded_only_when_present(self) -> None:
+        # GIVEN a turn with no egress span (batch-only had it; a bare streaming run may not)
+        spans = self._m2e_turn("corr-1", eot=500.0, stt=100.0, backend=100.0, tts=100.0)
+
+        # WHEN / THEN the composite is still computed over the required slices
+        self.assertEqual(voice_to_first_audio_samples(spans), [800.0])
+        # AND the report states the residual egress gap honestly
+        report = voice_to_first_audio_report(spans)
+        self.assertTrue(report.measured)
+        self.assertIn("channel_egress not folded", report.note)
+
+    def test_turn_missing_end_of_turn_is_skipped(self) -> None:
+        # GIVEN a turn with the post-EOT path but no end-of-turn hold span
+        spans = [
+            Span("stt.request", 100.0, {"correlation_id": "c"}),
+            Span("backend.first_token", 100.0, {"correlation_id": "c"}),
+            Span("voice.tts.first_audio", 100.0, {"correlation_id": "c"}),
+        ]
+
+        # THEN no truncated mouth-to-ear composite is produced (EOT is required)
+        self.assertEqual(voice_to_first_audio_samples(spans), [])
+        self.assertFalse(voice_to_first_audio_report(spans).measured)
+
+    def test_turns_of_different_calls_never_mix(self) -> None:
+        # GIVEN two calls (distinct correlation ids), one turn each, both with egress
+        spans = self._m2e_turn("a", 500.0, 100.0, 100.0, 100.0, egress=10.0) + self._m2e_turn(
+            "b", 600.0, 200.0, 200.0, 200.0, egress=20.0
+        )
+
+        # THEN each call yields its own composite (810, 1220), never blended
+        self.assertEqual(sorted(voice_to_first_audio_samples(spans)), [810.0, 1220.0])
+
+    def test_egress_folded_per_turn_by_position_in_a_multi_turn_call(self) -> None:
+        # GIVEN one call answering two turns, only the first carrying an egress span
+        spans = (
+            self._m2e_turn("a", 500.0, 100.0, 100.0, 100.0, egress=10.0)
+            + self._m2e_turn("a", 500.0, 100.0, 100.0, 100.0)
+        )
+
+        # THEN turn 1 folds egress (810), turn 2 does not (800), and the note flags partial coverage
+        self.assertEqual(sorted(voice_to_first_audio_samples(spans)), [800.0, 810.0])
+        self.assertIn("1/2 turns", voice_to_first_audio_report(spans).note)
+
+    def test_report_computes_percentiles_and_is_json_serializable(self) -> None:
+        # GIVEN 100 warm turns with a rising composite
+        spans: list[Span] = []
+        for i in range(1, 101):
+            spans += self._m2e_turn(f"c-{i}", float(i), float(i), float(i), float(i), egress=float(i))
+
+        # WHEN
+        composite = voice_to_first_audio_report(spans)
+        payload = composite.to_dict()
+
+        # THEN it is measured with nearest-rank percentiles over the composite (5i)
+        self.assertEqual(composite.name, VOICE_TO_FIRST_AUDIO)
+        self.assertTrue(composite.measured)
+        self.assertEqual(payload["name"], VOICE_TO_FIRST_AUDIO)
+        self.assertEqual(payload["latency"]["count"], 100)
+        self.assertEqual(payload["latency"]["p50_ms"], 250.0)
+        self.assertEqual(payload["latency"]["p95_ms"], 475.0)
+        self.assertEqual(payload["component_slices"], list(VOICE_TO_FIRST_AUDIO_SLICES))
+
+    def test_report_not_measured_when_no_complete_turn(self) -> None:
+        # GIVEN only an end-of-turn span (no post-EOT path)
+        composite = voice_to_first_audio_report([_span("voice.end_of_turn", 500.0)])
+
+        # THEN it is an explicit gap with a reason, not a fabricated zero
+        self.assertFalse(composite.measured)
+        self.assertIsNone(composite.report)
+        self.assertTrue(composite.note)
 
 
 class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):
