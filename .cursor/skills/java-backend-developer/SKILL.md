@@ -16,7 +16,7 @@ Java/Spring implementation patterns for the hexagonal architecture described in 
 
 ## Technology Stack
 
-- **Java 21 LTS** with records, sealed classes, pattern matching
+- **Java 17 LTS** with records, sealed classes, pattern matching (aligned with `pom.xml` and ADR-0026)
 - **Spring Boot 3.x** with Spring Web, WebClient, Validation, Actuator, Cache
 - **Maven** for build management
 - **JUnit 5** with manual fake adapters (no Mockito)

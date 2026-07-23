@@ -87,7 +87,7 @@ public class ConversationConfig {
     public ConverseUseCase converseUseCase(
             AnswerQuestionUseCase answerQuestionUseCase,
             ConversationMemoryPort conversationMemoryPort,
-            @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
+            @Value("${voice-support.conversation.retrieval.top-k:8}") int topK) {
         return new ConversationService(answerQuestionUseCase, conversationMemoryPort, topK);
     }
 
@@ -99,7 +99,7 @@ public class ConversationConfig {
             ConversationMemoryPort conversationMemoryPort,
             LanguageDetector languageDetector,
             BackendTelemetry backendTelemetry,
-            @Value("${voice-support.conversation.retrieval.top-k:4}") int topK) {
+            @Value("${voice-support.conversation.retrieval.top-k:8}") int topK) {
         return new StreamingConversationService(groundQueryUseCase, streamingAnswerGeneratorPort,
                 outputGuardrail, conversationMemoryPort, languageDetector, backendTelemetry, topK);
     }
