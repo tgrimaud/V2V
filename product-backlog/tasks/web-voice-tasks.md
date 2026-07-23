@@ -1565,9 +1565,11 @@ every slice span carries a per-turn id). Adversarial review **93/100**. QA passe
 `docs/qa/task-web-017-per-turn-telemetry-qa.md`: the `per_turn` report separates turns end to
 end via `scripts/streaming_per_turn_sample.py` (2 calls × 3 paced turns → 6 distinct rows,
 distinct `message_id` under one `correlation_id`, one `time_to_first_audio` per turn),
-barge-in turn → null composite with no desync, no key/audio/path leak in telemetry.
-**Remaining before done:** warm multi-turn **live** sample (Gradium/Mistral) showing distinct
-per-turn slices with real durations.
+barge-in turn → null composite with no desync, no key/audio/path leak in telemetry. Warm **live**
+sample captured (Gradium STT/TTS + Mistral over WebRTC, call `3bcf0fac…`): `turn_index` 1/2/3,
+3 distinct `message_id` under one `conversation_id`, every slice span once per turn; real per-turn
+`time_to_first_audio` 5154/5740/5350 ms. All Required Evidence satisfied — **done** (SLO latency is a
+separate STT-finalize concern owned by TASK-STT-010/011, not WEB-017).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id`
 
@@ -1639,5 +1641,10 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
   (real processors) + `scripts/streaming_per_turn_sample.py` → `streaming_latency_report.py`
   `per_turn` section (offline, repeatable). See `docs/qa/task-web-017-per-turn-telemetry-qa.md`.
 - ✅ Updated `docs/observability/voice-journey-timing.md`.
-- ✅ No API key / raw audio / path leak — dump attribute scan (id/latency/provider/outcome only).
-- ⏳ **Warm live** multi-turn sample with real durations (Gradium/Mistral) — pending live run.
+- ✅ No API key / raw audio / path leak — offline + live dump attribute scan (id/latency/provider/outcome only).
+- ✅ **Warm live** multi-turn sample (Gradium STT/TTS + Mistral over WebRTC) — one call `3bcf0fac…`,
+  `conversation_id 1e5b912d…`, `turn_index` 1/2/3, 3 distinct `message_id`, every slice span once per
+  turn (no overwrite). Real per-turn `time_to_first_audio` 5154/5740/5350 ms (p50 5350 / p95 5740),
+  mouth-to-ear p50 5850 / p95 6240 ms; `barge_in_count=2` yet all turns cleanly separated. Full numbers
+  in `docs/qa/task-web-017-per-turn-telemetry-qa.md`. (Composite p95 exceeds ADR-0018/0029 gates due to
+  ~4 s Gradium STT finalize — pre-existing, owned by TASK-STT-010/011, out of WEB-017 scope.)
