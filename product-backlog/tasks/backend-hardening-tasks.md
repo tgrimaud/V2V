@@ -9,7 +9,7 @@ pilot, unless pulled in earlier.
 |---|---|---|---|---|
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
-| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | In progress (2026-07-23) — implemented + unit-tested (`mvn test` 223 green, ArchUnit OK); awaiting adversarial review + QA/latency |
+| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | Merge-ready (2026-07-23) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 functional regression); `mvn test` 229 green. Merge pending user request |
 
 ---
 
@@ -167,8 +167,9 @@ consistently documented (paired with TASK-WEB-016 for the Python voice runtime).
 
 **Parent:** EPIC-005 (Answer engine) — answer quality / pilot latency
 **Classification:** V1 answer quality / latency lever
-**Status:** In progress (2026-07-23) — implemented + unit-tested; awaiting adversarial
-review + QA/latency validation.
+**Status:** Merge-ready (2026-07-23) — adversarial review 92/100 (QA gate Pass) + QA
+functional & latency **Go**; `mvn test` 229 green, ArchUnit OK. Merge pending explicit
+user request.
 **Priority:** High
 **Branch:** `task/TASK-BE-018-concise-voice-answers`
 **Surfaced by:** BUG-004 live voice validation (2026-07-22/23) — grounded answers are
@@ -264,7 +265,21 @@ Delivered on `task/TASK-BE-018-concise-voice-answers` (branched from
   + disabled for 0/negative), `AbstractChatClientAnswerAdapterTest` (directive present +
   ordered before the language directive when budget set; absent when budget = 0).
 
-**Remaining:** adversarial code review, then QA functional (FR+EN sample: concise but
-still grounded, no BUG-004 regression) + latency before/after (batch `/turn` TTFA and
-WebRTC spoken duration) per ADR-0018 method vs the ADR-0029 criterion; set the concrete
-budget with QA. Live A/B not yet run.
+### Review & QA outcome (2026-07-23)
+
+- **Adversarial code review:** 92/100 — QA gate **Pass**, no blocking findings (one
+  non-blocking test-symmetry gap fixed: `BackendTelemetry.recordAnswerLength` now covered).
+- **QA functional & latency:** **Go** — see `docs/qa/task-be-018-concise-answers-qa-report.md`.
+  Live A/B (Mistral `mistral-small-latest`, warm, `api`, 10 163 KB chunks), budget=3 vs 0:
+  - answer chars (grounded, n=8): p50 **286 vs 426 (−33 %)**, p95 **336 vs 899 (−63 %)**,
+    mean 280 vs 517 (−46 %);
+  - `llm_wording`: p50 **846 vs 1200 ms (−30 %)**, p95 **2033 vs 3100 ms (−34 %)**;
+  - functional: 8/8 grounded still answered (BUG-004 greeting incl.), 10/10 language-correct,
+    2/2 off-topic refused — **no regression** in either arm.
+  - Automated net: BDD `answer-concision.feature` (real adapter + capturing `ChatModel`),
+    `mvn test` **229 green**.
+
+**Remaining before a latency SLO claim (not blocking merge):** fold in TTS/channel-egress
+mouth-to-ear measurement (TASK-WEB-014, ADR-0029) and enlarge the sample; the current
+evidence is the backend lever (`answer_chars` + `llm_wording`) with TTS cost as a proxy.
+Default budget kept at **3** (env `LLM_MAX_ANSWER_SENTENCES`).
