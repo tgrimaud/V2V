@@ -187,7 +187,8 @@ RF-008 (WER normalization, surfaced by the first live Gradium run) → TASK-STT-
 | Bug | Title | Severity | Status | Notes |
 |-----|-------|:--------:|--------|-------|
 | [BUG-001](bugs/BUG-001-input-guardrail-blocks-legitimate-phishing-support.md) | Input guardrail refuses legitimate phishing/scam-call support questions | Medium | New (P2) | Surfaced in Sprint 8 live test; belongs to Sprint 7 guardrail (ADR-0014). Tracked as a Sprint 8 out-of-sprint follow-up. |
-| [BUG-003](bugs/BUG-003-kb-chunking-brittle-retrieval-handoff.md) | Over-fragmented KB chunking evicts the answer chunk from top-K → LLM hand-off → "not enough info" on covered topics | High | New (P1) | Surfaced during US-042 live WebRTC test; language-independent (FR/EN), not a WebRTC/STT bug. `articles-fr.csv` ingested as 10 166 malformed chunks (mid-word splits, `X \n\n X` duplication, header-only chunks). EPIC-005. |
+| [BUG-003](bugs/BUG-003-kb-chunking-brittle-retrieval-handoff.md) | Over-fragmented KB chunking evicts the answer chunk from top-K → LLM hand-off → "not enough info" on covered topics | High | Fixed — live-validated (P1) | `TextChunker` rewritten (contiguous hard-split, word boundaries, no header-only chunks, `###`), topK 4→8, clean re-ingest. Retrieval now reliably PASSES ≈0.85; live FR turn grounded. Residual LLM refusal split out to BUG-004. EPIC-005. |
+| [BUG-004](bugs/BUG-004-llm-intermittent-handoff-despite-grounded-evidence.md) | LLM intermittently refuses ("transfer to advisor") despite passing evidence (≈0.85) → OutputGuardrail rewrites to low-confidence fallback (grounded=false) | High | New (P1) | Split from BUG-003 live validation. Retrieval PASSES but Mistral non-deterministically judges evidence insufficient and emits the transfer directive; conversation history suppresses it. Prompt/temperature layer, not chunking. EPIC-005. |
 
 ## Decisions
 

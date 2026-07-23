@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-003
 - **Title:** Legitimate, KB-covered questions (technical support, résiliation) fall back to "Je n'ai pas assez d'informations fiables…" because the chunk holding the real answer is evicted from top-K
-- **Status:** Fixed (pending QA + user validation)
+- **Status:** Fixed — live-validated by user (chunking scope); residual LLM refusal tracked as [BUG-004](BUG-004-llm-intermittent-handoff-despite-grounded-evidence.md)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test)
@@ -196,24 +196,33 @@ connection is not working." is a distinct guardrail concern — track separately
   - The greeting no longer flips the outcome (FR1=FR2, FR3=FR4, EN1=EN2) — the specific
     BUG-003 instability is resolved.
 
-**Residual (out of chunking scope — track separately):** "j'ai un problème avec ma box"
-still hand-offs even though retrieval now **PASSES** (verdict PASS, scores 0.78/0.76/0.76/0.75).
-This is a genuinely ambiguous query (TV box vs internet box, no stated symptom) where the
-**LLM hands off** rather than asking a clarifying question. It is the downstream
-handoff/clarification behaviour flagged in this ticket's Analysis, not the chunker. Suggest a
-follow-up: prefer a clarifying question over the low-confidence fallback when retrieval passes
-but the query is under-specified.
+**Residual (out of chunking scope — now [BUG-004](BUG-004-llm-intermittent-handoff-despite-grounded-evidence.md)):**
+even after the chunker fix, some covered queries still hand-off although retrieval now **PASSES**
+(e.g. "j'ai un problème avec ma box" at 0.78/0.76; "problème avec ma connexion internet" at ≈0.85).
+The LLM non-deterministically judges the passing evidence insufficient and emits the exact transfer
+directive, which the `OutputGuardrail` faithfully converts to the low-confidence fallback. Notably a
+prior turn in the same `conversation_id` (history) suppresses the refusal. This is the downstream
+LLM/prompt layer, not the chunker — split out to **BUG-004** for prompt/temperature work.
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
+- **Retested by:** User (live WebRTC) + developer (backend `/converse` + `/retrieve`)
+- **Retest date:** 2026-07-23
 - **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+  - Live FR voice turn "J'ai un problème avec ma connexion Internet." → grounded answer with the
+    box-reconnection steps (correlation 2026-07-23T08:56:51).
+  - `/retrieve` for the previously-evicted topics now returns verdict **PASS** with the answer
+    chunk at the top (≈0.85), no header-only chunks, no in-chunk duplication.
+  - Re-ingest of `articles-fr.csv` with the rewritten `TextChunker`: 0 header-only chunks,
+    contiguous word-boundary chunks.
+- **Result:** Passed for the chunking scope. Retrieval is stable and grounded.
+- **Retest evidence:** backend `[CONVERSE-DIAG]`/`[CONVERSE]` logs + `/retrieve` responses captured
+  during the 2026-07-23 live session; `TextChunkerTest` green.
+- **Note:** the intermittent LLM refusal despite passing retrieval is a separate defect →
+  [BUG-004](BUG-004-llm-intermittent-handoff-despite-grounded-evidence.md).
 
 ## Closure
 
-- **Closed by:**
-- **Closed date:**
-- **Closure reason:**
+- **Closed by:** User validation (2026-07-23) — merge pending explicit user request
+- **Closed date:** 2026-07-23 (chunking scope)
+- **Closure reason:** Fixed (chunking/retrieval). Residual LLM/guardrail refusal split to BUG-004.
