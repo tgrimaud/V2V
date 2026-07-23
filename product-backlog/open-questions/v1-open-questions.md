@@ -115,9 +115,23 @@ sign-off: instrument true mouth-to-ear (`channel_egress` + end-of-turn hold,
 **TASK-WEB-014**). STT/TTS are at the Gradium floor, so the latency lever is the
 answer engine and the criterion — not the voice edges; ADR-0012 (modular cascade) is
 reaffirmed and "OpenAI" for V1 means the cascade chat provider (ADR-0006/DEC-011),
-not Realtime speech-to-speech. Remaining OQ-005 sub-items (journeys counted,
-fixture-vs-live provider mix, barge-in authority) fold into TASK-WEB-014 and the QA
-latency plan.
+not Realtime speech-to-speech.
+
+**OQ-005 sub-items — resolved by TASK-WEB-014:**
+- **Journeys counted toward the pilot metric:** warm streaming **WebRTC** turns on the
+  **web** channel with the **real backend** that produce a complete end-of-turn →
+  first-audio path. A turn missing any required slice (e.g. a barge-in turn with no
+  final answer) is **excluded**, never counted as a fast turn; fixture-only and
+  stub-backend runs are engineering baselines, not pilot-gate inputs.
+- **Fixture-vs-live provider mix:** the ADR-0029 gate is measured with **live** Gradium
+  STT/TTS + the real backend. Fixture providers are deterministic dev/CI only and never
+  feed the gate; `pipeline_timing`'s "first present span name wins" already prevents a
+  fixture span and a web span mixing into one slice distribution.
+- **Barge-in authority:** the Pipecat **output transport** is authoritative for barge-in
+  cancellation timing (emits Bot Started/Stopped-speaking frames, flushes on
+  `InterruptionFrame`). Barge-in turns are excluded from `voice_to_first_audio` (no
+  complete answer); barge-in is tracked separately via `voice.barge_in.count`, not
+  folded into the first-audio composite.
 
 **Owner:** Product / Architecture / Operations  
 **Impacts:** EPIC-004, EPIC-005, EPIC-009

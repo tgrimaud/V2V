@@ -112,13 +112,43 @@ positional-zipped (the k-th of each = turn k), and a turn missing any component
 truncated value. It reports p50/p95/p99 over the sample and the ADR-0018 gate
 (`p95 < 800 ms`).
 
-**WebRTC-path measurement gap:** `channel_ingress` (`web.voice.ingress`) and
-`channel_egress` (`web.voice.egress`) are emitted only on the batch HTTP path, not
-on the WebRTC transport, so they are reported as explicit gaps for streaming runs.
-The composite therefore covers end-of-turn → first synthesized audio; the residual
-WebRTC channel-egress transport add-on (first frame emitted → playable at the
-browser) is not yet instrumented and is called out in the QA report rather than
-folded silently into the number.
+**WebRTC-path egress (TASK-WEB-014):** `channel_egress` (`web.voice.egress`) is now
+also emitted on the WebRTC streaming path by the `ChannelEgressProbe`
+(`web_voice/channel_egress_probe.py`), placed between the TTS processor and the
+transport output. It times the **runtime egress** of the *first* audio frame of each
+spoken turn (frame → transport output), reusing the batch span name so
+`PipelineTimingReport` measures the slice on both paths. It re-arms after each
+`BotStoppedSpeakingFrame`, so a multi-turn call yields one egress sample per turn.
+`channel_ingress` (`web.voice.ingress`) stays batch-HTTP-only for now.
+
+**Honest residual gap:** the probe measures runtime egress (hand-off to the
+transport), **not** the full browser-audible add-on (RTP encode/packetize + network
++ jitter buffer + playout), which is not server-observable. The
+`scripts/webrtc_live_client.py` headless client logs a client-side **first-audible
+proxy** (`mouth_to_ear_proxy_ms`) — the browser-received end-to-end number — to close
+that residual gap during a live sample.
+
+### Mouth-to-ear composite: `voice_to_first_audio` (TASK-WEB-014, ADR-0029)
+
+`time_to_first_audio` starts at end-of-turn **acceptance**; the market measures
+**mouth-to-ear** (ADR-0029) — from the instant the customer stops speaking to the
+first agent audio they *hear*. `voice_to_first_audio` folds back the two slices
+`time_to_first_audio` excludes:
+
+```
+voice_to_first_audio = end_of_turn (trailing-silence hold, pre-acceptance)
+                     + stt + backend_first_token + tts_first_audio
+                     + channel_egress (runtime egress, WebRTC; folded when present)
+```
+
+`voice_common.pipeline_timing.voice_to_first_audio_report(spans)` computes it per
+turn (same per-correlation positional zip). `end_of_turn` + the post-EOT path are
+**required**; `channel_egress` is folded **per turn when present** and reported as an
+explicit residual gap otherwise — a missing egress span is never silently treated as
+zero. `scripts/streaming_latency_report.py` reports it alongside `time_to_first_audio`
+and evaluates the **ADR-0029 gate**: mouth-to-ear p95 ≤ 1.5 s (primary) + a
+`time_to_first_audio` p95 ≤ 1.2 s engineering sub-target (overall `not_measured` when
+either composite has no complete turn — never a silent pass).
 
 ## How it works
 

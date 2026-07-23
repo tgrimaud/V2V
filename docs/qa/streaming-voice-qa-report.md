@@ -187,6 +187,38 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
 # -> adds a "provider_baseline" section with per-percentile delta_ms (measured - provider)
 ```
 
+## Mouth-To-Ear Composite (TASK-WEB-014, ADR-0029)
+
+TASK-WEB-014 closes the ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known
+gap and instruments the **mouth-to-ear** metric the market actually measures:
+
+- **`voice_to_first_audio` composite** (`voice_common/pipeline_timing.py`) = end-of-turn
+  hold + STT + backend + TTS + `channel_egress`, per turn under one correlation id,
+  reported alongside `time_to_first_audio`. Egress is folded per turn when present and
+  reported as an explicit residual gap otherwise (never a silent zero).
+- **`channel_egress` on WebRTC** (`web_voice/channel_egress_probe.py`): the
+  `ChannelEgressProbe` sits between TTS and the transport output and times the runtime
+  egress of the first audio frame of each spoken turn, emitting the same
+  `web.voice.egress` span the batch path uses — so the CHANNEL_EGRESS slice is now
+  measured on the streaming path (previously batch-HTTP-only).
+- **ADR-0029 gate** in `scripts/streaming_latency_report.py`: mouth-to-ear p95 ≤ 1.5 s
+  (primary) + `time_to_first_audio` p95 ≤ 1.2 s (engineering); overall `not_measured`
+  when either has no complete turn (never a silent pass).
+- **Residual browser-audible gap** (RTP encode/packetize + network + jitter buffer +
+  playout) is not server-observable; the headless client
+  (`scripts/webrtc_live_client.py`) logs a client-side first-audible proxy
+  (`mouth_to_ear_proxy_ms`) to close it during a live sample.
+
+Developer coverage: `tests/test_pipeline_timing.py` (composite computation, fake
+spans), `tests/test_channel_egress_probe.py` (egress emission on the WebRTC path),
+`tests/test_streaming_latency_report.py` (mouth-to-ear + ADR-0029 gate). Full suite:
+unittest **334** green, behave **10 features / 26 scenarios / 120 steps** green.
+
+**Pending before pilot sign-off (honest gap):** a **warm live sample against the real
+backend** to record measured `voice_to_first_audio` p50/p95/p99 and evaluate the
+ADR-0029 gate. The instrumentation and gate are in place; the measured mouth-to-ear
+number is the remaining input (ticket is an out-of-sprint pre-pilot measurement).
+
 ## Component Findings
 | Brick | Status | Findings | Next action |
 |---|---|---|---|
@@ -195,21 +227,24 @@ python3 scripts/streaming_latency_report.py --input /tmp/streaming-telemetry.jso
 | Streaming TTS | Pass | First audio ~363 ms; incremental playback stable | Reuse/multiplex the WebSocket (out of sprint) |
 | Barge-in | Pass | Interrupts playback; anti-echo gate holds on normal turns | — |
 | Observability | Pass | One correlation id per call; spans + metrics dumped on teardown | — |
-| Channel egress (WebRTC) | Gap | Not instrumented on the WebRTC transport | Instrument the last transport hop (follow-up) |
+| Channel egress (WebRTC) | Pass | Instrumented by `ChannelEgressProbe` (TASK-WEB-014): runtime egress of the first frame per turn, folded into `voice_to_first_audio` | Capture browser-audible residual via the client first-audible proxy in a live sample |
 
 ## Defects And Gaps
 | Severity | Finding | Impact | Owner |
 |---|---|---|---|
 | High | Measured `time_to_first_audio` p95 1698 ms > 800 ms (with stub backend) | Pilot latency criterion not met; STT finalize tail is the lever | QA / Architecture (measured gap) |
 | Medium | 2 of 7 warm calls produced no turn telemetry (empty session) | Reliability/measurement caveat; likely the headless client replaying the same clip in rapid succession rather than a server defect, but unconfirmed | Follow-up (out of sprint) |
-| Info | `channel_egress` not measured on WebRTC | Composite excludes the last transport hop | Follow-up (out of sprint) |
+| Resolved | `channel_egress` not measured on WebRTC | Closed by TASK-WEB-014 (`ChannelEgressProbe` + `voice_to_first_audio` mouth-to-ear composite); browser-audible residual is a stated gap covered by the client proxy | Done |
 | Info | One WebSocket per turn | Setup/teardown cost | Backlog (out of sprint) |
 
 ## Open Questions
 - **Product:** is a functional pilot acceptable with `time_to_first_audio` p95 ~1.7 s
   while the STT finalize tail is optimized, or is `p95 < 800 ms` a hard pilot gate?
-- **Architecture:** should the WebRTC channel-egress hop be instrumented before the
-  pilot, or is the EOT → first-synthesized-audio composite sufficient for V1?
+- **Architecture:** ~~should the WebRTC channel-egress hop be instrumented before the
+  pilot?~~ **Resolved (TASK-WEB-014):** yes — `channel_egress` is now instrumented on
+  the WebRTC path and folded into the `voice_to_first_audio` mouth-to-ear composite
+  (ADR-0029), with the browser-audible residual covered by the client first-audible
+  proxy. Remaining: capture the warm live sample.
 - **Technical:** target for the STT post-EOT finalize tail (main lever to reach
   `p95 < 800 ms`); with the tail at p95 ~1.39 s it alone exceeds the whole budget.
 
