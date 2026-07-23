@@ -39,6 +39,31 @@ class BackendTelemetryTest {
     }
 
     @Test
+    @DisplayName("records answer length as a provider-tagged distribution summary (TASK-BE-018)")
+    void recordsAnswerLength() {
+        // WHEN a spoken answer size is recorded for a provider
+        telemetry.recordAnswerLength("mistral-api", 142);
+
+        // THEN a distribution summary carries the answer chars under that provider
+        DistributionSummary summary = registry.find("voice_support.answer_chars")
+                .tag("provider", "mistral-api")
+                .summary();
+        assertNotNull(summary);
+        assertEquals(1, summary.count());
+        assertEquals(142.0, summary.totalAmount());
+    }
+
+    @Test
+    @DisplayName("defaults a blank answer-length provider tag to n/a (TASK-BE-018)")
+    void recordsAnswerLengthWithDefaultedProvider() {
+        // WHEN the provider is blank
+        telemetry.recordAnswerLength("  ", 0);
+
+        // THEN the summary is registered under the n/a placeholder, not an empty tag
+        assertNotNull(registry.find("voice_support.answer_chars").tag("provider", "n/a").summary());
+    }
+
+    @Test
     @DisplayName("records a success-tagged timer carrying the current channel and provider")
     void recordsSuccess() {
         // GIVEN a known channel for the current request
