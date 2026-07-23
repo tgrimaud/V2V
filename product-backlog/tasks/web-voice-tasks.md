@@ -1537,3 +1537,78 @@ project APIs are documented consistently.
 - A valid OpenAPI document describes every `web_voice` endpoint (paths, params,
   request/response, error shape, correlation-id headers).
 - The spec matches the HTTP contract doc; drift is caught in review.
+
+---
+
+## TASK-WEB-017 - Per-Turn Identity On WebRTC Streaming Telemetry (enable per-turn latency)
+
+**Parent:** EPIC-006 (Voice2Voice) — observability hardening
+**Related:** US-036 (per-slice latency), ADR-0028 (backend observability correlation),
+TASK-WEB-013 (telemetry import unification), TASK-WEB-014 (mouth-to-ear latency),
+`docs/architecture/channel-identity-boundary.md` (identity fields)
+**Classification:** V1 hardening (observability)
+**Status:** Proposed (2026-07-23) — surfaced during live WebRTC testing; off the billing
+theme, schedule before any per-turn latency SLO claim from live/browser sessions.
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id` (to be created when scheduled)
+
+### Context
+
+On the **WebRTC streaming** path a single `ChannelEnvelope` is created **per session**
+(`web_voice/webrtc_signaling.py:164`, `ChannelEnvelope.for_web_turn(...)`), and the streaming
+telemetry emitters propagate **only** `correlation_id` (+`channel`) —
+`web_voice/streaming_stt_processor.py:240/256`, `web_voice/streaming_tts_processor.py:233`,
+`web_voice/utterance_aggregator.py:126`. They drop `conversation_id` and `message_id` even
+though the envelope already carries them. Consequently:
+
+- the session-end telemetry flush **stacks all turns' spans keyed by span name**, so per-turn
+  slices (`stt.request`, `voice.tts.first_audio`, …) overwrite each other within a call;
+- `conversation_id` and `message_id` come out **`None`** on the streaming path;
+- `scripts/streaming_latency_report.py` / `voice_common/pipeline_timing.py` (which group by
+  span name) cannot separate turns, so **per-turn p50/p95/p99 cannot be derived from a
+  multi-turn browser session** (verified live 2026-07-23, session `b4fa2735…`: 3 turns, one
+  flush, all identity keys except `correlation_id` null).
+
+The **batch** path (`web_voice/server.py:273`) already creates a fresh envelope per turn and
+emits the full identity set, so it is unaffected.
+
+### Objective
+
+Make each turn on the streaming path **individually traceable** while keeping the
+**conversation-level `correlation_id` stable** (that stability is desirable — it lets us follow
+the whole dialogue end to end). Enable per-turn latency distributions from live/browser sessions.
+
+### Scope
+
+- Allocate a **per-turn id** (a fresh `message_id` and/or a monotonic turn index) at each
+  detected end-of-turn on the streaming path, without minting a new `correlation_id`.
+- Stamp that per-turn id (+ `conversation_id`, `channel`) on **all** streaming spans/events
+  (STT processor, TTS processor, utterance aggregator, channel egress probe).
+- Update `voice_common/pipeline_timing.py` / `scripts/streaming_latency_report.py` to bucket
+  slices **by turn id**, then aggregate p50/p95/p99 across turns.
+- Align with `docs/architecture/channel-identity-boundary.md` (correlation vs conversation vs
+  message id) and update `docs/observability/voice-journey-timing.md`.
+
+### Out Of Scope
+
+- The batch `/api/voice/turn` path (already correct — one envelope per request).
+- Backend `conversation_id` memory semantics (owned by the Java backend).
+- Changing the meaning/stability of `correlation_id` (it stays per-conversation).
+
+### Acceptance Criteria
+
+- Each streaming turn's spans/events carry a **unique per-turn id** plus the **stable
+  per-conversation `correlation_id`**; `conversation_id`/`message_id` are no longer `None` on
+  the streaming path.
+- `streaming_latency_report.py` produces **per-turn** slice distributions (p50/p95/p99) from a
+  single multi-turn WebRTC session, without turns overwriting each other.
+- The conversation trace remains followable end to end (correlation stability unchanged).
+- Developer tests cover the per-turn id allocation and the by-turn aggregation.
+
+### Required Evidence
+
+- Developer tests (per-turn id lifecycle on the streaming path; by-turn bucketing in the report).
+- A multi-turn live (or headless `scripts/webrtc_live_client.py`) sample showing **distinct
+  per-turn slices** in the report from one session.
+- Updated `docs/observability/voice-journey-timing.md`.
+- No API key / raw audio / path leak in telemetry.
