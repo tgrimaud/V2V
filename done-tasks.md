@@ -582,3 +582,58 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/sprints/sprint-7-answer-engine.md`, `product-backlog/backlog-index.md` — sprint ✅ Done
 - `done-tasks.md` — this entry
 - (implementation + tests + ADR-0026/0027/0028/0029 + QA docs landed via the merged sprint stack)
+
+## 2026-07-23 — Sprint 8 closed: CSV knowledge-base ingestion (articles.csv)
+
+**Summary:**
+
+- Closed **SPRINT-8-CSV-KB-INGESTION** (EPIC-005): ingest the real Eir operator KB CSV
+  export into pgvector via a new connector on the TASK-BE-003 socle, tag mixed content
+  by domain, and answer in the customer's language. Three tickets, all user-validated
+  and merged into `feat/restart-from-scratch`.
+- **TASK-BE-013** — `CsvArticleConnector` + embedding `DomainClassifierPort` (Apache
+  Commons CSV parse, jsoup HTML→text, `sourceId=document_id`, `language=en`, domain
+  classified against billing/support/commercial anchors, else `general`; threshold
+  0.55). Adversarial 92/100, QA PASS, live-validated. Merged 2026-07-21.
+- **TASK-BE-014** — batched embedding/insert (`VectorStorePort.storeChunks` + sync
+  progress metrics/logs): full corpus ~73 s, idempotent re-sync (306 skipped). Adversarial
+  93/100, QA PASS. Merged 2026-07-21.
+- **TASK-BE-015** — answer language handling (FR/EN): reply in the customer's question
+  language across answers/insufficient-evidence fallback/off-topic refusal/escalation,
+  per-turn with session stickiness and a configurable deployment default (EN for the Eir
+  pilot); language observable per turn. `AnswerLanguage` value object + `LanguageDetector`
+  domain service.
+- **BUG-002** (QA-found on BE-015) — an ambiguous follow-up in a French conversation got
+  an English guardrail fallback: the decided answer language was not threaded into the
+  guardrail fallback wording. Fixed by threading the decided language into all guardrails
+  (dropped the now-dead `AnswerLanguage.detect(text, fallback)` overload). Adversarial
+  passed + **live QA retest PASS** (real Mistral/Ollama + corpus).
+- Related work that also landed on integration around the same window (tracked under their
+  own tickets, not Sprint 8's CSV theme): US-042 (UI language selector + forced-language
+  override on `/converse`), TASK-BE-017 (FR CSV translation).
+
+### Gates (closure checks rerun 2026-07-23)
+
+- **Backend `mvn test`: 229 tests, BUILD SUCCESS** (JDK 17, infra-free — manual fakes).
+- **voice-agent: 316 unittest OK** + **26 Behave scenarios** (10 features / 120 steps) green.
+- Per-ticket: adversarial review ≥ 92/100 + QA PASS + user validation (recorded in the
+  ticket rows and `sprints/sprint-8-csv-kb-ingestion.md`).
+
+### Sprint closure
+
+- Sprint 8 tickets were merged **fast-forward** into `feat/restart-from-scratch` as they were
+  validated (BE-013/BE-014 on 2026-07-21; BE-015 + BUG-002 fix subsequently). Closure is the
+  status bookkeeping: no separate merge commit exists (fast-forward), so statuses were flipped
+  by hand.
+- Sprint status flipped to ✅ Done in `sprints/sprint-8-csv-kb-ingestion.md` (header + roadmap +
+  tickets table) and the `backlog-index.md` sprint registry; BUG-002 and the BE-015 ticket rows
+  marked closed/merged.
+- Scope held: customer identity / BSS / PDF / comparison stay gated (OQ-001/003/004) for
+  Sprint 9; BUG-001 (input guardrail over-blocks legitimate phishing-support questions) stays an
+  out-of-sprint P2 follow-up.
+
+### Files changed (closure)
+- `product-backlog/sprints/sprint-8-csv-kb-ingestion.md`, `product-backlog/backlog-index.md` — sprint ✅ Done
+- `product-backlog/bugs/BUG-002-ambiguous-fallback-wording-ignores-language-stickiness.md`, `product-backlog/tasks/kb-ingestion-tasks.md` — tickets closed/merged
+- `done-tasks.md` — this entry
+- (implementation + tests + QA docs landed via the merged ticket stack)

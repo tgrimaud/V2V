@@ -212,11 +212,12 @@ and expose ingestion progress/throughput for monitoring.
 **Parent:** EPIC-005 (Answer engine / knowledge base)
 **Related:** TASK-BE-013 / TASK-BE-014 (English Eir corpus now ingested), Sprint 7 answer engine
 **Classification:** V1 core — answer quality; runtime-affecting (requires observability).
-**Status:** QA found BUG-002 (2026-07-21) — implemented (backend + 210 tests green, infra-free),
-adversarial review closed, functional QA + live run (Mistral+Ollama+corpus) confirm FR/EN
-answers, FR↔EN fidelity and per-turn telemetry; but the ambiguous-follow-up guardrail fallback
-wording ignores session stickiness / the configurable default (`BUG-002`). Fix BUG-002 →
-adversarial review → QA retest before merge. Report: `docs/qa/task-be-015-answer-language-qa-report.md`.
+**Status:** ✅ Validated by user + merged into `feat/restart-from-scratch` (2026-07-23, Sprint 8
+closure). Implemented (backend, infra-free tests + BDD), adversarial review closed, functional
+QA + live run (Mistral+Ollama+corpus) confirm FR/EN answers, FR↔EN fidelity and per-turn
+telemetry. QA-found **BUG-002** (ambiguous-follow-up guardrail fallback ignored session
+stickiness / configurable default) fixed + adversarial passed + **live QA retest PASS**.
+Report: `docs/qa/task-be-015-answer-language-qa-report.md`; bug: `bugs/BUG-002…md`.
 **Priority:** High
 **Branch:** `task/TASK-BE-015-answer-language`
 

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-002
 - **Title:** Ambiguous follow-up in a French conversation gets an English guardrail fallback message
-- **Status:** Fixed — QA verified (live); pending user validation/merge
+- **Status:** ✅ Closed — validated by user + merged into `feat/restart-from-scratch` (2026-07-23, Sprint 8 closure); fix + adversarial review + live QA retest PASS
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** QA (live run)

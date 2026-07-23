@@ -17,12 +17,15 @@ sprint (EPIC-011, after this one). It reuses the Sprint 7 answer engine unchange
 
 ## Status
 
-**Status:** In progress (opened 2026-07-21). Core tickets **TASK-BE-013 + TASK-BE-014
-validated by user and merged** into `feat/restart-from-scratch` (2026-07-21, fast-forward);
-their ticket branches are deleted. **TASK-BE-015 (answer language) scoped 2026-07-21 and
-pulled into this sprint** (user decisions captured); implementation not started. Sprint kept
-open pending TASK-BE-015. BUG-001 tracked as an out-of-sprint follow-up. Theme set by user decision: the
-billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
+**Status:** ✅ Done (closed 2026-07-23). All three tickets validated by the user and
+merged into `feat/restart-from-scratch`: **TASK-BE-013 + TASK-BE-014** (2026-07-21,
+fast-forward) and **TASK-BE-015** (answer language, FR/EN) with its QA-found **BUG-002**
+(ambiguous-follow-up fallback wording now follows the decided language) fixed, adversarial
+review passed and **live QA retest PASS**. Closure checks rerun green (backend `mvn test`
+**229**, voice-agent **316 unittest + 26 Behave** / 10 features / 120 steps). BUG-001
+(input guardrail over-blocks legitimate phishing-support questions) stays an out-of-sprint
+P2 follow-up. Theme set by user decision: the billing / identity theme is Sprint 9,
+telephony/Genesys Sprint 10.
 
 ## Roadmap Context
 
@@ -30,7 +33,7 @@ billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 |---|---|---|
 | Sprint 6 | Streaming voice loop + latency | ✅ Done (2026-07-17) |
 | Sprint 7 | Real answer engine — RAG over the KB (EPIC-005) | ✅ Done (2026-07-20) |
-| **Sprint 8** | **CSV KB ingestion — `CsvArticleConnector` + embedding `DomainClassifier` (EPIC-005) — this sprint** | Planned |
+| **Sprint 8** | **CSV KB ingestion — `CsvArticleConnector` + embedding `DomainClassifier` (EPIC-005) — this sprint** | ✅ Done (closed 2026-07-23) |
 | Sprint 9 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 | Sprint 10 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
@@ -51,7 +54,7 @@ billing / identity theme is shifted to Sprint 9, telephony/Genesys to Sprint 10.
 |---|---|---|---|---|
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifierPort` — bulk KB ingestion from `articles.csv` (CommonsCSV parse, jsoup HTML→text, `sourceId=document_id`, `language=en`, domain classified vs anchors) | V1 core (KB content) | TASK-BE-003 | ✅ **Validated by user (2026-07-21)** — adversarial 92/100, QA PASS, live-validated (threshold 0.55); merge-ready |
 | TASK-BE-014 | Batch embedding/insert — extend `VectorStorePort` with a batched `storeChunks` + sync progress metrics/logs (perf, batched embedding/insert) | V1 core (KB content) | TASK-BE-013 | ✅ **Validated by user (2026-07-21)** — adversarial 93/100, QA PASS, live-validated (75s→44.7s; full corpus ~73s, idempotent re-sync 306 skipped), 184 tests green; merge-ready |
-| TASK-BE-015 | Answer language handling — assistant answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn with session stickiness | V1 core (answer quality) | TASK-BE-013 | 🐞 QA found BUG-002 2026-07-21 — backend + 210 tests green (9 BDD scenarios) + live run (Mistral+Ollama+corpus) confirm FR/EN answers, fidelity & per-turn telemetry; but ambiguous follow-up fallback wording ignores stickiness/default (`docs/qa/task-be-015-answer-language-qa-report.md`). Fix BUG-002 → adversarial review → QA retest before merge |
+| TASK-BE-015 | Answer language handling — assistant answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn with session stickiness | V1 core (answer quality) | TASK-BE-013 | ✅ **Validated by user + merged** (2026-07-23) — backend + BDD green, FR/EN answers/fidelity/per-turn telemetry confirmed live; QA-found **BUG-002** (ambiguous follow-up fallback ignored stickiness/default) fixed + adversarial passed + **live QA retest PASS** (`docs/qa/task-be-015-answer-language-qa-report.md`, `bugs/BUG-002…md`) |
 
 Full ticket details: [../tasks/kb-ingestion-tasks.md](../tasks/kb-ingestion-tasks.md).
 
