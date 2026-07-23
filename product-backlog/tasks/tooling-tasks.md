@@ -7,7 +7,7 @@ product story). They keep the delivery workflow reproducible.
 
 **Parent:** Delivery tooling
 **Classification:** Developer experience / CI enabler
-**Status:** Scheduled — Sprint 9 (hardening/assainissement): validate + merge. Implemented — merge-ready (pending user validation)
+**Status:** ✅ Done (Sprint 5, 2026-07-15) — venv setup documented in `voice-agent/README.md` + `CLAUDE.md`, already on `feat/restart-from-scratch`. (Reconciled 2026-07-23: an earlier note wrongly re-scheduled this to Sprint 9 "validate + merge" — nothing was pending, the work shipped in Sprint 5.)
 **Priority:** Medium
 **Branch:** `task/TASK-ENV-001-test-venv` (from `feat/sprint-5-backend-bridge`)
 

@@ -557,9 +557,9 @@ Scenario: Formatting differences do not count as transcription errors
 **Builds on:** TASK-STT-009 (batch end-of-turn detector + `voice.end_of_turn` span)
 **Pairs with:** TASK-STT-010 (streaming STT) — real-time turn detection is a prerequisite for the streaming path
 **Classification:** V1 pilot gate
-**Status:** Scheduled — Sprint 9 (hardening/assainissement): merge + close. Validated by user (Sprint 6, 2026-07-16) — adversarial review 93/100 (Pass); QA Go (live WebRTC gate, `docs/qa/stt-012-streaming-end-of-turn-qa.md`); merge-ready, pending explicit merge request
+**Status:** ✅ Done — Merged into `feat/sprint-6-streaming` (2026-07-16, ff; branch deleted), Sprint 6 closed and merged to `feat/restart-from-scratch`. Validated by user (2026-07-16) — adversarial review 93/100 (Pass); QA Go (live WebRTC gate, `docs/qa/stt-012-streaming-end-of-turn-qa.md`). (Reconciled 2026-07-23: an earlier note wrongly re-scheduled this to Sprint 9 "merge + close" — it was already merged in Sprint 6.)
 **Priority:** Medium
-**Branch:** `task/TASK-STT-012-streaming-vad-end-of-turn`
+**Branch:** `task/TASK-STT-012-streaming-vad-end-of-turn` (merged + deleted in Sprint 6)
 
 ### Objective
 

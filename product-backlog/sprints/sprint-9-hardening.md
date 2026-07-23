@@ -31,9 +31,11 @@ live tests surfaced BUG-005 and TASK-WEB-017.
 ## Why now (state that justifies the sprint)
 
 - Eight sprints of critical-path delivery left a tail of small, low-risk items (telemetry
-  import symmetry, per-turn telemetry identity, OpenAPI specs, a merge-ready venv/VAD, an
-  open stub invariant) that never justified their own sprint but degrade consistency and
-  observability if left indefinitely.
+  import symmetry, per-turn telemetry identity, OpenAPI specs, an open stub invariant) that
+  never justified their own sprint but degrade consistency and observability if left
+  indefinitely. (Two items initially listed here — the venv standardization TASK-ENV-001 and
+  the streaming VAD end-of-turn TASK-STT-012 — turned out to be already delivered in
+  Sprints 5/6; their stale statuses were reconciled on 2026-07-23.)
 - Live Sprint 8 testing surfaced real functional debt: internal KB content leaking to end
   users (BUG-005) and a permissive confidence gate on vague turns (TASK-WEB-012).
 - Two P1 bugs are effectively one step from closed (BUG-004 fixed backend-side pending live
@@ -50,8 +52,8 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 |---|---|---|---|
 | TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | Planned (opportunistic) |
 | TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | Proposed (2026-07-23) |
-| TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | Implemented — validate + merge |
-| TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | Merge-ready — merge + close |
+| TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | ✅ Already delivered (Sprint 5, on restart) — stale status reconciled 2026-07-23, no work needed |
+| TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
 | RF-017 | Assert the stub DEC-002 no-amount invariant at import time (or close as superseded by the HTTP backend default) | S | Open (Low) |
 | RF-019 | Live re-validation of the browser answering loop (Chrome DevTools MCP) — the live stack is already up | S/M | Gated (manual live QA) |
 
