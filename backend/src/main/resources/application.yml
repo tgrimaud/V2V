@@ -22,13 +22,17 @@ spring:
       chat:
         model: ${OLLAMA_CHAT_MODEL:llama3.1:8b}
         options:
-          temperature: 0.3
+          # Low temperature for the wording step reduces non-deterministic refusals despite
+          # grounded evidence (BUG-004). Tunable via OLLAMA_CHAT_TEMPERATURE.
+          temperature: ${OLLAMA_CHAT_TEMPERATURE:0.2}
     mistralai:
       api-key: ${MISTRAL_API_KEY:}
       chat:
         options:
           model: ${MISTRAL_CHAT_MODEL:mistral-small-latest}
-          temperature: 0.3
+          # Low temperature for the wording step reduces non-deterministic refusals despite
+          # grounded evidence (BUG-004). Tunable via MISTRAL_CHAT_TEMPERATURE.
+          temperature: ${MISTRAL_CHAT_TEMPERATURE:0.2}
     vectorstore:
       pgvector:
         # Embedding dimension is fixed at table creation. Changing the embedding

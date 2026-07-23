@@ -57,4 +57,22 @@ class AnswerLanguageTest {
         assertTrue(AnswerLanguage.ENGLISH.handoffMarkers().contains("transfer you to an advisor"));
         assertTrue(AnswerLanguage.FRENCH.handoffMarkers().contains("transfère à un conseiller"));
     }
+
+    @Test
+    @DisplayName("the directive restricts the hand-off to empty/unrelated context (BUG-004)")
+    void directiveConditionsTheHandoff() {
+        // GIVEN the wording directive that the LLM receives per turn
+        String french = AnswerLanguage.FRENCH.llmDirective();
+        String english = AnswerLanguage.ENGLISH.llmDirective();
+
+        // THEN it still carries the exact hand-off sentence the OutputGuardrail matches
+        assertTrue(french.contains("je vous transfère à un conseiller."));
+        assertTrue(english.contains("I'll transfer you to an advisor."));
+        // AND it tells the model to use partial context and only refuse when context is unusable,
+        // so a grounded turn is not converted into a spurious refusal (BUG-004).
+        assertTrue(french.contains("QUE si"));
+        assertTrue(french.contains("partiellement"));
+        assertTrue(english.contains("ONLY if"));
+        assertTrue(english.contains("partially"));
+    }
 }

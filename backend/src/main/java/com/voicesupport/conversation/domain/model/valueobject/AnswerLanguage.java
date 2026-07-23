@@ -13,13 +13,17 @@ public enum AnswerLanguage {
 
     FRENCH("fr",
             "LANGUE : Tu dois répondre UNIQUEMENT en français, quelle que soit la langue du "
-                    + "CONTEXTE ci-dessus. Si le CONTEXTE ne contient pas la réponse, réponds "
-                    + "exactement : \"Je n'ai pas cette information, je vous transfère à un conseiller.\"",
+                    + "CONTEXTE ci-dessus. Appuie-toi sur le CONTEXTE pour aider le client même "
+                    + "s'il ne traite le sujet que partiellement. Ne réponds \"Je n'ai pas cette "
+                    + "information, je vous transfère à un conseiller.\" (exactement, mot pour mot) "
+                    + "QUE si le CONTEXTE est vide ou totalement sans rapport avec la question.",
             List.of("transfère à un conseiller", "transfere a un conseiller")),
     ENGLISH("en",
             "LANGUAGE: You MUST answer ONLY in English, regardless of the language of the CONTEXT "
-                    + "above. If the CONTEXT does not contain the answer, reply exactly: "
-                    + "\"I don't have this information, I'll transfer you to an advisor.\"",
+                    + "above. Use the CONTEXT to help the customer even if it only partially "
+                    + "addresses the question. Reply \"I don't have this information, I'll transfer "
+                    + "you to an advisor.\" (exactly, word for word) ONLY if the CONTEXT is empty or "
+                    + "entirely unrelated to the question.",
             List.of("transfer you to an advisor"));
 
     private static final Pattern FRENCH_MARKERS = markers(

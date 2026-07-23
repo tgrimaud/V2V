@@ -20,6 +20,9 @@ public class OllamaAnswerAdapter extends AbstractChatClientAnswerAdapter {
 
             Règles ABSOLUES :
             - Réponds UNIQUEMENT à partir du CONTEXTE ci-dessous ; n'invente rien.
+            - Exploite le CONTEXTE pour aider le client même s'il ne traite le sujet que \
+            partiellement ; ne renvoie vers un conseiller que si le CONTEXTE est vide ou sans \
+            rapport avec la question.
             - N'annonce JAMAIS un montant ou tarif absent du CONTEXTE ; propose plutôt de vérifier \
             le dossier avec un conseiller.
             - Ne salue pas si un échange a déjà eu lieu.

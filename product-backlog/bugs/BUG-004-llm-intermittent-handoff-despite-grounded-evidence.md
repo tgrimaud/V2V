@@ -4,14 +4,14 @@
 
 - **Bug ID:** BUG-004
 - **Title:** The LLM non-deterministically emits the "I don't have this information, transfer to an advisor" refusal even when retrieval PASSES with strong evidence → OutputGuardrail rewrites it to the low-confidence fallback (grounded=false)
-- **Status:** New
+- **Status:** In progress
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test) + backend-only reproduction
 - **Detected date:** 2026-07-23
 - **Related user story:** US-042 (surfaced while validating BUG-003 live)
 - **Related epic:** EPIC-005 (Answer engine / knowledge base)
-- **Branch:** `fix/BUG-004-llm-handoff-despite-evidence` (to create)
+- **Branch:** `fix/BUG-004-llm-handoff-despite-evidence` (created off `fix/BUG-003` to keep the validated retrieval baseline)
 - **Owner:** Backend developer
 
 ## Problem Statement
@@ -111,7 +111,29 @@ Non-deterministic. Live + backend-only, same build, same transcript:
 
 ## Developer Notes
 
-Candidate directions (to validate, not yet decided):
+### Fix attempt 1 (2026-07-23) — prompt hardening + lower temperature
+
+- **Prompt (primary lever):** the per-turn `AnswerLanguage` directive (appended last, strongest by
+  recency) now instructs the model to *use the CONTEXT even if it only partially addresses the
+  question* and to emit the transfer sentence **only if the CONTEXT is empty or entirely unrelated**.
+  The exact transfer sentence is preserved verbatim so the `OutputGuardrail` still catches genuine
+  hand-offs. The base system prompt (`MistralAnswerAdapter` / `OllamaAnswerAdapter`) gained a
+  matching rule.
+- **Temperature (secondary lever):** wording-step temperature lowered `0.3 → 0.2` for both providers
+  (`application.yml` + `LlmConfig` `@Value` defaults), tunable via `MISTRAL_CHAT_TEMPERATURE` /
+  `OLLAMA_CHAT_TEMPERATURE`, to reduce run-to-run flips.
+- **Files changed:** `AnswerLanguage.java` (directives), `MistralAnswerAdapter.java`,
+  `OllamaAnswerAdapter.java` (base prompt), `application.yml`, `LlmConfig.java` (temperature).
+- **Tests added:** `AnswerLanguageTest.directiveConditionsTheHandoff` locks the conditioned refusal
+  wording while asserting the exact guardrail marker is still present.
+- **Validation:** unit suite green; **live A/B refusal-rate measurement pending** (repeat the
+  "Bonjour, j'ai un problème avec ma connexion internet." turn N times before/after). If the refusal
+  rate is still material at 0.2, drop temperature to 0.1 next.
+- residual risk: the DEC-002 "unbacked amount → hand-off" behavior is unchanged (separate rule); the
+  greeting-biased flip may not fully vanish from prompt+temperature alone — a follow-up could avoid
+  storing fallback answers in conversation memory.
+
+### Candidate directions (original analysis):
 
 - **Prompt:** instruct the LLM to answer from the CONTEXT even when it only partially matches, and to
   use the transfer sentence only when the CONTEXT is truly irrelevant; make the refusal condition

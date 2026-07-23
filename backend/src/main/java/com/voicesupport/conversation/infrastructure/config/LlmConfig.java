@@ -32,7 +32,7 @@ public class LlmConfig {
             @Value("${spring.ai.mistralai.api-key:}") String apiKey,
             @Value("${spring.ai.mistralai.base-url:https://api.mistral.ai}") String baseUrl,
             @Value("${spring.ai.mistralai.chat.options.model:mistral-small-latest}") String model,
-            @Value("${spring.ai.mistralai.chat.options.temperature:0.3}") double temperature,
+            @Value("${spring.ai.mistralai.chat.options.temperature:0.2}") double temperature,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
             @Value("${voice-support.llm.connect-timeout-ms:3000}") long connectMs) {
         // Provider HTTP read timeout closes a stalled socket (TASK-BE-012 medium fix); the
@@ -64,7 +64,7 @@ public class LlmConfig {
     public OllamaChatModel ollamaChatModel(
             OllamaApi ollamaApi,
             @Value("${spring.ai.ollama.chat.model:llama3.1:8b}") String model,
-            @Value("${spring.ai.ollama.chat.options.temperature:0.3}") double temperature) {
+            @Value("${spring.ai.ollama.chat.options.temperature:0.2}") double temperature) {
         return OllamaChatModel.builder()
                 .ollamaApi(ollamaApi)
                 .defaultOptions(OllamaOptions.builder()
