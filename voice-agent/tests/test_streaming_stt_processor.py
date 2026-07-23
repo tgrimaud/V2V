@@ -177,7 +177,12 @@ async def _drive(processor: StreamingSttProcessor, frames) -> _Sink:
 
 
 def _envelope() -> SimpleNamespace:
-    return SimpleNamespace(correlation_id="corr-1", channel="web_voice", external_session_id="sess-1")
+    return SimpleNamespace(
+        correlation_id="corr-1",
+        conversation_id="conv-1",
+        channel="web_voice",
+        external_session_id="sess-1",
+    )
 
 
 class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
@@ -216,6 +221,45 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         metrics = {m.name for m in telemetry.metrics()}
         self.assertIn("stt.time_to_final_ms", metrics)
         self.assertIn("stt.time_to_first_partial_ms", metrics)
+
+    async def test_stamps_per_turn_identity_on_turn_spans(self):
+        # GIVEN telemetry wiring on a streaming turn (TASK-WEB-017)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("facture")], "facture")
+        processor = _processor(FakeProvider(session), telemetry)
+        # WHEN a full turn streams through
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        await _drive(processor, frames)
+        # THEN the turn's spans carry the stable conversation id AND a per-turn id, so a
+        # multi-turn call can be split per turn (correlation_id stays per-conversation)
+        eot = next(s for s in telemetry.spans() if s.name == END_OF_TURN_SPAN)
+        stt = next(s for s in telemetry.spans() if s.name == STT_REQUEST_SPAN)
+        for span in (eot, stt):
+            self.assertEqual(span.attributes["correlation_id"], "corr-1")
+            self.assertEqual(span.attributes["conversation_id"], "conv-1")
+            self.assertEqual(span.attributes["turn_index"], 1)
+            self.assertIsNotNone(span.attributes["message_id"])
+        # AND both spans share the SAME per-turn message id (one turn, one id)
+        self.assertEqual(eot.attributes["message_id"], stt.attributes["message_id"])
+
+    async def test_begin_turn_advances_index_and_mints_new_message_id(self):
+        # GIVEN a processor wired to a recorder (TASK-WEB-017)
+        telemetry = TelemetryRecorder()
+        processor = _processor(FakeProvider(FakeSession([], "")), telemetry)
+        # WHEN two turns begin
+        processor._begin_turn()
+        telemetry.span("marker", 1.0)
+        first = next(s for s in telemetry.spans() if s.name == "marker")
+        processor._begin_turn()
+        telemetry.span("marker", 2.0)
+        second = [s for s in telemetry.spans() if s.name == "marker"][-1]
+        # THEN the turn index increments and a fresh message id is minted, while the
+        # per-conversation identity stays stable
+        self.assertEqual(first.attributes["turn_index"], 1)
+        self.assertEqual(second.attributes["turn_index"], 2)
+        self.assertNotEqual(first.attributes["message_id"], second.attributes["message_id"])
+        self.assertEqual(first.attributes["conversation_id"], "conv-1")
+        self.assertEqual(second.attributes["conversation_id"], "conv-1")
 
     async def test_silence_only_never_opens_a_session(self):
         # GIVEN a stream that carries only silence

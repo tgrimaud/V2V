@@ -27,6 +27,7 @@ threshold), never zeros, or no end-of-turn is ever detected.
 """
 
 from typing import Any
+from uuid import uuid4
 
 from pipecat.frames.frames import EndFrame, Frame, InputAudioRawFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -81,6 +82,10 @@ class UtteranceAggregator(FrameProcessor):
         self._buffer = bytearray()
         # Read by tests / telemetry: number of utterances flushed this session.
         self.flush_count = 0
+        # Per-turn index on this batch-bridge session (TASK-WEB-017): advanced at each
+        # end-of-turn so every span of the turn carries a stable per-turn id via the
+        # recorder baggage, while the per-conversation correlation_id stays stable.
+        self._turn_index = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -106,6 +111,7 @@ class UtteranceAggregator(FrameProcessor):
             self._buffer = bytearray()
 
     async def _emit_and_flush(self, detection: EndOfTurnResult, direction: FrameDirection) -> None:
+        self._begin_turn()
         self._record_end_of_turn(detection)
         utterance = bytes(self._buffer)
         self._buffer = bytearray()
@@ -117,6 +123,18 @@ class UtteranceAggregator(FrameProcessor):
                 num_channels=self._num_channels,
             ),
             direction,
+        )
+
+    def _begin_turn(self) -> None:
+        """Advance the per-turn identity for this call (TASK-WEB-017), keeping the
+        per-conversation correlation_id stable, so the turn's spans share one turn id."""
+        if self._telemetry is None or self._envelope is None:
+            return
+        self._turn_index += 1
+        self._telemetry.begin_turn(
+            conversation_id=getattr(self._envelope, "conversation_id", None),
+            message_id=str(uuid4()),
+            turn_index=self._turn_index,
         )
 
     def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:

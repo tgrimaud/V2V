@@ -90,18 +90,38 @@ class TelemetryRecorder:
     _spans: list[Span] = field(default_factory=list)
     _metrics: list[MetricSample] = field(default_factory=list)
     _logs: list[StructuredLog] = field(default_factory=list)
+    # Per-turn identity baggage merged into every span/event/metric/log until the next
+    # begin_turn (TASK-WEB-017). Empty by default, so a recorder that never calls
+    # begin_turn (batch path, one fresh recorder/turn) behaves exactly as before.
+    _turn_attributes: dict[str, Any] = field(default_factory=dict)
+
+    def begin_turn(self, **attributes: Any) -> None:
+        """Set the per-turn identity (e.g. conversation_id/message_id/turn_index) that
+        is stamped on every subsequent record until the next turn.
+
+        On the streaming path one recorder lives for the whole call, so without this
+        the per-turn id would be absent and turns could not be separated. The stable
+        per-conversation correlation_id keeps being passed explicitly by the emitters;
+        an explicit attribute always wins over the baggage on a key clash.
+        """
+        self._turn_attributes = dict(attributes)
+
+    def _merged(self, attributes: dict[str, Any]) -> dict[str, Any]:
+        if not self._turn_attributes:
+            return attributes
+        return {**self._turn_attributes, **attributes}
 
     def record(self, name: str, **attributes: Any) -> None:
-        self._events.append(TelemetryEvent(name, attributes))
+        self._events.append(TelemetryEvent(name, self._merged(attributes)))
 
     def span(self, name: str, duration_ms: float, **attributes: Any) -> None:
-        self._spans.append(Span(name, round(duration_ms, 3), attributes))
+        self._spans.append(Span(name, round(duration_ms, 3), self._merged(attributes)))
 
     def metric(self, name: str, value: float, **attributes: Any) -> None:
-        self._metrics.append(MetricSample(name, round(value, 3), attributes))
+        self._metrics.append(MetricSample(name, round(value, 3), self._merged(attributes)))
 
     def log(self, level: str, message: str, **attributes: Any) -> None:
-        self._logs.append(StructuredLog(level, message, attributes))
+        self._logs.append(StructuredLog(level, message, self._merged(attributes)))
 
     def events(self) -> list[TelemetryEvent]:
         return list(self._events)

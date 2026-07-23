@@ -1552,11 +1552,19 @@ project APIs are documented consistently.
 TASK-WEB-013 (telemetry import unification), TASK-WEB-014 (mouth-to-ear latency),
 `docs/architecture/channel-identity-boundary.md` (identity fields)
 **Classification:** V1 hardening (observability)
-**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-23) — surfaced
-during live WebRTC testing; prerequisite for any per-turn latency SLO claim from live/browser
-sessions (unblocks TASK-WEB-014/015, which stay out of this sprint).
+**Status:** Implemented (2026-07-23, Sprint 9) — per-turn identity baggage on
+`TelemetryRecorder.begin_turn(...)`, advanced by the turn owner (`StreamingSttProcessor`
+on the live path, `UtteranceAggregator` on the batch-bridge path) at each end-of-turn; the
+recorder stamps `conversation_id`/`message_id`/`turn_index` on **every** span/event/metric/log
+of the turn (STT, backend, TTS, channel egress) while `correlation_id` stays per-conversation.
+`pipeline_timing` buckets by `(correlation_id, turn_index)` (positional-zip fallback for
+spans without a per-turn id) and adds `per_turn_timings`; `streaming_latency_report.py` gains
+a `per_turn` section. unittest **346** green (+12), behave **26** green; report `per_turn`
+demonstrated end to end on a synthetic 3-turn call (barge-in turn 2 → null composites, turns
+1 & 3 keep their own slices, no desync). **Remaining before done:** warm multi-turn live/headless
+sample showing distinct per-turn slices + adversarial review + QA.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id`
 
 ### Context
 
