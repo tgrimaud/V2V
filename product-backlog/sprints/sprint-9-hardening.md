@@ -50,7 +50,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 
 | Ticket | Title | Effort | Entry state |
 |---|---|---|---|
-| TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | Planned (opportunistic) |
+| TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | ✅ Implemented (2026-07-23) — one-line import change, 334 unittest + 26 behave green; branch `task/TASK-WEB-013-unify-telemetry-imports` |
 | TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | Proposed (2026-07-23) |
 | TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | ✅ Already delivered (Sprint 5, on restart) — stale status reconciled 2026-07-23, no work needed |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
