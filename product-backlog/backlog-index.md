@@ -125,7 +125,7 @@ against the new empty-codebase plan.
 | TASK-BE-014 | Batch embedding/insert — `VectorStorePort.storeChunks` + sync progress metrics/logs (perf, anti-timeout for bulk CSV) | V1 core (KB content) | Planned (Sprint 8) | High |
 | TASK-BE-015 | Answer language handling — bot answers in the customer's question language (FR/EN), consistently across answers/fallbacks/refusal/escalation; configurable default (EN for Eir pilot); per-turn + session stickiness | V1 core (answer quality) | Planned (Sprint 8) — scoped 2026-07-21 (user decisions) | High |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend — `springdoc-openapi` + `/swagger-ui` + `/v3/api-docs`, `@Tag`/`@Operation` on controllers | V1 hardening | Proposed (2026-07-21) — cross-cutting, out of Sprint 8 theme | Medium |
-| TASK-BE-018 | Concise voice-first answers — cap answer length via LLM prompt budget to cut TTS synthesis time (batch `/turn` ≈14 s, live tail); no grounding regression (BUG-004) | V1 answer quality / latency | Merge-ready (2026-07-23) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green. Merge pending user request. ADR-0033/ADR-0029 | High |
+| TASK-BE-018 | Concise voice-first answers — cap answer length via LLM prompt budget to cut TTS synthesis time (batch `/turn` ≈14 s, live tail); no grounding regression (BUG-004) | V1 answer quality / latency | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green. ADR-0033/ADR-0029 | High |
 
 ## Planned Sprints
 

@@ -9,7 +9,7 @@ pilot, unless pulled in earlier.
 |---|---|---|---|---|
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
-| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | Merge-ready (2026-07-23) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 functional regression); `mvn test` 229 green. Merge pending user request |
+| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 
 ---
 
@@ -167,9 +167,9 @@ consistently documented (paired with TASK-WEB-016 for the Python voice runtime).
 
 **Parent:** EPIC-005 (Answer engine) — answer quality / pilot latency
 **Classification:** V1 answer quality / latency lever
-**Status:** Merge-ready (2026-07-23) — adversarial review 92/100 (QA gate Pass) + QA
-functional & latency **Go**; `mvn test` 229 green, ArchUnit OK. Merge pending explicit
-user request.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) —
+adversarial review 92/100 (QA gate Pass) + QA functional & latency **Go**; `mvn test` 229
+green, ArchUnit OK.
 **Priority:** High
 **Branch:** `task/TASK-BE-018-concise-voice-answers`
 **Surfaced by:** BUG-004 live voice validation (2026-07-22/23) — grounded answers are
