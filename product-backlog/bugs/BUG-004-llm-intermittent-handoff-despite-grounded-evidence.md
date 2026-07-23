@@ -75,6 +75,18 @@ Non-deterministic. Live + backend-only, same build, same transcript:
   the CONTEXT insufficient. `OutputGuardrail.isNonAnswer()` matches the hand-off marker
   (`transfère à un conseiller`) and returns `GuardrailDecision.lowConfidence(...)` → `grounded=false`.
 - So the fallback originates from the **LLM's own judgment** (non-deterministic), not from retrieval.
+- **Live frequency signal (2026-07-23 session, same running build, retrieval PASS ≈0.85 throughout):**
+  the `"Bonjour,"` prefix strongly raises the refusal rate — it is a probabilistic trigger, not a
+  strict determinant.
+
+  | Transcript | grounded=true | grounded=false |
+  |------------|:-------------:|:--------------:|
+  | "Bonjour, j'ai un problème avec ma connexion internet." | 1 | ~6 |
+  | "J'ai un problème avec ma connexion internet." (no greeting) | 4 | 0 |
+
+  Note: in isolated **stateless** `/converse` calls both variants could fall back; across a live
+  session the greeting correlates clearly with refusal. The common factor is the LLM's non-deterministic
+  grounding judgment, biased by phrasing (greeting) and stabilized by conversation history.
 
 ## Impact
 
