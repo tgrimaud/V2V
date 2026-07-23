@@ -1306,14 +1306,20 @@ ADR-0018 (latency taxonomy + the `channel_egress` / end-of-turn known gap), DEC-
 **Depends on:** TASK-WEB-007 (WebRTC transport), TASK-WEB-009 (streaming composite
 report — done), TASK-BE-010 (real-backend composite baseline)
 **Classification:** V1 pilot gate
-**Status:** Proposed (2026-07-20) — created from ADR-0029. **Out-of-sprint
-pilot-readiness follow-up** (EPIC-010, feeds US-040 pilot readiness report): kept
-**off the billing theme** (identity/BSS/PDF/comparison, now Sprint 10); schedule in the
-pilot-readiness latency pass **before the pilot**. No urgency — the voice path
-(STT/TTS/WebRTC, Sprint 6) and the real backend (Sprint 7) are frozen, so the
-mouth-to-ear measurement stays valid whenever it is run.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-07-23) — instrumentation +
+reporting + dev tests + docs done on `task/TASK-WEB-014-mouth-to-ear-latency`; unittest
+**334** green, behave **10 features / 26 scenarios / 120 steps** green. `voice_to_first_audio`
+mouth-to-ear composite (EOT hold + STT + backend + TTS + `channel_egress`), `ChannelEgressProbe`
+emitting `web.voice.egress` on the WebRTC streaming path, ADR-0029 gate in
+`streaming_latency_report`, and a client-side first-audible proxy. Closes the
+ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known gap. **Remaining before
+pilot sign-off:** capture a **warm live sample against the real backend** and record
+measured `voice_to_first_audio` p50/p95/p99 vs the ADR-0029 gate — an out-of-sprint
+pre-pilot measurement in the pilot-readiness latency theme (off the billing theme, now
+Sprint 10); voice + backend are frozen so the sample stays valid whenever run. Adversarial
+review + QA go/no-go pending.
 **Priority:** High
-**Branch:** `task/TASK-WEB-014-mouth-to-ear-latency` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-014-mouth-to-ear-latency`
 
 ### Objective
 

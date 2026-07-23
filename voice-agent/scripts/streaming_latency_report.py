@@ -44,10 +44,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from voice_common.pipeline_timing import (  # noqa: E402
     PipelineTimingReport,
     time_to_first_audio_report,
+    voice_to_first_audio_report,
 )
 from voice_common.telemetry import LatencyReport, MetricSample, Span  # noqa: E402
 
 DEFAULT_SLO_P95_MS = 800.0
+# ADR-0029 pilot acceptance: mouth-to-ear p95 <= 1.5 s (primary) + a
+# time_to_first_audio p95 <= 1.2 s engineering sub-target. TASK-WEB-014 is the
+# measurement prerequisite that instruments the mouth-to-ear composite so the gate
+# can actually be evaluated (not just the middle-of-chain composite).
+ADR_0029_MOUTH_TO_EAR_P95_MS = 1500.0
+ADR_0029_TTFA_P95_MS = 1200.0
 
 # Streaming metric names surfaced as distributions (emitted by the streaming STT /
 # TTS processors). Barge-in is a counter, handled separately.
@@ -164,8 +171,22 @@ def _barge_in_count(metrics: list[MetricSample]) -> int:
     return int(sum(m.value for m in metrics if m.name == _BARGE_IN_METRIC))
 
 
+def _p95_gate(composite_report, criterion_p95_ms: float) -> dict[str, Any]:
+    """Evaluate one composite's p95 against a `<=` criterion (not_measured-safe)."""
+    if not composite_report.measured or composite_report.report is None:
+        return {"criterion_p95_ms": criterion_p95_ms, "status": "not_measured", "margin_ms": None}
+    p95 = composite_report.report.p95_ms
+    passed = p95 is not None and p95 <= criterion_p95_ms
+    return {
+        "criterion_p95_ms": criterion_p95_ms,
+        "measured_p95_ms": p95,
+        "status": "pass" if passed else "fail",
+        "margin_ms": round(criterion_p95_ms - p95, 3) if p95 is not None else None,
+    }
+
+
 def _slo_gate(composite_report, slo_p95_ms: float) -> dict[str, Any]:
-    """ADR-0018 pilot acceptance gate on time_to_first_audio p95."""
+    """ADR-0018 pilot acceptance gate on time_to_first_audio p95 (strict `<`)."""
     if not composite_report.measured or composite_report.report is None:
         return {"criterion_p95_ms": slo_p95_ms, "status": "not_measured", "margin_ms": None}
     p95 = composite_report.report.p95_ms
@@ -178,6 +199,33 @@ def _slo_gate(composite_report, slo_p95_ms: float) -> dict[str, Any]:
     }
 
 
+def _adr_0029_gate(
+    mouth_to_ear,
+    time_to_first_audio,
+    *,
+    mouth_to_ear_p95_ms: float,
+    ttfa_p95_ms: float,
+) -> dict[str, Any]:
+    """ADR-0029 pilot gate: mouth-to-ear p95 (primary) + time_to_first_audio p95 (sub).
+
+    Overall go/no-go is a pass only when both sub-criteria pass; if either is
+    `not_measured` the overall status stays `not_measured` (never a silent pass)."""
+    primary = _p95_gate(mouth_to_ear, mouth_to_ear_p95_ms)
+    engineering = _p95_gate(time_to_first_audio, ttfa_p95_ms)
+    statuses = {primary["status"], engineering["status"]}
+    if "not_measured" in statuses:
+        overall = "not_measured"
+    elif statuses == {"pass"}:
+        overall = "pass"
+    else:
+        overall = "fail"
+    return {
+        "status": overall,
+        "mouth_to_ear_p95": primary,
+        "time_to_first_audio_p95": engineering,
+    }
+
+
 def build_streaming_report(
     spans: list[Span],
     metrics: list[MetricSample],
@@ -187,16 +235,20 @@ def build_streaming_report(
     provider: str,
     warm: bool,
     slo_p95_ms: float = DEFAULT_SLO_P95_MS,
+    mouth_to_ear_p95_ms: float = ADR_0029_MOUTH_TO_EAR_P95_MS,
+    ttfa_p95_ms: float = ADR_0029_TTFA_P95_MS,
     note: str | None = None,
     tts_baseline: dict[str, float] | None = None,
     tts_baseline_source: str | None = None,
 ) -> dict[str, Any]:
     per_slice = PipelineTimingReport.from_spans(spans)
     composite = time_to_first_audio_report(spans)
+    mouth_to_ear = voice_to_first_audio_report(spans)
     return {
         "sample": {
             "calls": calls,
             "turns_with_first_audio": composite.report.count if composite.report else 0,
+            "turns_with_mouth_to_ear": mouth_to_ear.report.count if mouth_to_ear.report else 0,
             "channel": channel,
             "provider": provider,
             "warm": warm,
@@ -207,7 +259,14 @@ def build_streaming_report(
         "metric_distributions": _metric_distributions(metrics),
         "barge_in_count": _barge_in_count(metrics),
         "time_to_first_audio": composite.to_dict(),
+        "voice_to_first_audio": mouth_to_ear.to_dict(),
         "adr_0018_gate": _slo_gate(composite, slo_p95_ms),
+        "adr_0029_gate": _adr_0029_gate(
+            mouth_to_ear,
+            composite,
+            mouth_to_ear_p95_ms=mouth_to_ear_p95_ms,
+            ttfa_p95_ms=ttfa_p95_ms,
+        ),
         "provider_baseline": _provider_baseline(metrics, tts_baseline, tts_baseline_source),
     }
 
@@ -227,6 +286,18 @@ def main() -> int:
     warm_group.add_argument("--warm", dest="warm", action="store_true", default=True)
     warm_group.add_argument("--cold", dest="warm", action="store_false")
     parser.add_argument("--slo-p95-ms", type=float, default=DEFAULT_SLO_P95_MS)
+    parser.add_argument(
+        "--mouth-to-ear-p95-ms",
+        type=float,
+        default=ADR_0029_MOUTH_TO_EAR_P95_MS,
+        help="ADR-0029 primary pilot criterion (mouth-to-ear p95 <= this, ms)",
+    )
+    parser.add_argument(
+        "--ttfa-p95-ms",
+        type=float,
+        default=ADR_0029_TTFA_P95_MS,
+        help="ADR-0029 engineering sub-target (time_to_first_audio p95 <= this, ms)",
+    )
     parser.add_argument("--note", default=None)
     parser.add_argument(
         "--tts-baseline",
@@ -258,6 +329,8 @@ def main() -> int:
         provider=args.provider,
         warm=args.warm,
         slo_p95_ms=args.slo_p95_ms,
+        mouth_to_ear_p95_ms=args.mouth_to_ear_p95_ms,
+        ttfa_p95_ms=args.ttfa_p95_ms,
         note=args.note,
         tts_baseline=tts_baseline,
         tts_baseline_source=args.tts_baseline_source,

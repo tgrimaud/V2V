@@ -16,11 +16,16 @@ from voice_common.pipeline_timing import (
     TIME_TO_FIRST_AUDIO,
     TIME_TO_FIRST_AUDIO_SLICES,
     TTS_FIRST_AUDIO,
+    VOICE_TO_FIRST_AUDIO,
+    VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES,
+    VOICE_TO_FIRST_AUDIO_SLICES,
     CompositeTiming,
     PipelineTimingReport,
     SliceTiming,
     time_to_first_audio_report,
     time_to_first_audio_samples,
+    voice_to_first_audio_report,
+    voice_to_first_audio_samples,
 )
 
 __all__ = [
@@ -33,9 +38,14 @@ __all__ = [
     "TIME_TO_FIRST_AUDIO",
     "TIME_TO_FIRST_AUDIO_SLICES",
     "TTS_FIRST_AUDIO",
+    "VOICE_TO_FIRST_AUDIO",
+    "VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES",
+    "VOICE_TO_FIRST_AUDIO_SLICES",
     "CompositeTiming",
     "PipelineTimingReport",
     "SliceTiming",
     "time_to_first_audio_report",
     "time_to_first_audio_samples",
+    "voice_to_first_audio_report",
+    "voice_to_first_audio_samples",
 ]

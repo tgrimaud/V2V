@@ -197,6 +197,93 @@ class BuildStreamingReportTest(unittest.TestCase):
         self.assertIsNone(section["delta_ms"])
 
 
+def _call_dump_with_egress(correlation_id: str, stt: float, backend: float, tts: float, egress: float) -> str:
+    """A streaming turn dump that also carries a WebRTC channel-egress span (TASK-WEB-014)."""
+    attrs = {"correlation_id": correlation_id}
+    spans = [
+        {"name": "voice.end_of_turn", "duration_ms": 250.0, "attributes": attrs},
+        {"name": "stt.request", "duration_ms": stt, "attributes": attrs},
+        {"name": "backend.first_token", "duration_ms": backend, "attributes": attrs},
+        {"name": "voice.tts.first_audio", "duration_ms": tts, "attributes": attrs},
+        {"name": "web.voice.egress", "duration_ms": egress,
+         "attributes": {**attrs, "transport": "webrtc", "measure": "runtime_egress"}},
+    ]
+    return json.dumps({"spans": spans, "events": [], "metrics": []}, sort_keys=True)
+
+
+class MouthToEarCompositeTest(unittest.TestCase):
+    def _report(self, *dumps: str) -> dict:
+        spans, metrics, calls = parse_telemetry_dumps(list(dumps))
+        return build_streaming_report(
+            spans, metrics, calls=calls, channel="web", provider="gradium-streaming", warm=True,
+        )
+
+    def test_mouth_to_ear_folds_the_end_of_turn_hold(self) -> None:
+        # GIVEN two warm calls; each dump carries the end-of-turn hold (250 ms)
+        report = self._report(
+            _call_dump("c1", 120.0, 200.0, 180.0),  # m2e = 250 + 500 = 750
+            _call_dump("c2", 130.0, 210.0, 190.0),  # m2e = 250 + 530 = 780
+        )
+        composite = report["voice_to_first_audio"]
+
+        # THEN the mouth-to-ear composite is measured over both turns, above time_to_first_audio
+        self.assertTrue(composite["measured"])
+        self.assertEqual(composite["latency"]["count"], 2)
+        self.assertEqual(composite["latency"]["max_ms"], 780.0)
+        self.assertEqual(report["sample"]["turns_with_mouth_to_ear"], 2)
+        # AND with no egress span, the residual egress gap is stated, never silently zeroed
+        self.assertIn("channel_egress not folded", composite["note"])
+
+    def test_mouth_to_ear_folds_channel_egress_when_present(self) -> None:
+        # GIVEN a streaming turn that also carries the WebRTC runtime-egress span
+        report = self._report(_call_dump_with_egress("c1", 120.0, 200.0, 180.0, egress=6.0))
+        composite = report["voice_to_first_audio"]
+
+        # THEN egress is folded into the composite (250 + 500 + 6) and reported as runtime egress
+        self.assertEqual(composite["latency"]["max_ms"], 756.0)
+        self.assertIn("runtime egress", composite["note"])
+
+
+class Adr0029GateTest(unittest.TestCase):
+    def _gate(self, *dumps: str, m2e: float = 1500.0, ttfa: float = 1200.0) -> dict:
+        spans, metrics, calls = parse_telemetry_dumps(list(dumps))
+        report = build_streaming_report(
+            spans, metrics, calls=calls, channel="web", provider="gradium-streaming",
+            warm=True, mouth_to_ear_p95_ms=m2e, ttfa_p95_ms=ttfa,
+        )
+        return report["adr_0029_gate"]
+
+    def test_pass_when_both_subcriteria_pass(self) -> None:
+        # GIVEN a warm sample under both ADR-0029 thresholds (m2e 750, ttfa 500)
+        gate = self._gate(_call_dump("c1", 120.0, 200.0, 180.0))
+
+        # THEN the overall gate passes with both sub-criteria green
+        self.assertEqual(gate["status"], "pass")
+        self.assertEqual(gate["mouth_to_ear_p95"]["status"], "pass")
+        self.assertEqual(gate["time_to_first_audio_p95"]["status"], "pass")
+
+    def test_fail_when_mouth_to_ear_exceeds_primary_criterion(self) -> None:
+        # GIVEN a slow turn: ttfa 1500 (> 1200), m2e 1750 (> 1500)
+        gate = self._gate(_call_dump("slow", 500.0, 500.0, 500.0))
+
+        # THEN both sub-criteria fail and the overall gate fails honestly
+        self.assertEqual(gate["status"], "fail")
+        self.assertEqual(gate["mouth_to_ear_p95"]["measured_p95_ms"], 1750.0)
+        self.assertLess(gate["mouth_to_ear_p95"]["margin_ms"], 0)
+
+    def test_not_measured_when_no_complete_turn(self) -> None:
+        # GIVEN a dump with only an end-of-turn span (no post-EOT path)
+        dump = json.dumps(
+            {"spans": [{"name": "voice.end_of_turn", "duration_ms": 250.0,
+                        "attributes": {"correlation_id": "x"}}], "events": [], "metrics": []},
+            sort_keys=True,
+        )
+        gate = self._gate(dump)
+
+        # THEN the overall gate is a documented gap, never a silent pass
+        self.assertEqual(gate["status"], "not_measured")
+
+
 class ParseBaselineTest(unittest.TestCase):
     def test_parses_percentiles_and_normalises_ms_suffix(self) -> None:
         # GIVEN a provider baseline spec with mixed keys

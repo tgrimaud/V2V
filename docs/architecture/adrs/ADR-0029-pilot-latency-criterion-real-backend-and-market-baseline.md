@@ -93,10 +93,15 @@ publishes ~800 ms, lands 1–1.4 s in EU). Takeaways:
      architecture, not the V1 cascade.
 
 2. **Prerequisite to any pilot sign-off or SLO claim:** instrument true mouth-to-ear
-   — fold `channel_egress` (WebRTC first frame → audible in the browser) and the
-   end-of-turn hold into one correlation-id timeline and report p50/p95/p99
-   (**TASK-WEB-014**, the ADR-0018 known gap). No latency acceptance is recorded
-   against a partial composite.
+   — fold `channel_egress` and the end-of-turn hold into one correlation-id timeline
+   and report p50/p95/p99 (**TASK-WEB-014**, the ADR-0018 known gap). No latency
+   acceptance is recorded against a partial composite. **Status (TASK-WEB-014):** the
+   instrumentation now exists — the `voice_to_first_audio` composite folds the
+   end-of-turn hold + post-EOT path + WebRTC runtime `channel_egress`, the
+   `streaming_latency_report` evaluates the ADR-0029 gate, and the headless client
+   logs a browser-audible first-audible proxy for the residual network/playout gap.
+   The remaining step before sign-off is capturing a **warm live sample against the
+   real backend** and recording its p50/p95/p99 in the QA report.
 
 3. **Reaffirm ADR-0012 (modular cascade) for V1.** We do **not** chase sub-800 ms by
    moving the conversation loop into a speech-to-speech provider, because that would
@@ -124,7 +129,8 @@ publishes ~800 ms, lands 1–1.4 s in EU). Takeaways:
   the acceptance **number** and the addition of the mouth-to-ear metric change.
 - The current real-backend path (~1.41 s `time_to_first_audio` p95, BE-011) is
   **within the revised engineering sub-target's neighborhood but not yet inside it**;
-  the mouth-to-ear number is unknown until TASK-WEB-014 lands and is the true gate.
+  the mouth-to-ear composite is now instrumented (TASK-WEB-014) and is the true gate —
+  its measured p95 is pending a warm live sample against the real backend.
 - A production SLO still requires the ADR-0010 operational controls (dashboards,
   alerting, degraded-mode + provider-outage tests) on top of the measured baseline.
 - OQ-005 is resolved: acceptance conditions, metrics, and the cascade decision are now

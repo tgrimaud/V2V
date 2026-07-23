@@ -210,3 +210,107 @@ def time_to_first_audio_report(spans: Iterable[Span]) -> CompositeTiming:
         component_slices=TIME_TO_FIRST_AUDIO_SLICES,
         report=LatencyReport.from_samples(samples),
     )
+
+
+# --- voice_to_first_audio composite (mouth-to-ear, ADR-0029, TASK-WEB-014) --------
+#
+# ADR-0018's `time_to_first_audio` starts at end-of-turn *acceptance*; the market
+# measures **mouth-to-ear** (ADR-0029): from the instant the customer stops speaking
+# to the first agent audio the customer *hears*. This composite folds back in the two
+# slices `time_to_first_audio` excludes:
+#   - END_OF_TURN: the trailing-silence hold *before* acceptance (server-measured as
+#     the `voice.end_of_turn` span), and
+#   - CHANNEL_EGRESS: the runtime egress add-on on the audio path (measured on the
+#     WebRTC streaming path by the ChannelEgressProbe, TASK-WEB-014).
+# END_OF_TURN + the post-EOT path (STT + backend + TTS) are the **required**
+# components; CHANNEL_EGRESS is folded **per turn when present** and reported as an
+# explicit residual gap otherwise, so a missing egress span is never silently treated
+# as zero. The browser-audible add-on *beyond* runtime egress (RTP encode/packetize +
+# network + jitter buffer + playout) is not server-observable and stays a documented
+# residual gap (see docs/observability/voice-journey-timing.md).
+VOICE_TO_FIRST_AUDIO = "voice_to_first_audio"
+VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES: tuple[str, ...] = (
+    END_OF_TURN,
+    STT,
+    BACKEND_FIRST_TOKEN,
+    TTS_FIRST_AUDIO,
+)
+VOICE_TO_FIRST_AUDIO_SLICES: tuple[str, ...] = (
+    *VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES,
+    CHANNEL_EGRESS,
+)
+
+
+@dataclass(frozen=True)
+class _MouthToEar:
+    samples: list[float]
+    turns: int
+    turns_with_egress: int
+
+
+def _voice_to_first_audio(spans: Iterable[Span]) -> _MouthToEar:
+    """Per-turn mouth-to-ear composites, folding channel egress when the turn has it.
+
+    Required slices are positional-zipped per correlation group (as for
+    `time_to_first_audio`); a turn missing any required slice is skipped so no
+    truncated composite is produced. Channel egress is added to turn k only when the
+    group carries a k-th egress sample, and the egress coverage is tracked so the
+    report can state honestly whether egress was folded for all / some / no turns.
+    """
+    samples: list[float] = []
+    turns = 0
+    turns_with_egress = 0
+    for group in _group_spans_by_correlation(spans):
+        required = [_ordered_slice_durations(s, group) for s in VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES]
+        if any(not durations for durations in required):
+            continue
+        egress = _ordered_slice_durations(CHANNEL_EGRESS, group)
+        group_turns = min(len(durations) for durations in required)
+        for k in range(group_turns):
+            total = sum(durations[k] for durations in required)
+            if k < len(egress):
+                total += egress[k]
+                turns_with_egress += 1
+            samples.append(round(total, 3))
+        turns += group_turns
+    return _MouthToEar(samples=samples, turns=turns, turns_with_egress=turns_with_egress)
+
+
+def voice_to_first_audio_samples(spans: Iterable[Span]) -> list[float]:
+    """Per-turn mouth-to-ear composites (ms): EOT hold + STT + backend + TTS + egress."""
+    return _voice_to_first_audio(spans).samples
+
+
+def _egress_coverage_note(turns: int, turns_with_egress: int) -> str | None:
+    if turns_with_egress == 0:
+        return (
+            "channel_egress not folded (no egress span in this sample); mouth-to-ear "
+            "excludes the audio egress add-on — stated residual gap"
+        )
+    if turns_with_egress < turns:
+        return (
+            f"channel_egress folded for {turns_with_egress}/{turns} turns; the rest "
+            "exclude the egress add-on (stated residual gap)"
+        )
+    return (
+        "channel_egress folded as runtime egress (frame -> WebRTC transport); the "
+        "browser-audible add-on beyond runtime egress stays a stated residual gap"
+    )
+
+
+def voice_to_first_audio_report(spans: Iterable[Span]) -> CompositeTiming:
+    result = _voice_to_first_audio(list(spans))
+    if not result.samples:
+        return CompositeTiming(
+            name=VOICE_TO_FIRST_AUDIO,
+            measured=False,
+            component_slices=VOICE_TO_FIRST_AUDIO_SLICES,
+            note="no complete end-of-turn->first-audio turn (with end_of_turn hold) in this sample",
+        )
+    return CompositeTiming(
+        name=VOICE_TO_FIRST_AUDIO,
+        measured=True,
+        component_slices=VOICE_TO_FIRST_AUDIO_SLICES,
+        report=LatencyReport.from_samples(result.samples),
+        note=_egress_coverage_note(result.turns, result.turns_with_egress),
+    )

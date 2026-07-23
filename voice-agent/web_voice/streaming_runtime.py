@@ -57,6 +57,7 @@ class StreamingVoiceSession:
         backend: BackendAnswerPort | None = None,
         telemetry: Any = None,
         pre_stt: Sequence[FrameProcessor] = (),
+        pre_output: Sequence[FrameProcessor] = (),
         stt_detects_end_of_turn: bool = True,
         stt_processor: FrameProcessor | None = None,
         tts_processor: FrameProcessor | None = None,
@@ -84,6 +85,11 @@ class StreamingVoiceSession:
         # transport (WebRTC) needs an utterance aggregator here to turn streamed
         # audio into whole-utterance frames; the batch fake transport passes none.
         self._pre_stt = list(pre_stt)
+        # Processors inserted between TTS and transport.output(). The WebRTC path puts
+        # the ChannelEgressProbe here to measure runtime egress of the first audio
+        # frame (TASK-WEB-014); the in-memory fake transport passes none, so the
+        # streaming spike keeps its egress-as-gap behaviour unchanged.
+        self._pre_output = list(pre_output)
         self._task: Any = None
         # Number of times the runner was awaited; the single-loop guarantee is
         # `run_count == 1` for a whole session (asserted by the tests, RF-012).
@@ -107,6 +113,7 @@ class StreamingVoiceSession:
                 stt,
                 answer,
                 tts,
+                *self._pre_output,
                 self._transport.output(),
             ]
         )

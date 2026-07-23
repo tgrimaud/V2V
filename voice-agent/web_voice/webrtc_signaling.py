@@ -24,6 +24,7 @@ from typing import Any, Callable
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
+from .channel_egress_probe import ChannelEgressProbe
 from .egress import WebVoiceEgress
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
@@ -178,6 +179,16 @@ class WebRtcSignalingService:
             return self._build_streaming_session(transport, envelope, telemetry, tts_processor)
         return self._build_batch_session(transport, envelope, telemetry, tts_processor)
 
+    def _build_egress_probe(self, envelope, telemetry) -> ChannelEgressProbe:
+        """Runtime channel-egress probe for the WebRTC transport (TASK-WEB-014):
+        measures the first audio frame's hand-off to `transport.output()` so the
+        CHANNEL_EGRESS slice is measured on the streaming path (not batch-HTTP only)
+        and the mouth-to-ear composite folds it in. Provider label mirrors the active
+        TTS provider so the egress span carries a meaningful provider attribute."""
+        provider = self._streaming_tts_provider_for(envelope)
+        provider_name = getattr(provider, "name", None) or "gradium-tts"
+        return ChannelEgressProbe(envelope, telemetry, provider_name=provider_name)
+
     def _build_tts_processor(self, envelope, telemetry):
         """Streaming TTS processor for the session, or None (batch TTS fallback)."""
         if self._streaming_tts_provider is None:
@@ -216,6 +227,7 @@ class WebRtcSignalingService:
             # detection + its span and emits the final transcript itself.
             stt_processor=stt,
             tts_processor=tts_processor,
+            pre_output=[self._build_egress_probe(envelope, telemetry)],
         )
 
     def _build_batch_session(
@@ -239,6 +251,7 @@ class WebRtcSignalingService:
             # streaming path, so the batch detector in the ingress is skipped here.
             stt_detects_end_of_turn=False,
             tts_processor=tts_processor,
+            pre_output=[self._build_egress_probe(envelope, telemetry)],
         )
 
     def _build_transport(self, connection):

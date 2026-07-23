@@ -90,10 +90,14 @@ time_to_first_audio = stt (post-EOT finalize tail)
 (positional zip within a correlation group; turns missing a component are skipped),
 and `scripts/streaming_latency_report.py` reports p50/p95/p99 and the
 `p95 < 800 ms` gate over a warm streaming sample parsed from the server telemetry
-dumps. **Known gap:** `channel_ingress` / `channel_egress` are emitted only on the
-batch HTTP path, so the WebRTC channel-egress transport add-on (first frame emitted
-→ playable at the browser) is not yet folded into the number — it is reported
-separately, not silently included. Reproduction commands and the full breakdown are
+dumps. **Egress gap update (TASK-WEB-014):** `channel_egress` (`web.voice.egress`) is
+now emitted on the WebRTC path too, by the `ChannelEgressProbe` (runtime egress of
+the first audio frame → transport output), and folded into the **mouth-to-ear**
+composite `voice_to_first_audio` (see ADR-0029). The full browser-audible add-on (RTP
+encode/packetize + network + jitter buffer + playout) beyond runtime egress remains
+non-server-observable and is captured by a client-side first-audible proxy in
+`scripts/webrtc_live_client.py`. `channel_ingress` stays batch-HTTP-only.
+Reproduction commands and the full breakdown are
 in [`docs/qa/streaming-voice-qa-report.md`](../../qa/streaming-voice-qa-report.md)
 and [`docs/observability/voice-journey-timing.md`](../../observability/voice-journey-timing.md).
 
@@ -120,7 +124,7 @@ Per-slice p50/p95/p99 over the same warm sample:
 | `backend_first_token` | 0.01 | 0.01 | 0.01 | stub backend (no BSS/RAG/LLM) — real backend will add materially here |
 | `tts_first_audio` | 309.3 | 478.9 | 478.9 | Gradium streaming TTS first playable chunk |
 | `channel_ingress` | — | — | — | not measured on WebRTC path (batch-HTTP-only span) |
-| `channel_egress` | — | — | — | not measured on WebRTC path (WebRTC transport egress not folded in) |
+| `channel_egress` | — | — | — | now instrumented on WebRTC (TASK-WEB-014, `ChannelEgressProbe`); this pre-TASK-WEB-014 baseline predates it — re-measure with the mouth-to-ear composite (`voice_to_first_audio`, ADR-0029) |
 
 **Gate outcome: NO-GO on the pilot latency criterion.** The warm streaming path is
 functionally complete and instrumented, but `time_to_first_audio` p95 (~1.70 s) is
