@@ -1070,7 +1070,7 @@ if intent-based detection or a confirmation step is chosen (see open questions)
 **Depends on:** streaming STT (TASK-STT-010, merged), streaming TTS (TASK-WEB-004,
 merged), graceful pipeline drain on call end (delivered with TASK-WEB-008)
 **Classification:** V1 core
-**Status:** Proposed (2026-07-16) — not yet scheduled in a sprint
+**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-16)
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-010-call-end-farewell` (to be created when scheduled)
 
@@ -1308,7 +1308,7 @@ report — done), TASK-BE-010 (real-backend composite baseline)
 **Classification:** V1 pilot gate
 **Status:** Proposed (2026-07-20) — created from ADR-0029. **Out-of-sprint
 pilot-readiness follow-up** (EPIC-010, feeds US-040 pilot readiness report): kept
-**off the billing theme** (identity/BSS/PDF/comparison, now Sprint 9); schedule in the
+**off the billing theme** (identity/BSS/PDF/comparison, now Sprint 10); schedule in the
 pilot-readiness latency pass **before the pilot**. No urgency — the voice path
 (STT/TTS/WebRTC, Sprint 6) and the real backend (Sprint 7) are frozen, so the
 mouth-to-ear measurement stays valid whenever it is run.
@@ -1416,7 +1416,7 @@ instrumented baseline, not blind**)
 **Classification:** V1 pilot gate (perceived latency)
 **Status:** Proposed (2026-07-20, from the Sprint 7 demo) — **out-of-sprint
 pilot-readiness follow-up**, kept **off the billing theme**
-(identity/BSS/PDF/comparison, now Sprint 9); schedule in the pilot-readiness latency
+(identity/BSS/PDF/comparison, now Sprint 10); schedule in the pilot-readiness latency
 pass, after TASK-WEB-014 has published the mouth-to-ear baseline.
 **Priority:** High
 **Branch:** `task/TASK-WEB-015-perceived-latency-levers` (to be created when scheduled)
@@ -1507,8 +1507,7 @@ Scenario: The first turn no longer pays the full cold-start penalty
 **Parent:** EPIC-006 (Voice2Voice) — cross-cutting API hardening
 **Related:** TASK-BE-016 (OpenAPI for the Java backend)
 **Classification:** V1 hardening
-**Status:** Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme;
-schedule opportunistically before the pilot.
+**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme; paired with TASK-BE-016 (backend OpenAPI).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-016-voice-openapi` (to be created when scheduled)
 
@@ -1547,8 +1546,9 @@ project APIs are documented consistently.
 TASK-WEB-013 (telemetry import unification), TASK-WEB-014 (mouth-to-ear latency),
 `docs/architecture/channel-identity-boundary.md` (identity fields)
 **Classification:** V1 hardening (observability)
-**Status:** Proposed (2026-07-23) — surfaced during live WebRTC testing; off the billing
-theme, schedule before any per-turn latency SLO claim from live/browser sessions.
+**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-23) — surfaced
+during live WebRTC testing; prerequisite for any per-turn latency SLO claim from live/browser
+sessions (unblocks TASK-WEB-014/015, which stay out of this sprint).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id` (to be created when scheduled)
 

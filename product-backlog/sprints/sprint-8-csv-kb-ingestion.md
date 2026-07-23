@@ -24,8 +24,9 @@ fast-forward) and **TASK-BE-015** (answer language, FR/EN) with its QA-found **B
 review passed and **live QA retest PASS**. Closure checks rerun green (backend `mvn test`
 **229**, voice-agent **316 unittest + 26 Behave** / 10 features / 120 steps). BUG-001
 (input guardrail over-blocks legitimate phishing-support questions) stays an out-of-sprint
-P2 follow-up. Theme set by user decision: the billing / identity theme is Sprint 9,
-telephony/Genesys Sprint 10.
+P2 follow-up. Theme (updated 2026-07-23 by user decision): Sprint 9 became a
+hardening/assainissement sprint, so the billing/identity theme shifted to Sprint 10 and
+telephony/Genesys to Sprint 11.
 
 ## Roadmap Context
 
@@ -34,8 +35,9 @@ telephony/Genesys Sprint 10.
 | Sprint 6 | Streaming voice loop + latency | ✅ Done (2026-07-17) |
 | Sprint 7 | Real answer engine — RAG over the KB (EPIC-005) | ✅ Done (2026-07-20) |
 | **Sprint 8** | **CSV KB ingestion — `CsvArticleConnector` + embedding `DomainClassifier` (EPIC-005) — this sprint** | ✅ Done (closed 2026-07-23) |
-| Sprint 9 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
-| Sprint 10 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
+| Sprint 9 | Hardening / assainissement — accumulated small improvements & set-aside debt | Planned (opened 2026-07-23) |
+| Sprint 10 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 (shifted from Sprint 9) |
+| Sprint 11 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 (shifted from Sprint 10) |
 
 ## Why now (state that justifies the sprint)
 

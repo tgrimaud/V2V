@@ -7,7 +7,7 @@ product story). They keep the delivery workflow reproducible.
 
 **Parent:** Delivery tooling
 **Classification:** Developer experience / CI enabler
-**Status:** Implemented — merge-ready (pending user validation)
+**Status:** Scheduled — Sprint 9 (hardening/assainissement): validate + merge. Implemented — merge-ready (pending user validation)
 **Priority:** Medium
 **Branch:** `task/TASK-ENV-001-test-venv` (from `feat/sprint-5-backend-bridge`)
 

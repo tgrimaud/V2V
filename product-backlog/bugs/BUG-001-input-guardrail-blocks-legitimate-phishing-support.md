@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-001
 - **Title:** Input guardrail blocks legitimate anti-phishing/scam-call support questions
-- **Status:** New
+- **Status:** New — scheduled in Sprint 9 (hardening/assainissement)
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** User validation (live test during Sprint 8)

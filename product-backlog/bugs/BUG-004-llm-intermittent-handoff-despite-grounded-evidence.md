@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-004
 - **Title:** The LLM non-deterministically emits the "I don't have this information, transfer to an advisor" refusal even when retrieval PASSES with strong evidence → OutputGuardrail rewrites it to the low-confidence fallback (grounded=false)
-- **Status:** Fixed — backend-validated (pending live voice + user validation)
+- **Status:** Fixed — backend-validated (pending live voice + user validation); scheduled in Sprint 9 (hardening/assainissement): live-validate + merge + close
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test) + backend-only reproduction

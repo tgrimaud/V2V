@@ -130,8 +130,7 @@ reuses the `CorrelationId` source, per the note above):
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme;
-schedule opportunistically before the pilot.
+**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme; paired with TASK-WEB-016 (voice-runtime OpenAPI).
 **Priority:** Medium
 **Branch:** `task/TASK-BE-016-openapi-swagger`
 

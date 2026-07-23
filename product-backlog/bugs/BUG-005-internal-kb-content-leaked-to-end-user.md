@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-005
 - **Title:** On a low-information utterance ("vas-y"), retrieval surfaces internal agent-desk articles (R6/ION appointment tooling, VAA) and the LLM voices them to the end user; confidence drops to ≈0.52 but still PASSES the gate instead of asking to clarify
-- **Status:** New
+- **Status:** New — scheduled in Sprint 9 (hardening/assainissement)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test)

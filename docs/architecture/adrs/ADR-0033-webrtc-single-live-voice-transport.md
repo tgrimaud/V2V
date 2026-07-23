@@ -74,7 +74,7 @@ we want a simple framed byte stream. That usage is unaffected by this decision.
   where they are delivered; no parallel streaming stack is built for `/turn`.
 - The batch `/turn` path keeps its value as a stable, fully-deterministic harness for tests
   and per-slice latency measurement without pretending to be a live channel.
-- Telephony/Genesys ingress (future EPIC-010 / Sprint 10) enters through its own media layer
+- Telephony/Genesys ingress (future EPIC-010 / Sprint 11) enters through its own media layer
   and is **out of scope** here; this ADR governs the **web** client transport only and does
   not pre-decide the telephony media path.
 - No change is required to server↔provider sockets, the backend HTTP conversation contract
