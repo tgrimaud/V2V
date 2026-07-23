@@ -130,6 +130,11 @@ voice-support:
     # Provider HTTP connect timeout for the chat call (TASK-BE-012). Bounds the pre-read handshake
     # so a dead/unreachable endpoint fails fast rather than hanging a bounded LLM worker thread.
     connect-timeout-ms: ${LLM_CONNECT_TIMEOUT_MS:3000}
+    # Voice-first answer-length budget (TASK-BE-018). Appended per call as a concision directive in
+    # the answer language, capping the spoken answer so long grounded answers stop dominating TTS
+    # synthesis time (batch TTFA + live spoken tail). Does not weaken grounding (DEC-002 / BUG-004):
+    # concise-but-complete, still hands off only when the context is empty/unrelated. 0 disables.
+    max-answer-sentences: ${LLM_MAX_ANSWER_SENTENCES:3}
   observability:
     # Allow-list bounding the `channel` metric tag cardinality (TASK-BE-009). A client-supplied
     # channel outside this list collapses to `other` on the metric tag; the raw value stays in

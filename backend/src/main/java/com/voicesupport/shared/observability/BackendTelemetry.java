@@ -28,6 +28,7 @@ public class BackendTelemetry {
     private static final Logger log = LoggerFactory.getLogger(BackendTelemetry.class);
     private static final String TIMER = "voice_support.slice";
     private static final String PROMPT_CHARS = "voice_support.prompt_chars";
+    private static final String ANSWER_CHARS = "voice_support.answer_chars";
     private static final String ANSWER_LANGUAGE = "voice_support.answer_language";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
@@ -81,6 +82,21 @@ public class BackendTelemetry {
         log.info("[PROMPT] provider={} system_chars={} context_chars={} history_chars={} chunk_count={} "
                         + "correlation_id={}",
                 safeProvider, systemChars, contextChars, historyChars, chunkCount, CorrelationId.current());
+    }
+
+    // Answer-length observability (TASK-BE-018): records the spoken answer size in characters as a
+    // DistributionSummary (voice_support.answer_chars) plus an [ANSWER] log, so the concision budget's
+    // effect on TTS synthesis time is measurable next to the llm_wording latency. Records the length
+    // only — never the answer text — and carries the correlation id.
+    public void recordAnswerLength(String provider, int answerChars) {
+        String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
+        DistributionSummary.builder(ANSWER_CHARS)
+                .tag("provider", safeProvider)
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .register(registry)
+                .record(answerChars);
+        log.info("[ANSWER] provider={} answer_chars={} correlation_id={}",
+                safeProvider, answerChars, CorrelationId.current());
     }
 
     // Answer-language observability (TASK-BE-015): records the language the assistant answered in

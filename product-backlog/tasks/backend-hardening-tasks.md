@@ -9,7 +9,7 @@ pilot, unless pulled in earlier.
 |---|---|---|---|---|
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
-| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | Proposed (2026-07-23) — out of Sprint 8 theme; latency follow-up |
+| TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | In progress (2026-07-23) — implemented + unit-tested (`mvn test` 223 green, ArchUnit OK); awaiting adversarial review + QA/latency |
 
 ---
 
@@ -167,8 +167,8 @@ consistently documented (paired with TASK-WEB-016 for the Python voice runtime).
 
 **Parent:** EPIC-005 (Answer engine) — answer quality / pilot latency
 **Classification:** V1 answer quality / latency lever
-**Status:** Proposed (2026-07-23) — cross-cutting, out of the Sprint 8 CSV theme;
-schedule opportunistically before the pilot.
+**Status:** In progress (2026-07-23) — implemented + unit-tested; awaiting adversarial
+review + QA/latency validation.
 **Priority:** High
 **Branch:** `task/TASK-BE-018-concise-voice-answers`
 **Surfaced by:** BUG-004 live voice validation (2026-07-22/23) — grounded answers are
@@ -233,3 +233,38 @@ still refuse/hand off only when context is empty or unrelated; never invent amou
   streaming) and the ADR-0029 latency work — not a substitute for either.
 - Do not lower grounding to hit brevity: if a question genuinely needs more detail,
   concise-but-complete beats truncated. QA sets the concrete budget.
+
+### Implementation notes (2026-07-23)
+
+Delivered on `task/TASK-BE-018-concise-voice-answers` (branched from
+`feat/restart-from-scratch` after the BUG-004 stack merged):
+
+- **Per-language concision directive** owned by `AnswerLanguage.concisionDirective(int
+  maxSentences)` (FR/EN wording, `%d` sentence cap; a non-positive budget returns an
+  empty string = disabled). Kept in the language value object so brevity wording matches
+  the answer language and stays beside `llmDirective()`/`handoffMarkers()`.
+- **Prompt assembly** (`AbstractChatClientAnswerAdapter.buildSystemMessage`): the
+  concision directive is appended **just before** the language directive, so the language
+  instruction remains last for recency (TASK-BE-015). Generation-time constraint — no
+  post-hoc truncation, so a grounded answer is never cut mid-sentence.
+- **Configurable budget** `voice-support.llm.max-answer-sentences` (env
+  `LLM_MAX_ANSWER_SENTENCES`, default **3**, `0` disables), threaded into both
+  `MistralAnswerAdapter` and `OllamaAnswerAdapter` via `LlmConfig` (shared abstract base,
+  no per-adapter duplication). The base voice-style prompt ("phrases courtes") is
+  unchanged; the numeric cap is the new explicit lever.
+- **Observability:** new `BackendTelemetry.recordAnswerLength(provider, answerChars)` →
+  `voice_support.answer_chars` DistributionSummary (p50/p95/p99, `provider` tag) + a
+  privacy-safe `[ANSWER]` log with the correlation id (length only, never answer text),
+  recorded on both the sync and streaming answer paths so the budget's effect on TTS
+  synthesis time is measurable next to `llm_wording`.
+- **Grounding preserved (DEC-002 / BUG-004):** the hand-off markers and the
+  empty/unrelated-only refusal condition are untouched; concision only shortens a valid
+  grounded answer.
+- **Tests (`mvn test` 223 green, ArchUnit OK):** `AnswerLanguageTest` (FR/EN cap wording
+  + disabled for 0/negative), `AbstractChatClientAnswerAdapterTest` (directive present +
+  ordered before the language directive when budget set; absent when budget = 0).
+
+**Remaining:** adversarial code review, then QA functional (FR+EN sample: concise but
+still grounded, no BUG-004 regression) + latency before/after (batch `/turn` TTFA and
+WebRTC spoken duration) per ADR-0018 method vs the ADR-0029 criterion; set the concrete
+budget with QA. Live A/B not yet run.

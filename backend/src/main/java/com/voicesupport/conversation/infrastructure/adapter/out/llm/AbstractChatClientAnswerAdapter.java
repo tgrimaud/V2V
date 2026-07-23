@@ -55,11 +55,16 @@ public abstract class AbstractChatClientAnswerAdapter
     private final ChatClient chatClient;
     private final BackendTelemetry telemetry;
     private final long timeoutMs;
+    // Voice-first answer-length budget (TASK-BE-018): appended per call as a concision directive so
+    // long grounded answers stop dominating TTS synthesis time. <= 0 disables the constraint.
+    private final int maxAnswerSentences;
 
-    protected AbstractChatClientAnswerAdapter(ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs) {
+    protected AbstractChatClientAnswerAdapter(
+            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs, int maxAnswerSentences) {
         this.chatClient = chatClient;
         this.telemetry = telemetry;
         this.timeoutMs = timeoutMs;
+        this.maxAnswerSentences = maxAnswerSentences;
     }
 
     protected abstract String systemPromptTemplate();
@@ -75,7 +80,11 @@ public abstract class AbstractChatClientAnswerAdapter
         // Return the raw text (empty when the model produced nothing); classifying an empty or
         // refusal answer as a safe hand-off is the OutputGuardrail's job, so it is never voiced
         // as a grounded answer with a confidence signal.
-        return text == null ? "" : text.strip();
+        String answer = text == null ? "" : text.strip();
+        // Answer-length observability (TASK-BE-018): record the spoken answer size so the concision
+        // budget's effect on TTS synthesis time is measurable next to the llm_wording latency.
+        telemetry.recordAnswerLength(providerName(), answer.length());
+        return answer;
     }
 
     private String callProvider(String systemMessage, String question) {
@@ -116,10 +125,14 @@ public abstract class AbstractChatClientAnswerAdapter
         String systemMessage = buildSystemMessage(evidence, history, language);
         long start = System.nanoTime();
         boolean[] firstSeen = {false};
+        int[] answerChars = {0};
         try {
-            streamContent(systemMessage, question == null ? "" : question)
-                    .forEach(token -> forwardToken(token, onToken, firstSeen, start));
+            streamContent(systemMessage, question == null ? "" : question).forEach(token -> {
+                answerChars[0] += token == null ? 0 : token.length();
+                forwardToken(token, onToken, firstSeen, start);
+            });
             telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "success", elapsed(start));
+            telemetry.recordAnswerLength(providerName(), answerChars[0]);
         } catch (RuntimeException e) {
             telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "error", elapsed(start));
             throw new UpstreamUnavailableException("LLM streaming call failed", e);
@@ -153,10 +166,17 @@ public abstract class AbstractChatClientAnswerAdapter
             historyBlock = HISTORY_HEADER + String.join("\n", history);
             systemMessage += historyBlock;
         }
+        // Concision directive before the language directive (TASK-BE-018): caps the spoken answer to
+        // the configured sentence budget in the answer language. Placed just before the language
+        // directive so the language instruction stays last for recency (see below).
+        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
+        String concision = target.concisionDirective(maxAnswerSentences);
+        if (!concision.isEmpty()) {
+            systemMessage += "\n\n" + concision;
+        }
         // Answer-language directive last for recency (TASK-BE-015): a strong, explicit instruction
         // at the end reliably overrides the French framing of the base prompt, so an English turn
         // is answered in English even when the RAG context is English and the prompt is French.
-        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
         systemMessage += "\n\n" + target.llmDirective();
         telemetry.recordAnswerLanguage(providerName(), target.code());
         int chunkCount = evidence == null ? 0 : evidence.size();

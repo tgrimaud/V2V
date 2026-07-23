@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("AbstractChatClientAnswerAdapter (grounded system message)")
 class AbstractChatClientAnswerAdapterTest {
 
-    private final TestAdapter adapter = new TestAdapter();
+    private final TestAdapter adapter = new TestAdapter(3);
 
     @Test
     @DisplayName("evidence text is injected in place of the {context} placeholder")
@@ -65,9 +65,43 @@ class AbstractChatClientAnswerAdapterTest {
         assertTrue(french.contains("je vous transfère à un conseiller"));
     }
 
+    @Test
+    @DisplayName("a concision budget appends the sentence cap in the answer language (TASK-BE-018)")
+    void appendsConcisionDirectiveWhenBudgetSet() {
+        // GIVEN an adapter configured with a 3-sentence budget
+        TestAdapter capped = new TestAdapter(3);
+        List<RetrievedEvidence> evidence = List.of(new RetrievedEvidence("ctx", "s", "d", 0.9));
+
+        // WHEN building for English and for French
+        String english = capped.systemMessage(evidence, List.of(), AnswerLanguage.ENGLISH);
+        String french = capped.systemMessage(evidence, List.of(), AnswerLanguage.FRENCH);
+
+        // THEN each carries the concision cap worded in its own language
+        assertTrue(english.contains("answer in 3 sentence(s) maximum"));
+        assertTrue(french.contains("réponds en 3 phrase(s) maximum"));
+        // AND the language directive still comes after the concision directive (recency)
+        assertTrue(english.indexOf("answer in 3 sentence(s) maximum")
+                < english.indexOf("You MUST answer ONLY in English"));
+    }
+
+    @Test
+    @DisplayName("a zero budget disables the concision directive (TASK-BE-018)")
+    void omitsConcisionDirectiveWhenBudgetDisabled() {
+        // GIVEN an adapter with the budget disabled
+        TestAdapter uncapped = new TestAdapter(0);
+
+        // WHEN building the system message
+        String message = uncapped.systemMessage(
+                List.of(new RetrievedEvidence("ctx", "s", "d", 0.9)), List.of(), AnswerLanguage.ENGLISH);
+
+        // THEN no concision cap is present, but the language directive still is
+        assertFalse(message.contains("sentence(s) maximum"));
+        assertTrue(message.contains("You MUST answer ONLY in English"));
+    }
+
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
-        TestAdapter() {
-            super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0);
+        TestAdapter(int maxAnswerSentences) {
+            super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0, maxAnswerSentences);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {

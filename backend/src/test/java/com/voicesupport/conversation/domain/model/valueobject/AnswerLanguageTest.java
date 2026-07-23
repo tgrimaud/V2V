@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("AnswerLanguage (FR/EN detection, directive, config parsing)")
@@ -74,5 +75,27 @@ class AnswerLanguageTest {
         assertTrue(french.contains("partiellement"));
         assertTrue(english.contains("ONLY if"));
         assertTrue(english.contains("partially"));
+    }
+
+    @Test
+    @DisplayName("the concision directive caps sentences in the answer language (TASK-BE-018)")
+    void concisionDirectiveCapsSentences() {
+        // WHEN a positive budget is requested
+        String french = AnswerLanguage.FRENCH.concisionDirective(2);
+        String english = AnswerLanguage.ENGLISH.concisionDirective(3);
+
+        // THEN the cap is worded in each language with the requested number
+        assertTrue(french.contains("réponds en 2 phrase(s) maximum"));
+        assertTrue(english.contains("answer in 3 sentence(s) maximum"));
+    }
+
+    @Test
+    @DisplayName("a non-positive concision budget disables the directive (TASK-BE-018)")
+    void concisionDirectiveDisabledForZeroOrNegative() {
+        // WHEN the budget is zero or negative
+        // THEN the directive is empty (nothing appended to the prompt)
+        assertTrue(AnswerLanguage.ENGLISH.concisionDirective(0).isEmpty());
+        assertTrue(AnswerLanguage.FRENCH.concisionDirective(-1).isEmpty());
+        assertFalse(AnswerLanguage.ENGLISH.concisionDirective(1).isEmpty());
     }
 }

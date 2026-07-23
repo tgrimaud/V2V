@@ -17,14 +17,18 @@ public enum AnswerLanguage {
                     + "s'il ne traite le sujet que partiellement. Ne réponds \"Je n'ai pas cette "
                     + "information, je vous transfère à un conseiller.\" (exactement, mot pour mot) "
                     + "QUE si le CONTEXTE est vide ou totalement sans rapport avec la question.",
-            List.of("transfère à un conseiller", "transfere a un conseiller")),
+            List.of("transfère à un conseiller", "transfere a un conseiller"),
+            "CONCISION : réponds en %d phrase(s) maximum, en allant droit au but, sans listes "
+                    + "ni mise en forme ; garde uniquement l'information utile à la question."),
     ENGLISH("en",
             "LANGUAGE: You MUST answer ONLY in English, regardless of the language of the CONTEXT "
                     + "above. Use the CONTEXT to help the customer even if it only partially "
                     + "addresses the question. Reply \"I don't have this information, I'll transfer "
                     + "you to an advisor.\" (exactly, word for word) ONLY if the CONTEXT is empty or "
                     + "entirely unrelated to the question.",
-            List.of("transfer you to an advisor"));
+            List.of("transfer you to an advisor"),
+            "CONCISENESS: answer in %d sentence(s) maximum, get straight to the point, with no "
+                    + "lists or formatting; keep only the information useful to the question.");
 
     private static final Pattern FRENCH_MARKERS = markers(
             "le", "la", "les", "un", "une", "des", "du", "je", "vous", "nous", "il", "elle",
@@ -42,11 +46,13 @@ public enum AnswerLanguage {
     private final String code;
     private final String llmDirective;
     private final List<String> handoffMarkers;
+    private final String concisionTemplate;
 
-    AnswerLanguage(String code, String llmDirective, List<String> handoffMarkers) {
+    AnswerLanguage(String code, String llmDirective, List<String> handoffMarkers, String concisionTemplate) {
         this.code = code;
         this.llmDirective = llmDirective;
         this.handoffMarkers = handoffMarkers;
+        this.concisionTemplate = concisionTemplate;
     }
 
     public String code() {
@@ -55,6 +61,17 @@ public enum AnswerLanguage {
 
     public String llmDirective() {
         return llmDirective;
+    }
+
+    // Voice-first concision constraint (TASK-BE-018): a per-language, per-call instruction capping
+    // the spoken answer to maxSentences so long grounded answers stop dominating TTS synthesis time
+    // (batch TTFA and the live spoken tail). Language-owned so brevity wording matches the answer
+    // language. A non-positive budget disables the constraint (empty string, nothing appended).
+    public String concisionDirective(int maxSentences) {
+        if (maxSentences <= 0) {
+            return "";
+        }
+        return String.format(Locale.ROOT, concisionTemplate, maxSentences);
     }
 
     public List<String> handoffMarkers() {

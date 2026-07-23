@@ -86,16 +86,18 @@ public class LlmConfig {
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
     public MistralAnswerAdapter mistralAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
-            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
-        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs);
+            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
+        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
     }
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "ollama")
     public OllamaAnswerAdapter ollamaAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
-            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs) {
-        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs);
+            @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
+        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
     }
 
     private static RestClient.Builder timeoutRestClientBuilder(long connectMs, long readMs) {
