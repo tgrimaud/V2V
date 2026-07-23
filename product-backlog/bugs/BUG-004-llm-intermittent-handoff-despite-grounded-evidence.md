@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-004
 - **Title:** The LLM non-deterministically emits the "I don't have this information, transfer to an advisor" refusal even when retrieval PASSES with strong evidence → OutputGuardrail rewrites it to the low-confidence fallback (grounded=false)
-- **Status:** In progress
+- **Status:** Fixed — backend-validated (pending live voice + user validation)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test) + backend-only reproduction
@@ -126,9 +126,18 @@ Non-deterministic. Live + backend-only, same build, same transcript:
   `OllamaAnswerAdapter.java` (base prompt), `application.yml`, `LlmConfig.java` (temperature).
 - **Tests added:** `AnswerLanguageTest.directiveConditionsTheHandoff` locks the conditioned refusal
   wording while asserting the exact guardrail marker is still present.
-- **Validation:** unit suite green; **live A/B refusal-rate measurement pending** (repeat the
-  "Bonjour, j'ai un problème avec ma connexion internet." turn N times before/after). If the refusal
-  rate is still material at 0.2, drop temperature to 0.1 next.
+- **Validation:** unit suite green (219). Backend-only A/B on the rebuilt image (temp 0.2 +
+  conditioned prompt), fresh `conversation_id` (no memory — the hardest case):
+  - "Bonjour, j'ai un problème avec ma connexion internet." ×20 → **20 grounded / 0 fallback**
+    (before the fix: ~6/7 fallback for this exact phrasing).
+  - "J'ai un problème avec ma connexion internet." ×10, "j'ai un problème avec ma box" ×10,
+    "Comment réinitialiser ma box ?" ×8 → **100% grounded** (the "ma box" case was the other
+    BUG-003 residual).
+  - Negative control preserved: "Quelle est la capitale de la France ?" / "Raconte-moi une blague."
+    → still refused by the off-topic InputGuardrail (no regression, the bot does not answer
+    off-domain).
+  - DEC-002 preserved: an amount probe returned prices that are present in the KB context
+    (OutputGuardrail did not trip), i.e. no fabricated amount.
 - residual risk: the DEC-002 "unbacked amount → hand-off" behavior is unchanged (separate rule); the
   greeting-biased flip may not fully vanish from prompt+temperature alone — a follow-up could avoid
   storing fallback answers in conversation memory.
@@ -151,11 +160,13 @@ Non-deterministic. Live + backend-only, same build, same transcript:
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
-- **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+- **Retested by:** Developer (backend-only A/B). Live voice + user validation pending.
+- **Retest date:** 2026-07-23
+- **Scenarios rerun:** refusal-rate A/B on covered topics (fresh id, no memory) + off-topic negative
+  control + DEC-002 amount probe (see Developer Notes → Validation).
+- **Result:** Passed (backend). Refusal-despite-evidence eliminated in 20/20 for the failing
+  phrasing; no off-topic or DEC-002 regression.
+- **Retest evidence:** counts recorded in Developer Notes; unit suite 219 green.
 
 ## Closure
 
