@@ -1559,10 +1559,15 @@ recorder stamps `conversation_id`/`message_id`/`turn_index` on **every** span/ev
 of the turn (STT, backend, TTS, channel egress) while `correlation_id` stays per-conversation.
 `pipeline_timing` buckets by `(correlation_id, turn_index)` (positional-zip fallback for
 spans without a per-turn id) and adds `per_turn_timings`; `streaming_latency_report.py` gains
-a `per_turn` section. unittest **346** green (+12), behave **26** green; report `per_turn`
-demonstrated end to end on a synthetic 3-turn call (barge-in turn 2 → null composites, turns
-1 & 3 keep their own slices, no desync). **Remaining before done:** warm multi-turn live/headless
-sample showing distinct per-turn slices + adversarial review + QA.
+a `per_turn` section. unittest **346** green (+12), behave **27** green (+1 multi-turn
+`streaming_loop.feature` scenario driving the real STT→backend→TTS processors and asserting
+every slice span carries a per-turn id). Adversarial review **93/100**. QA passed —
+`docs/qa/task-web-017-per-turn-telemetry-qa.md`: the `per_turn` report separates turns end to
+end via `scripts/streaming_per_turn_sample.py` (2 calls × 3 paced turns → 6 distinct rows,
+distinct `message_id` under one `correlation_id`, one `time_to_first_audio` per turn),
+barge-in turn → null composite with no desync, no key/audio/path leak in telemetry.
+**Remaining before done:** warm multi-turn **live** sample (Gradium/Mistral) showing distinct
+per-turn slices with real durations.
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id`
 
@@ -1626,3 +1631,13 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
   per-turn slices** in the report from one session.
 - Updated `docs/observability/voice-journey-timing.md`.
 - No API key / raw audio / path leak in telemetry.
+
+**Evidence status (2026-07-23):**
+- ✅ Developer tests — `test_telemetry_turn_baggage.py`, `test_streaming_stt_processor.py`,
+  `test_utterance_aggregator.py`, `test_pipeline_timing.py` (per-turn lifecycle + by-turn bucketing).
+- ✅ Multi-turn sample showing distinct per-turn slices — Behave `streaming_loop.feature` #2
+  (real processors) + `scripts/streaming_per_turn_sample.py` → `streaming_latency_report.py`
+  `per_turn` section (offline, repeatable). See `docs/qa/task-web-017-per-turn-telemetry-qa.md`.
+- ✅ Updated `docs/observability/voice-journey-timing.md`.
+- ✅ No API key / raw audio / path leak — dump attribute scan (id/latency/provider/outcome only).
+- ⏳ **Warm live** multi-turn sample with real durations (Gradium/Mistral) — pending live run.
