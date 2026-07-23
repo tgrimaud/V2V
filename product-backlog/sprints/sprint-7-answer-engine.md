@@ -53,7 +53,7 @@ p95 761.5 ms < 800 ms)
 | Sprint 5 | Backend answer bridge (stub/http contract, US-019 close) | ✅ Done |
 | Sprint 6 | Streaming voice loop + latency (WebRTC/streaming/barge-in) | ✅ Done (closed 2026-07-17) — ADR-0018 gate MET (p95 761.5 ms) via TASK-STT-013 |
 | **Sprint 7** | **Real answer engine — RAG over the knowledge base (EPIC-005) — this sprint** | ✅ Done (closed 2026-07-20) — merged → `feat/restart-from-scratch`; latency fil closed by ADR-0029 (OQ-005) |
-| Sprint 8 | CSV KB ingestion — `CsvArticleConnector` (articles.csv, HTML→text) + embedding `DomainClassifier` (EPIC-005) | Planned (2026-07-21) — TASK-BE-013/014 |
+| Sprint 8 | CSV KB ingestion — `CsvArticleConnector` (articles.csv, HTML→text) + embedding `DomainClassifier` (EPIC-005) | ✅ Done (closed 2026-07-23) — TASK-BE-013/014/015 (+BUG-002) |
 | Sprint 9 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) → customer-specific invoice explanation | Planned — gated by OQ-001/003/004 |
 | Sprint 10 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
