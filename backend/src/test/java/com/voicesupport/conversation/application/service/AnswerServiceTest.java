@@ -180,5 +180,30 @@ class AnswerServiceTest {
                 .count();
         assertEquals(1.0, count);
         assertEquals(0, generator.callCount);
+
+        // AND the blocked verdict is counted so clarify/low-confidence/off-topic rates are observable
+        // (ADR-0034); a mutant that drops the recordGuardrailBlock call leaves no such meter to find.
+        double blocks = meterRegistry.get("voice_support.guardrail_block")
+                .tag("verdict", "off_topic")
+                .counter()
+                .count();
+        assertEquals(1.0, blocks);
+    }
+
+    @Test
+    @DisplayName("the prior conversation history is forwarded to the LLM unchanged (TASK-BE-006)")
+    void forwardsHistoryToLlm() {
+        // GIVEN an answerable result and a non-empty prior history
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.8))));
+        List<String> history = List.of(
+                "Client : Pourquoi ma facture change ?", "Assistant : À cause de la proration.");
+
+        // WHEN answering with that history
+        service.answer("Et le mois prochain ?", "billing", 4, true, history);
+
+        // THEN the LLM receives the real history verbatim; a mutant that swaps the null-guard branch
+        // (returning an empty list for a non-null history) would forward nothing.
+        assertEquals(history, generator.lastHistory);
     }
 }

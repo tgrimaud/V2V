@@ -79,6 +79,58 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
+    void shouldNormaliseSimilarityByBothVectorMagnitudes() {
+        // GIVEN a HALF-magnitude billing anchor ([0.5,0,0]) and an article aligned with it ([1,0,0]).
+        // Cosine = dot/(|q|*|anchor|) = 0.5/(1*0.5) = 1.0 (>= 0.5). If the two magnitudes were divided
+        // instead of multiplied in the denominator, it would be 0.5/(1/0.5) = 0.25 (< 0.5) -> general.
+        FakeEmbeddingModel model = new FakeEmbeddingModel()
+                .on("BILLING_ANCHOR", new float[]{0.5f, 0f, 0f})
+                .on("SUPPORT_ANCHOR", new float[]{0f, 1f, 0f})
+                .on("COMMERCIAL_ANCHOR", new float[]{0f, 0f, 1f})
+                .on("halfbill", new float[]{1f, 0f, 0f});
+        EmbeddingDomainClassifierAdapter classifier =
+                new EmbeddingDomainClassifierAdapter(model, ANCHORS, 0.5, 2000);
+
+        // WHEN classifying
+        String domain = classifier.classify("t", "aligned halfbill vector");
+
+        // THEN both magnitudes normalise the score; a multiply->divide mutant on the norm product
+        // would drop it below threshold and fall back to general.
+        assertEquals("billing", domain);
+    }
+
+    @Test
+    void shouldSelectAnchorWhenSimilarityExactlyEqualsThreshold() {
+        // GIVEN an article perfectly aligned with billing (cosine 1.0) and a threshold of exactly 1.0
+        FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
+                .on("exactbill", new float[]{1f, 0f, 0f});
+        EmbeddingDomainClassifierAdapter classifier =
+                new EmbeddingDomainClassifierAdapter(model, ANCHORS, 1.0, 2000);
+
+        // WHEN classifying
+        String domain = classifier.classify("t", "exactbill match");
+
+        // THEN a score equal to the current best is accepted (>=); a strict `>` mutant would leave it general
+        assertEquals("billing", domain);
+    }
+
+    @Test
+    void shouldClassifyFromTheTitleWhenOnlyTheTitleCarriesTheSignal() {
+        // GIVEN the classifying keyword lives in the TITLE only, the content is neutral
+        FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
+                .on("titlekey", new float[]{1f, 0f, 0f});
+        EmbeddingDomainClassifierAdapter classifier =
+                new EmbeddingDomainClassifierAdapter(model, ANCHORS, 0.5, 2000);
+
+        // WHEN classifying with the signal in the title
+        String domain = classifier.classify("about titlekey", "neutral body without any anchor");
+
+        // THEN the title is part of the classification text; a mutant that drops the title (negated
+        // null-guard branch) would embed only the neutral body and fall back to general.
+        assertEquals("billing", domain);
+    }
+
+    @Test
     void shouldReturnGeneralWhenNoAnchorsConfigured() {
         // GIVEN a classifier with no domain anchors
         EmbeddingDomainClassifierAdapter classifier =

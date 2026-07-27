@@ -59,6 +59,21 @@ class GuardedSentenceEmitterTest {
     }
 
     @Test
+    @DisplayName("emits every safe sentence completed within a single token (loop does not stop early)")
+    void emitsAllSentencesFromOneToken() {
+        // GIVEN evidence with no amount
+        GuardedSentenceEmitter emitter = emitterFor(List.of(
+                new RetrievedEvidence("Contexte.", "s1", "billing", 0.9)));
+
+        // WHEN a single token completes TWO sentences at once (both terminated + trailing space)
+        emitter.accept("Un. Deux. ");
+
+        // THEN both are emitted in the same accept() call; a mutant that returns after the first
+        // safe sentence (negated not-blocked guard inside the loop) would drop "Deux."
+        assertEquals(List.of("Un.", "Deux."), emitted);
+    }
+
+    @Test
     @DisplayName("lets a grounded amount through when it is backed by the evidence")
     void allowsGroundedAmount() {
         // GIVEN evidence that carries the amount

@@ -156,11 +156,17 @@
                  mvn -Ppitest test-compile org.pitest:pitest-maven:mutationCoverage
              Report: target/pit-reports/index.html. The build targets Java 17; if PIT
              fails under a newer runtime JDK (ASM major-version), run with JAVA_HOME on a
-             JDK 17. Baseline (2026-07-27, widened scope + TextChunker hardened): 318 mutations,
-             ~90 % detected, 91 % test strength (~30 s). mutationThreshold=88 (below baseline)
-             guards regressions without flaking; ratchet up as survivors are killed. Remaining
-             survivors are mostly near-equivalent (TextChunker overlapTail `<0` / snapBack `>=`
-             edges) plus peripheral SentenceSegmenter/LanguageDetector/telemetry-void calls. -->
+             JDK 17. Baseline (2026-07-27, widened scope + survivors ground down): 318 mutations,
+             309 killed = 97 % detected, 97 % test strength (~30 s). mutationThreshold=95 (below
+             baseline) guards regressions without flaking; ratchet up as survivors are killed.
+             The 9 remaining survivors are all equivalent or timing-non-deterministic, hence
+             accepted (see TASK-QA-018): TextChunker overlapTail:91 / snapBackToBoundary:82 edges;
+             SentenceSegmenter.extractComplete:37 (`start>0`->`>=0` => delete(0,0) no-op);
+             EmbeddingDomainClassifierAdapter.classificationText:78 (`>`->`>=` => substring(0,len)
+             on len==maxChars is the same string); KnowledgeSyncService.elapsedMs:108 x3 (nanoTime
+             duration, non-deterministic without an injected Clock); OutputGuardrail.amountsIn
+             filter (CURRENCY_AMOUNT always has a digit => canonical never empty => no-op);
+             ConversationHistoryFormatter.format:18 (ArrayList capacity hint). -->
         <profile>
             <id>pitest</id>
             <build>
@@ -194,7 +200,7 @@
                                 <param>XML</param>
                             </outputFormats>
                             <timestampedReports>false</timestampedReports>
-                            <mutationThreshold>88</mutationThreshold>
+                            <mutationThreshold>95</mutationThreshold>
                         </configuration>
                     </plugin>
                 </plugins>

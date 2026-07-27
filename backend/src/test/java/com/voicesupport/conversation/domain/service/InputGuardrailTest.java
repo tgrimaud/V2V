@@ -138,12 +138,42 @@ class InputGuardrailTest {
     @ValueSource(strings = {
             "ok how do I pay my bill?",
             "continue mon abonnement fibre s'il vous plaît",
-            "vas-y explique ma facture en détail"})
+            "vas-y explique ma facture en détail",
+            // BUG-005 boundary: a short (<= MAX_VAGUE_TOKENS) turn whose LAST token is a real word is
+            // NOT vague — pins allVagueTokens' `return false` (non-vague token found) against a mutant
+            // that always reports every token as a continuer.
+            "ok facture"})
     @DisplayName("does not clarify when a continuer is followed by a real question")
     void doesNotClarifyWhenIntentFollows(String question) {
         GuardrailDecision decision = guardrail.check(question, true, AnswerLanguage.FRENCH);
 
         assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
+    }
+
+    @Test
+    @DisplayName("refuses an unsafe term sitting exactly at the minimum-length boundary")
+    void refusesUnsafeTermAtLengthBoundary() {
+        // GIVEN "gun" is exactly MIN_QUESTION_LENGTH (3) chars: the short-input pass must NOT fire
+        // before the inappropriate check runs — pins the `length < MIN` edge against a `<= MIN` mutant.
+        GuardrailDecision decision = guardrail.check("gun", false, AnswerLanguage.ENGLISH);
+
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.INAPPROPRIATE, decision.verdict());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // "ab" is below MIN_QUESTION_LENGTH: it reaches the short-input pass (pins that return
+            // against a null-return mutant). "..." normalizes to blank inside isVague (contentless
+            // punctuation) and must NOT clarify (pins isVague's blank `return false`).
+            "ab", "..."})
+    @DisplayName("passes short or contentless-punctuation input without a premature block")
+    void passesShortOrContentlessInput(String question) {
+        GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
+
+        assertNotNull(decision.verdict());
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
+        assertFalse(decision.blocked());
     }
 
     @Test

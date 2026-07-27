@@ -416,6 +416,48 @@ KnowledgeRetrievalService, KnowledgeSyncService). Ports (interfaces) and value o
   stale-removal void call) and application services (null pass-throughs, telemetry void calls) —
   several near-equivalent. Tracked as a follow-up; ratchet the threshold further as they are killed.
 
+### Survivor grind-down — remaining scope (2026-07-27)
+
+Per user request ("continue à les grignoter"), the peripheral survivors outside the TextChunker
+cluster were ground down with targeted deterministic tests (no production code changed):
+
+- **InputGuardrail** — pinned the `length < MIN_QUESTION_LENGTH` boundary (a 3-char unsafe term
+  "gun" must still be refused), the short-input pass return (`ab`) and the `isVague` blank-normalise
+  return (contentless `...` must not clarify), plus a short "continuer + real word" turn ("ok facture")
+  that must pass (allVagueTokens non-vague return).
+- **SentenceSegmenter** — pinned the `isBoundary` digit-guard line: a digit-then-`.`-then-space is
+  not a boundary ("Prix 5. suite."), `!`/`?` still split after a digit ("Total 5!"), and a leading
+  terminator at index 0 is a boundary without reading `charAt(-1)` (". Bonjour.").
+- **LanguageDetector** — the `defaultLanguage()` getter is now asserted, and stickiness must scan
+  back to the **oldest** history turn (pins the `i >= 0` lower bound).
+- **GuardedSentenceEmitter** — a single token completing two safe sentences emits both (pins the
+  not-blocked guard inside the accept loop).
+- **AnswerService / StreamingConversationService** — the blocked-verdict telemetry
+  (`voice_support.guardrail_block`) is now asserted on both fallback paths; AnswerService also
+  asserts the prior history is forwarded verbatim to the LLM (null-guard branch).
+- **ConversationService** — the produced answer is asserted as the return value (both overloads).
+- **KnowledgeIngestionService** — chunks are stored with an ascending 0-based index (increment).
+- **KnowledgeSyncService** — `sync(sourceType)` returns the matching connector's report (predicate
+  + non-null return); `removeStale` deletion is isolated and asserted against the vector store.
+- **EmbeddingDomainClassifierAdapter** — cosine normalises by **both** magnitudes (non-unit anchor),
+  a score exactly equal to the threshold is accepted (`>=`), and a title-only signal classifies.
+
+**Final score: 318 mutations, 309 killed = 97 % detected, 97 % test strength, 0 no-coverage.**
+`mutationThreshold` ratcheted **88 → 95** (below the 97 baseline).
+
+**Accepted residual survivors — all 9 equivalent or timing-non-deterministic** (cannot be killed
+without a semantic change; documented, not chased):
+
+| Mutant | Why it is equivalent / untestable |
+|---|---|
+| `TextChunker.overlapTail:91` (`<= 0` → `< 0`) | `chunkOverlap` is never negative; both branches behave identically. |
+| `TextChunker.snapBackToBoundary:82` (`> start` → `>= start`) | Same snap-back result for the boundary index. |
+| `SentenceSegmenter.extractComplete:37` (`start > 0` → `>= 0`) | When `start == 0`, `buffer.delete(0, 0)` is a no-op. |
+| `EmbeddingDomainClassifierAdapter.classificationText:78` (`>` → `>=`) | `substring(0, maxChars)` when `length == maxChars` returns the identical string. |
+| `KnowledgeSyncService.elapsedMs:108` ×3 (sub→add, div→mult, return 0) | A `System.nanoTime()` duration; not deterministically assertable without an injected `Clock`. |
+| `OutputGuardrail.amountsIn` filter (`!isEmpty` → `true`) | `CURRENCY_AMOUNT` always matches ≥1 digit, so `canonical()` is never empty — the filter is a no-op. |
+| `ConversationHistoryFormatter.format:18` (`size*2` → `size/2`) | `ArrayList` initial-capacity hint only; no behavioural effect. |
+
 ### Review & QA outcome
 
 _Not runtime-affecting_ (test-tooling + tests + skill docs only; no production behaviour

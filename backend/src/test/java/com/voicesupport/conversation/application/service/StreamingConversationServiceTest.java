@@ -165,6 +165,14 @@ class StreamingConversationServiceTest {
                 .count();
         assertEquals(1.0, count);
         assertEquals(0, generator.callCount);
+
+        // AND the blocked verdict is counted on the streaming path too (ADR-0034); a mutant dropping
+        // the recordGuardrailBlock call in emitFallback would leave no such meter to find.
+        double blocks = meterRegistry.get("voice_support.guardrail_block")
+                .tag("verdict", "off_topic")
+                .counter()
+                .count();
+        assertEquals(1.0, blocks);
     }
 
     private GeneratedAnswer consume(String transcript, String conversationId) {

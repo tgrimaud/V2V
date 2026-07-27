@@ -67,9 +67,14 @@ class ConversationServiceTest {
         answerUseCase.nextAnswer = GeneratedAnswer.grounded("Réponse groundée.", 0.9);
 
         // WHEN answering
-        service.converse("Ma question", "c1");
+        GeneratedAnswer answer = service.converse("Ma question", "c1");
 
-        // THEN memory holds exactly that exchange
+        // THEN the produced answer is returned to the caller (pins both converse overloads against a
+        // null-return mutant that would still record memory but hand the caller nothing)
+        assertEquals("Réponse groundée.", answer.text());
+        assertTrue(answer.grounded());
+
+        // AND memory holds exactly that exchange
         List<ConversationTurn> turns = memory.recentTurns("c1");
         assertEquals(1, turns.size());
         assertEquals("Ma question", turns.get(0).userText());

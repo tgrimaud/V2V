@@ -64,6 +64,28 @@ class LanguageDetectorTest {
     }
 
     @Test
+    @DisplayName("exposes the configured default language")
+    void exposesConfiguredDefault() {
+        // The default is read back for prompt/telemetry wiring; pins the getter against a null return
+        assertEquals(AnswerLanguage.FRENCH, new LanguageDetector(AnswerLanguage.FRENCH).defaultLanguage());
+        assertEquals(AnswerLanguage.ENGLISH, detector.defaultLanguage());
+    }
+
+    @Test
+    @DisplayName("stickiness scans back to the OLDEST history turn when only it carries a language")
+    void stickinessReachesOldestTurn() {
+        // GIVEN only the oldest turn (index 0) is detectable; the newer turns are ambiguous
+        List<String> history = List.of("Pourquoi ma facture augmente ?", "123", "456");
+
+        // WHEN the current turn is ambiguous
+        AnswerLanguage resolved = detector.resolve("42", history);
+
+        // THEN the scan must reach index 0 to find French; a loop that stops at i > 0 would miss it
+        // and fall back to the English default (pins the `i >= 0` lower bound).
+        assertEquals(AnswerLanguage.FRENCH, resolved);
+    }
+
+    @Test
     @DisplayName("a forced UI language overrides detection and stickiness (US-042 BR1/BR2)")
     void forcedLanguageWins() {
         // GIVEN a clearly French question and a French session history

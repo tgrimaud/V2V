@@ -113,6 +113,44 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
+    void syncSingleSourceTypeReturnsReportForTheMatchingConnector() {
+        // GIVEN a service with a markdown connector holding two never-seen documents
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
+        KnowledgeSyncService service = serviceWith(
+                connector, new FakeKnowledgeSourceStatePort(), new FakeVectorStorePort());
+
+        // WHEN syncing that single source type by name
+        SyncReport report = service.sync(TYPE);
+
+        // THEN the matching connector is selected and its report is returned (not null, not thrown);
+        // pins the `sourceType.equals(...)` predicate and the non-null return of the single-source path
+        assertEquals(2, report.processed());
+        assertEquals(2, report.ingested());
+    }
+
+    @Test
+    void removeStaleDeletesTheStaleSourceFromTheVectorStore() {
+        // GIVEN two synced sources
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+        KnowledgeSyncService service = serviceWith(connector, state, vectorStore);
+        service.syncAll();
+        // Isolate the removeStale deletion from the delete-before-store done during first ingestion
+        vectorStore.deletedSources.clear();
+
+        // WHEN one unchanged source remains and the other disappears (a.md is skipped, not re-ingested)
+        connector.setDocuments(List.of(doc("a.md", "# A\n\nAlpha.")));
+        service.syncAll();
+
+        // THEN the stale source is deleted from the vector store via removeStale specifically; a mutant
+        // that removes that deleteBySource call leaves the store untouched here.
+        assertEquals(List.of(TYPE + "/b.md"), vectorStore.deletedSources);
+    }
+
+    @Test
     void syncUnknownSourceTypeThrows() {
         // GIVEN a service with only a markdown connector
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(TYPE, List.of());

@@ -59,6 +59,40 @@ class SentenceSegmenterTest {
     }
 
     @Test
+    @DisplayName("a '.' preceded by a digit is not a boundary even when followed by whitespace")
+    void digitDotFollowedByWhitespaceIsNotABoundary() {
+        // WHEN a digit-then-'.'-then-space precedes a real sentence-final '.'
+        List<String> sentences = segmenter.feed("Prix 5. suite. ");
+
+        // THEN only the sentence-final '.' splits; the "5." stays inside one sentence
+        // (pins the look-back `buffer.charAt(index - 1)` digit guard on the boundary line:
+        // a +1 offset, a negated digit test, or an always-true boundary would split at "5.").
+        assertEquals(List.of("Prix 5. suite."), sentences);
+    }
+
+    @Test
+    @DisplayName("a digit before '!' still splits (the digit guard applies only to '.')")
+    void digitBeforeBangStillSplits() {
+        // WHEN '!' follows a digit and a space
+        List<String> sentences = segmenter.feed("Total 5! Fin. ");
+
+        // THEN '!' is a boundary regardless of the preceding digit (only '.' is decimal-guarded);
+        // pins the `current != '.'` clause against a `current == '.'` mutant.
+        assertEquals(List.of("Total 5!", "Fin."), sentences);
+    }
+
+    @Test
+    @DisplayName("a terminator at index 0 is a boundary without looking back past the buffer start")
+    void leadingTerminatorIsBoundary() {
+        // WHEN the very first character is a terminator followed by whitespace
+        List<String> sentences = segmenter.feed(". Bonjour. ");
+
+        // THEN the `index == 0` guard makes it a boundary without reading charAt(-1); a mutant that
+        // negates that guard would index out of bounds instead of emitting the leading "." chunk.
+        assertEquals(List.of(".", "Bonjour."), sentences);
+    }
+
+    @Test
     @DisplayName("flush returns the remaining buffer and empties it")
     void flushReturnsRemainder() {
         // GIVEN buffered content with no trailing boundary
