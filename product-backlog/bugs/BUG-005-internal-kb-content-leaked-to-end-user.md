@@ -132,11 +132,17 @@ wrong-audience material. Two distinct facets:
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
+- **Retested by:** Live backend validation (full stack up: pgvector :5433, Ollama :11434, backend :8080 new code, voice runtime :8090)
+- **Retest date:** 2026-07-27
 - **Scenarios rerun:**
-- **Result:** Passed / Failed / Reopened
-- **Retest evidence:**
+  1. Full KB re-sync with the audience classifier (615 sources / 10 163 chunks). Audience split: **7 655 customer / 2 508 internal**. The exact BUG-005 offender (`source_id=244`, "Change Order Appointment / Changement de rendez-vous", VAA/R6) is tagged **internal**.
+  2. `/api/conversation/converse` turn 1 — well-formed billing question → grounded answer, confidence 0.7409.
+  3. `/api/conversation/converse` turn 2 (same conversation) — `"vas-y."` → **clarify** message ("Pouvez-vous la reformuler ou me donner un peu plus de détails ?"); `[GUARDRAIL] verdict=clarify`, grounded=false, 1 ms (no retrieval/LLM). **No R6/ION/VAA content.**
+  4. `/api/conversation/retrieve` with a query explicitly naming "VAA et R6" (topK 10) — the internal article `244` **does not appear** in the evidence (fail-closed audience filter excludes it).
+  5. **Live browser voice (WebRTC, :8090) — validated by the user (2026-07-27):** end-to-end mic → STT → backend → clarify → TTS confirmed working; no internal KB content spoken back on the vague follow-up. (Note: a very short single-word "vas-y" was once not finalized by streaming STT — a capture/end-of-turn artifact on ultra-short utterances, not a leak; a slightly longer utterance + a clear pause reproduces the clarify turn.)
+- **Result:** Passed (backend live + browser voice, user-validated) — the reported defect no longer reproduces.
+- **Retest evidence:** backend log `/tmp/vsb-be-bug005.log` (`[CONVERSE]` bug005-t1/t2, `[GUARDRAIL] verdict=clarify`); DB audience split; `/retrieve` evidence sources.
+- **Residual finding (recall gap, not a regression):** 964 chunks mentioning `ION`/`R6` as whole words remain tagged `customer` (vs 476 internal). The classifier is high-precision on the configured markers (`back office`, `vérification d'aptitude`, `r6/ion`, `vaa`, `vrd`); agent-desk articles that reference the ION/R6 platforms **without** those exact tokens are not yet excluded. Widening `KB_AUDIENCE_INTERNAL_MARKERS` (e.g. bare `ion`/`r6`) would raise recall but risks hiding legitimate customer pricing articles that mention `R6` — an SME/precision decision. Tracked as a follow-up tuning item; the specific BUG-005 defect is fixed.
 
 ## Closure
 
