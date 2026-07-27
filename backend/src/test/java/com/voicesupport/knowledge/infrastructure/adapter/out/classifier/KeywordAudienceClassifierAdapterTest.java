@@ -54,4 +54,33 @@ class KeywordAudienceClassifierAdapterTest {
         assertEquals("customer", classifier.classify(null, null));
         assertEquals("customer", classifier.classify("", "   "));
     }
+
+    @Test
+    @DisplayName("a marker present only in the title (empty content) still tags internal")
+    void tagsInternalWhenMarkerIsInTitleOnly() {
+        // GIVEN — the internal marker is in the title and the content is empty; the title must
+        // be part of the haystack (pins `title == null ? "" : title`, not dropping the title).
+        String internalTitle = "Back Office procedure (VAA)";
+
+        // WHEN
+        String audience = classifier.classify(internalTitle, "");
+
+        // THEN
+        assertEquals("internal", audience);
+    }
+
+    @Test
+    @DisplayName("a blank marker in the config is ignored (does not turn every article internal)")
+    void ignoresBlankMarkers() {
+        // GIVEN — a blank marker must be filtered out at construction; if kept, its empty pattern
+        // would match every haystack and mis-tag all content as internal (fail-open).
+        KeywordAudienceClassifierAdapter withBlank =
+                new KeywordAudienceClassifierAdapter(List.of("back office", "   "));
+
+        // WHEN
+        String audience = withBlank.classify("Why did my bill increase?", "Your monthly bill can increase.");
+
+        // THEN
+        assertEquals("customer", audience);
+    }
 }

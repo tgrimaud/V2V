@@ -10,6 +10,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
+| TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | In progress (2026-07-27, Sprint 9) — branch `task/TASK-QA-018-mutation-testing-backend` |
 
 ---
 
@@ -282,3 +283,115 @@ Delivered on `task/TASK-BE-018-concise-voice-answers` (branched from
 mouth-to-ear measurement (TASK-WEB-014, ADR-0029) and enlarge the sample; the current
 evidence is the backend lever (`answer_chars` + `llm_wording`) with TTS cost as a proxy.
 Default budget kept at **3** (env `LLM_MAX_ANSWER_SENTENCES`).
+
+---
+
+## TASK-QA-018 — Mutation Testing (PIT) For The Backend Domain
+
+**Parent:** EPIC-005 (Answer engine) — cross-cutting test-quality hardening
+**Classification:** V1 hardening / test quality
+**Status:** In progress — Sprint 9 (hardening/assainissement). Requested by user 2026-07-27
+after the BUG-001/BUG-005 guardrail work, to prove the guardrail/classifier tests actually
+*kill* mutations (catch real logic changes), not just execute lines.
+**Priority:** Medium
+**Branch:** `task/TASK-QA-018-mutation-testing-backend`
+**Relates to:** `test-guidelines` skill (mutation-testing standard) + `java-backend-developer`
+skill (PIT/Maven wiring); BUG-001 (`InputGuardrail`), BUG-005 (`RetrievalConfidenceGuardrail`,
+audience classifier) — the exact deterministic logic mutation testing protects.
+
+### Context
+
+The backend has strong line/branch coverage on pure-domain logic (guardrails, language
+detection, audience classifier, money/comparison to come) but coverage only proves code was
+*executed*, not that a test would *fail* if the logic were wrong. The recent P1/P2 guardrail
+fixes (three-band confidence, vague-turn clarify, intent-aware cyber rule) are exactly the
+kind of boolean/threshold logic where a weak assertion silently passes a broken mutant.
+
+The project is an ideal fit for mutation testing: pure-domain unit tests, manual fakes, no
+Mockito, no `@SpringBootTest`, no DB/Ollama needed for `mvn test` → PIT runs fast with high
+signal on the classes that matter.
+
+### Objective
+
+Introduce **PIT (pitest)** mutation testing on the backend, scoped first to the
+high-value deterministic domain packages, with a starting mutation-score threshold, so
+weak tests are surfaced before they ship.
+
+### Scope
+
+- Add `pitest-maven` + `pitest-junit5-plugin` to `backend/pom.xml` (test-only, not a runtime
+  dep). Pin a version that runs under the local JDK (see JDK note).
+- `targetClasses` scoped to the deterministic domain first (not the whole app):
+  `com.voicesupport.conversation.domain.service.*` (guardrails, language, segmenter) +
+  `com.voicesupport.knowledge.infrastructure.adapter.out.classifier.*` (audience classifier).
+  Widen later (comparison/money when they land).
+- `targetTests` = the matching `*Test` classes; exclude Cucumber/ArchUnit suites from the
+  mutation run (they are not fast unit oracles).
+- Run `mvn -Ppitest org.pitest:pitest-maven:mutationCoverage` (own profile so the normal
+  `mvn test` stays fast) and capture the baseline HTML/XML report score.
+- Set a **starting** `mutationThreshold` (descriptive, non-CI-breaking at first) — proposal
+  **70 %** on the scoped packages — with a short rationale; ratchet up once the baseline is known.
+
+### Acceptance
+
+- `mvn -Ppitest ...:mutationCoverage` runs green on the scoped packages and produces a
+  mutation-score report; the baseline score is recorded in this ticket + the QA doc.
+- Any surviving mutants that reveal a genuine assertion gap are either killed (test added)
+  or explicitly noted as accepted (with reason).
+- The standard `mvn test` is unchanged (PIT is behind a profile), so CI/dev speed is unaffected.
+- Mutation-testing standard documented in `test-guidelines` (norm) + `java-backend-developer`
+  (PIT/Maven how-to); skill edits go through the `skill-creator` process.
+- `mvn test` + ArchUnit stay green.
+
+### Notes
+
+- **Java version:** the build targets **Java 17** (`<java.version>17</java.version>`), fully
+  supported by modern PIT (1.16.x) + `pitest-junit5-plugin` (1.2.x). The only nuance is the
+  **runtime JDK** that executes Maven (currently openjdk **25** on this machine): PIT must be
+  a version new enough to run on JDK 25, otherwise pin `JAVA_HOME` to a JDK 17 for the PIT run.
+  Validate at first run.
+- **Offline builds:** the normal loop uses `mvn -o`; the first PIT run needs network to fetch
+  the plugin jars (run once online, then it is cached in `~/.m2`).
+- Mutation testing complements, does not replace, coverage — it is the "do my assertions
+  actually catch bugs" gate for critical deterministic logic.
+
+### Implementation notes (2026-07-27)
+
+Delivered on `task/TASK-QA-018-mutation-testing-backend` (branched from `feat/restart-from-scratch`):
+
+- **PIT wired behind a `pitest` profile** in `backend/pom.xml` (`pitest-maven` 1.19.1 +
+  `pitest-junit5-plugin` 1.2.2). Scoped to `conversation.domain.service.*` +
+  `knowledge.infrastructure.adapter.out.classifier.*`. The normal `mvn test` loop is
+  unchanged (profile-gated). Run:
+  `mvn -Ppitest test-compile org.pitest:pitest-maven:mutationCoverage`.
+- **JDK compat validated:** the build targets **Java 17**; PIT 1.19.1 runs cleanly under the
+  local **JDK 25** runtime (no ASM major-version failure), so no JDK-17 toolchain is required
+  here. Documented the `JAVA_HOME`-on-17 fallback in case a future PIT/JDK combo regresses.
+- **Baseline captured:** 193 mutations, **168 killed (87 %)**, **test strength 90 %**, line
+  coverage 93 % on the scoped classes.
+- **PIT surfaced real assertion gaps in the BUG-001/BUG-005 hot path** (the whole point):
+  - `RetrievalConfidenceGuardrail.check` — both band edges (`< floor`, `< clarify-ceiling`)
+    were unpinned → added exact-boundary tests (score == 0.5 clarifies, score == 0.62 passes).
+  - `InputGuardrail.isCyberOffense` (BUG-001) — no case reached the final `offense-verb?`
+    return with the discriminating outcome → added a neutral cyber-term case
+    ("C'est quoi le phishing exactement ?") that must **pass** (only PERFORM-intent is refused).
+  - `InputGuardrail.isVague` (BUG-005) — the `words.length <= MAX_VAGUE_TOKENS` edge was
+    unpinned → added an exactly-3-continuers vague turn ("ok alors donc") that must clarify.
+  - `KeywordAudienceClassifierAdapter` — title-only marker (must tag internal) and blank-marker
+    config (must not turn every article internal) were unasserted → added both.
+- **After strengthening: 174 killed (mutation score 90 %), test strength 93 %.** All six
+  targeted survivors killed. `mutationThreshold=85` set (below the 90 baseline) to guard
+  regressions without flaking; ratchet up as peripheral survivors are killed.
+- **Accepted residual survivors** (out of the BUG-001/005 scope, tracked not chased):
+  `SentenceSegmenter` (streaming boundary), `EmbeddingDomainClassifierAdapter` (domain, not
+  audience), `LanguageDetector`, `ConversationHistoryFormatter`, `OutputGuardrail` lambda,
+  `GuardedSentenceEmitter` — mostly `NO_COVERAGE`/peripheral boundary mutants.
+- **Docs:** mutation-testing norm added to the `test-guidelines` skill; PIT/Maven how-to
+  (profile, recompile gotcha, JDK note) added to the `java-backend-developer` skill.
+- **Verification:** `mvn -o test` = **279 green**; `mvn -Ppitest ...:mutationCoverage` = BUILD
+  SUCCESS (90 % ≥ 85 threshold).
+
+### Review & QA outcome
+
+_Not runtime-affecting_ (test-tooling + tests + skill docs only; no production behaviour
+change). Adversarial code review / QA latency gates N/A. Awaiting user validation before merge.

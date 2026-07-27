@@ -144,4 +144,53 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- TASK-QA-018: mutation testing (PIT). Behind a profile so the normal
+             `mvn test` loop stays fast. Scoped to the high-value deterministic domain
+             (guardrails + audience classifier) — the BUG-001/BUG-005 logic where a weak
+             assertion could silently pass a broken mutant. IMPORTANT: invoke via a phase so
+             the tests recompile — calling the goal alone runs against stale target/test-classes:
+                 mvn -Ppitest test-compile org.pitest:pitest-maven:mutationCoverage
+             Report: target/pit-reports/index.html. The build targets Java 17; if PIT
+             fails under a newer runtime JDK (ASM major-version), run with JAVA_HOME on a
+             JDK 17. Baseline (2026-07-27): 193 mutations, 90 % killed, 93 % test strength.
+             mutationThreshold=85 (below baseline) guards regressions without flaking; ratchet
+             up as peripheral survivors (SentenceSegmenter, EmbeddingDomainClassifier...) are killed. -->
+        <profile>
+            <id>pitest</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-maven</artifactId>
+                        <version>1.19.1</version>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.pitest</groupId>
+                                <artifactId>pitest-junit5-plugin</artifactId>
+                                <version>1.2.2</version>
+                            </dependency>
+                        </dependencies>
+                        <configuration>
+                            <targetClasses>
+                                <param>com.voicesupport.conversation.domain.service.*</param>
+                                <param>com.voicesupport.knowledge.infrastructure.adapter.out.classifier.*</param>
+                            </targetClasses>
+                            <targetTests>
+                                <param>com.voicesupport.conversation.domain.service.*</param>
+                                <param>com.voicesupport.knowledge.infrastructure.adapter.out.classifier.*</param>
+                            </targetTests>
+                            <outputFormats>
+                                <param>HTML</param>
+                                <param>XML</param>
+                            </outputFormats>
+                            <timestampedReports>false</timestampedReports>
+                            <mutationThreshold>85</mutationThreshold>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

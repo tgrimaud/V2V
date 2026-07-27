@@ -63,7 +63,11 @@ class InputGuardrailTest {
             "Comment protéger mon compte contre le phishing ?",
             "How can I protect myself against malware?",
             "How do I report a phishing email?",
-            "Je pense être victime d'une arnaque par téléphone"
+            "Je pense être victime d'une arnaque par téléphone",
+            // BUG-001 boundary: a neutral cyber term with NO offensive verb and NO defensive
+            // marker must still pass (only PERFORM-intent is refused) — reaches isCyberOffense's
+            // final `offense verb present?` return, pinning it against an always-unsafe mutant.
+            "C'est quoi le phishing exactement ?"
     })
     @DisplayName("BUG-001: passes legitimate anti-phishing/scam support questions to retrieval")
     void passesLegitimateCyberSupport(String question) {
@@ -116,7 +120,10 @@ class InputGuardrailTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"vas-y", "vas-y.", "Vas y", "allez-y", "ok", "OK", "d'accord", "continue",
-            "voilà", "ok alors", "et ensuite"})
+            "voilà", "ok alors", "et ensuite",
+            // BUG-005 boundary: exactly MAX_VAGUE_TOKENS (3) continuers must still clarify —
+            // pins the `words.length <= MAX_VAGUE_TOKENS` edge against a `< MAX` mutant.
+            "ok alors donc"})
     @DisplayName("BUG-005: asks to clarify on a vague/low-information turn instead of retrieving")
     void clarifiesOnVagueTurn(String vague) {
         GuardrailDecision decision = guardrail.check(vague, true, AnswerLanguage.FRENCH);

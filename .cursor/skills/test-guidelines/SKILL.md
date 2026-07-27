@@ -179,6 +179,38 @@ If coverage thresholds can't be met, specific classes can be excluded (e.g. Spri
 
 ---
 
+## Mutation Testing
+
+Coverage tells you a line *ran*; it does not tell you a test would *fail* if that line were wrong. Mutation testing closes that gap: a tool (PIT for Java) makes small, systematic changes to the production code — flip a `<` to `<=`, negate a condition, replace a boolean return with `true`, drop a method call — and re-runs the tests. If a mutant survives (tests still pass), some behaviour is unasserted. This is the honest measure of whether your assertions actually catch bugs.
+
+### When to use it (recommended for critical deterministic logic)
+
+Mutation testing pays off most on **pure, deterministic decision logic** where a subtle boundary or negation error is both easy to introduce and expensive to ship: guardrails, confidence thresholds, classifiers, money/reconciliation maths, parsing/segmentation. It is not a blanket requirement for every class — DTOs, wiring/config, and thin adapters get little from it. Scope the run to the packages that matter; a scoped run stays fast and gives high signal.
+
+Run it on the critical logic **before QA acceptance** of a story that touches such logic, and treat surviving mutants like review findings.
+
+### How to read the result
+
+- **Mutation score** = killed / total mutations. The headline number.
+- **Test strength** = killed / mutations that were *covered* (excludes `NO_COVERAGE`). Tells you assertion quality independent of coverage gaps.
+- **SURVIVED** = the code was exercised but no assertion pinned the mutated behaviour → a real assertion gap (or an equivalent mutant that cannot be observed).
+- **NO_COVERAGE** = the mutated line was never executed by any test → a coverage gap, not an assertion gap.
+
+### What to do with survivors
+
+For each survivor, decide: **kill it or accept it.**
+
+- **Kill** the ones that reveal a genuine gap — usually by adding a *boundary* case (a value exactly on a threshold pins `<` vs `<=`) or a *discriminating* case (an input that reaches the mutated return with the opposite outcome). These tests double as executable documentation of the exact rule.
+- **Accept**, explicitly and with a reason, equivalent mutants (no observable behavioural difference) and low-value peripheral survivors. Record the rationale so the residual is a decision, not an oversight.
+
+### Threshold policy
+
+Put mutation testing behind its own build profile so the normal `mvn test` loop stays fast. Set a **starting `mutationThreshold` below the measured baseline** (e.g. baseline 90 % → threshold 85 %): high enough to catch a regression, low enough not to flake on minor fluctuations. Ratchet the threshold up as survivors are killed. Record the baseline (mutations / killed / test strength) so the ratchet has a reference.
+
+For the Java/Maven wiring (PIT `pitest-maven` + `pitest-junit5-plugin`, scoping, the recompile gotcha, JDK notes), see the `java-backend-developer` skill.
+
+---
+
 ## Architecture and Infrastructure Tests
 
 ### ArchUnit for module dependencies (optional)

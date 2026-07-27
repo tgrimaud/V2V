@@ -63,6 +63,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
 | RF-017 | Assert the stub DEC-002 no-amount invariant at import time (or close as superseded by the HTTP backend default) | S | Open (Low) |
 | RF-019 | Live re-validation of the browser answering loop (Chrome DevTools MCP) — the live stack is already up | S/M | Gated (manual live QA) |
+| TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — test effectiveness, not just coverage | M | In progress (2026-07-27) — added after BUG-001/005 to prove guardrail tests kill mutants |
 
 ### Tier B — API / documentation hardening
 

@@ -96,6 +96,32 @@ class RetrievalConfidenceGuardrailTest {
     }
 
     @Test
+    @DisplayName("BUG-005 boundary: a score exactly at the floor clarifies (floor is inclusive-pass, `< floor` blocks)")
+    void scoreExactlyAtFloorClarifies() {
+        // GIVEN
+        List<RetrievedEvidence> atFloor = List.of(new RetrievedEvidence("t", "s", "support", 0.5));
+
+        // WHEN
+        GuardrailDecision decision = banded.check(atFloor, AnswerLanguage.FRENCH);
+
+        // THEN — pins `bestScore < floor` (not `<=`): at 0.5 we do NOT hand off, we clarify
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("BUG-005 boundary: a score exactly at the clarify ceiling passes (`< ceiling` clarifies, ceiling answers)")
+    void scoreExactlyAtCeilingPasses() {
+        // GIVEN
+        List<RetrievedEvidence> atCeiling = List.of(new RetrievedEvidence("t", "s", "support", 0.62));
+
+        // WHEN
+        GuardrailDecision decision = banded.check(atCeiling, AnswerLanguage.FRENCH);
+
+        // THEN — pins `bestScore < ceiling` (not `<=`): at 0.62 we answer, we do NOT clarify
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
+    @Test
     @DisplayName("the single-threshold constructor keeps the legacy no-clarify-band behavior")
     void singleThresholdHasNoClarifyBand() {
         RetrievalConfidenceGuardrail legacy = new RetrievalConfidenceGuardrail(0.5);

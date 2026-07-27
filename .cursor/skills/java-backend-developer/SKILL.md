@@ -380,6 +380,48 @@ See the `software-architect` skill's `references/archunit-tests.md` for complete
 - No field injection (`@Autowired` on fields)
 - Controllers end with `Controller`, adapters end with `Adapter`
 
+### Mutation Testing (PIT)
+
+For *why* and *when* to use mutation testing, and how to read the result, see the `test-guidelines` skill's "Mutation Testing" section. This is the Java/Maven wiring.
+
+Use **PIT** (`pitest-maven` + `pitest-junit5-plugin`) behind a dedicated `pitest` profile so the normal `mvn test` loop stays fast. Scope `targetClasses` / `targetTests` to the high-value deterministic domain (guardrails, thresholds, classifiers, money) — not the whole app.
+
+```xml
+<profile>
+  <id>pitest</id>
+  <build><plugins>
+    <plugin>
+      <groupId>org.pitest</groupId>
+      <artifactId>pitest-maven</artifactId>
+      <version>1.19.1</version>
+      <dependencies>
+        <dependency>
+          <groupId>org.pitest</groupId>
+          <artifactId>pitest-junit5-plugin</artifactId>
+          <version>1.2.2</version>
+        </dependency>
+      </dependencies>
+      <configuration>
+        <targetClasses><param>com.example.domain.service.*</param></targetClasses>
+        <targetTests><param>com.example.domain.service.*</param></targetTests>
+        <outputFormats><param>HTML</param><param>XML</param></outputFormats>
+        <timestampedReports>false</timestampedReports>
+        <mutationThreshold>85</mutationThreshold> <!-- below baseline; ratchet up -->
+      </configuration>
+    </plugin>
+  </plugins></build>
+</profile>
+```
+
+**Gotcha — recompile first.** Invoking the goal alone runs against a *stale* `target/test-classes`, so new/edited tests are silently ignored and the score looks unchanged. Always drive it through a phase:
+
+```bash
+mvn -Ppitest test-compile org.pitest:pitest-maven:mutationCoverage
+# report: target/pit-reports/index.html
+```
+
+**JDK note.** The build targets Java 17, which modern PIT (1.19.x) + junit5-plugin (1.2.x) fully support. PIT executes under the JVM that runs Maven; on a much newer runtime JDK it needs a PIT version recent enough for that bytecode (ASM major version) — PIT 1.19.1 runs fine under JDK 25. If a mutation run fails on an "unsupported class file major version", point `JAVA_HOME` at a JDK 17 for the PIT run.
+
 ### Test Structure
 
 ```
