@@ -106,12 +106,18 @@ class CallEndFarewellProcessor(FrameProcessor):
     async def _handle_confirmation(self, frame: TranscriptionFrame, direction: FrameDirection) -> None:
         self._cancel_timer()
         self._state = _State.IDLE
-        if self._detector.is_done_confirmation(frame.text):
+        if self._confirms_done(frame.text):
             await self._end_call_with(SIGNAL_CONFIRMATION, direction)
         else:
             # The customer wants something else: cancel the farewell, answer normally.
             self._record("voice.call_end.cancelled")
             await self.push_frame(frame, direction)
+
+    def _confirms_done(self, text: str) -> bool:
+        """The confirmation answer ends the call when it is an explicit "done" ("non",
+        "c'est tout") OR a repeated standalone closing ("non, au revoir" / "au revoir"),
+        so re-saying goodbye is not mistaken for a new request."""
+        return self._detector.is_done_confirmation(text) or self._detector.detect_closing(text).is_closing
 
     def _arm_timer(self, direction: FrameDirection) -> None:
         self._cancel_timer()

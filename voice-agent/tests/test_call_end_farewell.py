@@ -86,6 +86,18 @@ class ConfirmationTurnTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([SIGNAL_CONFIRMATION], spy.signals)
         self.assertEqual(SIGNAL_CONFIRMATION, processor.last_end_signal)
 
+    async def test_a_repeated_closing_confirmation_ends_the_call(self) -> None:
+        # GIVEN a farewell processor with a teardown spy
+        spy = _EndCallSpy()
+        processor = CallEndFarewellProcessor(ClosingIntentDetector(), _envelope(), end_call=spy)
+        # WHEN the customer answers the confirmation by re-saying a farewell ("non, au revoir")
+        down, _up = await run_test(
+            processor, frames_to_send=[_transcript("au revoir"), _transcript("non, au revoir")]
+        )
+        # THEN a re-said goodbye is treated as done (not a new request): the call ends
+        self.assertIn(DEFAULT_CLOSING_MESSAGE, _plain_texts(down))
+        self.assertEqual([SIGNAL_CONFIRMATION], spy.signals)
+
     async def test_a_follow_up_question_cancels_the_farewell_and_is_answered(self) -> None:
         # GIVEN a farewell processor with a teardown spy
         spy = _EndCallSpy()
