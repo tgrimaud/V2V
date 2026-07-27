@@ -10,7 +10,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-012 | Backend REST error contract (`GlobalExceptionHandler` + `ErrorResponse`) | V1 hardening | TASK-BE-002 | ✅ Merged into `feat/sprint-7-answer-engine` (2026-07-20) |
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
-| TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | In progress (2026-07-27, Sprint 9) — branch `task/TASK-QA-018-mutation-testing-backend` |
+| TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
 
 ---
 
@@ -290,9 +290,11 @@ Default budget kept at **3** (env `LLM_MAX_ANSWER_SENTENCES`).
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting test-quality hardening
 **Classification:** V1 hardening / test quality
-**Status:** In progress — Sprint 9 (hardening/assainissement). Requested by user 2026-07-27
-after the BUG-001/BUG-005 guardrail work, to prove the guardrail/classifier tests actually
-*kill* mutations (catch real logic changes), not just execute lines.
+**Status:** ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (fast-forward, `58cdb2c`).
+Sprint 9 (hardening/assainissement). Requested by user 2026-07-27 after the BUG-001/BUG-005
+guardrail work, to prove the guardrail/classifier tests actually *kill* mutations (catch real
+logic changes), not just execute lines. Final: 318 mutations, 309 killed (97 %), 97 % test
+strength, `mutationThreshold=95`; 9 residual survivors accepted as equivalent/non-deterministic.
 **Priority:** Medium
 **Branch:** `task/TASK-QA-018-mutation-testing-backend`
 **Relates to:** `test-guidelines` skill (mutation-testing standard) + `java-backend-developer`
