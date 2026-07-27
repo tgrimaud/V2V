@@ -5,11 +5,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conversation_backend import (  # noqa: E402
+    STUB_ANSWER_TEXT,
     AnswerOutcome,
     AnswerRequest,
     BackendAnswerPort,
     EmptyTranscriptError,
     StubBackendAdapter,
+    assert_no_fabricated_amount,
 )
 
 
@@ -61,6 +63,30 @@ class StubBackendAdapterTest(unittest.TestCase):
                 # so it cannot state an invented amount (DEC-002).
                 self.assertFalse(any(ch.isdigit() for ch in text), text)
                 self.assertNotIn("€", text)
+
+    def test_import_time_invariant_accepts_the_shipped_stub_text(self) -> None:
+        # GIVEN the constant that was already validated at import time
+        # WHEN the DEC-002 invariant guard is applied to it again
+        # THEN it does not raise (the shipped text is digit/currency-free)
+        assert_no_fabricated_amount(STUB_ANSWER_TEXT)
+
+    def test_import_time_invariant_rejects_a_fabricated_amount(self) -> None:
+        # GIVEN texts that would let the stub voice an invented amount (RF-017)
+        for drifted in ["Votre facture est de 5 euros", "Total 39,99", "Il reste 10 unités"]:
+            with self.subTest(text=drifted):
+                # WHEN the guard runs in the code path (not only in a test that could be relaxed)
+                # THEN drift on the constant fails fast instead of shipping a DEC-002 breach
+                with self.assertRaises(ValueError):
+                    assert_no_fabricated_amount(drifted)
+
+    def test_import_time_invariant_rejects_currency_symbols(self) -> None:
+        # GIVEN a digit-free but currency-symboled text
+        for drifted in ["Un montant en €", "A charge in $", "Payable in £"]:
+            with self.subTest(text=drifted):
+                # WHEN the guard runs
+                # THEN the currency symbol alone is enough to reject it
+                with self.assertRaises(ValueError):
+                    assert_no_fabricated_amount(drifted)
 
     def test_answer_is_deterministic(self) -> None:
         # GIVEN the same transcript answered twice

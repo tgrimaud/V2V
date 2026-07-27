@@ -22,7 +22,7 @@ from .degraded import (
 from .http_backend import HttpBackendAdapter, HttpBackendError, HttpResponse
 from .models import AnswerOutcome, AnswerRequest, AnswerResult, ConversationEnvelope
 from .port import BackendAnswerPort, EmptyTranscriptError
-from .stub_backend import STUB_ANSWER_TEXT, StubBackendAdapter
+from .stub_backend import STUB_ANSWER_TEXT, StubBackendAdapter, assert_no_fabricated_amount
 
 __all__ = [
     "AnswerOutcome",
@@ -44,6 +44,7 @@ __all__ = [
     "STUB",
     "STUB_ANSWER_TEXT",
     "StubBackendAdapter",
+    "assert_no_fabricated_amount",
     "build_backend",
     "degraded_answer",
 ]
