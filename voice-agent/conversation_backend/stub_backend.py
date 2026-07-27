@@ -14,6 +14,9 @@ STUB_ANSWER_TEXT = (
 # A monetary amount always needs a digit, so a digit-free text can never state one; the
 # currency symbols are a belt-and-suspenders check. Kept as symbols only (not currency
 # words) because the digit rule is what actually forbids a fabricated amount (DEC-002).
+# Intentional parity with the production backend OutputGuardrail (DEC-002 regex), which
+# is likewise digit-anchored: a spelled-out amount ("cinq euros", no digit) is out of
+# scope on both paths by design, so the stub guard is neither weaker nor stronger.
 _CURRENCY_SYMBOLS = ("€", "$", "£")
 
 
