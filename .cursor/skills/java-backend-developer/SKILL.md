@@ -302,7 +302,7 @@ public class AdapterConfig {
 
 ### Boy Scout Rule
 
-**Leave the code cleaner than you found it.** Every time you touch a file — to fix a bug, add a feature, or review — improve at least one thing: rename an unclear variable, extract a method, remove dead code, tighten a type. Small, incremental cleanups compound and prevent rot. Never make a file worse than it was before your change.
+Leave the code cleaner than you found it — bring the code you touch up to the current standard, behaviour-preserving. The canonical rule (scope to what you touch, test-before/after, keeping the cleanup as its own commit, and respecting mandatory constraints like interface-override method names) lives in the language-agnostic **code-guidelines** skill under *Refactoring Safety → "Leave it cleaner than you found it — the Boy Scout Rule"*. Follow it for Java too.
 
 ### Naming
 - Classes: `PascalCase` (nouns)
