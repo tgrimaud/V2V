@@ -15,3 +15,14 @@ Feature: End-to-end streaming voice loop
     And the bot answer is spoken back as incremental audio
     And the whole turn shares one correlation id
     And time_to_first_audio is derivable from the turn telemetry
+
+  # TASK-WEB-017 - per-turn identity on the streaming path: one recorder + one
+  # correlation id per call, but each turn carries its own turn id so per-turn latency
+  # can be derived from a multi-turn session and turns never overwrite each other.
+  Scenario: A multi-turn streaming call keeps each turn individually traceable
+    Given a customer asking two questions on the same streaming call
+    When the streaming loop runs both turns end to end
+    Then the whole call shares one correlation id
+    And every slice span of the call carries a per-turn id
+    And the two turns carry distinct per-turn ids under one conversation id
+    And the per-turn report separates the two turns without overwriting slices

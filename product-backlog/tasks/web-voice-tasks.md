@@ -1552,11 +1552,26 @@ project APIs are documented consistently.
 TASK-WEB-013 (telemetry import unification), TASK-WEB-014 (mouth-to-ear latency),
 `docs/architecture/channel-identity-boundary.md` (identity fields)
 **Classification:** V1 hardening (observability)
-**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-23) — surfaced
-during live WebRTC testing; prerequisite for any per-turn latency SLO claim from live/browser
-sessions (unblocks TASK-WEB-014/015, which stay out of this sprint).
+**Status:** Implemented (2026-07-23, Sprint 9) — per-turn identity baggage on
+`TelemetryRecorder.begin_turn(...)`, advanced by the turn owner (`StreamingSttProcessor`
+on the live path, `UtteranceAggregator` on the batch-bridge path) at each end-of-turn; the
+recorder stamps `conversation_id`/`message_id`/`turn_index` on **every** span/event/metric/log
+of the turn (STT, backend, TTS, channel egress) while `correlation_id` stays per-conversation.
+`pipeline_timing` buckets by `(correlation_id, turn_index)` (positional-zip fallback for
+spans without a per-turn id) and adds `per_turn_timings`; `streaming_latency_report.py` gains
+a `per_turn` section. unittest **346** green (+12), behave **27** green (+1 multi-turn
+`streaming_loop.feature` scenario driving the real STT→backend→TTS processors and asserting
+every slice span carries a per-turn id). Adversarial review **93/100**. QA passed —
+`docs/qa/task-web-017-per-turn-telemetry-qa.md`: the `per_turn` report separates turns end to
+end via `scripts/streaming_per_turn_sample.py` (2 calls × 3 paced turns → 6 distinct rows,
+distinct `message_id` under one `correlation_id`, one `time_to_first_audio` per turn),
+barge-in turn → null composite with no desync, no key/audio/path leak in telemetry. Warm **live**
+sample captured (Gradium STT/TTS + Mistral over WebRTC, call `3bcf0fac…`): `turn_index` 1/2/3,
+3 distinct `message_id` under one `conversation_id`, every slice span once per turn; real per-turn
+`time_to_first_audio` 5154/5740/5350 ms. All Required Evidence satisfied — **done** (SLO latency is a
+separate STT-finalize concern owned by TASK-STT-010/011, not WEB-017).
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-017-streaming-per-turn-telemetry-id`
 
 ### Context
 
@@ -1618,3 +1633,18 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
   per-turn slices** in the report from one session.
 - Updated `docs/observability/voice-journey-timing.md`.
 - No API key / raw audio / path leak in telemetry.
+
+**Evidence status (2026-07-23):**
+- ✅ Developer tests — `test_telemetry_turn_baggage.py`, `test_streaming_stt_processor.py`,
+  `test_utterance_aggregator.py`, `test_pipeline_timing.py` (per-turn lifecycle + by-turn bucketing).
+- ✅ Multi-turn sample showing distinct per-turn slices — Behave `streaming_loop.feature` #2
+  (real processors) + `scripts/streaming_per_turn_sample.py` → `streaming_latency_report.py`
+  `per_turn` section (offline, repeatable). See `docs/qa/task-web-017-per-turn-telemetry-qa.md`.
+- ✅ Updated `docs/observability/voice-journey-timing.md`.
+- ✅ No API key / raw audio / path leak — offline + live dump attribute scan (id/latency/provider/outcome only).
+- ✅ **Warm live** multi-turn sample (Gradium STT/TTS + Mistral over WebRTC) — one call `3bcf0fac…`,
+  `conversation_id 1e5b912d…`, `turn_index` 1/2/3, 3 distinct `message_id`, every slice span once per
+  turn (no overwrite). Real per-turn `time_to_first_audio` 5154/5740/5350 ms (p50 5350 / p95 5740),
+  mouth-to-ear p50 5850 / p95 6240 ms; `barge_in_count=2` yet all turns cleanly separated. Full numbers
+  in `docs/qa/task-web-017-per-turn-telemetry-qa.md`. (Composite p95 exceeds ADR-0018/0029 gates due to
+  ~4 s Gradium STT finalize — pre-existing, owned by TASK-STT-010/011, out of WEB-017 scope.)

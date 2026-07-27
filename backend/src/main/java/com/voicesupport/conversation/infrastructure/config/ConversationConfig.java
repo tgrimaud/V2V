@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
@@ -32,15 +33,26 @@ import java.util.concurrent.TimeUnit;
 @Configuration
 public class ConversationConfig {
 
+    // ADR-0034: the vague-turn markers (contentless continuers like "vas-y", "ok") that trigger a
+    // clarify instead of retrieving a weak, possibly wrong-audience match (BUG-005). Configurable so
+    // the list can be tuned per deployment/language without a rebuild.
     @Bean
-    public InputGuardrail inputGuardrail() {
-        return new InputGuardrail();
+    public InputGuardrail inputGuardrail(
+            @Value("${voice-support.conversation.vague-markers:"
+                    + "vas-y,vas y,allez-y,allez y,continue,continuez,poursuis,poursuivez,ensuite,"
+                    + "la suite,go,go on,go ahead,ok,okay,d'accord,dac,dacc,alors,donc,bah,ben,euh,"
+                    + "hmm,voila,voilà,et}") List<String> vagueMarkers) {
+        return new InputGuardrail(vagueMarkers);
     }
 
+    // ADR-0034: three-band confidence policy. Below confidence-threshold -> advisor hand-off; between
+    // it and clarify-threshold -> ask to clarify; at/above -> answer. clarify-threshold <= threshold
+    // disables the clarify band. Definitive billing proof threshold stays gated by OQ-002.
     @Bean
     public RetrievalConfidenceGuardrail retrievalConfidenceGuardrail(
-            @Value("${voice-support.conversation.confidence-threshold:0.5}") double confidenceThreshold) {
-        return new RetrievalConfidenceGuardrail(confidenceThreshold);
+            @Value("${voice-support.conversation.confidence-threshold:0.5}") double confidenceThreshold,
+            @Value("${voice-support.conversation.clarify-threshold:0.62}") double clarifyThreshold) {
+        return new RetrievalConfidenceGuardrail(confidenceThreshold, clarifyThreshold);
     }
 
     @Bean

@@ -48,6 +48,15 @@ also create unnecessary escalations.
 - Causes that require escalation.
 - Expected wording when certainty is insufficient.
 
+### Implementation Note (2026-07-27, ADR-0034 / BUG-005)
+
+A **provisional** three-band retrieval-confidence policy now exists pending this decision:
+below `confidence-threshold` (0.5) → advisor hand-off; between it and `clarify-threshold`
+(0.62) → ask the customer to clarify; at/above → answer. These are engineering placeholders
+tuned on observed similarity scores, **not** a validated billing-proof threshold — the
+definitive values (and whether a billing answer with no confidence must be treated as
+degraded) remain gated by this OQ and the billing answer engine.
+
 ---
 
 ## OQ-003 - BSS Data Availability And Granularity

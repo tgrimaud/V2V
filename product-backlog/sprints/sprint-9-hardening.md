@@ -15,8 +15,13 @@ per-turn latency measurement they depend on).
 
 ## Status
 
-**Status:** Planned (opened 2026-07-23). Scope set by user decision after the Sprint 8
-live tests surfaced BUG-005 and TASK-WEB-017.
+**Status:** In progress (opened 2026-07-23). Scope set by user decision after the Sprint 8
+live tests surfaced BUG-005 and TASK-WEB-017. Delivered so far: TASK-WEB-013 + TASK-WEB-017
+(both merged); BUG-004 closed (live-validated, fix already merged); TASK-ENV-001 + TASK-STT-012
+reconciled as already-delivered; **BUG-005 + TASK-WEB-012/RF-022 implemented** on
+`fix/BUG-005-internal-kb-content-leak` (KB audience boundary + weak-confidence clarify band +
+env-tunable Python floor; ADR-0034; adversarial 92/100; Java 262 / Python 353 + behave 27 green)
+— **pending live voice retest** before merge-ready.
 
 ## Roadmap Context
 
@@ -31,9 +36,11 @@ live tests surfaced BUG-005 and TASK-WEB-017.
 ## Why now (state that justifies the sprint)
 
 - Eight sprints of critical-path delivery left a tail of small, low-risk items (telemetry
-  import symmetry, per-turn telemetry identity, OpenAPI specs, a merge-ready venv/VAD, an
-  open stub invariant) that never justified their own sprint but degrade consistency and
-  observability if left indefinitely.
+  import symmetry, per-turn telemetry identity, OpenAPI specs, an open stub invariant) that
+  never justified their own sprint but degrade consistency and observability if left
+  indefinitely. (Two items initially listed here — the venv standardization TASK-ENV-001 and
+  the streaming VAD end-of-turn TASK-STT-012 — turned out to be already delivered in
+  Sprints 5/6; their stale statuses were reconciled on 2026-07-23.)
 - Live Sprint 8 testing surfaced real functional debt: internal KB content leaking to end
   users (BUG-005) and a permissive confidence gate on vague turns (TASK-WEB-012).
 - Two P1 bugs are effectively one step from closed (BUG-004 fixed backend-side pending live
@@ -48,10 +55,10 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 
 | Ticket | Title | Effort | Entry state |
 |---|---|---|---|
-| TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | Planned (opportunistic) |
-| TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | Proposed (2026-07-23) |
-| TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | Implemented — validate + merge |
-| TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | Merge-ready — merge + close |
+| TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | ✅ Merged into `feat/sprint-9-hardening` (2026-07-23, ff; branch deleted) — one-line import change, 334 unittest + 26 behave green |
+| TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | ✅ Merged into `feat/sprint-9-hardening` (2026-07-27, ff) — recorder turn baggage + `(correlation_id, turn_index)` bucketing + `per_turn` report; unittest 346 (+12) + behave 27 green; adversarial 93/100; QA passed inc. warm **live** Gradium+Mistral multi-turn sample (`docs/qa/task-web-017-per-turn-telemetry-qa.md`) |
+| TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | ✅ Already delivered (Sprint 5, on restart) — stale status reconciled 2026-07-23, no work needed |
+| TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
 | RF-017 | Assert the stub DEC-002 no-amount invariant at import time (or close as superseded by the HTTP backend default) | S | Open (Low) |
 | RF-019 | Live re-validation of the browser answering loop (Chrome DevTools MCP) — the live stack is already up | S/M | Gated (manual live QA) |
 
@@ -72,10 +79,10 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 
 | Ticket | Title | Prio | Effort |
 |---|---|---|---|
-| BUG-004 | LLM intermittently refuses ("transfer to advisor") despite passing evidence | P1 | S/M — fixed backend-side; live-validate + merge + close |
-| BUG-005 | Internal agent-facing KB content (R6/ION, VAA) voiced to the end user on a vague turn; weak-but-passing confidence | P1 | L — KB audience boundary + weak-confidence clarify |
+| BUG-004 | LLM intermittently refuses ("transfer to advisor") despite passing evidence | P1 | ✅ Closed (2026-07-27) — fix already merged; live-validated: greeting variant 20/20 grounded (was ~1/7), off-topic refused, DEC-002 preserved, `AnswerLanguageTest` green |
+| BUG-005 | Internal agent-facing KB content (R6/ION, VAA) voiced to the end user on a vague turn; weak-but-passing confidence | P1 | ✅ Implemented (2026-07-27) — audience boundary (fail-closed `audience==customer` filter) + 3-band clarify guardrail + vague-turn detection; ADR-0034; adversarial 92/100; tests green. Pending live voice retest |
 | BUG-001 | Input guardrail blocks legitimate phishing/scam-call support questions | P2 | M |
-| TASK-WEB-012 | Confidence policy for answers — treat a `SUCCESS` answer without confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022/015/018, DEC-002); couples with BUG-005 facet 2 | M | Gated by OQ-002 — decide the policy shape within this sprint |
+| TASK-WEB-012 | Confidence policy for answers — treat a `SUCCESS` answer without confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022/015/018, DEC-002); couples with BUG-005 facet 2 | M | ✅ Implemented (2026-07-27) — backend three-band confidence policy (floor→clarify→answer) + env-tunable Python client floor (RF-022, `VOICE_BACKEND_CONFIDENCE_THRESHOLD`); ADR-0034. Definitive proof threshold value still gated by OQ-002 |
 
 ## Out Of Scope (explicitly deferred)
 

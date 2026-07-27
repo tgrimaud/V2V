@@ -161,17 +161,28 @@ def _ordered_slice_durations(slice_name: str, spans: list[Span]) -> list[float]:
     return []
 
 
-def _group_spans_by_correlation(spans: Iterable[Span]) -> list[list[Span]]:
-    """Group spans by correlation id so turns from different calls never mix.
+def _turn_key(span: Span) -> tuple[Any, Any]:
+    """(correlation_id, turn_index) identity of the turn a span belongs to.
 
-    Spans keep their recorded order within a group (a call runs one turn to
-    completion before the next), which lets us reconstruct per-turn composites by
-    positional zip even when a single call answered several turns.
+    `turn_index` is the per-turn id stamped on the streaming path (TASK-WEB-017); it is
+    `None` on the batch path (one fresh recorder + correlation id per turn) and on
+    legacy samples, so those keep grouping by correlation id alone.
     """
-    groups: dict[Any, list[Span]] = {}
+    return (span.attributes.get("correlation_id"), span.attributes.get("turn_index"))
+
+
+def _group_spans_by_turn(spans: Iterable[Span]) -> list[list[Span]]:
+    """Group spans by (correlation id, turn index) so turns never mix.
+
+    When the per-turn id is present (streaming path) each turn is its own group with one
+    span per slice, so a turn missing a slice (e.g. a barge-in) is skipped on its own
+    without desyncing the positional zip of the other turns. When it is absent (batch /
+    legacy) a group is one correlation id and spans keep their recorded order, so a
+    multi-turn call is still reconstructed by positional zip within the group.
+    """
+    groups: dict[tuple[Any, Any], list[Span]] = {}
     for span in spans:
-        cid = span.attributes.get("correlation_id")
-        groups.setdefault(cid, []).append(span)
+        groups.setdefault(_turn_key(span), []).append(span)
     return list(groups.values())
 
 
@@ -184,7 +195,7 @@ def time_to_first_audio_samples(spans: Iterable[Span]) -> list[float]:
     answer), so an incomplete turn never contributes a truncated composite.
     """
     samples: list[float] = []
-    for group in _group_spans_by_correlation(spans):
+    for group in _group_spans_by_turn(spans):
         per_slice = [_ordered_slice_durations(s, group) for s in TIME_TO_FIRST_AUDIO_SLICES]
         if any(not durations for durations in per_slice):
             continue
@@ -260,7 +271,7 @@ def _voice_to_first_audio(spans: Iterable[Span]) -> _MouthToEar:
     samples: list[float] = []
     turns = 0
     turns_with_egress = 0
-    for group in _group_spans_by_correlation(spans):
+    for group in _group_spans_by_turn(spans):
         required = [_ordered_slice_durations(s, group) for s in VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES]
         if any(not durations for durations in required):
             continue
@@ -314,3 +325,50 @@ def voice_to_first_audio_report(spans: Iterable[Span]) -> CompositeTiming:
         report=LatencyReport.from_samples(result.samples),
         note=_egress_coverage_note(result.turns, result.turns_with_egress),
     )
+
+
+# --- per-turn breakdown (TASK-WEB-017) --------------------------------------------
+#
+# Aggregate reports (per-slice p50/p95/p99, composites) already treat each turn as one
+# sample. This breakdown makes the per-turn separation explicit for a single call: one
+# row per (correlation_id, turn_index) with that turn's slice values and composites, so
+# a multi-turn streaming session is readable turn by turn instead of turns collapsing
+# under a shared span name. Requires the per-turn id from the streaming emitters.
+
+
+def _first_slice_ms(slice_name: str, group: list[Span]) -> float | None:
+    durations = _ordered_slice_durations(slice_name, group)
+    return durations[0] if durations else None
+
+
+def _sum_if_all(slices: dict[str, float | None], names: tuple[str, ...]) -> float | None:
+    values = [slices.get(name) for name in names]
+    if any(value is None for value in values):
+        return None
+    return round(sum(v for v in values if v is not None), 3)
+
+
+def _turn_row(group: list[Span]) -> dict[str, Any]:
+    slices = {name: _first_slice_ms(name, group) for name in PIPELINE_SLICES}
+    ttfa = _sum_if_all(slices, TIME_TO_FIRST_AUDIO_SLICES)
+    m2e = _sum_if_all(slices, VOICE_TO_FIRST_AUDIO_REQUIRED_SLICES)
+    if m2e is not None and slices.get(CHANNEL_EGRESS) is not None:
+        m2e = round(m2e + slices[CHANNEL_EGRESS], 3)
+    head = group[0].attributes
+    return {
+        "correlation_id": head.get("correlation_id"),
+        "turn_index": head.get("turn_index"),
+        "message_id": head.get("message_id"),
+        "slices_ms": {name: value for name, value in slices.items() if value is not None},
+        "time_to_first_audio_ms": ttfa,
+        "voice_to_first_audio_ms": m2e,
+    }
+
+
+def per_turn_timings(spans: Iterable[Span]) -> list[dict[str, Any]]:
+    """One row per (correlation_id, turn_index): that turn's slices + composites."""
+    rows = [_turn_row(group) for group in _group_spans_by_turn(spans)]
+    rows.sort(
+        key=lambda row: (str(row["correlation_id"]), row["turn_index"] or 0)
+    )
+    return rows

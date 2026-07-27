@@ -7,6 +7,9 @@ public record GuardrailDecision(Verdict verdict, String fallbackMessage) {
         GREETING,
         OFF_TOPIC,
         INAPPROPRIATE,
+        // ADR-0034: a vague/low-information turn or a middle-confidence retrieval; the bot asks the
+        // customer to clarify rather than voicing a weakly-matched (possibly wrong-audience) article.
+        CLARIFY,
         LOW_CONFIDENCE,
         UNGROUNDED
     }
@@ -29,6 +32,10 @@ public record GuardrailDecision(Verdict verdict, String fallbackMessage) {
 
     public static GuardrailDecision inappropriate(String message) {
         return new GuardrailDecision(Verdict.INAPPROPRIATE, message);
+    }
+
+    public static GuardrailDecision clarify(String message) {
+        return new GuardrailDecision(Verdict.CLARIFY, message);
     }
 
     public static GuardrailDecision lowConfidence(String message) {

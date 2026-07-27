@@ -26,7 +26,12 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from conversation_backend import StubBackendAdapter
-from stt_validation.pipeline_timing import time_to_first_audio_report
+from stt_validation.pipeline_timing import (
+    PipelineTimingReport,
+    STT,
+    per_turn_timings,
+    time_to_first_audio_report,
+)
 from stt_validation.streaming import FinalTranscript, PartialTranscript
 from tts_synthesis.streaming import AudioChunk
 from voice_common.telemetry import TelemetryRecorder
@@ -225,3 +230,132 @@ def step_first_audio_derivable(context):
     assert composite.measured, "time_to_first_audio should be derivable from the streaming spans"
     assert composite.report is not None and composite.report.count >= 1
     assert composite.report.p50_ms is not None and composite.report.p50_ms > 0
+
+
+# --- multi-turn per-turn identity (TASK-WEB-017) ----------------------------------
+
+# Slice spans that make up the latency composites; each must carry a per-turn id so a
+# multi-turn call is separable per turn (not just STT — backend and TTS spans too).
+_SLICE_SPAN_NAMES = {
+    "voice.end_of_turn",
+    "stt.request",
+    "backend.first_token",
+    "backend.request",
+    "voice.tts.first_audio",
+}
+
+
+class _MultiSttProvider:
+    name = "fake-streaming-stt"
+
+    def __init__(self, sessions):
+        self._sessions = list(sessions)
+
+    async def open(self):
+        return self._sessions.pop(0)
+
+
+class _MultiTtsProvider:
+    name = "fake-streaming-tts"
+
+    def __init__(self, chunk_lists):
+        self._chunk_lists = list(chunk_lists)
+
+    async def open(self):
+        return _FakeTtsSession(self._chunk_lists.pop(0))
+
+
+async def _run_until(processors, frames, min_audio_chunks):
+    sink = _Sink()
+    pipeline = Pipeline([_Source(frames), *processors, sink])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        from pipecat.pipeline.runner import PipelineRunner
+        from pipecat.pipeline.task import PipelineParams, PipelineTask
+
+        task = PipelineTask(
+            pipeline, params=PipelineParams(), enable_rtvi=False,
+            enable_turn_tracking=False, cancel_on_idle_timeout=False, check_dangling_tasks=False,
+        )
+        run = asyncio.create_task(PipelineRunner(handle_sigint=False).run(task))
+        deadline = asyncio.get_event_loop().time() + 5.0
+        while len(sink.audio) < min_audio_chunks and asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.02)
+        await task.queue_frames([EndFrame()])
+        await asyncio.wait_for(run, timeout=10)
+    return sink
+
+
+@given("a customer asking two questions on the same streaming call")
+def step_two_questions(context):
+    context.telemetry = TelemetryRecorder()
+    envelope = ChannelEnvelope.for_web_turn(correlation_id=CORRELATION_ID)
+    context.conversation_id = envelope.conversation_id
+    detector = StreamingEndOfTurnDetector(
+        sample_rate_hz=SAMPLE_RATE,
+        silence_window_ms=100,
+        amplitude_threshold=DEFAULT_AMPLITUDE_THRESHOLD,
+        min_utterance_ms=20,
+    )
+    stt = StreamingSttProcessor(
+        _MultiSttProvider([
+            _FakeSttSession([PartialTranscript("pourquoi")], "pourquoi ma facture augmente"),
+            _FakeSttSession([PartialTranscript("et")], "et le mois prochain"),
+        ]),
+        envelope,
+        context.telemetry,
+        detector=detector,
+    )
+    answer = AnswerProcessor(StubBackendAdapter(), envelope, context.telemetry)
+    # prewarm disabled so the TTS provider opens exactly one session per turn (two turns).
+    tts = StreamingTtsProcessor(
+        _MultiTtsProvider([[AudioChunk(b"\x01\x02")], [AudioChunk(b"\x03\x04")]]),
+        envelope,
+        context.telemetry,
+        prewarm=False,
+    )
+    context.processors = [stt, answer, tts]
+    turn = [_speech_frame()] * 3 + [_silence_frame()] * 10
+    context.frames = turn + turn
+
+
+@when("the streaming loop runs both turns end to end")
+def step_run_two_turns(context):
+    context.sink = asyncio.run(_run_until(context.processors, context.frames, min_audio_chunks=2))
+
+
+@then("the whole call shares one correlation id")
+def step_call_one_correlation(context):
+    correlations = {s.attributes.get("correlation_id") for s in context.telemetry.spans()}
+    assert correlations == {CORRELATION_ID}, correlations
+
+
+@then("every slice span of the call carries a per-turn id")
+def step_every_slice_span_has_turn_id(context):
+    slice_spans = [s for s in context.telemetry.spans() if s.name in _SLICE_SPAN_NAMES]
+    assert slice_spans, "no slice spans recorded"
+    missing = [s.name for s in slice_spans if s.attributes.get("turn_index") is None]
+    assert not missing, f"slice spans missing a per-turn id: {missing}"
+
+
+@then("the two turns carry distinct per-turn ids under one conversation id")
+def step_two_distinct_turn_ids(context):
+    spans = context.telemetry.spans()
+    turn_indexes = {s.attributes.get("turn_index") for s in spans if s.name in _SLICE_SPAN_NAMES}
+    assert turn_indexes == {1, 2}, turn_indexes
+    message_ids = {s.attributes.get("message_id") for s in spans if s.name in _SLICE_SPAN_NAMES}
+    assert len(message_ids) == 2, message_ids
+    conversations = {s.attributes.get("conversation_id") for s in spans if s.name in _SLICE_SPAN_NAMES}
+    assert conversations == {context.conversation_id}, conversations
+
+
+@then("the per-turn report separates the two turns without overwriting slices")
+def step_per_turn_report_separates(context):
+    spans = context.telemetry.spans()
+    rows = per_turn_timings(spans)
+    assert [r["turn_index"] for r in rows] == [1, 2], rows
+    assert rows[0]["message_id"] != rows[1]["message_id"], rows
+    # per-slice distribution keeps one sample per turn (no overwrite)
+    report = PipelineTimingReport.from_spans(spans)
+    stt = next(s for s in report.slices if s.slice == STT)
+    assert stt.report is not None and stt.report.count == 2, stt.report

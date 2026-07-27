@@ -11,6 +11,7 @@ It imports only pipecat, the neutral `conversation_backend` contract and the sha
 """
 
 import asyncio
+import os
 from typing import Any
 
 from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
@@ -36,6 +37,30 @@ from voice_common.telemetry import TelemetryRecorder, Timer
 # total answer duration. Both carry the correlation id, provider, outcome and length.
 BACKEND_FIRST_TOKEN_SPAN = "backend.first_token"
 BACKEND_REQUEST_SPAN = "backend.request"
+
+# RF-022 (ADR-0034): the client-side degraded-mode confidence floor is env-tunable so a
+# deployment can align it with the backend's own confidence policy without a code change.
+# It is a *safety net* below the backend grounding guardrail, not a replacement for it.
+CONFIDENCE_THRESHOLD_ENV_VAR = "VOICE_BACKEND_CONFIDENCE_THRESHOLD"
+
+
+def resolve_confidence_threshold() -> float:
+    """Resolve the degraded-mode confidence floor from the environment.
+
+    Falls back to `DEFAULT_CONFIDENCE_THRESHOLD` when the override is unset, non-numeric
+    or out of the [0, 1] range, so a bad value degrades gracefully rather than crashing
+    the turn (mirrors the barge-in env parsing in `web_voice/webrtc_signaling.py`).
+    """
+    raw = os.environ.get(CONFIDENCE_THRESHOLD_ENV_VAR)
+    if raw is None:
+        return DEFAULT_CONFIDENCE_THRESHOLD
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_CONFIDENCE_THRESHOLD
+    if not 0.0 <= value <= 1.0:
+        return DEFAULT_CONFIDENCE_THRESHOLD
+    return value
 
 
 def answer_with_telemetry(
@@ -142,11 +167,23 @@ def _backend_attributes(backend: BackendAnswerPort, request: AnswerRequest, resu
 class AnswerProcessor(FrameProcessor):
     """`TranscriptionFrame` -> backend answer -> plain `TextFrame` (replaces echo)."""
 
-    def __init__(self, backend: BackendAnswerPort, envelope: Any, telemetry: Any = None) -> None:
+    def __init__(
+        self,
+        backend: BackendAnswerPort,
+        envelope: Any,
+        telemetry: Any = None,
+        *,
+        confidence_threshold: float | None = None,
+    ) -> None:
         super().__init__()
         self._backend = backend
         self._envelope = envelope
         self._telemetry = telemetry
+        # RF-022: resolve the env-tunable floor once at construction; an explicit override
+        # (tests / callers) still wins over the environment.
+        self._confidence_threshold = (
+            confidence_threshold if confidence_threshold is not None else resolve_confidence_threshold()
+        )
         # Last AnswerResult, read by the pipeline / turn processor for the response.
         self.result: Any = None
 
@@ -162,7 +199,12 @@ class AnswerProcessor(FrameProcessor):
         try:
             # The backend does blocking work (adapter I/O later); keep it off the loop.
             result = await asyncio.to_thread(
-                answer_with_telemetry, self._backend, request, self._telemetry
+                lambda: answer_with_telemetry(
+                    self._backend,
+                    request,
+                    self._telemetry,
+                    confidence_threshold=self._confidence_threshold,
+                )
             )
         except EmptyTranscriptError:
             # Nothing to answer: never invent a turn, so no text flows downstream.

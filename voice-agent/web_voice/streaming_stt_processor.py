@@ -18,6 +18,7 @@ streaming provider + detector wiring.
 
 import asyncio
 from typing import Any
+from uuid import uuid4
 
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
@@ -102,6 +103,11 @@ class StreamingSttProcessor(FrameProcessor):
         self._session: Any = None
         self._turn_timer: Timer | None = None
         self._first_partial_ms: float | None = None
+        # Monotonic per-turn index on this streaming session (TASK-WEB-017). One recorder
+        # lives for the whole call, so we advance a fresh per-turn identity at each
+        # end-of-turn while the per-conversation correlation_id stays stable; all spans
+        # of the turn (STT, backend, TTS, egress) then carry it via the recorder baggage.
+        self._turn_index = 0
         # Read by tests: number of final transcripts emitted this session.
         self.final_count = 0
         # True while the bot's spoken answer is playing (tracked from the
@@ -200,6 +206,7 @@ class StreamingSttProcessor(FrameProcessor):
             )
 
     async def _finalize(self, detection: EndOfTurnResult, direction: FrameDirection) -> None:
+        self._begin_turn()
         self._record_end_of_turn(detection)
         session = self._session
         self._session = None
@@ -243,6 +250,19 @@ class StreamingSttProcessor(FrameProcessor):
         }
         self._telemetry.record(BARGE_IN_EVENT, **attrs)
         self._telemetry.metric(BARGE_IN_METRIC, 1, **attrs)
+
+    def _begin_turn(self) -> None:
+        """Advance the per-turn identity for this call (TASK-WEB-017), keeping the
+        per-conversation correlation_id stable. Called first at each end-of-turn so the
+        turn's end_of_turn / stt / backend / tts / egress spans all share one turn id."""
+        if self._telemetry is None or self._envelope is None:
+            return
+        self._turn_index += 1
+        self._telemetry.begin_turn(
+            conversation_id=getattr(self._envelope, "conversation_id", None),
+            message_id=str(uuid4()),
+            turn_index=self._turn_index,
+        )
 
     def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:
         if self._telemetry is None or self._envelope is None or detection.slice_ms is None:

@@ -81,6 +81,41 @@ class InputGuardrailTest {
         assertNotNull(decision.fallbackMessage());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"vas-y", "vas-y.", "Vas y", "allez-y", "ok", "OK", "d'accord", "continue",
+            "voilà", "ok alors", "et ensuite"})
+    @DisplayName("BUG-005: asks to clarify on a vague/low-information turn instead of retrieving")
+    void clarifiesOnVagueTurn(String vague) {
+        GuardrailDecision decision = guardrail.check(vague, true, AnswerLanguage.FRENCH);
+
+        assertTrue(decision.blocked(), "should clarify: " + vague);
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertEquals("Je ne suis pas sûr d'avoir bien compris votre demande. "
+                + "Pouvez-vous la reformuler ou me donner un peu plus de détails ?", decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ok how do I pay my bill?",
+            "continue mon abonnement fibre s'il vous plaît",
+            "vas-y explique ma facture en détail"})
+    @DisplayName("does not clarify when a continuer is followed by a real question")
+    void doesNotClarifyWhenIntentFollows(String question) {
+        GuardrailDecision decision = guardrail.check(question, true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
+    }
+
+    @Test
+    @DisplayName("clarify wording follows the decided language (English)")
+    void clarifiesInEnglish() {
+        GuardrailDecision decision = guardrail.check("go on", true, AnswerLanguage.ENGLISH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertTrue(decision.fallbackMessage().startsWith("I'm not sure I fully understood"),
+                "expected English clarify wording, got: " + decision.fallbackMessage());
+    }
+
     @Test
     @DisplayName("does not treat a greeting followed by a real question as a greeting")
     void greetingWithQuestionPasses() {

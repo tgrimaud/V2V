@@ -104,6 +104,14 @@ public class AnswerLanguageSteps {
                 "expected an offer to reach a human: " + answer.text());
     }
 
+    @And("the assistant asks the customer to clarify")
+    public void asksToClarify() {
+        String text = answer.text().toLowerCase();
+        assertTrue(text.contains("reformuler") || text.contains("rephrase")
+                        || text.contains("préciser") || text.contains("more detail"),
+                "expected a clarification prompt: " + answer.text());
+    }
+
     private AnswerLanguage languageFor(String label) {
         return switch (label.toLowerCase()) {
             case "english" -> AnswerLanguage.ENGLISH;

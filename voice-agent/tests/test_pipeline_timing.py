@@ -17,6 +17,7 @@ from stt_validation.pipeline_timing import (  # noqa: E402
     VOICE_TO_FIRST_AUDIO,
     VOICE_TO_FIRST_AUDIO_SLICES,
     PipelineTimingReport,
+    per_turn_timings,
     time_to_first_audio_report,
     time_to_first_audio_samples,
     voice_to_first_audio_report,
@@ -427,6 +428,111 @@ class VoiceToFirstAudioCompositeTest(unittest.TestCase):
         self.assertFalse(composite.measured)
         self.assertIsNone(composite.report)
         self.assertTrue(composite.note)
+
+
+def _turn_with_id(
+    correlation_id: str,
+    turn_index: int,
+    *,
+    eot: float,
+    stt: float,
+    backend: float,
+    tts: float,
+    egress: float | None = None,
+    message_id: str | None = None,
+) -> list[Span]:
+    """One streaming turn carrying the per-turn id (TASK-WEB-017)."""
+    attrs = {
+        "correlation_id": correlation_id,
+        "turn_index": turn_index,
+        "message_id": message_id or f"msg-{correlation_id}-{turn_index}",
+    }
+    spans = [
+        Span("voice.end_of_turn", eot, attrs),
+        Span("stt.request", stt, attrs),
+        Span("backend.first_token", backend, attrs),
+        Span("voice.tts.first_audio", tts, attrs),
+    ]
+    if egress is not None:
+        spans.append(Span("web.voice.egress", egress, attrs))
+    return spans
+
+
+class PerTurnIdentityBucketingTest(unittest.TestCase):
+    """TASK-WEB-017: a per-turn id splits a multi-turn streaming call robustly."""
+
+    def test_barge_in_turn_missing_slices_does_not_desync_other_turns(self) -> None:
+        # GIVEN a 3-turn streaming call where the MIDDLE turn was barged in (only an
+        # end-of-turn + stt span, no backend/tts) — positional zip by correlation would
+        # pair turn-1 STT with turn-3 backend; the per-turn id must prevent that.
+        spans = (
+            _turn_with_id("call", 1, eot=500.0, stt=100.0, backend=100.0, tts=100.0)
+            + [
+                Span("voice.end_of_turn", 500.0, {"correlation_id": "call", "turn_index": 2}),
+                Span("stt.request", 999.0, {"correlation_id": "call", "turn_index": 2}),
+            ]
+            + _turn_with_id("call", 3, eot=500.0, stt=300.0, backend=300.0, tts=300.0)
+        )
+
+        # WHEN the composite is computed
+        samples = sorted(time_to_first_audio_samples(spans))
+
+        # THEN only the two complete turns contribute, each summing its OWN slices
+        # (300 = 100*3, 900 = 300*3); the incomplete turn 2 is skipped, not blended
+        self.assertEqual(samples, [300.0, 900.0])
+
+    def test_mouth_to_ear_buckets_egress_by_turn_id_not_position(self) -> None:
+        # GIVEN two turns of one call, only the SECOND carrying an egress span
+        spans = _turn_with_id("call", 1, eot=500.0, stt=100.0, backend=100.0, tts=100.0) + _turn_with_id(
+            "call", 2, eot=500.0, stt=100.0, backend=100.0, tts=100.0, egress=10.0
+        )
+
+        # WHEN the mouth-to-ear composite is computed
+        samples = sorted(voice_to_first_audio_samples(spans))
+
+        # THEN turn 1 has no egress (800) and turn 2 folds its own egress (810)
+        self.assertEqual(samples, [800.0, 810.0])
+
+    def test_per_turn_timings_yields_one_row_per_turn_with_composites(self) -> None:
+        # GIVEN a two-turn streaming call
+        spans = _turn_with_id("call", 1, eot=500.0, stt=100.0, backend=100.0, tts=100.0, egress=5.0) + _turn_with_id(
+            "call", 2, eot=600.0, stt=200.0, backend=200.0, tts=200.0, egress=10.0
+        )
+
+        # WHEN the per-turn breakdown is built
+        rows = per_turn_timings(spans)
+
+        # THEN there is one row per turn, ordered, each with its own slices + composites
+        self.assertEqual([r["turn_index"] for r in rows], [1, 2])
+        self.assertNotEqual(rows[0]["message_id"], rows[1]["message_id"])
+        self.assertEqual(rows[0]["time_to_first_audio_ms"], 300.0)  # 100*3
+        self.assertEqual(rows[0]["voice_to_first_audio_ms"], 805.0)  # 500+300+5
+        self.assertEqual(rows[1]["time_to_first_audio_ms"], 600.0)  # 200*3
+        self.assertEqual(rows[1]["voice_to_first_audio_ms"], 1210.0)  # 600+600+10
+        self.assertEqual(rows[0]["slices_ms"]["stt"], 100.0)
+
+    def test_per_slice_report_keeps_one_sample_per_turn(self) -> None:
+        # GIVEN two turns with distinct stt values on one call
+        spans = _turn_with_id("call", 1, eot=1.0, stt=100.0, backend=1.0, tts=1.0) + _turn_with_id(
+            "call", 2, eot=1.0, stt=200.0, backend=1.0, tts=1.0
+        )
+
+        # WHEN the per-slice report is built
+        report = PipelineTimingReport.from_spans(spans)
+        stt = next(s for s in report.slices if s.slice == STT)
+
+        # THEN both turns' stt samples are kept (no overwrite): count 2, min 100 max 200
+        self.assertEqual(stt.report.count, 2)
+        self.assertEqual(stt.report.min_ms, 100.0)
+        self.assertEqual(stt.report.max_ms, 200.0)
+
+    def test_legacy_spans_without_turn_id_still_reconstruct_by_position(self) -> None:
+        # GIVEN a pre-WEB-017 multi-turn call (same correlation, no turn_index)
+        spans = _turn_spans("call", 100.0, 100.0, 100.0) + _turn_spans("call", 200.0, 200.0, 200.0)
+
+        # WHEN the composite is computed
+        # THEN the positional-zip fallback still separates the two turns
+        self.assertEqual(sorted(time_to_first_audio_samples(spans)), [300.0, 600.0])
 
 
 class PipelineTelemetryBridgeTest(unittest.IsolatedAsyncioTestCase):

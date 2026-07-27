@@ -106,11 +106,12 @@ time_to_first_audio = stt (post-EOT finalize tail)
 ```
 
 `voice_common.pipeline_timing.time_to_first_audio_report(spans)` computes it
-per-turn: within each correlation group the three component spans are
-positional-zipped (the k-th of each = turn k), and a turn missing any component
-(e.g. a barge-in turn with no final answer) is skipped rather than contributing a
-truncated value. It reports p50/p95/p99 over the sample and the ADR-0018 gate
-(`p95 < 800 ms`).
+per-turn: spans are grouped by `(correlation_id, turn_index)` (TASK-WEB-017), so on
+the streaming path each turn is its own bucket with one span per slice and a turn
+missing a component (e.g. a barge-in turn with no final answer) is skipped **without
+desyncing the other turns**. Legacy/batch spans that carry no `turn_index` fall back
+to per-correlation grouping with positional zip (the k-th of each slice = turn k). It
+reports p50/p95/p99 over the sample and the ADR-0018 gate (`p95 < 800 ms`).
 
 **WebRTC-path egress (TASK-WEB-014):** `channel_egress` (`web.voice.egress`) is now
 also emitted on the WebRTC streaming path by the `ChannelEgressProbe`
@@ -142,13 +143,40 @@ voice_to_first_audio = end_of_turn (trailing-silence hold, pre-acceptance)
 ```
 
 `voice_common.pipeline_timing.voice_to_first_audio_report(spans)` computes it per
-turn (same per-correlation positional zip). `end_of_turn` + the post-EOT path are
+turn (same `(correlation_id, turn_index)` bucketing, positional-zip fallback for
+spans without a per-turn id). `end_of_turn` + the post-EOT path are
 **required**; `channel_egress` is folded **per turn when present** and reported as an
 explicit residual gap otherwise — a missing egress span is never silently treated as
 zero. `scripts/streaming_latency_report.py` reports it alongside `time_to_first_audio`
 and evaluates the **ADR-0029 gate**: mouth-to-ear p95 ≤ 1.5 s (primary) + a
 `time_to_first_audio` p95 ≤ 1.2 s engineering sub-target (overall `not_measured` when
 either composite has no complete turn — never a silent pass).
+
+### Per-turn identity on the streaming path (TASK-WEB-017)
+
+The WebRTC streaming path builds **one** `ChannelEnvelope` + **one** `TelemetryRecorder`
+per call, so a single stable `correlation_id` spans the whole conversation (desirable —
+it lets us follow the dialogue end to end). Before TASK-WEB-017 the streaming emitters
+propagated only `correlation_id`, so `conversation_id`/`message_id` came out `None` and
+every turn's spans shared the same key — turns could only be separated by a fragile
+positional zip, which desyncs as soon as a turn is missing a slice (e.g. a barge-in).
+
+The turn owner (`StreamingSttProcessor` on the live path, `UtteranceAggregator` on the
+batch-bridge path) now calls `TelemetryRecorder.begin_turn(conversation_id, message_id,
+turn_index)` at each detected end-of-turn. The recorder merges that per-turn baggage
+into **every** subsequent span/event/metric/log of the turn (STT, backend, TTS, channel
+egress), so the whole turn is individually traceable while `correlation_id` stays
+per-conversation. An explicit attribute always wins over the baggage on a key clash.
+
+Consequences for the report:
+
+- slices are bucketed by `(correlation_id, turn_index)`, so a barge-in turn is skipped
+  on its own without desyncing the others;
+- `scripts/streaming_latency_report.py` adds a **`per_turn`** section
+  (`voice_common.pipeline_timing.per_turn_timings`) — one row per `(correlation_id,
+  turn_index)` with that turn's slice values, `message_id`, and both composites — so a
+  multi-turn browser session is readable turn by turn and per-turn p50/p95/p99 can be
+  derived from live sessions.
 
 ## How it works
 

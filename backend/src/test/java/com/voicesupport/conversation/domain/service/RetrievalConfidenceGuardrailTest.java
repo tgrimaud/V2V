@@ -62,4 +62,45 @@ class RetrievalConfidenceGuardrailTest {
 
         assertTrue(decision.blocked());
     }
+
+    // ADR-0034 / BUG-005: three-band policy (floor 0.5, clarify ceiling 0.62).
+    private final RetrievalConfidenceGuardrail banded = new RetrievalConfidenceGuardrail(0.5, 0.62);
+
+    @Test
+    @DisplayName("BUG-005: a middle-confidence retrieval (0.52) asks to clarify, not answer")
+    void clarifiesOnMiddleConfidence() {
+        List<RetrievedEvidence> middle = List.of(new RetrievedEvidence("t", "s", "support", 0.5213));
+
+        GuardrailDecision decision = banded.check(middle, AnswerLanguage.FRENCH);
+
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("below the floor still hands off to an advisor (low confidence), not clarify")
+    void handsOffBelowFloor() {
+        List<RetrievedEvidence> weak = List.of(new RetrievedEvidence("t", "s", "support", 0.45));
+
+        GuardrailDecision decision = banded.check(weak, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.LOW_CONFIDENCE, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("at or above the clarify ceiling the answer passes")
+    void passesAtOrAboveCeiling() {
+        List<RetrievedEvidence> strong = List.of(new RetrievedEvidence("t", "s", "support", 0.76));
+
+        assertEquals(GuardrailDecision.Verdict.PASS, banded.check(strong, AnswerLanguage.FRENCH).verdict());
+    }
+
+    @Test
+    @DisplayName("the single-threshold constructor keeps the legacy no-clarify-band behavior")
+    void singleThresholdHasNoClarifyBand() {
+        RetrievalConfidenceGuardrail legacy = new RetrievalConfidenceGuardrail(0.5);
+        List<RetrievedEvidence> middle = List.of(new RetrievedEvidence("t", "s", "support", 0.5213));
+
+        assertEquals(GuardrailDecision.Verdict.PASS, legacy.check(middle, AnswerLanguage.FRENCH).verdict());
+    }
 }

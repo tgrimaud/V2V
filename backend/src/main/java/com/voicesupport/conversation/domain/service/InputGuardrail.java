@@ -3,15 +3,27 @@ package com.voicesupport.conversation.domain.service;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 
+import java.text.Normalizer;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
-// Pre-retrieval guardrail (ADR-0014): handles greetings directly and refuses
-// off-topic or unsafe requests with a canned response, before any embedding,
-// vector search or LLM call is made. Deterministic and language-aware (fr/en).
+// Pre-retrieval guardrail (ADR-0014 / ADR-0034): handles greetings directly, asks to clarify on a
+// vague/low-information turn, and refuses off-topic or unsafe requests with a canned response,
+// before any embedding, vector search or LLM call is made. Deterministic and language-aware (fr/en).
 public class InputGuardrail {
 
     private static final int MIN_QUESTION_LENGTH = 3;
+    // A turn made only of contentless continuers ("vas-y", "ok"...) carries no retrievable intent;
+    // answering it retrieves a weak, possibly wrong-audience match (BUG-005). Max 3 such tokens so a
+    // real short question is never mistaken for a vague turn. Configurable per deployment.
+    private static final int MAX_VAGUE_TOKENS = 3;
+    private static final Set<String> DEFAULT_VAGUE_MARKERS = Set.of(
+            "vas-y", "vas y", "allez-y", "allez y", "continue", "continuez", "poursuis", "poursuivez",
+            "ensuite", "la suite", "go", "go on", "go ahead", "ok", "okay", "d'accord", "dac", "dacc",
+            "alors", "donc", "bah", "ben", "euh", "hmm", "voila", "voilà", "et");
 
     private static final List<Pattern> GREETING_PATTERNS = List.of(
             compile("^(bonjour|bonsoir|salut|coucou|hey|hello|hi|yo|bjr|slt|cc|bsr)\\s*[!.?,;…]*$"),
@@ -44,6 +56,32 @@ public class InputGuardrail {
             compile("(tradui(s|re|ction)|translate)"),
             compile("(qui\\s+(est|a\\s+inventé|était)|who\\s+(is|was|invented))"));
 
+    // Normalized (lower-case, accent-folded, punctuation→space) marker forms: whole-utterance
+    // phrases (e.g. "vas y", "d accord") and single-token continuers (e.g. "ok", "alors").
+    private final Set<String> vaguePhrases;
+    private final Set<String> vagueTokens;
+
+    public InputGuardrail() {
+        this(DEFAULT_VAGUE_MARKERS);
+    }
+
+    public InputGuardrail(Collection<String> vagueMarkers) {
+        Set<String> phrases = new HashSet<>();
+        Set<String> tokens = new HashSet<>();
+        for (String marker : vagueMarkers) {
+            String normalized = normalize(marker);
+            if (normalized.isBlank()) {
+                continue;
+            }
+            phrases.add(normalized);
+            if (!normalized.contains(" ")) {
+                tokens.add(normalized);
+            }
+        }
+        this.vaguePhrases = Set.copyOf(phrases);
+        this.vagueTokens = Set.copyOf(tokens);
+    }
+
     // The answer language is decided once per turn upstream (LanguageDetector: question language,
     // then session stickiness, then the configurable default) and passed in so the canned wording
     // matches the language of the rest of the turn, even when the input itself is ambiguous.
@@ -55,6 +93,9 @@ public class InputGuardrail {
         if (matchesAny(GREETING_PATTERNS, trimmed)) {
             return GuardrailDecision.greeting(GuardrailMessages.greeting(language, alreadyGreeted));
         }
+        if (isVague(trimmed)) {
+            return GuardrailDecision.clarify(GuardrailMessages.clarify(language));
+        }
         if (trimmed.length() < MIN_QUESTION_LENGTH) {
             return GuardrailDecision.pass();
         }
@@ -65,6 +106,36 @@ public class InputGuardrail {
             return GuardrailDecision.offTopic(GuardrailMessages.offTopic(language));
         }
         return GuardrailDecision.pass();
+    }
+
+    // A turn is vague when the whole utterance is a known continuer phrase, or when it is a short
+    // run (<= MAX_VAGUE_TOKENS) made entirely of continuer tokens — so "ok" or "vas-y, continue"
+    // clarify, while "ok how do I pay?" (real intent) is answered normally.
+    private boolean isVague(String text) {
+        String normalized = normalize(text);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if (vaguePhrases.contains(normalized)) {
+            return true;
+        }
+        String[] words = normalized.split(" ");
+        return words.length <= MAX_VAGUE_TOKENS && allVagueTokens(words);
+    }
+
+    private boolean allVagueTokens(String[] words) {
+        for (String word : words) {
+            if (!vagueTokens.contains(word)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String normalize(String text) {
+        String folded = Normalizer.normalize(text.toLowerCase(java.util.Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        return folded.replaceAll("[^a-z0-9]+", " ").strip();
     }
 
     private boolean matchesAny(List<Pattern> patterns, String text) {

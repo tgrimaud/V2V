@@ -1,7 +1,9 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.csv;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.fake.FakeAudienceClassifier;
 import com.voicesupport.knowledge.fake.FakeDomainClassifier;
+import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.KeywordAudienceClassifierAdapter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,7 +36,7 @@ class CsvArticleConnectorTest {
         FakeDomainClassifier classifier = new FakeDomainClassifier();
         classifier.returns = "billing";
         CsvArticleConnector connector =
-                new CsvArticleConnector(writeCsv(dir, row).toString(), "en", classifier);
+                new CsvArticleConnector(writeCsv(dir, row).toString(), "en", classifier, customerAudience());
 
         // WHEN fetching all documents
         List<SourceDocument> docs = connector.fetchAll();
@@ -46,6 +48,7 @@ class CsvArticleConnectorTest {
         assertEquals("csv-article", doc.sourceType());
         assertEquals("en", doc.language());
         assertEquals("billing", doc.domain());
+        assertEquals("customer", doc.audience());
         assertNotNull(doc.contentHash());
         assertTrue(doc.content().contains("First paragraph & more."));
         assertTrue(doc.content().contains("Second link para."));
@@ -60,7 +63,7 @@ class CsvArticleConnectorTest {
         String row = "42,\"Router setup\",\"<h1>Wifi</h1><p>Reset your router.</p>\"";
         FakeDomainClassifier classifier = new FakeDomainClassifier();
         CsvArticleConnector connector =
-                new CsvArticleConnector(writeCsv(dir, row).toString(), "en", classifier);
+                new CsvArticleConnector(writeCsv(dir, row).toString(), "en", classifier, customerAudience());
 
         // WHEN fetching
         connector.fetchAll();
@@ -76,8 +79,8 @@ class CsvArticleConnectorTest {
         String body = ",\"No id\",\"<p>body</p>\"\r\n"
                 + "7,\"Empty\",\"\"\r\n"
                 + "8,\"Valid\",\"<p>Kept.</p>\"\r\n";
-        CsvArticleConnector connector =
-                new CsvArticleConnector(writeCsv(dir, body).toString(), "en", new FakeDomainClassifier());
+        CsvArticleConnector connector = new CsvArticleConnector(
+                writeCsv(dir, body).toString(), "en", new FakeDomainClassifier(), customerAudience());
 
         // WHEN fetching
         List<String> ids = connector.fetchAll().stream().map(SourceDocument::sourceId).toList();
@@ -89,8 +92,8 @@ class CsvArticleConnectorTest {
     @Test
     void shouldReturnEmptyListWhenFileMissing() {
         // GIVEN a path that does not exist
-        CsvArticleConnector connector =
-                new CsvArticleConnector("/no/such/articles.csv", "en", new FakeDomainClassifier());
+        CsvArticleConnector connector = new CsvArticleConnector(
+                "/no/such/articles.csv", "en", new FakeDomainClassifier(), customerAudience());
 
         // WHEN fetching THEN it degrades gracefully to an empty list
         assertTrue(connector.fetchAll().isEmpty());
@@ -99,10 +102,43 @@ class CsvArticleConnectorTest {
     @Test
     void shouldExposeCsvArticleSourceType() {
         // GIVEN a connector
-        CsvArticleConnector connector =
-                new CsvArticleConnector("/tmp/x.csv", "en", new FakeDomainClassifier());
+        CsvArticleConnector connector = new CsvArticleConnector(
+                "/tmp/x.csv", "en", new FakeDomainClassifier(), customerAudience());
 
         // WHEN/THEN the source type is stable for the sync ledger
         assertEquals("csv-article", connector.sourceType());
+    }
+
+    @Test
+    void shouldTagAgentDeskArticleAsInternalAudience(@TempDir Path dir) throws IOException {
+        // GIVEN an agent/back-office article that names internal tooling (BUG-005: R6/ION, VAA)
+        String row = "253,\"View Available Appointments (VAA)\","
+                + "\"<p>Modify the appointment in R6/ION for Back Office agents only.</p>\"";
+        CsvArticleConnector connector = new CsvArticleConnector(
+                writeCsv(dir, row).toString(), "en", new FakeDomainClassifier(),
+                new KeywordAudienceClassifierAdapter(List.of("back office", "r6/ion", "vaa")));
+
+        // WHEN fetching
+        SourceDocument doc = connector.fetchAll().get(0);
+
+        // THEN it is tagged internal so the fail-closed retrieval filter excludes it from customers
+        assertEquals("internal", doc.audience());
+    }
+
+    @Test
+    void shouldKeepCustomerArticleAsCustomerAudience(@TempDir Path dir) throws IOException {
+        // GIVEN a plain customer-facing billing article with no agent-desk markers
+        String row = "196,\"Why did my bill increase?\",\"<p>Your monthly bill can change after a "
+                + "discount ends or you use extra data.</p>\"";
+        CsvArticleConnector connector = new CsvArticleConnector(
+                writeCsv(dir, row).toString(), "en", new FakeDomainClassifier(),
+                new KeywordAudienceClassifierAdapter(List.of("back office", "r6/ion", "vaa")));
+
+        // WHEN fetching THEN it stays customer-facing
+        assertEquals("customer", connector.fetchAll().get(0).audience());
+    }
+
+    private FakeAudienceClassifier customerAudience() {
+        return new FakeAudienceClassifier();
     }
 }

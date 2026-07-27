@@ -40,20 +40,23 @@ Feature: Answer language follows the customer's question language (TASK-BE-015)
     When the customer's turn is "Quel temps fera-t-il demain ?"
     Then the assistant's spoken reply is in French
 
-  Scenario: An ambiguous turn uses the deployment default language (BR2)
+  # BUG-005/ADR-0034: a vague/low-information turn ("ok", "vas-y") is now asked to clarify before
+  # any retrieval, and the clarify wording still follows the decided language, so the default and
+  # stickiness paths stay covered on a contentless turn.
+  Scenario: A vague turn clarifies in the deployment default language (BR2/BUG-005)
     Given the knowledge base has relevant English support content
     When the customer's turn is "ok"
-    Then the assistant answers in English
+    Then the assistant's spoken reply is in English
 
-  Scenario: An ambiguous follow-up keeps the current conversation language (BR3)
+  Scenario: A vague follow-up clarifies in the current conversation language (BR3/BUG-005)
     Given the knowledge base has relevant English support content
     And the conversation so far has been in French
     When the customer's turn is "ok"
-    Then the assistant answers in French
+    Then the assistant's spoken reply is in French
 
-  Scenario: An ambiguous follow-up keeps the language on a fallback turn (BUG-002)
+  Scenario: A vague follow-up clarifies (not a weak answer) and keeps the language (BUG-002/BUG-005)
     Given the assistant cannot find enough evidence to answer
     And the conversation so far has been in French
     When the customer's turn is "ok"
     Then the assistant's spoken reply is in French
-    And the assistant offers a human advisor
+    And the assistant asks the customer to clarify

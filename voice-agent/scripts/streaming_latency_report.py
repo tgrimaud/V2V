@@ -43,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from voice_common.pipeline_timing import (  # noqa: E402
     PipelineTimingReport,
+    per_turn_timings,
     time_to_first_audio_report,
     voice_to_first_audio_report,
 )
@@ -256,6 +257,10 @@ def build_streaming_report(
             "note": note,
         },
         "per_slice": per_slice.to_dict(),
+        # Per-turn breakdown (TASK-WEB-017): one row per (correlation_id, turn_index) so a
+        # multi-turn streaming call is readable turn by turn — turns no longer collapse
+        # under a shared span name. Empty on pre-WEB-017 samples (no per-turn id).
+        "per_turn": per_turn_timings(spans),
         "metric_distributions": _metric_distributions(metrics),
         "barge_in_count": _barge_in_count(metrics),
         "time_to_first_audio": composite.to_dict(),

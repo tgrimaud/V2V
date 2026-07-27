@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile
 from stt_validation.models import TranscriptResult
 from stt_validation.providers import SttProvider
 from stt_validation.runner import SttValidationRunner
-from stt_validation.telemetry import TelemetryRecorder, Timer
+from voice_common.telemetry import TelemetryRecorder, Timer
 
 from .end_of_turn import END_OF_TURN_SPAN, EndOfTurnDetector, EndOfTurnResult
 from .envelope import ChannelEnvelope

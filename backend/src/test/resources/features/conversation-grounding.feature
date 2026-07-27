@@ -31,6 +31,18 @@ Feature: Conversation grounding with guardrails
     Then the assistant refuses with a low-confidence message
     And knowledge retrieval was attempted
 
+  Scenario: A vague low-information turn is asked to clarify before any retrieval (BUG-005)
+    When the customer says "vas-y."
+    Then the assistant clarifies the request
+    And no knowledge retrieval is performed
+
+  Scenario: A middle-confidence retrieval asks to clarify instead of answering (BUG-005)
+    Given the confidence policy has a clarify band above the floor
+    And the knowledge base can only return a middle-confidence match
+    When the customer asks "Pourquoi ma facture est plus élevée ce mois-ci ?"
+    Then the assistant clarifies the request
+    And knowledge retrieval was attempted
+
   Scenario: Shared general knowledge grounds an answer across domains
     Given the knowledge base returns a shared general article with a strong match
     When the customer asks "Quels sont les horaires du service client ?"

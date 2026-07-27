@@ -142,6 +142,29 @@ class UtteranceAggregatorTest(unittest.IsolatedAsyncioTestCase):
             any(e.name == "voice.end_of_turn.detected" for e in telemetry.events())
         )
 
+    async def test_stamps_per_turn_identity_on_end_of_turn_span(self) -> None:
+        # GIVEN an aggregator with telemetry + envelope carrying a conversation id
+        telemetry = TelemetryRecorder()
+        envelope = SimpleNamespace(
+            correlation_id="corr-42", conversation_id="conv-42", channel="web_voice"
+        )
+        agg = UtteranceAggregator(
+            sample_rate_hz=SAMPLE_RATE,
+            silence_window_ms=100,
+            min_utterance_ms=20,
+            telemetry=telemetry,
+            envelope=envelope,
+        )
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 6
+        # WHEN a turn streams through and end-of-turn fires (TASK-WEB-017)
+        await _drive(agg, frames)
+        # THEN the end_of_turn span carries the stable conversation id and a per-turn id
+        span = next(s for s in telemetry.spans() if s.name == END_OF_TURN_SPAN)
+        self.assertEqual(span.attributes["correlation_id"], "corr-42")
+        self.assertEqual(span.attributes["conversation_id"], "conv-42")
+        self.assertEqual(span.attributes["turn_index"], 1)
+        self.assertIsNotNone(span.attributes["message_id"])
+
     async def test_no_span_when_stream_has_no_speech(self) -> None:
         # GIVEN telemetry wiring and a stream that carries only silence
         telemetry = TelemetryRecorder()

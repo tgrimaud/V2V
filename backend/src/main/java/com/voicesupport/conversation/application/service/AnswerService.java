@@ -55,7 +55,9 @@ public class AnswerService implements AnswerQuestionUseCase {
         GroundingResult grounding = groundQueryUseCase.ground(question, domain, topK, alreadyGreeted, language);
         if (!grounding.answerable()) {
             // Guardrail-fallback turns skip the LLM, so record the answer language here (no provider)
-            // to keep per-turn language observability complete, not just on LLM turns (TASK-BE-015).
+            // to keep per-turn language observability complete, not just on LLM turns (TASK-BE-015),
+            // plus the blocked verdict so clarify/low-confidence rates are observable (ADR-0034).
+            telemetry.recordGuardrailBlock(grounding.decision().verdict().name());
             telemetry.recordAnswerLanguage(null, language.code());
             return GeneratedAnswer.fallback(grounding.decision().fallbackMessage());
         }

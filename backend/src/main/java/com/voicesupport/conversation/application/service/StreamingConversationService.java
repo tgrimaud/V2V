@@ -5,6 +5,7 @@ import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
+import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
@@ -72,7 +73,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty(), language);
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, history, language, onChunk)
-                : emitFallback(language, grounding.decision().fallbackMessage(), onChunk);
+                : emitFallback(language, grounding.decision(), onChunk);
         memory.append(conversationId, new ConversationTurn(transcript, answer.text()));
         return answer;
     }
@@ -87,10 +88,13 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         return emitter.finish();
     }
 
-    private GeneratedAnswer emitFallback(AnswerLanguage language, String message, Consumer<String> onChunk) {
+    private GeneratedAnswer emitFallback(AnswerLanguage language, GuardrailDecision decision, Consumer<String> onChunk) {
         // Guardrail-fallback turns skip the streaming LLM, so record the answer language here (no
-        // provider) to keep per-turn language observability complete on the voice path (TASK-BE-015).
+        // provider) to keep per-turn language observability complete on the voice path (TASK-BE-015),
+        // plus the blocked verdict so clarify/low-confidence rates are observable (ADR-0034).
+        telemetry.recordGuardrailBlock(decision.verdict().name());
         telemetry.recordAnswerLanguage(null, language.code());
+        String message = decision.fallbackMessage();
         onChunk.accept(message);
         return GeneratedAnswer.fallback(message);
     }

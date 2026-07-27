@@ -45,6 +45,20 @@ public class ConversationGroundingSteps {
                 new RetrievedEvidence("vaguement lié", "s1", "billing", 0.30)));
     }
 
+    // ADR-0034/BUG-005: switch the post-retrieval guardrail to the three-band policy (floor 0.5,
+    // clarify ceiling 0.62) so a middle-confidence retrieval clarifies instead of being answered.
+    @Given("the confidence policy has a clarify band above the floor")
+    public void confidencePolicyHasClarifyBand() {
+        service = new RetrievalGroundingService(
+                new InputGuardrail(), new RetrievalConfidenceGuardrail(0.5, 0.62), retrievalPort);
+    }
+
+    @Given("the knowledge base can only return a middle-confidence match")
+    public void middleConfidenceEvidence() {
+        retrievalPort.setEvidence(List.of(
+                new RetrievedEvidence("partiellement lié à R6/ION", "s1", "support", 0.5213)));
+    }
+
     @Given("the knowledge base returns a shared general article with a strong match")
     public void generalEvidenceStrong() {
         retrievalPort.setEvidence(List.of(
@@ -99,6 +113,11 @@ public class ConversationGroundingSteps {
     @Then("the assistant refuses with a low-confidence message")
     public void refusesLowConfidence() {
         assertRefused(GuardrailDecision.Verdict.LOW_CONFIDENCE);
+    }
+
+    @Then("the assistant clarifies the request")
+    public void clarifiesTheRequest() {
+        assertRefused(GuardrailDecision.Verdict.CLARIFY);
     }
 
     @Then("no knowledge retrieval is performed")
