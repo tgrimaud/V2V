@@ -57,6 +57,7 @@ class StreamingVoiceSession:
         backend: BackendAnswerPort | None = None,
         telemetry: Any = None,
         pre_stt: Sequence[FrameProcessor] = (),
+        pre_answer: Sequence[FrameProcessor] = (),
         pre_output: Sequence[FrameProcessor] = (),
         stt_detects_end_of_turn: bool = True,
         stt_processor: FrameProcessor | None = None,
@@ -85,6 +86,11 @@ class StreamingVoiceSession:
         # transport (WebRTC) needs an utterance aggregator here to turn streamed
         # audio into whole-utterance frames; the batch fake transport passes none.
         self._pre_stt = list(pre_stt)
+        # Processors inserted between STT and the answer step. The WebRTC path puts the
+        # CallEndFarewellProcessor here (TASK-WEB-010): it inspects the final transcript,
+        # can suppress the answer on a customer closing formula, and speaks the
+        # confirmation / closing by pushing plain TextFrames toward the TTS stage.
+        self._pre_answer = list(pre_answer)
         # Processors inserted between TTS and transport.output(). The WebRTC path puts
         # the ChannelEgressProbe here to measure runtime egress of the first audio
         # frame (TASK-WEB-014); the in-memory fake transport passes none, so the
@@ -111,6 +117,7 @@ class StreamingVoiceSession:
                 self._transport.input(),
                 *self._pre_stt,
                 stt,
+                *self._pre_answer,
                 answer,
                 tts,
                 *self._pre_output,

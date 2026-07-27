@@ -24,7 +24,18 @@ from typing import Any, Callable
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
+from .call_end_farewell import (
+    DEFAULT_CLOSING_MESSAGE,
+    DEFAULT_CONFIRM_PROMPT,
+    DEFAULT_CONFIRM_TIMEOUT_S,
+    CallEndFarewellProcessor,
+)
 from .channel_egress_probe import ChannelEgressProbe
+from .closing_intent import (
+    DEFAULT_CLOSING_PHRASES,
+    DEFAULT_DONE_PHRASES,
+    ClosingIntentDetector,
+)
 from .egress import WebVoiceEgress
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
@@ -35,6 +46,51 @@ from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
 
 DEFAULT_SAMPLE_RATE = 16000
+
+# End-of-call reasons emitted on the `voice.call_end` telemetry event (TASK-WEB-010).
+END_OF_CALL_EVENT = "voice.call_end"
+REASON_CUSTOMER_FAREWELL = "customer_farewell"
+REASON_CLIENT_STOP = "client_stop"
+REASON_CLIENT_DROP = "client_drop"
+
+_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _farewell_config() -> dict[str, Any]:
+    """Resolve the env-tunable end-of-call farewell settings (TASK-WEB-010, ADR-0035).
+
+    Mirrors the barge-in env pattern: bad values fall back to the defaults rather than
+    crashing a call. `VOICE_FAREWELL_ENABLED=0` disables the feature entirely (the
+    pre-existing manual-hangup behaviour then applies).
+    """
+    enabled = os.environ.get("VOICE_FAREWELL_ENABLED", "1").strip().lower() not in _FALSE_VALUES
+    return {
+        "enabled": enabled,
+        "prompt": os.environ.get("VOICE_FAREWELL_PROMPT", DEFAULT_CONFIRM_PROMPT),
+        "closing": os.environ.get("VOICE_FAREWELL_CLOSING", DEFAULT_CLOSING_MESSAGE),
+        "timeout_s": _float_env("VOICE_FAREWELL_CONFIRM_TIMEOUT_S", DEFAULT_CONFIRM_TIMEOUT_S),
+        "closing_phrases": _phrase_env("VOICE_FAREWELL_PHRASES", DEFAULT_CLOSING_PHRASES),
+        "done_phrases": _phrase_env("VOICE_FAREWELL_DONE_PHRASES", DEFAULT_DONE_PHRASES),
+    }
+
+
+def _float_env(env_var: str, default: float) -> float:
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _phrase_env(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return default
+    phrases = tuple(part.strip() for part in raw.split(",") if part.strip())
+    return phrases or default
 
 
 def _barge_in_config() -> dict[str, int]:
@@ -65,6 +121,12 @@ class _Session:
     envelope: ChannelEnvelope
     telemetry: TelemetryRecorder
     task: Any = None
+    # The farewell processor for this session (TASK-WEB-010), or None when the feature
+    # is disabled / the batch path is used. Wired to the teardown callback post-build.
+    farewell: Any = None
+    # The end-of-call reason once recorded, so it is emitted exactly once (a bot farewell
+    # must not be overwritten by the later `closed` event that its own disconnect fires).
+    end_reason: str | None = None
 
 
 def _log_telemetry(telemetry: TelemetryRecorder) -> None:
@@ -164,20 +226,33 @@ class WebRtcSignalingService:
         # session envelope -> forces the backend answer language and selects the STT/TTS voice.
         envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
         telemetry = self._telemetry_factory()
-        session = self._build_session(connection, envelope, telemetry)
-        record = _Session(connection, session, envelope, telemetry)
+        session, farewell = self._build_session(connection, envelope, telemetry)
+        record = _Session(connection, session, envelope, telemetry, farewell=farewell)
         self._register_cleanup(connection)
         self._sessions[connection.pc_id] = record
+        self._wire_farewell(record)
         answer = self._answer_payload(connection.get_answer(), envelope)
         record.task = asyncio.ensure_future(session.run())
         return answer
 
-    def _build_session(self, connection, envelope, telemetry) -> StreamingVoiceSession:
+    def _wire_farewell(self, record: _Session) -> None:
+        """Give the farewell processor a teardown callback now that its session/connection
+        exist: on a confirmed farewell it records the end-of-call reason then reuses the
+        TASK-WEB-008 drain path to speak the closing and end the call."""
+        if record.farewell is None:
+            return
+
+        async def _end_call(signal: str) -> None:
+            await self._on_farewell(record, signal)
+
+        record.farewell.set_end_call(_end_call)
+
+    def _build_session(self, connection, envelope, telemetry) -> tuple[StreamingVoiceSession, Any]:
         transport = self._build_transport(connection)
         tts_processor = self._build_tts_processor(envelope, telemetry)
         if self._streaming_provider is not None:
             return self._build_streaming_session(transport, envelope, telemetry, tts_processor)
-        return self._build_batch_session(transport, envelope, telemetry, tts_processor)
+        return self._build_batch_session(transport, envelope, telemetry, tts_processor), None
 
     def _build_egress_probe(self, envelope, telemetry) -> ChannelEgressProbe:
         """Runtime channel-egress probe for the WebRTC transport (TASK-WEB-014):
@@ -203,7 +278,7 @@ class WebRtcSignalingService:
 
     def _build_streaming_session(
         self, transport, envelope, telemetry, tts_processor
-    ) -> StreamingVoiceSession:
+    ) -> tuple[StreamingVoiceSession, Any]:
         provider = self._streaming_provider_for(envelope)
         stt = StreamingSttProcessor(
             provider,
@@ -216,7 +291,8 @@ class WebRtcSignalingService:
             # count. Unset -> the processor defaults apply.
             **_barge_in_config(),
         )
-        return StreamingVoiceSession(
+        farewell = self._build_farewell_processor(envelope, telemetry)
+        session = StreamingVoiceSession(
             transport,
             ingress=self._ingress,
             egress=self._egress,
@@ -227,7 +303,28 @@ class WebRtcSignalingService:
             # detection + its span and emits the final transcript itself.
             stt_processor=stt,
             tts_processor=tts_processor,
+            # Conversational end-of-call (TASK-WEB-010): inspects the final transcript
+            # between STT and the answer step, before the backend is asked.
+            pre_answer=[farewell] if farewell is not None else [],
             pre_output=[self._build_egress_probe(envelope, telemetry)],
+        )
+        return session, farewell
+
+    def _build_farewell_processor(self, envelope, telemetry) -> Any:
+        """End-of-call farewell processor for the session, or None when disabled."""
+        config = _farewell_config()
+        if not config["enabled"]:
+            return None
+        detector = ClosingIntentDetector(
+            closing_phrases=config["closing_phrases"], done_phrases=config["done_phrases"]
+        )
+        return CallEndFarewellProcessor(
+            detector,
+            envelope,
+            telemetry,
+            confirm_prompt=config["prompt"],
+            closing_message=config["closing"],
+            confirm_timeout_s=config["timeout_s"],
         )
 
     def _build_batch_session(
@@ -273,22 +370,60 @@ class WebRtcSignalingService:
         # idempotent (the second event finds the session already popped).
         @connection.event_handler("closed")
         async def _on_closed(conn) -> None:  # noqa: ANN001 - pipecat callback signature
-            await self._drain_and_discard(conn.pc_id)
+            await self._drain_and_discard(conn.pc_id, reason=REASON_CLIENT_STOP)
 
         @connection.event_handler("disconnected")
         async def _on_disconnected(conn) -> None:  # noqa: ANN001 - pipecat callback signature
-            await self._drain_and_discard(conn.pc_id)
+            await self._drain_and_discard(conn.pc_id, reason=REASON_CLIENT_DROP)
 
-    async def _drain_and_discard(self, pc_id: str) -> None:
-        """On call end/drop: flush a trailing partial utterance (TASK-WEB-008) before
-        discarding, so a customer still mid-speech at hangup still yields an
-        end_of_turn span + final transcript in telemetry instead of a silently
-        dropped turn. Draining is best-effort; teardown always proceeds.
+    async def _drain_and_discard(self, pc_id: str, reason: str = REASON_CLIENT_STOP) -> None:
+        """On call end/drop: record the end-of-call reason, flush a trailing partial
+        utterance (TASK-WEB-008), then discard. A bot-initiated farewell has already
+        recorded `customer_farewell`, so `_record_end_of_call` leaves it untouched here.
+        Draining is best-effort; teardown always proceeds.
         """
         record = self._sessions.get(pc_id)
         if record is not None:
+            self._record_end_of_call(record, reason=reason)
             await self._drain(record)
         self._discard(pc_id)
+
+    def _record_end_of_call(self, record: _Session, *, reason: str, signal: str | None = None) -> None:
+        """Emit the end-of-call reason once under the call correlation id (TASK-WEB-010):
+        `customer_farewell` (bot ended the call) vs `client_stop`/`client_drop` (manual
+        hangup / abrupt drop). Pilot review reads this to attribute every call ending."""
+        if record.end_reason is not None:
+            return
+        record.end_reason = reason
+        attributes = {"correlation_id": record.envelope.correlation_id, "reason": reason}
+        if signal is not None:
+            attributes["signal"] = signal
+        record.telemetry.record(END_OF_CALL_EVENT, **attributes)
+
+    async def _on_farewell(self, record: _Session, signal: str) -> None:
+        """Confirmed farewell: record the reason and schedule the graceful teardown off
+        the pipeline task (we must not await our own run() task from inside it)."""
+        import asyncio
+
+        self._record_end_of_call(record, reason=REASON_CUSTOMER_FAREWELL, signal=signal)
+        asyncio.ensure_future(self._farewell_teardown(record))
+
+    async def _farewell_teardown(self, record: _Session, timeout: float = 10.0) -> None:
+        """Let the closing message drain (TASK-WEB-008 path), then disconnect. Disconnect
+        fires `closed` -> `_drain_and_discard` -> `_discard`, which logs telemetry once
+        (the reason is already recorded). Bounded so a stuck transport never hangs."""
+        import asyncio
+
+        try:
+            await record.session.drain()  # queue EndFrame; the closing plays, then run() ends
+            if record.task is not None:
+                await asyncio.wait_for(asyncio.shield(record.task), timeout=timeout)
+        except Exception:  # noqa: BLE001 - teardown is best-effort, never blocks/raises
+            pass
+        try:
+            await record.connection.disconnect()
+        except Exception:  # noqa: BLE001 - connection may already be closing
+            pass
 
     async def _drain(self, record: _Session, timeout: float = 5.0) -> None:
         import asyncio

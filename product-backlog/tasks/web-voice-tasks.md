@@ -1070,9 +1070,19 @@ if intent-based detection or a confirmation step is chosen (see open questions)
 **Depends on:** streaming STT (TASK-STT-010, merged), streaming TTS (TASK-WEB-004,
 merged), graceful pipeline drain on call end (delivered with TASK-WEB-008)
 **Classification:** V1 core
-**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-16)
+**Status:** Implemented (2026-07-27) — pending adversarial review + QA acceptance +
+user live validation. Deterministic no-LLM `ClosingIntentDetector`
+(`web_voice/closing_intent.py`, word-boundary token matching, negation + embedded-request
+guards) + `CallEndFarewellProcessor` (`web_voice/call_end_farewell.py`) inserted on a new
+`pre_answer` seam of `StreamingVoiceSession`. Confirmation turn + bounded confirmation-scoped
+silence timer (`VOICE_FAREWELL_CONFIRM_TIMEOUT_S`); ending reuses the TASK-WEB-008 `drain()`
+path via a signaling teardown callback; `voice.call_end` reason telemetry
+(`customer_farewell` vs `client_stop`/`client_drop`) under the call correlation id. FR phrase
+sets env-tunable (`VOICE_FAREWELL_ENABLED/PROMPT/CLOSING/PHRASES/DONE_PHRASES`). ADR-0035.
+Tests: 384 voice-agent unit (+28: `test_closing_intent`, `test_call_end_farewell`, signaling
+wiring) + Behave `call_end_farewell.feature` (2 scenarios) green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-010-call-end-farewell` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-010-call-end-farewell`
 
 ### Objective
 

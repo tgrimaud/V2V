@@ -36,6 +36,16 @@ Barge-in tuning (TASK-WEB-008) is env-only: `VOICE_BARGE_IN_THRESHOLD` (amplitud
 and `VOICE_BARGE_IN_FRAMES` (sustained-onset frame count); unset → processor
 defaults apply.
 
+End-of-call farewell (TASK-WEB-010, ADR-0035) is env-only on the WebRTC path:
+`VOICE_FAREWELL_ENABLED` (`0`/`false` disables the feature), `VOICE_FAREWELL_PROMPT`
+(confirmation question, default "Souhaitez-vous autre chose ?"),
+`VOICE_FAREWELL_CLOSING` (spoken closing), `VOICE_FAREWELL_CONFIRM_TIMEOUT_S`
+(bounded silence-as-confirmation window, default 6 s) and the FR phrase lists
+`VOICE_FAREWELL_PHRASES` / `VOICE_FAREWELL_DONE_PHRASES` (comma-separated). On a
+confirmed farewell the runtime emits a `voice.call_end` event with
+`reason=customer_farewell` (vs `client_stop`/`client_drop` on a manual hangup/drop)
+under the call correlation id. Unset → detector defaults apply.
+
 `http` backend configuration (TASK-WEB-003-C):
 
 | Env | Required | Meaning |

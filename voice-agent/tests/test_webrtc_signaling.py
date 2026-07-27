@@ -21,6 +21,7 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT))
 from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult  # noqa: E402
 from stt_validation.models import SttOutcome, TranscriptResult  # noqa: E402
 from tts_synthesis.models import SynthesisResult, TtsOutcome  # noqa: E402
+from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from web_voice.webrtc_support import probe_webrtc_support  # noqa: E402
 
 WEBRTC = probe_webrtc_support().available
@@ -132,7 +133,7 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
             connection=SimpleNamespace(pc_id="pc-1"),
             session=_FakeSession(),
             envelope=SimpleNamespace(correlation_id="c"),
-            telemetry=SimpleNamespace(),
+            telemetry=TelemetryRecorder(),
             task=None,
         )
         service._sessions["pc-1"] = record
@@ -142,6 +143,9 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(drained.is_set())
         self.assertNotIn("pc-1", service._sessions)
         self.assertEqual(logged, [record.telemetry])
+        # AND the end-of-call reason (manual hangup) was recorded under the correlation id
+        end = next(e for e in record.telemetry.events() if e.name == "voice.call_end")
+        self.assertEqual(end.attributes["reason"], "client_stop")
 
     async def test_drain_failure_still_discards_the_session(self) -> None:
         # GIVEN a session whose drain() raises (e.g. abrupt drop mid-flush)
@@ -159,7 +163,7 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
             connection=SimpleNamespace(pc_id="pc-2"),
             session=_ExplodingSession(),
             envelope=SimpleNamespace(correlation_id="c"),
-            telemetry=SimpleNamespace(),
+            telemetry=TelemetryRecorder(),
             task=None,
         )
         service._sessions["pc-2"] = record
@@ -251,6 +255,141 @@ class WebRtcLanguageSelectionTest(unittest.TestCase):
         self.assertEqual(service._streaming_tts_provider_for(en).name, "tts-en")
         self.assertEqual(service._streaming_tts_provider_for(fr).name, "tts-fr")
         self.assertEqual(service._streaming_tts_provider_for(none).name, "tts-default")
+
+
+class FarewellConfigTest(unittest.TestCase):
+    """TASK-WEB-010: env-tunable farewell settings resolve like the barge-in config."""
+
+    def setUp(self) -> None:
+        self._vars = (
+            "VOICE_FAREWELL_ENABLED",
+            "VOICE_FAREWELL_CONFIRM_TIMEOUT_S",
+            "VOICE_FAREWELL_PHRASES",
+        )
+        self._saved = {name: __import__("os").environ.pop(name, None) for name in self._vars}
+
+    def tearDown(self) -> None:
+        import os
+
+        for name, value in self._saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    def test_defaults_when_unset(self) -> None:
+        from web_voice.webrtc_signaling import _farewell_config
+
+        # GIVEN no overrides -> THEN the feature is enabled with default phrases/timeout
+        config = _farewell_config()
+        self.assertTrue(config["enabled"])
+        self.assertGreater(config["timeout_s"], 0)
+        self.assertIn("au revoir", config["closing_phrases"])
+
+    def test_can_be_disabled(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import _farewell_config
+
+        # GIVEN the disable switch -> THEN the feature is off
+        os.environ["VOICE_FAREWELL_ENABLED"] = "0"
+        self.assertFalse(_farewell_config()["enabled"])
+
+    def test_invalid_timeout_falls_back_to_default(self) -> None:
+        import os
+
+        from web_voice.call_end_farewell import DEFAULT_CONFIRM_TIMEOUT_S
+        from web_voice.webrtc_signaling import _farewell_config
+
+        # GIVEN a non-numeric / non-positive timeout -> THEN the default wins (no crash)
+        os.environ["VOICE_FAREWELL_CONFIRM_TIMEOUT_S"] = "soon"
+        self.assertEqual(_farewell_config()["timeout_s"], DEFAULT_CONFIRM_TIMEOUT_S)
+
+    def test_phrase_list_override_is_parsed(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import _farewell_config
+
+        # GIVEN a comma-separated override -> THEN it replaces the default phrase set
+        os.environ["VOICE_FAREWELL_PHRASES"] = " au revoir , ciao ,"
+        self.assertEqual(_farewell_config()["closing_phrases"], ("au revoir", "ciao"))
+
+
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class FarewellWiringTest(unittest.IsolatedAsyncioTestCase):
+    def _service(self):
+        from web_voice.webrtc_signaling import WebRtcSignalingService
+
+        return WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=lambda _t: None,
+            streaming_provider=SimpleNamespace(name="stt"),
+            streaming_tts_provider=SimpleNamespace(name="tts"),
+        )
+
+    def test_end_of_call_reason_is_recorded_once_and_farewell_wins(self) -> None:
+        # GIVEN a session record with a recorder
+        from web_voice.webrtc_signaling import _Session
+
+        service = self._service()
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc"),
+            session=SimpleNamespace(),
+            envelope=SimpleNamespace(correlation_id="corr-1"),
+            telemetry=TelemetryRecorder(),
+        )
+        # WHEN a farewell reason is recorded, then a later closed event tries to overwrite it
+        service._record_end_of_call(record, reason="customer_farewell", signal="confirmation")
+        service._record_end_of_call(record, reason="client_stop")
+        # THEN exactly one end-of-call event stands, and the farewell reason is kept
+        ends = [e for e in record.telemetry.events() if e.name == "voice.call_end"]
+        self.assertEqual(len(ends), 1)
+        self.assertEqual(ends[0].attributes["reason"], "customer_farewell")
+        self.assertEqual(ends[0].attributes["signal"], "confirmation")
+
+    async def test_on_farewell_records_reason_then_drains_and_disconnects(self) -> None:
+        # GIVEN a session whose drain + disconnect are observable
+        from web_voice.webrtc_signaling import _Session
+
+        service = self._service()
+        drained = asyncio.Event()
+        disconnected = asyncio.Event()
+
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc", disconnect=lambda: _set(disconnected)),
+            session=SimpleNamespace(drain=lambda: _set(drained)),
+            envelope=SimpleNamespace(correlation_id="corr-1"),
+            telemetry=TelemetryRecorder(),
+            task=None,
+        )
+        # WHEN a farewell is confirmed
+        await service._on_farewell(record, "silence")
+        await asyncio.sleep(0.05)  # let the fire-and-forget teardown run
+        # THEN the reason is recorded and the graceful drain + disconnect happened
+        self.assertEqual(record.end_reason, "customer_farewell")
+        self.assertTrue(drained.is_set())
+        self.assertTrue(disconnected.is_set())
+
+    def test_farewell_processor_absent_when_disabled(self) -> None:
+        import os
+
+        service = self._service()
+        saved = os.environ.pop("VOICE_FAREWELL_ENABLED", None)
+        os.environ["VOICE_FAREWELL_ENABLED"] = "false"
+        try:
+            # WHEN the feature is disabled -> THEN no farewell processor is built
+            self.assertIsNone(
+                service._build_farewell_processor(SimpleNamespace(correlation_id="c"), TelemetryRecorder())
+            )
+        finally:
+            if saved is None:
+                os.environ.pop("VOICE_FAREWELL_ENABLED", None)
+            else:
+                os.environ["VOICE_FAREWELL_ENABLED"] = saved
+
+
+async def _set(event: asyncio.Event) -> None:
+    event.set()
 
 
 if __name__ == "__main__":
