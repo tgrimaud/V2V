@@ -15,8 +15,9 @@ per-turn latency measurement they depend on).
 
 ## Status
 
-**Status:** Planned (opened 2026-07-23). Scope set by user decision after the Sprint 8
-live tests surfaced BUG-005 and TASK-WEB-017.
+**Status:** In progress (opened 2026-07-23). Scope set by user decision after the Sprint 8
+live tests surfaced BUG-005 and TASK-WEB-017. Delivered so far: TASK-WEB-013 + TASK-WEB-017
+(both merged); TASK-ENV-001 + TASK-STT-012 reconciled as already-delivered.
 
 ## Roadmap Context
 
@@ -51,7 +52,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 | Ticket | Title | Effort | Entry state |
 |---|---|---|---|
 | TASK-WEB-013 | Unify telemetry imports (`ingress.py` → `voice_common.telemetry`) — closes RF-023 | S | ✅ Merged into `feat/sprint-9-hardening` (2026-07-23, ff; branch deleted) — one-line import change, 334 unittest + 26 behave green |
-| TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | Implemented (2026-07-23) — recorder turn baggage + `(correlation_id, turn_index)` bucketing + `per_turn` report; unittest 346 (+12) + behave 26 green; branch `task/TASK-WEB-017-streaming-per-turn-telemetry-id`. Remaining: warm live sample + adversarial/QA |
+| TASK-WEB-017 | Per-turn identity on WebRTC streaming telemetry (keep stable per-conversation `correlation_id`) — enables per-turn latency | M | ✅ Merged into `feat/sprint-9-hardening` (2026-07-27, ff) — recorder turn baggage + `(correlation_id, turn_index)` bucketing + `per_turn` report; unittest 346 (+12) + behave 27 green; adversarial 93/100; QA passed inc. warm **live** Gradium+Mistral multi-turn sample (`docs/qa/task-web-017-per-turn-telemetry-qa.md`) |
 | TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | ✅ Already delivered (Sprint 5, on restart) — stale status reconciled 2026-07-23, no work needed |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
 | RF-017 | Assert the stub DEC-002 no-amount invariant at import time (or close as superseded by the HTTP backend default) | S | Open (Low) |
