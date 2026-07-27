@@ -18,10 +18,12 @@ per-turn latency measurement they depend on).
 **Status:** In progress (opened 2026-07-23). Scope set by user decision after the Sprint 8
 live tests surfaced BUG-005 and TASK-WEB-017. Delivered so far: TASK-WEB-013 + TASK-WEB-017
 (both merged); BUG-004 closed (live-validated, fix already merged); TASK-ENV-001 + TASK-STT-012
-reconciled as already-delivered; **BUG-005 + TASK-WEB-012/RF-022 implemented** on
-`fix/BUG-005-internal-kb-content-leak` (KB audience boundary + weak-confidence clarify band +
-env-tunable Python floor; ADR-0034; adversarial 92/100; Java 262 / Python 353 + behave 27 green)
-— **pending live voice retest** before merge-ready.
+reconciled as already-delivered; **BUG-005 + TASK-WEB-012/RF-022** merged into
+`feat/restart-from-scratch` (2026-07-27, KB audience boundary + weak-confidence clarify band +
+env-tunable Python floor; ADR-0034; adversarial 92/100; Java 262 / Python 353 + behave 27 green;
+**user-validated live** on the browser voice path); **BUG-001** merged (2026-07-27, intent-aware
+cyber guardrail; adversarial 93/100; backend 273 green; live QA passed). Remaining: RF-017,
+TASK-BE-016, TASK-WEB-016, TASK-WEB-010, RF-019.
 
 ## Roadmap Context
 
@@ -80,8 +82,8 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 | Ticket | Title | Prio | Effort |
 |---|---|---|---|
 | BUG-004 | LLM intermittently refuses ("transfer to advisor") despite passing evidence | P1 | ✅ Closed (2026-07-27) — fix already merged; live-validated: greeting variant 20/20 grounded (was ~1/7), off-topic refused, DEC-002 preserved, `AnswerLanguageTest` green |
-| BUG-005 | Internal agent-facing KB content (R6/ION, VAA) voiced to the end user on a vague turn; weak-but-passing confidence | P1 | ✅ Implemented (2026-07-27) — audience boundary (fail-closed `audience==customer` filter) + 3-band clarify guardrail + vague-turn detection; ADR-0034; adversarial 92/100; tests green. Pending live voice retest |
-| BUG-001 | Input guardrail blocks legitimate phishing/scam-call support questions | P2 | M |
+| BUG-005 | Internal agent-facing KB content (R6/ION, VAA) voiced to the end user on a vague turn; weak-but-passing confidence | P1 | ✅ Merged (2026-07-27) — audience boundary (fail-closed `audience==customer` filter) + 3-band clarify guardrail + vague-turn detection; ADR-0034; adversarial 92/100; tests green; **user-validated live** (browser voice). RF-024 recall gap tracked (accepted residual) |
+| BUG-001 | Input guardrail blocks legitimate phishing/scam-call support questions | P2 | ✅ Merged (2026-07-27) — intent-aware cyber guardrail (offensive verb + attack term, minus defensive framing); `InputGuardrailTest` 43→54, backend 262→273 green; adversarial 93/100; live QA passed (legit answered, offensive refused) |
 | TASK-WEB-012 | Confidence policy for answers — treat a `SUCCESS` answer without confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022/015/018, DEC-002); couples with BUG-005 facet 2 | M | ✅ Implemented (2026-07-27) — backend three-band confidence policy (floor→clarify→answer) + env-tunable Python client floor (RF-022, `VOICE_BACKEND_CONFIDENCE_THRESHOLD`); ADR-0034. Definitive proof threshold value still gated by OQ-002 |
 
 ## Out Of Scope (explicitly deferred)
