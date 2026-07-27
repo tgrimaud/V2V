@@ -193,6 +193,18 @@ Before touching existing code for a refactoring:
 
 Refactoring without tests is guessing.
 
+### Leave it cleaner than you found it — the Boy Scout Rule (guideline)
+
+When you edit a file, bring the code you touch up to the current standard instead of matching the surrounding legacy style. Small, in-passing cleanups (a misleading name, a stale comment, a convention drift like a test method that doesn't follow the naming rule) keep the codebase converging on the standard instead of ossifying around old choices. Consistency is what makes a codebase readable, so the standard wins over "matching the neighbours".
+
+Keep it bounded and safe:
+- **Scope to what you touch.** Clean the file/section you're already editing for a ticket. Don't launch an unrelated big-bang migration — leave untouched files for whoever edits them next.
+- **Behaviour-preserving only.** A cleanup must not change behaviour. Cover it with the same "test before / test after" loop above; a pure rename or comment fix should keep every test green.
+- **Separate the intent in the diff.** Where practical, keep the cleanup as its own commit (e.g. `refactor(test): …`) so reviewers can tell mechanical cleanup from real change.
+- **Respect real constraints.** Some "inconsistencies" are mandatory — e.g. methods that override an interface must keep the interface's name. Don't "clean" those.
+
+The goal is convergence, not perfection in one pass: every touched file gets a little better, and the standard spreads by attrition rather than by a risky one-shot rewrite.
+
 ---
 
 ## Environment and Pipeline Safety
@@ -220,6 +232,7 @@ Before submitting code, verify:
 - [ ] No class exceeds 200 non-blank lines
 - [ ] No method nesting deeper than 3 levels
 - [ ] Comments explain *why*, not *what* — or code was refactored to be self-explanatory
+- [ ] Code touched in this change was brought up to standard (Boy Scout Rule), behaviour-preserving
 - [ ] No new dependencies added without tech lead approval
 - [ ] New libraries vetted (public repo, active maintenance, license check)
 - [ ] Library features used in production are covered by unit tests
