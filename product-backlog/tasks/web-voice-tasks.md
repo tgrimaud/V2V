@@ -1070,8 +1070,9 @@ if intent-based detection or a confirmation step is chosen (see open questions)
 **Depends on:** streaming STT (TASK-STT-010, merged), streaming TTS (TASK-WEB-004,
 merged), graceful pipeline drain on call end (delivered with TASK-WEB-008)
 **Classification:** V1 core
-**Status:** Implemented (2026-07-27) — pending adversarial review + QA acceptance +
-user live validation. Deterministic no-LLM `ClosingIntentDetector`
+**Status:** ✅ Done (validated live by the user 2026-07-27) — adversarial review ≥90%,
+QA acceptance and user live validation all passed; **US-041 → Done**.
+Deterministic no-LLM `ClosingIntentDetector`
 (`web_voice/closing_intent.py`, word-boundary token matching, negation + embedded-request
 guards) + `CallEndFarewellProcessor` (`web_voice/call_end_farewell.py`) inserted on a new
 `pre_answer` seam of `StreamingVoiceSession`. Confirmation turn + bounded confirmation-scoped

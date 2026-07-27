@@ -985,7 +985,7 @@ Scenario: Pilot readiness can be decided
 
 **Parent:** EPIC-006
 **Classification:** V1 core
-**Status:** Draft (proposed 2026-07-16)
+**Status:** ✅ Done (delivered via TASK-WEB-010, validated live by the user 2026-07-27)
 **Priority:** Medium
 
 ### User Story

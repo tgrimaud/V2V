@@ -78,7 +78,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 
 | Ticket | Title | Effort |
 |---|---|---|
-| TASK-WEB-010 | End the call on a customer closing formula (US-041) — closing-intent detection + false-positive guard + end-of-call telemetry — **Implemented 2026-07-27** (ADR-0035; `task/TASK-WEB-010-call-end-farewell`), pending adversarial review + QA + user validation | M |
+| TASK-WEB-010 | End the call on a customer closing formula (US-041) — closing-intent detection + false-positive guard + end-of-call telemetry — **✅ Done 2026-07-27** (ADR-0035; `task/TASK-WEB-010-call-end-farewell`), adversarial review ≥90% + QA + user live validation passed | M |
 
 ### Tier D — set-aside functional debt
 
