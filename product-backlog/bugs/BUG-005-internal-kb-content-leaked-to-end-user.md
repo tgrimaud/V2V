@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-005
 - **Title:** On a low-information utterance ("vas-y"), retrieval surfaces internal agent-desk articles (R6/ION appointment tooling, VAA) and the LLM voices them to the end user; confidence drops to ≈0.52 but still PASSES the gate instead of asking to clarify
-- **Status:** New — scheduled in Sprint 9 (hardening/assainissement)
+- **Status:** Fixed — pending QA live retest (implemented on `fix/BUG-005-internal-kb-content-leak`, Sprint 9)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test)
@@ -79,29 +79,56 @@ wrong-audience material. Two distinct facets:
 
 ## Acceptance Criteria For Fix
 
-- [ ] Internal / agent-only KB content cannot be retrieved or voiced on an end-user channel
-      (e.g. an `audience` tag at ingestion — customer vs internal — with the customer runtime
-      filtering to customer-facing content, analogous to the existing `domain` filter).
-- [ ] On a weak/ambiguous turn (low retrieval confidence), the bot asks for clarification
-      instead of voicing a weakly-matched article (coordinate with
-      [TASK-WEB-012](../tasks/web-voice-tasks.md) confidence policy).
-- [ ] The defect no longer reproduces on the "vas-y" follow-up (and similar low-info turns).
-- [ ] A regression test covers both facets (internal content not retrievable for a customer
-      channel; low-confidence vague turn → clarification).
-- [ ] Relevant OpenTelemetry traces, metrics and structured logs are present or explicitly N/A.
-- [ ] Adversarial code review is at least 90% satisfied.
+- [x] Internal / agent-only KB content cannot be retrieved or voiced on an end-user channel
+      (`audience` tag at ingestion — customer vs internal — with the customer runtime
+      fail-closed filtering to `audience == customer`, AND-combined with the `domain` filter).
+- [x] On a weak/ambiguous turn (low retrieval confidence), the bot asks for clarification
+      instead of voicing a weakly-matched article (three-band confidence policy +
+      [TASK-WEB-012](../tasks/web-voice-tasks.md) / RF-022).
+- [x] The defect no longer reproduces on the "vas-y" follow-up (and similar low-info turns) —
+      covered by unit + BDD tests; **live voice retest pending** (see QA Retest).
+- [x] A regression test covers both facets (internal content not retrievable for a customer
+      channel; low-confidence/vague turn → clarification).
+- [x] Relevant OpenTelemetry traces, metrics and structured logs are present (guardrail-block
+      counter per verdict/channel; internal-audience ingestion audit log).
+- [x] Adversarial code review is at least 90% satisfied (92/100, Pass).
 - [ ] QA retest passes (backend-only reproduction + live voice).
-- [ ] Related documentation / backlog notes updated if behavior changed.
+- [x] Related documentation / backlog notes updated (ADR-0034, sprint-9, backlog-index, OQ).
 
 ## Developer Notes
 
-Developer fills this during resolution:
-
-- root cause:
-- files changed:
-- tests added/updated:
-- OpenTelemetry added/updated:
-- residual risk:
+- **root cause:** two independent gaps. (1) The CSV corpus (ADR-0030) mixes customer-facing and
+  internal agent-desk articles with **no audience column**, and the vector search filtered only by
+  `domain` — so an internal article (R6/ION, VAA) was retrievable on a customer turn. (2) The
+  post-retrieval guardrail was a single pass/fail threshold (0.5): a middle-confidence match
+  (≈0.52) passed and was voiced. A contentless continuer ("vas-y") also went straight to retrieval.
+- **fix (2 facets):**
+  - **Audience boundary:** new `AudienceClassifierPort` + deterministic `KeywordAudienceClassifierAdapter`
+    (lowercase + accent-fold, word-boundary acronyms) tags each `SourceDocument` `audience`
+    (`customer` default / `internal`) at ingestion; `PgVectorStoreAdapter` stores it in JSONB
+    metadata and its search is **fail-closed** on `audience == customer` (AND domain).
+  - **Weak-confidence clarify:** `RetrievalConfidenceGuardrail` now three-band (floor 0.5 → advisor
+    hand-off; floor→clarify-ceiling 0.62 → `CLARIFY`; ≥ ceiling → answer). `InputGuardrail` detects
+    vague/low-info turns (≤3 continuer tokens) pre-retrieval → `CLARIFY`. New `GuardrailDecision.CLARIFY`
+    verdict + fr/en clarify wording. Python client-side floor made env-tunable (RF-022,
+    `VOICE_BACKEND_CONFIDENCE_THRESHOLD`).
+- **files changed:** `AudienceClassifierPort`, `KeywordAudienceClassifierAdapter`, `SourceDocument`,
+  `CsvArticleConnector`, `PgVectorStoreAdapter`, `KnowledgeConfig`, `GuardrailDecision`,
+  `GuardrailMessages`, `RetrievalConfidenceGuardrail`, `InputGuardrail`, `ConversationConfig`,
+  `AnswerService`, `StreamingConversationService`, `BackendTelemetry`, `application.yml`,
+  `voice_pipeline/answer.py`; tests + BDD features; ADR-0034.
+- **tests added/updated:** `KeywordAudienceClassifierAdapterTest`, `PgVectorStoreAdapterTest`,
+  `InputGuardrailTest` (vague), `RetrievalConfidenceGuardrailTest` (bands), `BackendTelemetryTest`
+  (guardrail counter), `CsvArticleConnectorTest` (audience), 2 BDD scenarios (grounding), 3
+  language BDD scenarios adjusted, `test_answer_processor.py` (RF-022 boundaries). Java 262 /
+  Python 353 + behave 27 green.
+- **OpenTelemetry added/updated:** `voice_support.guardrail_block` counter (tags: verdict, channel)
+  + `[GUARDRAIL]` structured log in both sync and streaming pipelines; `[KB-SYNC] audience=internal`
+  ingestion audit log for the excluded partition.
+- **residual risk:** the retrieval filter is **fail-closed** on a metadata field legacy chunks lack,
+  so **deploying without a full KB re-sync empties the customer KB** (every chunk lacks `audience`
+  → 0 results → everything degrades to hand-off). Mitigation: the KB re-sync (`POST /api/knowledge/sync`)
+  is a mandatory release step; documented in ADR-0034, `CLAUDE.md` and `application.yml`.
 
 ## QA Retest
 

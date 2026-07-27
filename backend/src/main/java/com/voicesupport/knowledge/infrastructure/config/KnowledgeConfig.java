@@ -3,6 +3,7 @@ package com.voicesupport.knowledge.infrastructure.config;
 import com.voicesupport.knowledge.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.in.KnowledgeRetrievalUseCase;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
+import com.voicesupport.knowledge.domain.port.out.AudienceClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.DomainClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceStatePort;
@@ -14,6 +15,7 @@ import com.voicesupport.knowledge.domain.service.KnowledgeRetrievalService;
 import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.EmbeddingDomainClassifierAdapter;
+import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.KeywordAudienceClassifierAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.csv.CsvArticleConnector;
 import com.voicesupport.knowledge.infrastructure.adapter.out.markdown.MarkdownFolderConnector;
 import com.voicesupport.knowledge.infrastructure.adapter.out.persistence.JpaKnowledgeSourceStateAdapter;
@@ -74,12 +76,24 @@ public class KnowledgeConfig {
         return new EmbeddingDomainClassifierAdapter(embeddingModel, anchors, threshold, maxChars);
     }
 
+    // ADR-0034: deterministic, high-precision audience boundary for the mixed operator corpus.
+    // The default markers cover the observed BUG-005 agent-desk content (back office, R6/ION,
+    // VAA/VRD, vérification d'aptitude); extend the list to widen the internal partition without
+    // a rebuild. Precision over recall: only unambiguous markers tag an article internal.
+    @Bean
+    public AudienceClassifierPort audienceClassifier(
+            @Value("${voice-support.knowledge.audience.internal-markers:"
+                    + "back office,vérification d'aptitude,r6/ion,vaa,vrd}") List<String> internalMarkers) {
+        return new KeywordAudienceClassifierAdapter(internalMarkers);
+    }
+
     @Bean
     public CsvArticleConnector csvArticleConnector(
             @Value("${voice-support.knowledge.csv-path:../articles.csv}") String csvPath,
             @Value("${voice-support.knowledge.csv-language:en}") String csvLanguage,
-            DomainClassifierPort domainClassifier) {
-        return new CsvArticleConnector(csvPath, csvLanguage, domainClassifier);
+            DomainClassifierPort domainClassifier,
+            AudienceClassifierPort audienceClassifier) {
+        return new CsvArticleConnector(csvPath, csvLanguage, domainClassifier, audienceClassifier);
     }
 
     // TASK-BE-017: dev-only French copy of the CSV corpus, ingested as a distinct
@@ -91,8 +105,10 @@ public class KnowledgeConfig {
             @Value("${voice-support.knowledge.csv-fr-path:../articles-fr.csv}") String csvFrPath,
             @Value("${voice-support.knowledge.csv-fr-language:fr}") String csvFrLanguage,
             @Value("${voice-support.knowledge.csv-fr-source-type:csv-article-fr}") String csvFrSourceType,
-            DomainClassifierPort domainClassifier) {
-        return new CsvArticleConnector(csvFrPath, csvFrLanguage, csvFrSourceType, domainClassifier);
+            DomainClassifierPort domainClassifier,
+            AudienceClassifierPort audienceClassifier) {
+        return new CsvArticleConnector(
+                csvFrPath, csvFrLanguage, csvFrSourceType, domainClassifier, audienceClassifier);
     }
 
     @Bean

@@ -30,6 +30,7 @@ public class BackendTelemetry {
     private static final String PROMPT_CHARS = "voice_support.prompt_chars";
     private static final String ANSWER_CHARS = "voice_support.answer_chars";
     private static final String ANSWER_LANGUAGE = "voice_support.answer_language";
+    private static final String GUARDRAIL_BLOCK = "voice_support.guardrail_block";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
     private static final String CHANNEL_NONE = "n/a";
@@ -113,6 +114,23 @@ public class BackendTelemetry {
                 .increment();
         log.info("[LANGUAGE] provider={} language={} correlation_id={}",
                 safeProvider, safeLanguage, CorrelationId.current());
+    }
+
+    // Guardrail-block observability (ADR-0034): counts turns short-circuited by a blocked guardrail
+    // decision (voice_support.guardrail_block, tagged verdict + channel) plus a [GUARDRAIL] log, so
+    // clarify vs low_confidence vs off_topic rates are measurable per channel (BUG-005). Records the
+    // verdict only — never transcript or answer text — and carries the correlation id.
+    public void recordGuardrailBlock(String verdict) {
+        String safeVerdict = verdict == null || verdict.isBlank()
+                ? "n/a" : verdict.toLowerCase(java.util.Locale.ROOT);
+        String channel = normalizeChannel(CorrelationId.currentChannel());
+        Counter.builder(GUARDRAIL_BLOCK)
+                .tag("verdict", safeVerdict)
+                .tag("channel", channel)
+                .register(registry)
+                .increment();
+        log.info("[GUARDRAIL] verdict={} channel={} correlation_id={}",
+                safeVerdict, channel, CorrelationId.current());
     }
 
     public <T> T time(String slice, String provider, Supplier<T> work) {

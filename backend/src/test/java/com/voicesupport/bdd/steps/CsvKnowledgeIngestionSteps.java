@@ -3,6 +3,7 @@ package com.voicesupport.bdd.steps;
 import com.voicesupport.knowledge.domain.model.valueobject.SyncReport;
 import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.TextChunker;
+import com.voicesupport.knowledge.fake.FakeAudienceClassifier;
 import com.voicesupport.knowledge.fake.FakeDomainClassifier;
 import com.voicesupport.knowledge.fake.FakeKnowledgeSourceStatePort;
 import com.voicesupport.knowledge.fake.FakeSyncObserver;
@@ -31,9 +32,10 @@ public class CsvKnowledgeIngestionSteps {
     private final FakeVectorStorePort vectorStore = new FakeVectorStorePort();
     private final FakeKnowledgeSourceStatePort statePort = new FakeKnowledgeSourceStatePort();
     private final FakeDomainClassifier classifier = new FakeDomainClassifier();
+    private final FakeAudienceClassifier audienceClassifier = new FakeAudienceClassifier();
     private final Path csvFile = createCsvFile();
     private final CsvArticleConnector connector =
-            new CsvArticleConnector(csvFile.toString(), "en", classifier);
+            new CsvArticleConnector(csvFile.toString(), "en", classifier, audienceClassifier);
     private final KnowledgeSyncService service =
             new KnowledgeSyncService(
                     List.of(connector), statePort, vectorStore, new TextChunker(500, 50), new FakeSyncObserver());

@@ -5,6 +5,7 @@ a plain `TextFrame` carrying the backend's answer, and emits a `backend.request`
 telemetry span with only lengths (never the raw transcript or answer).
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -23,12 +24,15 @@ from conversation_backend import (  # noqa: E402
     AnswerResult,
     EmptyTranscriptError,
 )
+from conversation_backend import DEFAULT_CONFIDENCE_THRESHOLD  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_pipeline.answer import (  # noqa: E402
     BACKEND_FIRST_TOKEN_SPAN,
     BACKEND_REQUEST_SPAN,
+    CONFIDENCE_THRESHOLD_ENV_VAR,
     AnswerProcessor,
     answer_with_telemetry,
+    resolve_confidence_threshold,
 )
 
 
@@ -248,6 +252,68 @@ class DegradedModeTest(unittest.TestCase):
         # GIVEN the safe fallback text (DEC-002: never state a fabricated amount)
         # THEN it carries no digit or currency figure
         self.assertFalse(any(ch.isdigit() for ch in DEGRADED_FALLBACK_TEXT))
+
+    def test_confidence_policy_uses_an_explicit_higher_threshold(self) -> None:
+        # GIVEN an answer at 0.6 confidence and an explicit floor raised to 0.7 (RF-022)
+        telemetry = TelemetryRecorder()
+        # WHEN the helper applies the confidence policy with the raised floor
+        result = answer_with_telemetry(
+            _LowConfidenceBackend(confidence=0.6), _request(), telemetry, confidence_threshold=0.7
+        )
+        # THEN the 0.6 answer is now below the floor and replaced by the safe fallback
+        self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+        self.assertEqual(result.degraded_reason, "low_confidence")
+
+
+class ResolveConfidenceThresholdTest(unittest.TestCase):
+    """RF-022: env-tunable degraded-mode confidence floor (`VOICE_BACKEND_CONFIDENCE_THRESHOLD`)."""
+
+    def setUp(self) -> None:
+        self._saved = os.environ.pop(CONFIDENCE_THRESHOLD_ENV_VAR, None)
+
+    def tearDown(self) -> None:
+        if self._saved is None:
+            os.environ.pop(CONFIDENCE_THRESHOLD_ENV_VAR, None)
+        else:
+            os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = self._saved
+
+    def test_unset_env_falls_back_to_the_default(self) -> None:
+        # GIVEN no override set -> THEN the shared default floor is used
+        self.assertEqual(resolve_confidence_threshold(), DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_valid_override_is_honoured(self) -> None:
+        # GIVEN a valid in-range override
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "0.72"
+        # THEN it wins over the default
+        self.assertAlmostEqual(resolve_confidence_threshold(), 0.72)
+
+    def test_boundaries_zero_and_one_are_accepted(self) -> None:
+        # GIVEN the inclusive [0, 1] boundaries
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "0"
+        self.assertEqual(resolve_confidence_threshold(), 0.0)
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "1"
+        self.assertEqual(resolve_confidence_threshold(), 1.0)
+
+    def test_non_numeric_override_degrades_to_the_default(self) -> None:
+        # GIVEN a non-numeric value -> THEN parsing fails safe to the default
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "high"
+        self.assertEqual(resolve_confidence_threshold(), DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_out_of_range_override_degrades_to_the_default(self) -> None:
+        # GIVEN values outside [0, 1] (a probability floor cannot be > 1 or < 0)
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "1.5"
+        self.assertEqual(resolve_confidence_threshold(), DEFAULT_CONFIDENCE_THRESHOLD)
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "-0.1"
+        self.assertEqual(resolve_confidence_threshold(), DEFAULT_CONFIDENCE_THRESHOLD)
+
+    def test_processor_resolves_the_env_threshold_at_construction(self) -> None:
+        # GIVEN the env override set before the processor is built
+        os.environ[CONFIDENCE_THRESHOLD_ENV_VAR] = "0.8"
+        processor = AnswerProcessor(_FakeBackend(), _envelope())
+        # THEN the processor adopts the env floor (explicit arg still overrides it)
+        self.assertAlmostEqual(processor._confidence_threshold, 0.8)
+        explicit = AnswerProcessor(_FakeBackend(), _envelope(), confidence_threshold=0.55)
+        self.assertAlmostEqual(explicit._confidence_threshold, 0.55)
 
 
 if __name__ == "__main__":

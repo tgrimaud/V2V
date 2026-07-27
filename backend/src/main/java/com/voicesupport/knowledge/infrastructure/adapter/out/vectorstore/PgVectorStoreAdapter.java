@@ -19,6 +19,10 @@ import java.util.Map;
 public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
 
     private static final String SHARED_DOMAIN = "general";
+    // ADR-0034: the customer answer engine only ever retrieves customer-facing chunks. The filter
+    // is fail-closed (chunks without an audience value are excluded), so a full re-sync is required
+    // to activate the boundary — see the audience re-sync note in CLAUDE.md.
+    private static final String CUSTOMER_AUDIENCE = "customer";
 
     private final VectorStore vectorStore;
 
@@ -35,6 +39,7 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         metadata.put("section", section);
         metadata.put("chunk_index", String.valueOf(chunkIndex));
         metadata.put("domain", domain != null ? domain : SHARED_DOMAIN);
+        metadata.put("audience", CUSTOMER_AUDIENCE);
         vectorStore.add(List.of(new Document(content, metadata)));
     }
 
@@ -58,6 +63,7 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         metadata.put("section", chunk.section());
         metadata.put("chunk_index", String.valueOf(chunkIndex));
         metadata.put("domain", document.domain());
+        metadata.put("audience", document.audience() != null ? document.audience() : CUSTOMER_AUDIENCE);
         metadata.put("source_type", document.sourceType());
         metadata.put("source_id", document.sourceId());
         metadata.put("content_hash", document.contentHash());
@@ -82,27 +88,33 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
 
     @Override
     public List<KnowledgeChunk> search(String query, String domain, int topK) {
-        SearchRequest.Builder request = SearchRequest.builder().query(query).topK(topK);
-        Filter.Expression domainFilter = buildDomainFilter(domain);
-        if (domainFilter != null) {
-            request.filterExpression(domainFilter);
-        }
+        SearchRequest.Builder request = SearchRequest.builder()
+                .query(query).topK(topK)
+                .filterExpression(buildSearchFilter(domain));
         List<Document> documents = vectorStore.similaritySearch(request.build());
         return documents == null ? List.of() : documents.stream().map(this::toChunk).toList();
     }
 
-    // Restrict results to the requested domain plus the shared "general" domain.
-    // A null/blank domain means no domain restriction (search the whole store).
-    // An explicit "general" resolves to the shared domain only (never cross-domain).
-    private Filter.Expression buildDomainFilter(String domain) {
+    // ADR-0034: always restrict the customer answer engine to customer-facing chunks (fail-closed),
+    // AND-combined with the optional domain restriction. Internal/agent-desk content (BUG-005) is
+    // therefore never retrievable here regardless of the requested domain.
+    private Filter.Expression buildSearchFilter(String domain) {
+        FilterExpressionBuilder fb = new FilterExpressionBuilder();
+        FilterExpressionBuilder.Op customer = fb.eq("audience", CUSTOMER_AUDIENCE);
+        FilterExpressionBuilder.Op domainOp = domainOp(fb, domain);
+        return (domainOp == null ? customer : fb.and(customer, domainOp)).build();
+    }
+
+    // Restrict to the requested domain plus the shared "general" domain. A null/blank domain means
+    // no domain restriction; an explicit "general" resolves to the shared domain only.
+    private FilterExpressionBuilder.Op domainOp(FilterExpressionBuilder fb, String domain) {
         if (domain == null || domain.isBlank()) {
             return null;
         }
-        FilterExpressionBuilder fb = new FilterExpressionBuilder();
         if (SHARED_DOMAIN.equals(domain)) {
-            return fb.eq("domain", SHARED_DOMAIN).build();
+            return fb.eq("domain", SHARED_DOMAIN);
         }
-        return fb.or(fb.eq("domain", domain), fb.eq("domain", SHARED_DOMAIN)).build();
+        return fb.or(fb.eq("domain", domain), fb.eq("domain", SHARED_DOMAIN));
     }
 
     private KnowledgeChunk toChunk(Document document) {

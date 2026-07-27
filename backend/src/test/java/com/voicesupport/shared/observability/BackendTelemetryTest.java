@@ -1,5 +1,6 @@
 package com.voicesupport.shared.observability;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -61,6 +62,24 @@ class BackendTelemetryTest {
 
         // THEN the summary is registered under the n/a placeholder, not an empty tag
         assertNotNull(registry.find("voice_support.answer_chars").tag("provider", "n/a").summary());
+    }
+
+    @Test
+    @DisplayName("records a guardrail-block counter tagged by verdict and channel (ADR-0034)")
+    void recordsGuardrailBlock() {
+        // GIVEN a known channel for the current request
+        CorrelationId.setChannel("web_voice");
+
+        // WHEN a blocked guardrail verdict is recorded
+        telemetry.recordGuardrailBlock("CLARIFY");
+
+        // THEN a counter carries the lower-cased verdict under that channel
+        Counter counter = registry.find("voice_support.guardrail_block")
+                .tag("verdict", "clarify")
+                .tag("channel", "web_voice")
+                .counter();
+        assertNotNull(counter);
+        assertEquals(1.0, counter.count());
     }
 
     @Test

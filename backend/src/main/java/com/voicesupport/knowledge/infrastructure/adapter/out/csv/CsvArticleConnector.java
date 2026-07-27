@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.csv;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.port.out.AudienceClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.DomainClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import org.apache.commons.csv.CSVFormat;
@@ -32,6 +33,7 @@ public class CsvArticleConnector implements KnowledgeSourceConnector {
     private static final String COL_ID = "document_id";
     private static final String COL_TITLE = "title";
     private static final String COL_CONTENT = "content";
+    private static final String INTERNAL_AUDIENCE = "internal";
     private static final String BLOCK_SELECTOR =
             "p, div, li, h1, h2, h3, h4, h5, h6, tr, blockquote, section, article";
 
@@ -39,20 +41,25 @@ public class CsvArticleConnector implements KnowledgeSourceConnector {
     private final String defaultLanguage;
     private final String sourceType;
     private final DomainClassifierPort domainClassifier;
+    private final AudienceClassifierPort audienceClassifier;
 
-    public CsvArticleConnector(String csvPath, String defaultLanguage, DomainClassifierPort domainClassifier) {
-        this(csvPath, defaultLanguage, SOURCE_TYPE, domainClassifier);
+    public CsvArticleConnector(
+            String csvPath, String defaultLanguage,
+            DomainClassifierPort domainClassifier, AudienceClassifierPort audienceClassifier) {
+        this(csvPath, defaultLanguage, SOURCE_TYPE, domainClassifier, audienceClassifier);
     }
 
     // A parameterized source_type lets a second instance ingest a translated copy of the same
     // corpus (e.g. "csv-article-fr") without a source_id collision, since the idempotent sync
     // keys on (source_type, source_id) (TASK-BE-017).
     public CsvArticleConnector(
-            String csvPath, String defaultLanguage, String sourceType, DomainClassifierPort domainClassifier) {
+            String csvPath, String defaultLanguage, String sourceType,
+            DomainClassifierPort domainClassifier, AudienceClassifierPort audienceClassifier) {
         this.csvPath = Path.of(csvPath);
         this.defaultLanguage = defaultLanguage;
         this.sourceType = sourceType;
         this.domainClassifier = domainClassifier;
+        this.audienceClassifier = audienceClassifier;
     }
 
     @Override
@@ -105,8 +112,19 @@ public class CsvArticleConnector implements KnowledgeSourceConnector {
             return null;
         }
         String domain = domainClassifier.classify(title, content);
+        String audience = audienceClassifier.classify(title, content);
+        logAudience(sourceId, title, audience);
         return SourceDocument.create(
-                sourceType, sourceId, title, null, content, domain, defaultLanguage, Instant.now());
+                sourceType, sourceId, title, null, content, domain, audience, defaultLanguage, Instant.now());
+    }
+
+    // ADR-0034/BUG-005: make the internal partition visible after a sync so the audience boundary
+    // is auditable (how many agent-desk articles are excluded from the customer answer engine).
+    private void logAudience(String sourceId, String title, String audience) {
+        if (INTERNAL_AUDIENCE.equals(audience)) {
+            log.info("[KB-SYNC] audience=internal source_type={} source_id={} title={}",
+                    sourceType, sourceId, title);
+        }
     }
 
     private String value(CSVRecord record, String column) {

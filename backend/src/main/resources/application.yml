@@ -83,6 +83,16 @@ voice-support:
       # while keeping confident billing/support/commercial picks. See the TASK-BE-013 QA report.
       threshold: ${KB_CLASSIFIER_THRESHOLD:0.55}
       max-chars: ${KB_CLASSIFIER_MAX_CHARS:2000}
+    audience:
+      # Audience boundary (ADR-0034, BUG-005): the operator CSV corpus mixes customer-facing and
+      # internal/back-office agent articles with no audience column. An article whose title/content
+      # matches any of these unambiguous agent-desk markers is tagged audience=internal at ingestion
+      # (JSONB metadata) and is fail-closed excluded from the customer answer engine's retrieval.
+      # Deterministic + high-precision on purpose (over-tagging would hide legitimate answers); the
+      # comparison is lowercased and accent-folded, acronyms match on word boundaries. Extend this
+      # list to widen the internal partition without a rebuild. Activating the boundary requires a
+      # full KB re-sync so every chunk carries an audience value.
+      internal-markers: ${KB_AUDIENCE_INTERNAL_MARKERS:back office,vérification d'aptitude,r6/ion,vaa,vrd}
     # Bulk-sync observability cadence (TASK-BE-014): every N ingested documents the sync emits a
     # [KB-SYNC] op=progress line. Per-batch detail stays at DEBUG; per-batch timing + throughput
     # are always exposed as Micrometer meters (voice_support.kb_sync_batch / kb_sync_chunks /
@@ -93,6 +103,17 @@ voice-support:
     # best similarity score reaches this threshold. Provisional value per ADR-0021;
     # the definitive answer threshold is gated by OQ-002.
     confidence-threshold: ${CONVERSATION_CONFIDENCE_THRESHOLD:0.5}
+    # Weak-confidence clarify band (ADR-0034, BUG-005). Between confidence-threshold (floor,
+    # advisor hand-off) and this ceiling, a middle-confidence retrieval makes the bot ask the
+    # customer to clarify rather than voicing a weakly-matched (possibly wrong-audience) article.
+    # Set clarify-threshold <= confidence-threshold to disable the clarify band. Tune on measured
+    # data; the definitive billing proof threshold stays gated by OQ-002.
+    clarify-threshold: ${CONVERSATION_CLARIFY_THRESHOLD:0.62}
+    # Vague/low-information turn markers (ADR-0034, BUG-005). A turn made only of these contentless
+    # continuers (up to 3 tokens) is answered with a clarification prompt before any retrieval/LLM
+    # call — so "vas-y" no longer retrieves a weak internal match. Comparison is lowercased and
+    # accent-folded. Extend per deployment/language without a rebuild.
+    vague-markers: ${CONVERSATION_VAGUE_MARKERS:vas-y,vas y,allez-y,allez y,continue,continuez,poursuis,poursuivez,ensuite,la suite,go,go on,go ahead,ok,okay,d'accord,dac,dacc,alors,donc,bah,ben,euh,hmm,voila,voilà,et}
     # Answer-language default (TASK-BE-015, ADR-0031). The assistant answers in the language of the
     # customer's question (FR/EN); this default is used only when a turn is too ambiguous to detect
     # and no session language is established yet. English for the Eir pilot; set to fr for a French

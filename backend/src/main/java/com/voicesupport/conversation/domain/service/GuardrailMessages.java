@@ -45,6 +45,17 @@ final class GuardrailMessages {
                   + "autre chose concernant votre connexion ou nos services ?";
     }
 
+    // ADR-0034: a vague/low-information turn (e.g. "vas-y") or a middle-confidence retrieval does
+    // not warrant an advisor hand-off — a short clarification usually resolves it. Distinct from
+    // lowConfidence (below-floor hand-off) so the customer is invited to rephrase, not transferred.
+    static String clarify(AnswerLanguage language) {
+        return english(language)
+                ? "I'm not sure I fully understood your request. "
+                  + "Could you rephrase it or give me a little more detail?"
+                : "Je ne suis pas sûr d'avoir bien compris votre demande. "
+                  + "Pouvez-vous la reformuler ou me donner un peu plus de détails ?";
+    }
+
     static String lowConfidence(AnswerLanguage language) {
         return english(language)
                 ? "I don't have enough reliable information to answer this question. "
