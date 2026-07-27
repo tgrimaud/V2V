@@ -31,7 +31,7 @@ class ConversationServiceTest {
 
     @Test
     @DisplayName("first turn: empty history, not greeted, all-domain retrieval (domain null, topK 4)")
-    void firstTurn() {
+    void first_turn() {
         // WHEN the first turn of a conversation is answered
         service.converse("Bonjour", "c1");
 
@@ -44,7 +44,7 @@ class ConversationServiceTest {
 
     @Test
     @DisplayName("second turn passes the prior turn as history (current turn excluded) and marks greeted")
-    void secondTurnUsesPriorContext() {
+    void second_turn_uses_prior_context() {
         // GIVEN a first completed turn
         answerUseCase.nextAnswer = GeneratedAnswer.grounded("La proration explique l'écart.", 0.8);
         service.converse("Pourquoi ma facture change ?", "c1");
@@ -62,7 +62,7 @@ class ConversationServiceTest {
 
     @Test
     @DisplayName("the completed turn (transcript + produced answer) is recorded in memory")
-    void recordsCompletedTurn() {
+    void records_completed_turn() {
         // GIVEN the LLM produced a specific answer
         answerUseCase.nextAnswer = GeneratedAnswer.grounded("Réponse groundée.", 0.9);
 
@@ -83,7 +83,7 @@ class ConversationServiceTest {
 
     @Test
     @DisplayName("a missing conversation id is stateless: no history in, nothing recorded")
-    void blankConversationIdIsStateless() {
+    void blank_conversation_id_is_stateless() {
         // WHEN two turns are answered without a conversation id
         service.converse("Première question", "");
         service.converse("Deuxième question", "");
@@ -97,7 +97,7 @@ class ConversationServiceTest {
 
     @Test
     @DisplayName("conversations are isolated: one conversation's history never leaks into another")
-    void conversationsAreIsolated() {
+    void conversations_are_isolated() {
         // GIVEN a turn recorded on c1
         service.converse("Question A", "c1");
 

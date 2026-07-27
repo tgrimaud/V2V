@@ -34,7 +34,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void firstSyncIngestsAllDocuments() {
+    void first_sync_ingests_all_documents() {
         // GIVEN two never-seen documents
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -52,7 +52,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void secondSyncWithUnchangedContentSkipsEverything() {
+    void second_sync_with_unchanged_content_skips_everything() {
         // GIVEN a source that was already synced once
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));
@@ -73,7 +73,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void changedContentIsReingested() {
+    void changed_content_is_reingested() {
         // GIVEN a source synced once, then edited
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));
@@ -93,7 +93,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void removedSourceIsDeletedViaLedgerDiff() {
+    void removed_source_is_deleted_via_ledger_diff() {
         // GIVEN two synced sources
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -113,7 +113,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void syncSingleSourceTypeReturnsReportForTheMatchingConnector() {
+    void sync_single_source_type_returns_report_for_the_matching_connector() {
         // GIVEN a service with a markdown connector holding two never-seen documents
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -130,7 +130,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void removeStaleDeletesTheStaleSourceFromTheVectorStore() {
+    void remove_stale_deletes_the_stale_source_from_the_vector_store() {
         // GIVEN two synced sources
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -151,7 +151,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void syncUnknownSourceTypeThrows() {
+    void sync_unknown_source_type_throws() {
         // GIVEN a service with only a markdown connector
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(TYPE, List.of());
         KnowledgeSyncService service = serviceWith(
@@ -162,7 +162,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void eachDocumentIsStoredInOneBatchedCall() {
+    void each_document_is_stored_in_one_batched_call() {
         // GIVEN two documents to ingest
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -177,7 +177,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void observerReceivesPerBatchTimingAndCompletionTotals() {
+    void observer_receives_per_batch_timing_and_completion_totals() {
         // GIVEN two documents to ingest
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -199,7 +199,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void failedBatchAbortsSyncButIsObservableAndResumable() {
+    void failed_batch_aborts_sync_but_is_observable_and_resumable() {
         // GIVEN two documents where the second fails to store
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha."), doc("b.md", "# B\n\nBeta.")));
@@ -224,7 +224,7 @@ class KnowledgeSyncServiceTest {
     }
 
     @Test
-    void unchangedDocumentsEmitNoBatchButStillComplete() {
+    void unchanged_documents_emit_no_batch_but_still_complete() {
         // GIVEN a source already synced once
         FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
                 TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));

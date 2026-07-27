@@ -19,7 +19,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("blocks with low-confidence when no evidence was retrieved")
-    void blocksWhenEmpty() {
+    void blocks_when_empty() {
         GuardrailDecision decision = guardrail.check(List.of(), AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked());
@@ -28,7 +28,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("blocks when the best score is below the threshold")
-    void blocksWhenWeak() {
+    void blocks_when_weak() {
         List<RetrievedEvidence> weak = List.of(
                 new RetrievedEvidence("t1", "s1", "billing", 0.40),
                 new RetrievedEvidence("t2", "s2", "billing", 0.35));
@@ -41,7 +41,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("passes when at least one evidence reaches the threshold")
-    void passesWhenStrong() {
+    void passes_when_strong() {
         List<RetrievedEvidence> strong = List.of(
                 new RetrievedEvidence("t1", "s1", "billing", 0.82),
                 new RetrievedEvidence("t2", "s2", "billing", 0.30));
@@ -54,7 +54,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("applies a custom threshold")
-    void appliesCustomThreshold() {
+    void applies_custom_threshold() {
         RetrievalConfidenceGuardrail strict = new RetrievalConfidenceGuardrail(0.90);
         List<RetrievedEvidence> evidence = List.of(new RetrievedEvidence("t", "s", "billing", 0.85));
 
@@ -68,7 +68,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("BUG-005: a middle-confidence retrieval (0.52) asks to clarify, not answer")
-    void clarifiesOnMiddleConfidence() {
+    void clarifies_on_middle_confidence() {
         List<RetrievedEvidence> middle = List.of(new RetrievedEvidence("t", "s", "support", 0.5213));
 
         GuardrailDecision decision = banded.check(middle, AnswerLanguage.FRENCH);
@@ -79,7 +79,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("below the floor still hands off to an advisor (low confidence), not clarify")
-    void handsOffBelowFloor() {
+    void hands_off_below_floor() {
         List<RetrievedEvidence> weak = List.of(new RetrievedEvidence("t", "s", "support", 0.45));
 
         GuardrailDecision decision = banded.check(weak, AnswerLanguage.FRENCH);
@@ -89,7 +89,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("at or above the clarify ceiling the answer passes")
-    void passesAtOrAboveCeiling() {
+    void passes_at_or_above_ceiling() {
         List<RetrievedEvidence> strong = List.of(new RetrievedEvidence("t", "s", "support", 0.76));
 
         assertEquals(GuardrailDecision.Verdict.PASS, banded.check(strong, AnswerLanguage.FRENCH).verdict());
@@ -97,7 +97,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("BUG-005 boundary: a score exactly at the floor clarifies (floor is inclusive-pass, `< floor` blocks)")
-    void scoreExactlyAtFloorClarifies() {
+    void score_exactly_at_floor_clarifies() {
         // GIVEN
         List<RetrievedEvidence> atFloor = List.of(new RetrievedEvidence("t", "s", "support", 0.5));
 
@@ -110,7 +110,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("BUG-005 boundary: a score exactly at the clarify ceiling passes (`< ceiling` clarifies, ceiling answers)")
-    void scoreExactlyAtCeilingPasses() {
+    void score_exactly_at_ceiling_passes() {
         // GIVEN
         List<RetrievedEvidence> atCeiling = List.of(new RetrievedEvidence("t", "s", "support", 0.62));
 
@@ -123,7 +123,7 @@ class RetrievalConfidenceGuardrailTest {
 
     @Test
     @DisplayName("the single-threshold constructor keeps the legacy no-clarify-band behavior")
-    void singleThresholdHasNoClarifyBand() {
+    void single_threshold_has_no_clarify_band() {
         RetrievalConfidenceGuardrail legacy = new RetrievalConfidenceGuardrail(0.5);
         List<RetrievedEvidence> middle = List.of(new RetrievedEvidence("t", "s", "support", 0.5213));
 

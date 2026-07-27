@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class KnowledgeIngestionServiceTest {
 
     @Test
-    void shouldChunkContentAndStoreEveryChunk() {
+    void should_chunk_content_and_store_every_chunk() {
         // GIVEN an ingestion service over a fake vector store
         FakeVectorStorePort vectorStore = new FakeVectorStorePort();
         KnowledgeIngestionService service =
@@ -28,7 +28,7 @@ class KnowledgeIngestionServiceTest {
     }
 
     @Test
-    void shouldDefaultDomainToNullOverload() {
+    void should_default_domain_to_null_overload() {
         // GIVEN an ingestion service
         FakeVectorStorePort vectorStore = new FakeVectorStorePort();
         KnowledgeIngestionService service =
@@ -43,7 +43,7 @@ class KnowledgeIngestionServiceTest {
     }
 
     @Test
-    void shouldStoreChunksWithAscendingZeroBasedIndex() {
+    void should_store_chunks_with_ascending_zero_based_index() {
         // GIVEN a document whose paragraphs each exceed the chunk size, forcing several chunks
         FakeVectorStorePort vectorStore = new FakeVectorStorePort();
         KnowledgeIngestionService service =

@@ -475,9 +475,11 @@ strength / 0 no-coverage / threshold 95 passed), confirmed zero `src/main` chang
 of the 9 accepted survivors against the production source (all genuinely equivalent or
 timing-non-deterministic — none a killable gap in disguise), and judged the new tests to be real
 behavioural contracts rather than mutation-chasing. Non-blocking notes recorded:
-- New test methods use camelCase + `@DisplayName` (matching the surrounding files) rather than the
-  underscore convention the skill mandates — accepted as-is per product decision (test naming stays
-  descriptive via `@DisplayName`; existing camelCase suite is not migrated).
+- Test method naming (camelCase vs the skill's mandated underscore convention) was resolved by
+  applying the **Boy Scout rule**: every test file this ticket touched (13 files, 119 methods) was
+  migrated to the descriptive underscore convention while `@DisplayName` was preserved. Fake/helper
+  methods that override ports keep camelCase (they implement interfaces). Untouched test files are
+  left for a future ratchet — cleaned as they are next edited, not big-banged.
 - 4 of the 309 kills are PIT `TIMED_OUT` detections on loop-guard mutants (`TextChunker.hardSplit`,
   `snapBackToBoundary`), a weaker-but-valid form of kill; they cannot flip to SURVIVED from machine
   speed, so the threshold-95 gate carries no CI-flake risk.

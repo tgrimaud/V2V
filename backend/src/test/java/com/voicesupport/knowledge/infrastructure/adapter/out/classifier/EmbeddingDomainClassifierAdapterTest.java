@@ -22,7 +22,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldClassifyToClosestDomainAboveThreshold() {
+    void should_classify_to_closest_domain_above_threshold() {
         // GIVEN an article whose embedding aligns with the billing anchor
         FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
                 .on("invoice", new float[]{1, 0, 0});
@@ -37,7 +37,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldFallBackToGeneralBelowThreshold() {
+    void should_fall_back_to_general_below_threshold() {
         // GIVEN an article whose embedding is only weakly related to every anchor (cosine ~0.707)
         FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
                 .withDefault(new float[]{1, 1, 0});
@@ -52,7 +52,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldReturnGeneralForBlankContentWithoutEmbedding() {
+    void should_return_general_for_blank_content_without_embedding() {
         // GIVEN a classifier (anchors embedded once) and blank input
         EmbeddingDomainClassifierAdapter classifier =
                 new EmbeddingDomainClassifierAdapter(embeddingModelWithOrthogonalAnchors(), ANCHORS, 0.5, 2000);
@@ -65,7 +65,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldDegradeToGeneralWhenEmbeddingFails() {
+    void should_degrade_to_general_when_embedding_fails() {
         // GIVEN an embedding backend that fails on the article text (anchors still embed at construction)
         FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors().failOn("invoice");
         EmbeddingDomainClassifierAdapter classifier =
@@ -79,7 +79,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldNormaliseSimilarityByBothVectorMagnitudes() {
+    void should_normalise_similarity_by_both_vector_magnitudes() {
         // GIVEN a HALF-magnitude billing anchor ([0.5,0,0]) and an article aligned with it ([1,0,0]).
         // Cosine = dot/(|q|*|anchor|) = 0.5/(1*0.5) = 1.0 (>= 0.5). If the two magnitudes were divided
         // instead of multiplied in the denominator, it would be 0.5/(1/0.5) = 0.25 (< 0.5) -> general.
@@ -100,7 +100,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldSelectAnchorWhenSimilarityExactlyEqualsThreshold() {
+    void should_select_anchor_when_similarity_exactly_equals_threshold() {
         // GIVEN an article perfectly aligned with billing (cosine 1.0) and a threshold of exactly 1.0
         FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
                 .on("exactbill", new float[]{1f, 0f, 0f});
@@ -115,7 +115,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldClassifyFromTheTitleWhenOnlyTheTitleCarriesTheSignal() {
+    void should_classify_from_the_title_when_only_the_title_carries_the_signal() {
         // GIVEN the classifying keyword lives in the TITLE only, the content is neutral
         FakeEmbeddingModel model = embeddingModelWithOrthogonalAnchors()
                 .on("titlekey", new float[]{1f, 0f, 0f});
@@ -131,7 +131,7 @@ class EmbeddingDomainClassifierAdapterTest {
     }
 
     @Test
-    void shouldReturnGeneralWhenNoAnchorsConfigured() {
+    void should_return_general_when_no_anchors_configured() {
         // GIVEN a classifier with no domain anchors
         EmbeddingDomainClassifierAdapter classifier =
                 new EmbeddingDomainClassifierAdapter(new FakeEmbeddingModel(), Map.of(), 0.5, 2000);

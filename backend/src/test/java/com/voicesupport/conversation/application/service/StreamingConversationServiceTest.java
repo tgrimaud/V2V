@@ -47,7 +47,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("the configured top-K is forwarded to retrieval grounding (TASK-BE-011)")
-    void forwardsConfiguredTopK() {
+    void forwards_configured_top_k() {
         // GIVEN an answerable grounding result
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("ctx", "s1", "billing", 0.8))));
@@ -62,7 +62,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("blocked grounding emits the canned fallback, never streams the LLM, and is recorded")
-    void blockedGroundingSkipsLlm() {
+    void blocked_grounding_skips_llm() {
         // GIVEN the grounding pipeline blocks the input as off-topic
         grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Hors domaine.")));
 
@@ -78,7 +78,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("answerable question streams safe sentences, records the voiced answer, forwards evidence")
-    void streamsAnswerableSentences() {
+    void streams_answerable_sentences() {
         // GIVEN strong evidence and a clean two-token stream
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "s1", "billing", 0.83))));
@@ -97,7 +97,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("a mid-stream ungrounded amount stops emission after the safe part and hands off (DEC-002)")
-    void ungroundedAmountStopsStream() {
+    void ungrounded_amount_stops_stream() {
         // GIVEN evidence without any amount but a stream that invents one
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "s1", "billing", 0.9))));
@@ -115,7 +115,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("the second turn is greeted and receives the prior turn as history")
-    void secondTurnUsesPriorContext() {
+    void second_turn_uses_prior_context() {
         // GIVEN a first completed turn
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("ctx", "s1", "billing", 0.8))));
@@ -135,7 +135,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("the streamed answer language matches the customer's question language (TASK-BE-015)")
-    void streamsInTheQuestionLanguage() {
+    void streams_in_the_question_language() {
         // GIVEN an answerable grounding result
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("Prorating explains the difference.", "s1", "billing", 0.8))));
@@ -150,7 +150,7 @@ class StreamingConversationServiceTest {
 
     @Test
     @DisplayName("a guardrail-fallback stream still records the answer language (no provider) (TASK-BE-015)")
-    void fallbackStreamRecordsAnswerLanguage() {
+    void fallback_stream_records_answer_language() {
         // GIVEN the grounding pipeline blocks an English off-topic question
         grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Out of scope.")));
 

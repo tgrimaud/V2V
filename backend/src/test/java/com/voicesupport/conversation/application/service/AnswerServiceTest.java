@@ -42,7 +42,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("blocked grounding returns the canned fallback and never calls the LLM")
-    void blockedGroundingSkipsLlm() {
+    void blocked_grounding_skips_llm() {
         // GIVEN the grounding pipeline blocks the input as off-topic
         grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Hors domaine.")));
 
@@ -58,7 +58,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("answerable question is worded by the LLM with retrieval best-score as confidence")
-    void answerableProducesGroundedAnswer() {
+    void answerable_produces_grounded_answer() {
         // GIVEN strong evidence and a clean LLM answer
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.83),
@@ -78,7 +78,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("an ungrounded amount in the LLM answer is replaced by a safe hand-off (DEC-002)")
-    void fabricatedAmountReplacedByFallback() {
+    void fabricated_amount_replaced_by_fallback() {
         // GIVEN strong evidence with no amount but the LLM invents one
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.9))));
@@ -95,7 +95,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("an empty LLM answer becomes a safe fallback, never a grounded answer")
-    void emptyAnswerBecomesFallback() {
+    void empty_answer_becomes_fallback() {
         // GIVEN strong evidence but the LLM returns nothing
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.88))));
@@ -112,7 +112,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("an explicit LLM refusal is reported as a fallback, not grounded")
-    void refusalAnswerBecomesFallback() {
+    void refusal_answer_becomes_fallback() {
         // GIVEN strong evidence but the LLM emits the canned transfer sentence
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("Contenu de support.", "support-faq#1", "support", 0.9))));
@@ -128,7 +128,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("grounding parameters are forwarded unchanged")
-    void forwardsParameters() {
+    void forwards_parameters() {
         // GIVEN an answerable result
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("ctx", "s1", "support", 0.7))));
@@ -145,7 +145,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("the answer language matches the customer's question language (TASK-BE-015)")
-    void answersInTheQuestionLanguage() {
+    void answers_in_the_question_language() {
         // GIVEN an answerable result
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("Prorating explains the difference.", "billing-faq#1", "billing", 0.8))));
@@ -165,7 +165,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("a guardrail-fallback turn still records the answer language (no provider) (TASK-BE-015)")
-    void fallbackTurnRecordsAnswerLanguage() {
+    void fallback_turn_records_answer_language() {
         // GIVEN the grounding pipeline blocks an English off-topic question
         grounding.setNextResult(GroundingResult.blocked(GuardrailDecision.offTopic("Out of scope.")));
 
@@ -192,7 +192,7 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("the prior conversation history is forwarded to the LLM unchanged (TASK-BE-006)")
-    void forwardsHistoryToLlm() {
+    void forwards_history_to_llm() {
         // GIVEN an answerable result and a non-empty prior history
         grounding.setNextResult(GroundingResult.answerable(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "billing-faq#1", "billing", 0.8))));

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TextChunkerTest {
 
     @Test
-    void shouldReturnSingleChunkWhenContentFitsInChunkSize() {
+    void should_return_single_chunk_when_content_fits_in_chunk_size() {
         // GIVEN a chunker larger than the content
         TextChunker chunker = new TextChunker(500, 50);
 
@@ -23,7 +23,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldHardSplitASingleParagraphLongerThanChunkSize() {
+    void should_hard_split_a_single_paragraph_longer_than_chunk_size() {
         // GIVEN a chunk size of 100 and one paragraph (no blank lines) far longer than that
         // (reproduces the TASK-BE-017 embedder failure: a flattened article body as one paragraph)
         TextChunker chunker = new TextChunker(100, 10);
@@ -41,7 +41,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldSplitLongContentIntoMultipleChunks() {
+    void should_split_long_content_into_multiple_chunks() {
         // GIVEN a small chunk size
         TextChunker chunker = new TextChunker(40, 5);
         String content = "Para one is here.\n\nPara two is here.\n\nPara three is here.";
@@ -54,7 +54,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldExtractSectionFromMarkdownHeading() {
+    void should_extract_section_from_markdown_heading() {
         // GIVEN content with a level-2 heading
         TextChunker chunker = new TextChunker(500, 50);
 
@@ -66,7 +66,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldFallBackToDefaultSectionWhenNoHeading() {
+    void should_fall_back_to_default_section_when_no_heading() {
         // GIVEN content without any heading
         TextChunker chunker = new TextChunker(500, 50);
 
@@ -79,7 +79,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldNotDuplicateTheOverlapRegionInsideAChunk() {
+    void should_not_duplicate_the_overlap_region_inside_a_chunk() {
         // GIVEN a long single paragraph (flattened article body) longer than the chunk size (BUG-003:
         // the old double overlap re-stated the same words inside one chunk, e.g. "... cela\n\n cela ...")
         TextChunker chunker = new TextChunker(120, 30);
@@ -99,7 +99,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldNotEmitAChunkThatContainsOnlyHeadings() {
+    void should_not_emit_a_chunk_that_contains_only_headings() {
         // GIVEN nested headings followed by a body long enough to force a flush (BUG-003 header-only chunk)
         TextChunker chunker = new TextChunker(80, 10);
         String content = "# Base de connaissance\n\n## Connexion Internet\n\n### Ma box ne se connecte plus\n\n"
@@ -117,7 +117,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldNotCutWordsInTheMiddleWhenHardSplitting() {
+    void should_not_cut_words_in_the_middle_when_hard_splitting() {
         // GIVEN a long paragraph of real words far longer than the chunk size
         TextChunker chunker = new TextChunker(60, 10);
         String body = "alpha bravo charlie delta echo foxtrot golf hotel india juliett kilo "
@@ -139,7 +139,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void shouldExtractSectionFromLevelThreeHeading() {
+    void should_extract_section_from_level_three_heading() {
         // GIVEN a level-3 heading (### was ignored by the old extractSection)
         TextChunker chunker = new TextChunker(500, 50);
 
@@ -155,7 +155,7 @@ class TextChunkerTest {
     // subtle `<`/`<=`/negate mutation in the chunking algorithm is caught, not silently shipped. ---
 
     @Test
-    void flushBoundary_bufferPlusPieceExactlyAtChunkSizeDoesNotFlush() {
+    void flush_boundary_buffer_plus_piece_exactly_at_chunk_size_does_not_flush() {
         // GIVEN two 5-char paragraphs and a chunk size of exactly their combined length (10)
         TextChunker chunker = new TextChunker(10, 0);
 
@@ -168,7 +168,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void hardSplitBoundary_paragraphExactlyAtChunkSizeIsNotSplit() {
+    void hard_split_boundary_paragraph_exactly_at_chunk_size_is_not_split() {
         // GIVEN a single paragraph whose length is exactly the chunk size (10)
         TextChunker chunker = new TextChunker(10, 2);
 
@@ -181,7 +181,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void overlapTail_carriesTheWordBoundarySuffixIntoTheNextChunk() {
+    void overlap_tail_carries_the_word_boundary_suffix_into_the_next_chunk() {
         // GIVEN a flush where the 6-char tail starts with a space (" cd ef")
         TextChunker chunker = new TextChunker(10, 6);
 
@@ -196,7 +196,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void overlapTail_withNoWhitespaceReturnsTheWholeTail() {
+    void overlap_tail_with_no_whitespace_returns_the_whole_tail() {
         // GIVEN a flush where the 4-char tail has no whitespace ("efgh")
         TextChunker chunker = new TextChunker(10, 4);
 
@@ -210,7 +210,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void overlapTail_snapsForwardPastAMidTailWhitespaceDroppingThePartialWord() {
+    void overlap_tail_snaps_forward_past_a_mid_tail_whitespace_dropping_the_partial_word() {
         // GIVEN a flush where the 7-char tail is "ab cdef" (whitespace in the middle, not leading)
         TextChunker chunker = new TextChunker(10, 7);
 
@@ -225,7 +225,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void overlapTail_bufferExactlyAtOverlapLengthProducesNoOverlap() {
+    void overlap_tail_buffer_exactly_at_overlap_length_produces_no_overlap() {
         // GIVEN a flushed body chunk whose length equals the overlap exactly (5)
         TextChunker chunker = new TextChunker(5, 5);
 
@@ -240,7 +240,7 @@ class TextChunkerTest {
     }
 
     @Test
-    void addRemaining_headingOnlyDocumentStillProducesTheHeadingChunk() {
+    void add_remaining_heading_only_document_still_produces_the_heading_chunk() {
         // GIVEN a document that is only a heading (no body text at all)
         TextChunker chunker = new TextChunker(500, 50);
 

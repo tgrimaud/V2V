@@ -15,7 +15,7 @@ class KeywordAudienceClassifierAdapterTest {
 
     @Test
     @DisplayName("tags the BUG-005 agent-desk article (R6/ION + VAA) as internal")
-    void tagsAgentDeskArticleAsInternal() {
+    void tags_agent_desk_article_as_internal() {
         String content = "Modify the appointment in R6/ION for Back Office agents. "
                 + "Check availability via the VAA screen.";
 
@@ -24,14 +24,14 @@ class KeywordAudienceClassifierAdapterTest {
 
     @Test
     @DisplayName("matches internal markers regardless of case and accents")
-    void matchesRegardlessOfCaseAndAccents() {
+    void matches_regardless_of_case_and_accents() {
         assertEquals("internal", classifier.classify("Procédure", "Faire la Vérification d'Aptitude puis valider."));
         assertEquals("internal", classifier.classify(null, "process for BACK OFFICE only"));
     }
 
     @Test
     @DisplayName("keeps a plain customer billing article as customer")
-    void keepsCustomerArticleAsCustomer() {
+    void keeps_customer_article_as_customer() {
         String content = "Your monthly bill can increase when a promotional discount ends "
                 + "or when you use more data than your plan includes.";
 
@@ -40,7 +40,7 @@ class KeywordAudienceClassifierAdapterTest {
 
     @Test
     @DisplayName("acronyms match on word boundaries: an acronym embedded in a longer token does not match")
-    void doesNotFalsePositiveOnEmbeddedAcronym() {
+    void does_not_false_positive_on_embedded_acronym() {
         // "vaa" appears inside "bravaado" and "vrd" inside "overvrding" — word-boundary matching
         // must not treat these as the standalone internal acronyms.
         String content = "He answered with bravaado while overvrding the customer request.";
@@ -50,14 +50,14 @@ class KeywordAudienceClassifierAdapterTest {
 
     @Test
     @DisplayName("blank input defaults to the customer audience")
-    void blankDefaultsToCustomer() {
+    void blank_defaults_to_customer() {
         assertEquals("customer", classifier.classify(null, null));
         assertEquals("customer", classifier.classify("", "   "));
     }
 
     @Test
     @DisplayName("a marker present only in the title (empty content) still tags internal")
-    void tagsInternalWhenMarkerIsInTitleOnly() {
+    void tags_internal_when_marker_is_in_title_only() {
         // GIVEN — the internal marker is in the title and the content is empty; the title must
         // be part of the haystack (pins `title == null ? "" : title`, not dropping the title).
         String internalTitle = "Back Office procedure (VAA)";
@@ -71,7 +71,7 @@ class KeywordAudienceClassifierAdapterTest {
 
     @Test
     @DisplayName("a blank marker in the config is ignored (does not turn every article internal)")
-    void ignoresBlankMarkers() {
+    void ignores_blank_markers() {
         // GIVEN — a blank marker must be filtered out at construction; if kept, its empty pattern
         // would match every haystack and mis-tag all content as internal (fail-open).
         KeywordAudienceClassifierAdapter withBlank =

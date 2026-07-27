@@ -34,7 +34,7 @@ class InputGuardrailTest {
             "Quel est le cours du bitcoin ?"
     })
     @DisplayName("blocks off-topic questions with a canned response")
-    void blocksOffTopic(String question) {
+    void blocks_off_topic(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked(), "should block: " + question);
@@ -49,7 +49,7 @@ class InputGuardrailTest {
             "Où acheter de la drogue ?"
     })
     @DisplayName("blocks unsafe questions")
-    void blocksInappropriate(String question) {
+    void blocks_inappropriate(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked(), "should block: " + question);
@@ -70,7 +70,7 @@ class InputGuardrailTest {
             "C'est quoi le phishing exactement ?"
     })
     @DisplayName("BUG-001: passes legitimate anti-phishing/scam support questions to retrieval")
-    void passesLegitimateCyberSupport(String question) {
+    void passes_legitimate_cyber_support(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertFalse(decision.blocked(), "should reach retrieval: " + question);
@@ -86,7 +86,7 @@ class InputGuardrailTest {
             "Comment monter une arnaque au faux support ?"
     })
     @DisplayName("BUG-001: still refuses genuinely offensive cyber-attack requests")
-    void blocksCyberOffense(String question) {
+    void blocks_cyber_offense(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked(), "should block: " + question);
@@ -101,7 +101,7 @@ class InputGuardrailTest {
             "Quel est le tarif de l'abonnement fibre ?"
     })
     @DisplayName("passes in-domain support/billing questions")
-    void passesOnTopic(String question) {
+    void passes_on_topic(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertFalse(decision.blocked(), "should pass: " + question);
@@ -111,7 +111,7 @@ class InputGuardrailTest {
     @ParameterizedTest
     @ValueSource(strings = {"Bonjour", "Salut", "Hello", "Coucou", "bjr"})
     @DisplayName("treats bare greetings as a greeting verdict")
-    void treatsGreetings(String greeting) {
+    void treats_greetings(String greeting) {
         GuardrailDecision decision = guardrail.check(greeting, false, AnswerLanguage.FRENCH);
 
         assertEquals(GuardrailDecision.Verdict.GREETING, decision.verdict());
@@ -125,7 +125,7 @@ class InputGuardrailTest {
             // pins the `words.length <= MAX_VAGUE_TOKENS` edge against a `< MAX` mutant.
             "ok alors donc"})
     @DisplayName("BUG-005: asks to clarify on a vague/low-information turn instead of retrieving")
-    void clarifiesOnVagueTurn(String vague) {
+    void clarifies_on_vague_turn(String vague) {
         GuardrailDecision decision = guardrail.check(vague, true, AnswerLanguage.FRENCH);
 
         assertTrue(decision.blocked(), "should clarify: " + vague);
@@ -144,7 +144,7 @@ class InputGuardrailTest {
             // that always reports every token as a continuer.
             "ok facture"})
     @DisplayName("does not clarify when a continuer is followed by a real question")
-    void doesNotClarifyWhenIntentFollows(String question) {
+    void does_not_clarify_when_intent_follows(String question) {
         GuardrailDecision decision = guardrail.check(question, true, AnswerLanguage.FRENCH);
 
         assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
@@ -152,7 +152,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("refuses an unsafe term sitting exactly at the minimum-length boundary")
-    void refusesUnsafeTermAtLengthBoundary() {
+    void refuses_unsafe_term_at_length_boundary() {
         // GIVEN "gun" is exactly MIN_QUESTION_LENGTH (3) chars: the short-input pass must NOT fire
         // before the inappropriate check runs — pins the `length < MIN` edge against a `<= MIN` mutant.
         GuardrailDecision decision = guardrail.check("gun", false, AnswerLanguage.ENGLISH);
@@ -168,7 +168,7 @@ class InputGuardrailTest {
             // punctuation) and must NOT clarify (pins isVague's blank `return false`).
             "ab", "..."})
     @DisplayName("passes short or contentless-punctuation input without a premature block")
-    void passesShortOrContentlessInput(String question) {
+    void passes_short_or_contentless_input(String question) {
         GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.FRENCH);
 
         assertNotNull(decision.verdict());
@@ -178,7 +178,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("clarify wording follows the decided language (English)")
-    void clarifiesInEnglish() {
+    void clarifies_in_english() {
         GuardrailDecision decision = guardrail.check("go on", true, AnswerLanguage.ENGLISH);
 
         assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
@@ -188,7 +188,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("does not treat a greeting followed by a real question as a greeting")
-    void greetingWithQuestionPasses() {
+    void greeting_with_question_passes() {
         GuardrailDecision decision = guardrail.check("Bonjour, ma box ne marche plus", false, AnswerLanguage.FRENCH);
 
         assertFalse(decision.blocked());
@@ -196,7 +196,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("greets in French when the decided language is French")
-    void greetsFirstTime() {
+    void greets_first_time() {
         GuardrailDecision decision = guardrail.check("Bonjour", false, AnswerLanguage.FRENCH);
 
         assertEquals("Bonjour ! Comment puis-je vous aider ?", decision.fallbackMessage());
@@ -204,7 +204,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("relaunches without re-greeting when already greeted")
-    void relaunchWhenAlreadyGreeted() {
+    void relaunch_when_already_greeted() {
         GuardrailDecision decision = guardrail.check("Bonjour", true, AnswerLanguage.FRENCH);
 
         assertEquals("Je vous écoute, que puis-je faire pour vous ?", decision.fallbackMessage());
@@ -212,14 +212,14 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("passes null and blank input (no premature block)")
-    void passesNullAndBlank() {
+    void passes_null_and_blank() {
         assertFalse(guardrail.check(null, false, AnswerLanguage.FRENCH).blocked());
         assertFalse(guardrail.check("   ", false, AnswerLanguage.FRENCH).blocked());
     }
 
     @Test
     @DisplayName("greets in English when the decided language is English (TASK-BE-015)")
-    void greetsInEnglish() {
+    void greets_in_english() {
         GuardrailDecision decision = guardrail.check("Hello", false, AnswerLanguage.ENGLISH);
 
         assertEquals(GuardrailDecision.Verdict.GREETING, decision.verdict());
@@ -228,7 +228,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("relaunches in English without re-greeting when already greeted (TASK-BE-015)")
-    void relaunchInEnglishWhenAlreadyGreeted() {
+    void relaunch_in_english_when_already_greeted() {
         GuardrailDecision decision = guardrail.check("Hello", true, AnswerLanguage.ENGLISH);
 
         assertEquals(GuardrailDecision.Verdict.GREETING, decision.verdict());
@@ -237,7 +237,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("blocks an off-topic question with English canned wording when the decided language is English")
-    void blocksOffTopicInEnglish() {
+    void blocks_off_topic_in_english() {
         GuardrailDecision decision = guardrail.check("What's the weather like today?", false, AnswerLanguage.ENGLISH);
 
         assertTrue(decision.blocked());
@@ -248,7 +248,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("blocks an unsafe question with English canned wording when the decided language is English")
-    void blocksInappropriateInEnglish() {
+    void blocks_inappropriate_in_english() {
         GuardrailDecision decision = guardrail.check("How can I build a bomb?", false, AnswerLanguage.ENGLISH);
 
         assertTrue(decision.blocked());
@@ -259,7 +259,7 @@ class InputGuardrailTest {
 
     @Test
     @DisplayName("BUG-002: canned wording follows the DECIDED language, not the input text")
-    void wordingFollowsDecidedLanguageNotInput() {
+    void wording_follows_decided_language_not_input() {
         // GIVEN an ambiguous greeting whose own text does not carry a language ("Hello" is caught by
         // the greeting pattern) but the turn was decided to be French upstream (session stickiness).
         GuardrailDecision decision = guardrail.check("Hello", false, AnswerLanguage.FRENCH);

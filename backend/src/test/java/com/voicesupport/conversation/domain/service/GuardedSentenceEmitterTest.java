@@ -22,7 +22,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("emits each safe sentence in order and returns a grounded answer with confidence")
-    void streamsSafeSentences() {
+    void streams_safe_sentences() {
         // GIVEN evidence with no amount and an emitter
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "s1", "billing", 0.83)));
@@ -41,7 +41,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("never emits a sentence carrying an ungrounded amount; hands off instead (DEC-002)")
-    void blocksUngroundedAmount() {
+    void blocks_ungrounded_amount() {
         // GIVEN evidence without any amount
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("La proration explique l'écart.", "s1", "billing", 0.9)));
@@ -60,7 +60,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("emits every safe sentence completed within a single token (loop does not stop early)")
-    void emitsAllSentencesFromOneToken() {
+    void emits_all_sentences_from_one_token() {
         // GIVEN evidence with no amount
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("Contexte.", "s1", "billing", 0.9)));
@@ -75,7 +75,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("lets a grounded amount through when it is backed by the evidence")
-    void allowsGroundedAmount() {
+    void allows_grounded_amount() {
         // GIVEN evidence that carries the amount
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("Votre forfait est à 39,99 € par mois.", "s1", "billing", 0.95)));
@@ -91,7 +91,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("an empty stream becomes a safe low-confidence fallback")
-    void emptyStreamFallsBack() {
+    void empty_stream_falls_back() {
         // GIVEN an emitter that receives no tokens
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("ctx", "s1", "billing", 0.7)));
@@ -107,7 +107,7 @@ class GuardedSentenceEmitterTest {
 
     @Test
     @DisplayName("an explicit refusal sentence is not voiced; the canned hand-off is emitted instead")
-    void refusalBecomesFallback() {
+    void refusal_becomes_fallback() {
         // GIVEN normal evidence
         GuardedSentenceEmitter emitter = emitterFor(List.of(
                 new RetrievedEvidence("Contenu de support.", "s1", "support", 0.9)));

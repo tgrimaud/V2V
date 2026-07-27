@@ -15,7 +15,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("the question language wins when it is clear (BR1)")
-    void resolvesFromQuestion() {
+    void resolves_from_question() {
         // WHEN the question is clearly English / French
         assertEquals(AnswerLanguage.ENGLISH, detector.resolve("Why is my bill higher this month?", List.of()));
         assertEquals(AnswerLanguage.FRENCH, detector.resolve("Pourquoi ma facture augmente ?", List.of()));
@@ -23,7 +23,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("an ambiguous turn falls back to the configured default (BR2)")
-    void resolvesToDefaultWhenAmbiguous() {
+    void resolves_to_default_when_ambiguous() {
         // GIVEN detectors with different defaults
         LanguageDetector french = new LanguageDetector(AnswerLanguage.FRENCH);
 
@@ -34,7 +34,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("an ambiguous turn keeps the current conversation language (BR3 stickiness)")
-    void resolvesFromHistoryWhenAmbiguous() {
+    void resolves_from_history_when_ambiguous() {
         // GIVEN a prior French turn in the history
         List<String> history = List.of(
                 "Client : Pourquoi ma facture augmente ?", "Assistant : Réponse.");
@@ -48,7 +48,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("an ambiguous turn with an ambiguous history falls back to the default")
-    void resolvesToDefaultWhenHistoryAmbiguous() {
+    void resolves_to_default_when_history_ambiguous() {
         // GIVEN no usable language signal anywhere
         AnswerLanguage resolved = detector.resolve("42", List.of("123", "456"));
 
@@ -58,14 +58,14 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("a null default falls back to English")
-    void nullDefaultIsEnglish() {
+    void null_default_is_english() {
         LanguageDetector nullDefault = new LanguageDetector(null);
         assertEquals(AnswerLanguage.ENGLISH, nullDefault.resolve("42", List.of()));
     }
 
     @Test
     @DisplayName("exposes the configured default language")
-    void exposesConfiguredDefault() {
+    void exposes_configured_default() {
         // GIVEN detectors configured with explicit default languages
         // WHEN the configured default is read back (for prompt/telemetry wiring)
         // THEN each detector returns its configured default (pins the getter against a null return)
@@ -75,7 +75,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("stickiness scans back to the OLDEST history turn when only it carries a language")
-    void stickinessReachesOldestTurn() {
+    void stickiness_reaches_oldest_turn() {
         // GIVEN only the oldest turn (index 0) is detectable; the newer turns are ambiguous
         List<String> history = List.of("Pourquoi ma facture augmente ?", "123", "456");
 
@@ -89,7 +89,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("a forced UI language overrides detection and stickiness (US-042 BR1/BR2)")
-    void forcedLanguageWins() {
+    void forced_language_wins() {
         // GIVEN a clearly French question and a French session history
         List<String> frenchHistory = List.of("Client : Pourquoi ma facture augmente ?");
 
@@ -105,7 +105,7 @@ class LanguageDetectorTest {
 
     @Test
     @DisplayName("a blank/null forced language falls back to normal detection (US-042 BR3)")
-    void blankForcedLanguageFallsBackToDetection() {
+    void blank_forced_language_falls_back_to_detection() {
         // WHEN the forced code is null or blank the per-turn decision is unchanged
         assertEquals(AnswerLanguage.FRENCH, detector.resolve("Pourquoi ma facture augmente ?", List.of(), null));
         assertEquals(AnswerLanguage.ENGLISH, detector.resolve("Why is my bill higher?", List.of(), "  "));

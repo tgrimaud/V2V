@@ -15,7 +15,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("emits a sentence only once a terminator is followed by whitespace")
-    void emitsOnBoundary() {
+    void emits_on_boundary() {
         // GIVEN a terminator arrives at the end of a token (no following char yet)
         assertTrue(segmenter.feed("Bonjour.").isEmpty());
 
@@ -29,7 +29,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("never splits a decimal amount before the terminator that ends the sentence")
-    void doesNotSplitDecimalAmount() {
+    void does_not_split_decimal_amount() {
         // WHEN a sentence containing a decimal amount is fed with a trailing boundary
         List<String> sentences = segmenter.feed("Cela coûte 5.99 euros. ");
 
@@ -39,7 +39,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("splits multiple sentences present in a single token and keeps the tail buffered")
-    void splitsMultipleSentences() {
+    void splits_multiple_sentences() {
         // WHEN two full sentences plus a partial one arrive together
         List<String> sentences = segmenter.feed("Un. Deux! Trois");
 
@@ -50,7 +50,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("treats a newline as a sentence boundary")
-    void newlineIsBoundary() {
+    void newline_is_boundary() {
         // WHEN a token ends a line
         List<String> sentences = segmenter.feed("Première ligne\nseconde");
 
@@ -60,7 +60,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("a '.' preceded by a digit is not a boundary even when followed by whitespace")
-    void digitDotFollowedByWhitespaceIsNotABoundary() {
+    void digit_dot_followed_by_whitespace_is_not_a_boundary() {
         // GIVEN the streaming segmenter
         // WHEN a digit-then-'.'-then-space precedes a real sentence-final '.'
         List<String> sentences = segmenter.feed("Prix 5. suite. ");
@@ -73,7 +73,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("a digit before '!' still splits (the digit guard applies only to '.')")
-    void digitBeforeBangStillSplits() {
+    void digit_before_bang_still_splits() {
         // GIVEN the streaming segmenter
         // WHEN '!' follows a digit and a space
         List<String> sentences = segmenter.feed("Total 5! Fin. ");
@@ -85,7 +85,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("a terminator at index 0 is a boundary without looking back past the buffer start")
-    void leadingTerminatorIsBoundary() {
+    void leading_terminator_is_boundary() {
         // GIVEN the streaming segmenter
         // WHEN the very first character is a terminator followed by whitespace
         List<String> sentences = segmenter.feed(". Bonjour. ");
@@ -97,7 +97,7 @@ class SentenceSegmenterTest {
 
     @Test
     @DisplayName("flush returns the remaining buffer and empties it")
-    void flushReturnsRemainder() {
+    void flush_returns_remainder() {
         // GIVEN buffered content with no trailing boundary
         segmenter.feed("Sans ponctuation finale");
 
