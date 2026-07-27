@@ -156,10 +156,11 @@
                  mvn -Ppitest test-compile org.pitest:pitest-maven:mutationCoverage
              Report: target/pit-reports/index.html. The build targets Java 17; if PIT
              fails under a newer runtime JDK (ASM major-version), run with JAVA_HOME on a
-             JDK 17. Baseline (2026-07-27, widened scope): 318 mutations, 87 % killed,
-             88 % test strength (~30 s). mutationThreshold=85 (below baseline) guards
-             regressions without flaking; ratchet up as survivors are killed — the largest
-             remaining cluster is TextChunker overlap/boundary logic. -->
+             JDK 17. Baseline (2026-07-27, widened scope + TextChunker hardened): 318 mutations,
+             ~90 % detected, 91 % test strength (~30 s). mutationThreshold=88 (below baseline)
+             guards regressions without flaking; ratchet up as survivors are killed. Remaining
+             survivors are mostly near-equivalent (TextChunker overlapTail `<0` / snapBack `>=`
+             edges) plus peripheral SentenceSegmenter/LanguageDetector/telemetry-void calls. -->
         <profile>
             <id>pitest</id>
             <build>
@@ -193,7 +194,7 @@
                                 <param>XML</param>
                             </outputFormats>
                             <timestampedReports>false</timestampedReports>
-                            <mutationThreshold>85</mutationThreshold>
+                            <mutationThreshold>88</mutationThreshold>
                         </configuration>
                     </plugin>
                 </plugins>

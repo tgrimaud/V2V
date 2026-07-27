@@ -150,6 +150,110 @@ class TextChunkerTest {
         assertEquals("Ma box ne se connecte plus", chunks.get(0).section());
     }
 
+    // --- Deterministic boundary/overlap tests (TASK-QA-018): exact-content assertions that pin
+    // the chunk-size flush edge, the hard-split edge, and the word-boundary overlap tail so a
+    // subtle `<`/`<=`/negate mutation in the chunking algorithm is caught, not silently shipped. ---
+
+    @Test
+    void flushBoundary_bufferPlusPieceExactlyAtChunkSizeDoesNotFlush() {
+        // GIVEN two 5-char paragraphs and a chunk size of exactly their combined length (10)
+        TextChunker chunker = new TextChunker(10, 0);
+
+        // WHEN chunking
+        List<TextChunker.Chunk> chunks = chunker.chunk("aaaaa\n\nbbbbb");
+
+        // THEN they stay in one chunk — pins `sum > chunkSize` (a `>=` mutant would flush at ==)
+        assertEquals(1, chunks.size());
+        assertEquals("aaaaa\n\nbbbbb", chunks.get(0).content());
+    }
+
+    @Test
+    void hardSplitBoundary_paragraphExactlyAtChunkSizeIsNotSplit() {
+        // GIVEN a single paragraph whose length is exactly the chunk size (10)
+        TextChunker chunker = new TextChunker(10, 2);
+
+        // WHEN chunking
+        List<TextChunker.Chunk> chunks = chunker.chunk("0123456789");
+
+        // THEN it is kept whole — pins `length <= chunkSize` (a `<` mutant would hard-split it)
+        assertEquals(1, chunks.size());
+        assertEquals("0123456789", chunks.get(0).content());
+    }
+
+    @Test
+    void overlapTail_carriesTheWordBoundarySuffixIntoTheNextChunk() {
+        // GIVEN a flush where the 6-char tail starts with a space (" cd ef")
+        TextChunker chunker = new TextChunker(10, 6);
+
+        // WHEN a second paragraph forces a flush
+        List<TextChunker.Chunk> chunks = chunker.chunk("ab cd ef\n\ngh ij");
+
+        // THEN chunk 2 begins with the snapped-forward overlap "cd ef" — pins the overlap guard
+        // (negate → "") and the `substring(i+1)` word-snap (empty-return mutant → "")
+        assertEquals(2, chunks.size());
+        assertEquals("ab cd ef", chunks.get(0).content());
+        assertEquals("cd ef\n\ngh ij", chunks.get(1).content());
+    }
+
+    @Test
+    void overlapTail_withNoWhitespaceReturnsTheWholeTail() {
+        // GIVEN a flush where the 4-char tail has no whitespace ("efgh")
+        TextChunker chunker = new TextChunker(10, 4);
+
+        // WHEN a second paragraph forces a flush
+        List<TextChunker.Chunk> chunks = chunker.chunk("abcdefgh\n\nij kl");
+
+        // THEN the whole tail carries over — pins the final `return tail` (empty-return mutant → "")
+        assertEquals(2, chunks.size());
+        assertEquals("abcdefgh", chunks.get(0).content());
+        assertEquals("efgh\n\nij kl", chunks.get(1).content());
+    }
+
+    @Test
+    void overlapTail_snapsForwardPastAMidTailWhitespaceDroppingThePartialWord() {
+        // GIVEN a flush where the 7-char tail is "ab cdef" (whitespace in the middle, not leading)
+        TextChunker chunker = new TextChunker(10, 7);
+
+        // WHEN a second paragraph forces a flush
+        List<TextChunker.Chunk> chunks = chunker.chunk("xxab cdef\n\nGH");
+
+        // THEN the partial leading word "ab" is dropped, "cdef" carries over — pins the snap loop
+        // (a skip-the-loop mutant would keep "ab cdef", observable after strip)
+        assertEquals(2, chunks.size());
+        assertEquals("xxab cdef", chunks.get(0).content());
+        assertEquals("cdef\n\nGH", chunks.get(1).content());
+    }
+
+    @Test
+    void overlapTail_bufferExactlyAtOverlapLengthProducesNoOverlap() {
+        // GIVEN a flushed body chunk whose length equals the overlap exactly (5)
+        TextChunker chunker = new TextChunker(5, 5);
+
+        // WHEN a second paragraph forces a flush
+        List<TextChunker.Chunk> chunks = chunker.chunk("abcde\n\nfg");
+
+        // THEN no overlap is carried (buffer not longer than overlap) — pins `length <= chunkOverlap`
+        // (a `<` mutant would re-emit the whole buffer as overlap)
+        assertEquals(2, chunks.size());
+        assertEquals("abcde", chunks.get(0).content());
+        assertEquals("fg", chunks.get(1).content());
+    }
+
+    @Test
+    void addRemaining_headingOnlyDocumentStillProducesTheHeadingChunk() {
+        // GIVEN a document that is only a heading (no body text at all)
+        TextChunker chunker = new TextChunker(500, 50);
+
+        // WHEN chunking
+        List<TextChunker.Chunk> chunks = chunker.chunk("# Title only");
+
+        // THEN the heading is still emitted because it is the sole content — pins the
+        // `chunks.isEmpty()` fallback branch (a heading-only doc must not vanish)
+        assertEquals(1, chunks.size());
+        assertEquals("# Title only", chunks.get(0).content());
+        assertEquals("Title only", chunks.get(0).section());
+    }
+
     private static boolean hasBodyLine(String content) {
         for (String line : content.split("\n")) {
             String stripped = line.strip();

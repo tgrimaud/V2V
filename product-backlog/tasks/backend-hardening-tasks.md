@@ -400,15 +400,21 @@ ConversationService, RetrievalGroundingService, StreamingConversationService) an
 KnowledgeRetrievalService, KnowledgeSyncService). Ports (interfaces) and value objects
 (records) stay out of scope — no branching logic to mutate.
 
-- **Widened baseline:** 318 mutations, **276 killed (87 %)**, **test strength 88 %**, ~30 s run.
-  `mutationThreshold=85` still passes.
-- **Largest remaining survivor cluster:** `TextChunker` overlap/boundary logic
-  (`overlapTail`, `shouldFlush`, `hardSplit`, `snapBackToBoundary`) — subtle exact-length
-  boundary mutants; highest-value next target given chunking's impact on retrieval (BUG-003).
-  Smaller residuals in `KnowledgeSyncService` (elapsed-time math, stale-removal void call) and
-  application services (null pass-throughs, telemetry void calls) — several are near-equivalent.
-- These are tracked as a follow-up (ratchet the threshold up as they are killed); not chased in
-  this ticket to keep scope contained.
+- **Widened baseline:** 318 mutations, 87 % killed, 88 % test strength, ~30 s run.
+- **TextChunker cluster hardened (2026-07-27):** added 7 deterministic exact-content tests that
+  pin the flush edge (`sum > chunkSize`), the hard-split edge (`length <= chunkSize`), the
+  word-boundary overlap tail (guard negate, `substring(i+1)` word-snap, whole-tail return,
+  `buffer.length() <= chunkOverlap` edge) and the heading-only `chunks.isEmpty()` fallback.
+  TextChunker survivors dropped from ~11 to **2**, both genuinely **equivalent mutants**
+  (`overlapTail` `chunkOverlap <= 0` → `< 0`, and `snapBackToBoundary` `i > start` → `i >= start`
+  — same observable output), documented as accepted.
+- **New score:** 318 mutations, **286 killed (90 %)**, **test strength 91 %**.
+  `mutationThreshold` ratcheted **85 → 88** (below the 90 baseline).
+- **Remaining survivors (accepted / lower value):** peripheral `SentenceSegmenter`,
+  `EmbeddingDomainClassifierAdapter`, `LanguageDetector`, `ConversationHistoryFormatter`,
+  `OutputGuardrail`/`GuardedSentenceEmitter`; `KnowledgeSyncService` (elapsed-time math,
+  stale-removal void call) and application services (null pass-throughs, telemetry void calls) —
+  several near-equivalent. Tracked as a follow-up; ratchet the threshold further as they are killed.
 
 ### Review & QA outcome
 
