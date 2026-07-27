@@ -399,8 +399,10 @@ Per user request, the PIT scope was widened from the initial guardrails+classifi
 pure business logic**: added `conversation.application.service.*` (AnswerService,
 ConversationService, RetrievalGroundingService, StreamingConversationService) and
 `knowledge.domain.service.*` (TextChunker, KnowledgeIngestionService,
-KnowledgeRetrievalService, KnowledgeSyncService). Ports (interfaces) and value objects
-(records) stay out of scope — no branching logic to mutate.
+KnowledgeRetrievalService, KnowledgeSyncService). Ports (interfaces) stay out of scope.
+Most value objects (records) are plain data holders, but a few carry decision logic
+(e.g. `AnswerLanguage.detect()`); these are covered indirectly today and are candidates
+for a later PIT-scope ratchet rather than an assumed no-op.
 
 - **Widened baseline:** 318 mutations, 87 % killed, 88 % test strength, ~30 s run.
 - **TextChunker cluster hardened (2026-07-27):** added 7 deterministic exact-content tests that
@@ -462,5 +464,22 @@ without a semantic change; documented, not chased):
 
 ### Review & QA outcome
 
-_Not runtime-affecting_ (test-tooling + tests + skill docs only; no production behaviour
-change). Adversarial code review / QA latency gates N/A. Awaiting user validation before merge.
+_Not runtime-affecting_ (test-tooling + tests + skill docs only; **zero `src/main` changes**;
+no production behaviour change), so the mandatory OpenTelemetry rule and QA latency gate are
+genuinely N/A here — the mutation run is itself the evidence.
+
+**Independent adversarial code review (a posteriori, 2026-07-27): 96/100 — QA gate Pass,
+no blocking findings.** An independent reviewer (not the author) re-ran the build and reproduced
+the headline numbers (`mvn test` 303 green; PIT 318 mutations / 309 killed / 97 % score / 97 %
+strength / 0 no-coverage / threshold 95 passed), confirmed zero `src/main` changes, verified each
+of the 9 accepted survivors against the production source (all genuinely equivalent or
+timing-non-deterministic — none a killable gap in disguise), and judged the new tests to be real
+behavioural contracts rather than mutation-chasing. Non-blocking notes recorded:
+- New test methods use camelCase + `@DisplayName` (matching the surrounding files) rather than the
+  underscore convention the skill mandates — accepted as-is per product decision (test naming stays
+  descriptive via `@DisplayName`; existing camelCase suite is not migrated).
+- 4 of the 309 kills are PIT `TIMED_OUT` detections on loop-guard mutants (`TextChunker.hardSplit`,
+  `snapBackToBoundary`), a weaker-but-valid form of kill; they cannot flip to SURVIVED from machine
+  speed, so the threshold-95 gate carries no CI-flake risk.
+- The `elapsedMs` timing survivors would require a production `Clock`/time port to kill — tracked as
+  a future follow-up, out of this test-only scope.

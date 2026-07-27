@@ -66,7 +66,9 @@ class LanguageDetectorTest {
     @Test
     @DisplayName("exposes the configured default language")
     void exposesConfiguredDefault() {
-        // The default is read back for prompt/telemetry wiring; pins the getter against a null return
+        // GIVEN detectors configured with explicit default languages
+        // WHEN the configured default is read back (for prompt/telemetry wiring)
+        // THEN each detector returns its configured default (pins the getter against a null return)
         assertEquals(AnswerLanguage.FRENCH, new LanguageDetector(AnswerLanguage.FRENCH).defaultLanguage());
         assertEquals(AnswerLanguage.ENGLISH, detector.defaultLanguage());
     }

@@ -61,6 +61,7 @@ class SentenceSegmenterTest {
     @Test
     @DisplayName("a '.' preceded by a digit is not a boundary even when followed by whitespace")
     void digitDotFollowedByWhitespaceIsNotABoundary() {
+        // GIVEN the streaming segmenter
         // WHEN a digit-then-'.'-then-space precedes a real sentence-final '.'
         List<String> sentences = segmenter.feed("Prix 5. suite. ");
 
@@ -73,6 +74,7 @@ class SentenceSegmenterTest {
     @Test
     @DisplayName("a digit before '!' still splits (the digit guard applies only to '.')")
     void digitBeforeBangStillSplits() {
+        // GIVEN the streaming segmenter
         // WHEN '!' follows a digit and a space
         List<String> sentences = segmenter.feed("Total 5! Fin. ");
 
@@ -84,6 +86,7 @@ class SentenceSegmenterTest {
     @Test
     @DisplayName("a terminator at index 0 is a boundary without looking back past the buffer start")
     void leadingTerminatorIsBoundary() {
+        // GIVEN the streaming segmenter
         // WHEN the very first character is a terminator followed by whitespace
         List<String> sentences = segmenter.feed(". Bonjour. ");
 
