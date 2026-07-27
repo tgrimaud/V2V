@@ -34,10 +34,29 @@ public class InputGuardrail {
             compile("(arme|weapon|gun|bomb|explos|firearm|fusil|pistolet|grenade)"),
             compile("(drogue|drug|cocaïne|héroïne|meth|crack|stupéfiant)"),
             compile("(tuer|kill|murder|assassin|suicide)"),
-            compile("(hack(er|ing)?|pirater|phishing|ransomware|malware)"),
             compile("(fabriquer|construire|build|make|create).{0,20}(bombe|arme|weapon|explosive|poison)"),
             compile("(pédophil|child\\s+(porn|abuse))"),
             compile("(terroris|radicalisation|attentat)"));
+
+    // BUG-001: cyber-security terms (phishing, scam, malware, hacking...) are legitimate SUPPORT
+    // topics — "what to do about scam/phishing calls", "how to protect against malware". They are
+    // unsafe only when the user wants to PERFORM an attack: an offensive action verb is present AND
+    // no defensive framing is. Defensive questions carry a protect/avoid/report marker (or no
+    // offensive verb at all) and reach retrieval instead of being refused.
+    private static final Pattern CYBER_ATTACK_TERM = compile(
+            "\\b(phishing|hame[çc]onnage|scam|arnaque|hack(er|ing|é|ed|s)?|pirat(age|er|é)|"
+            + "ransomware|ran[çc]ongiciel|malware|spyware|logiciel\\s+(malveillant|espion)|keylogger|"
+            + "ddos|botnet|cheval\\s+de\\s+troie|trojan|virus\\s+informatique)\\b");
+    private static final Pattern CYBER_OFFENSE_VERB = compile(
+            "\\b(mener|lancer|créer|creer|monter|fabriquer|construire|développer|developper|coder|"
+            + "programmer|déployer|deployer|écrire|ecrire|pirater|hacker|"
+            + "run|launch|create|build|perform|conduct|develop|deploy|write|hack)\\b");
+    private static final Pattern CYBER_DEFENSE_MARKER = compile(
+            "(prot[ée]g|protect|[ée]vit|avoid|prevent|emp[êe]ch|reconna[îi]|recogni|d[ée]tect|"
+            + "signal|report|d[ée]clar|victim|fraud|frauduleux|se\\s+d[ée]fend|defend|s[ée]curis|"
+            + "secur|safe|bloqu|block|spam|suspect|m[ée]fi|"
+            + "que\\s+faire|what\\s+(should\\s+i|to)\\s+do|comment\\s+(faire\\s+)?(face|contre)|"
+            + "face\\s+[àa])");
 
     private static final List<Pattern> OFF_TOPIC_PATTERNS = List.of(
             compile("(météo|meteo|weather|forecast|prévisions?\\s+météo)"),
@@ -99,7 +118,7 @@ public class InputGuardrail {
         if (trimmed.length() < MIN_QUESTION_LENGTH) {
             return GuardrailDecision.pass();
         }
-        if (matchesAny(INAPPROPRIATE_PATTERNS, trimmed)) {
+        if (matchesAny(INAPPROPRIATE_PATTERNS, trimmed) || isCyberOffense(trimmed)) {
             return GuardrailDecision.inappropriate(GuardrailMessages.inappropriate(language));
         }
         if (matchesAny(OFF_TOPIC_PATTERNS, trimmed)) {
@@ -121,6 +140,20 @@ public class InputGuardrail {
         }
         String[] words = normalized.split(" ");
         return words.length <= MAX_VAGUE_TOKENS && allVagueTokens(words);
+    }
+
+    // BUG-001: a cyber-security term is unsafe only when the turn expresses intent to PERFORM the
+    // attack (an offensive verb) and carries no defensive framing (protect/avoid/report/victim...).
+    // "What should I do about scam or phishing calls?" and "how to protect against malware" pass;
+    // "how do I run a phishing campaign" / "comment créer un ransomware" stay refused.
+    private boolean isCyberOffense(String text) {
+        if (!CYBER_ATTACK_TERM.matcher(text).find()) {
+            return false;
+        }
+        if (CYBER_DEFENSE_MARKER.matcher(text).find()) {
+            return false;
+        }
+        return CYBER_OFFENSE_VERB.matcher(text).find();
     }
 
     private boolean allVagueTokens(String[] words) {

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-001
 - **Title:** Input guardrail blocks legitimate anti-phishing/scam-call support questions
-- **Status:** New — scheduled in Sprint 9 (hardening/assainissement)
+- **Status:** Fixed (implemented 2026-07-27) — pending adversarial review + QA retest
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** User validation (live test during Sprint 8)
@@ -68,28 +68,47 @@ canned refusal, skipping retrieval and the LLM entirely.
 
 ## Acceptance Criteria For Fix
 
-- [ ] The defect no longer reproduces: "What should I do about scam or phishing calls?"
+- [x] The defect no longer reproduces: "What should I do about scam or phishing calls?"
       reaches retrieval and yields a grounded answer or a safe low-confidence fallback.
-- [ ] Genuinely unsafe intents (e.g. "how do I run a phishing campaign") remain refused.
-- [ ] A regression test covers both the legitimate and the unsafe phrasing.
-- [ ] Relevant OpenTelemetry traces/logs present or explicitly not applicable.
+      (`InputGuardrailTest.passesLegitimateCyberSupport` → verdict PASS.)
+- [x] Genuinely unsafe intents (e.g. "how do I run a phishing campaign") remain refused.
+      (`InputGuardrailTest.blocksCyberOffense` → verdict INAPPROPRIATE.)
+- [x] A regression test covers both the legitimate and the unsafe phrasing (6 legitimate + 5 offensive cases).
+- [x] Relevant OpenTelemetry traces/logs present or explicitly not applicable — the guardrail is
+      pure domain (no Spring); the pre-existing `[GUARDRAIL] verdict=inappropriate` structured log +
+      guardrail-block counter (BackendTelemetry) already instrument this verdict path. No new
+      telemetry needed; the change only refines *when* the existing `INAPPROPRIATE` verdict fires.
 - [ ] Adversarial code review is at least 90% satisfied.
 - [ ] QA retest passes.
-- [ ] Backlog notes updated if behavior changed.
+- [x] Backlog notes updated if behavior changed.
 
 ## Developer Notes
 
 Developer fills this during resolution:
 
-- root cause: `phishing` (and possibly `hack`) in the unsafe blocklist with substring matching;
-  no intent disambiguation between defending-against vs performing an attack.
-- candidate fix directions (to confirm at fix time): remove `phishing` from the unsafe
-  blocklist (it is a legitimate support topic) and/or gate unsafe security terms behind an
-  action verb (make/run/perform/create + attack), and use word-boundary matching.
-- files changed:
-- tests added/updated:
-- OpenTelemetry added/updated:
-- residual risk:
+- root cause: `phishing` (and `hack`/`ransomware`/`malware`) in the unsafe blocklist with
+  substring matching; no intent disambiguation between defending-against vs performing an attack.
+- fix implemented: removed the blanket cyber blocklist line. Cyber-security terms are now handled
+  by an intent-aware helper `isCyberOffense(text)` that refuses **only** when (a) a cyber attack
+  term is present (word-boundary matched), (b) **no** defensive-framing marker is present
+  (protect/avoid/prevent/report/victim/detect/secure/block/spam/"what should I do"/"que faire face"/
+  "comment faire face|contre"...), and (c) an **offensive action verb** is present
+  (run/launch/create/build/write/develop/deploy/perform/conduct/hack/pirater + FR
+  mener/lancer/créer/monter/fabriquer/construire/développer/coder/programmer/déployer/écrire).
+  Weapons/drugs/violence/CSAM/terrorism stay unconditional.
+- files changed: `InputGuardrail.java` (removed cyber line from `INAPPROPRIATE_PATTERNS`; added
+  `CYBER_ATTACK_TERM` / `CYBER_OFFENSE_VERB` / `CYBER_DEFENSE_MARKER` + `isCyberOffense` helper,
+  wired into `check()`).
+- tests added/updated: `InputGuardrailTest` — `passesLegitimateCyberSupport` (6 cases) +
+  `blocksCyberOffense` (5 cases); suite 43→54, full backend 262→273, all green.
+- OpenTelemetry added/updated: none needed — existing `[GUARDRAIL] verdict=inappropriate` log +
+  guardrail-block counter already cover the verdict path (see AC note).
+- residual risk: precision/recall trade-off on adversarial free-text. A defensive phrasing that
+  happens to contain an offensive verb far from the term and no defensive marker (e.g. a contrived
+  "build resilience … phishing") could still be refused; conversely a bare offensive noun phrase
+  with no verb ("a phishing campaign tutorial") passes to retrieval (where audience/grounding
+  guardrails apply). Deemed acceptable for a P2 support-coverage fix; markers are code-local and
+  easy to extend.
 
 ## QA Retest
 
