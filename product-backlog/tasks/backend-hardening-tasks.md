@@ -391,6 +391,25 @@ Delivered on `task/TASK-QA-018-mutation-testing-backend` (branched from `feat/re
 - **Verification:** `mvn -o test` = **279 green**; `mvn -Ppitest ...:mutationCoverage` = BUILD
   SUCCESS (90 % ≥ 85 threshold).
 
+### Scope extension (2026-07-27)
+
+Per user request, the PIT scope was widened from the initial guardrails+classifier to **all
+pure business logic**: added `conversation.application.service.*` (AnswerService,
+ConversationService, RetrievalGroundingService, StreamingConversationService) and
+`knowledge.domain.service.*` (TextChunker, KnowledgeIngestionService,
+KnowledgeRetrievalService, KnowledgeSyncService). Ports (interfaces) and value objects
+(records) stay out of scope — no branching logic to mutate.
+
+- **Widened baseline:** 318 mutations, **276 killed (87 %)**, **test strength 88 %**, ~30 s run.
+  `mutationThreshold=85` still passes.
+- **Largest remaining survivor cluster:** `TextChunker` overlap/boundary logic
+  (`overlapTail`, `shouldFlush`, `hardSplit`, `snapBackToBoundary`) — subtle exact-length
+  boundary mutants; highest-value next target given chunking's impact on retrieval (BUG-003).
+  Smaller residuals in `KnowledgeSyncService` (elapsed-time math, stale-removal void call) and
+  application services (null pass-throughs, telemetry void calls) — several are near-equivalent.
+- These are tracked as a follow-up (ratchet the threshold up as they are killed); not chased in
+  this ticket to keep scope contained.
+
 ### Review & QA outcome
 
 _Not runtime-affecting_ (test-tooling + tests + skill docs only; no production behaviour
