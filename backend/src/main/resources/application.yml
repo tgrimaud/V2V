@@ -45,6 +45,16 @@ spring:
 server:
   port: 8080
 
+# OpenAPI 3 / Swagger UI (TASK-BE-016). The spec is served at /v3/api-docs (JSON) and
+# /v3/api-docs.yaml (YAML); the interactive UI at /swagger-ui.html. Paths are pinned
+# explicitly so they stay stable if a springdoc default changes.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
 # Observability (TASK-BE-009): expose Micrometer metrics via actuator so per-slice latency
 # (voice_support.slice, tagged slice/channel/provider/outcome) is queryable locally with
 # client-side p50/p95/p99 percentiles. No external exporter is wired for the pilot.

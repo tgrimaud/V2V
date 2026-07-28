@@ -5,6 +5,13 @@ import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
+import com.voicesupport.shared.web.rest.ErrorResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +29,7 @@ import java.util.Locale;
 // conversation/answer endpoint (memory + LLM wording + streaming) is TASK-BE-006.
 @RestController
 @RequestMapping("/api/conversation")
+@Tag(name = "Conversation")
 public class RetrievalController {
 
     private static final Logger log = LoggerFactory.getLogger(RetrievalController.class);
@@ -35,6 +43,16 @@ public class RetrievalController {
     }
 
     @PostMapping("/retrieve")
+    @Operation(summary = "Ground a query (pre-LLM)",
+            description = "Runs retrieval and the grounding guardrail, returning the answerable verdict, an "
+                    + "optional fallback message and the grounded evidence (no LLM wording).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Grounding decision and evidence."),
+            @ApiResponse(responseCode = "400", description = "Invalid request (e.g. blank question).",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "A required upstream (vector store) is unavailable.",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<RetrievalResponse> retrieve(@Valid @RequestBody RetrievalRequest request) {
         long start = System.nanoTime();
         // This validation surface has no conversation history, so the language is decided from the

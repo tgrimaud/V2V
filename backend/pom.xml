@@ -26,6 +26,14 @@
         <!-- KB CSV ingestion (TASK-BE-013, ADR-0030): not managed by the Spring Boot BOM. -->
         <jsoup.version>1.22.2</jsoup.version>
         <commons-csv.version>1.14.1</commons-csv.version>
+        <!-- OpenAPI/Swagger (TASK-BE-016): not managed by the Spring Boot BOM. 2.8.x is the
+             springdoc line compatible with Spring Boot 3.4.x (OpenAPI 3.1 by default). Pinned to
+             2.8.14 (NOT 2.8.15+): 2.8.15 registers the swagger-ui pattern
+             `/swagger-ui/**/*swagger-initializer.js`, which Spring Web's PathPatternParser rejects
+             ("No more pattern data allowed after ** pattern element") until the Spring Web 6.2.8 fix
+             shipped in Spring Boot 3.4.7. We are on Boot 3.4.1, so 2.8.14 is the last known-good
+             springdoc (springdoc issue #3210). Bump this together with a Spring Boot >= 3.4.7 upgrade. -->
+        <springdoc.version>2.8.14</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -36,6 +44,18 @@
                 <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- TASK-BE-016: Spring AI (spring-ai-model) pulls the non-jakarta
+                 io.swagger.core.v3:swagger-annotations 2.2.25, whose io.swagger.v3.oas.annotations
+                 package duplicates the swagger-annotations-jakarta 2.2.38 that springdoc brings.
+                 The stale 2.2.25 classes can win on the classpath and lack Parameter.validationGroups(),
+                 which springdoc 2.8.14 calls -> NoSuchMethodError when generating /v3/api-docs. Align
+                 the non-jakarta variant to the same 2.2.38 so both duplicate packages expose the method
+                 regardless of load order. -->
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations</artifactId>
+                <version>2.2.38</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -87,6 +107,14 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- OpenAPI 3 spec (/v3/api-docs) + Swagger UI (/swagger-ui.html) for the REST
+             surface (TASK-BE-016). Version pinned: springdoc is not in the Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- KB CSV ingestion (TASK-BE-013, ADR-0030): CsvArticleConnector.

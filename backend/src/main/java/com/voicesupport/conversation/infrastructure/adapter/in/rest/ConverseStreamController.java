@@ -3,6 +3,12 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -24,6 +30,7 @@ import java.util.concurrent.RejectedExecutionException;
 // error events. The synchronous /converse endpoint stays the non-streaming fallback.
 @RestController
 @RequestMapping("/api/conversation")
+@Tag(name = "Conversation")
 public class ConverseStreamController {
 
     private static final long STREAM_TIMEOUT_MS = 60_000L;
@@ -45,8 +52,19 @@ public class ConverseStreamController {
     }
 
     @PostMapping(value = "/converse-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Converse with SSE streaming",
+            description = "Same body as /converse but streams Server-Sent Events: `chunk` (partial text), "
+                    + "`done` (final {text, confidence?, grounded}) and `error` (the ErrorResponse contract).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "text/event-stream of chunk/done/error events."),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid x-api-key when a shared secret is set "
+                    + "(empty body).", content = @Content),
+            @ApiResponse(responseCode = "503", description = "Concurrent-stream ceiling reached (empty body).",
+                    content = @Content)
+    })
     public ResponseEntity<SseEmitter> converseStream(
             @RequestBody ConverseRequest request,
+            @Parameter(description = "Optional shared secret; required only when the backend api-key is set.")
             @RequestHeader(value = "x-api-key", required = false) String providedKey,
             HttpServletResponse httpResponse) {
         if (!authorized(providedKey)) {

@@ -131,7 +131,17 @@ reuses the `CorrelationId` source, per the note above):
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme; paired with TASK-WEB-016 (voice-runtime OpenAPI).
+**Status:** Implemented (2026-07-28) — pending adversarial review + QA acceptance + user live
+validation. Added `springdoc-openapi-starter-webmvc-ui` (pinned **2.8.14**) → live OpenAPI **3.1.0**
+doc at `/v3/api-docs` (+ `.yaml`) and Swagger UI at `/swagger-ui.html`, paths pinned in
+`application.yml`. `OpenApiConfig` (shared) sets the API info + an optional `x-api-key` security
+scheme and an `OperationCustomizer` that documents the cross-cutting `X-Correlation-Id` request
+header + response header on every operation. All 6 controllers `@Tag`/`@Operation`-annotated
+(Conversation group + Health + Knowledge base), infra DTOs + `ErrorResponse` `@Schema`-annotated;
+`/ingest` marked `consumes=multipart/form-data`, streaming as `text/event-stream`, 401/503 error
+paths documented. Two version traps hit & fixed (see Gotchas). `mvn test` **305** green (+2
+`OpenApiConfigTest`), ArchUnit OK. Live-verified: `/v3/api-docs` 200, all 8 paths, api-key scheme,
+correlation-id header, multipart/SSE content types, `ErrorResponse` schema.
 **Priority:** Medium
 **Branch:** `task/TASK-BE-016-openapi-swagger`
 
@@ -140,6 +150,19 @@ reuses the `CorrelationId` source, per the note above):
 No `springdoc`/`openapi`/`swagger` dependency exists in `backend/pom.xml`; the REST
 surface (`KnowledgeController`, `ConverseController`, `HealthController`, streaming)
 is undocumented as OpenAPI.
+
+### Gotchas (springdoc + Spring Boot 3.4.1)
+
+- **springdoc 2.8.15+ breaks on Boot 3.4.1**: it registers the swagger-ui pattern
+  `/swagger-ui/**/*swagger-initializer.js`, which Spring Web's `PathPatternParser` rejects
+  ("No more pattern data allowed after ** pattern element"). Fixed in Spring Web 6.2.8
+  (Boot 3.4.7). We are on Boot 3.4.1 → pinned springdoc **2.8.14** (last known-good). Bump it
+  only together with a Spring Boot ≥ 3.4.7 upgrade (springdoc issue #3210).
+- **Duplicate swagger annotations package**: Spring AI (`spring-ai-model`) pulls the non-jakarta
+  `io.swagger.core.v3:swagger-annotations:2.2.25`, whose `io.swagger.v3.oas.annotations` package
+  duplicates springdoc's `swagger-annotations-jakarta:2.2.38`. The stale 2.2.25 classes can win on
+  the classpath and lack `Parameter.validationGroups()` → `NoSuchMethodError` on `/v3/api-docs`.
+  Fixed by aligning the non-jakarta variant to **2.2.38** in `dependencyManagement`.
 
 ### Objective
 

@@ -2,6 +2,13 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
+import com.voicesupport.shared.web.rest.ErrorResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +24,8 @@ import java.util.Locale;
 // conversation memory, streaming) lands with TASK-BE-006.
 @RestController
 @RequestMapping("/api/conversation")
+@Tag(name = "Conversation", description = "Answer engine: retrieval, LLM wording, guardrails and the "
+        + "voice-runtime converse contract.")
 public class AnswerController {
 
     private static final Logger log = LoggerFactory.getLogger(AnswerController.class);
@@ -28,6 +37,14 @@ public class AnswerController {
     }
 
     @PostMapping("/answer")
+    @Operation(summary = "Answer a question (wording step)",
+            description = "Runs grounding then LLM wording then the output guardrail (DEC-002) and returns "
+                    + "{text, confidence?, grounded}. Never invents amounts; hands off when context is empty.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "A safe, contract-shaped answer."),
+            @ApiResponse(responseCode = "503", description = "A required upstream (LLM or vector store) is unavailable.",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<AnswerResponse> answer(@RequestBody AnswerRequest request) {
         long start = System.nanoTime();
         GeneratedAnswer answer = answerQuestionUseCase.answer(

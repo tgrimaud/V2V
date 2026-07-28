@@ -71,7 +71,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 
 | Ticket | Title | Effort |
 |---|---|---|
-| TASK-BE-016 | OpenAPI/Swagger for the Java backend (springdoc) | M |
+| TASK-BE-016 | OpenAPI/Swagger for the Java backend (springdoc) — **Implemented 2026-07-28** (springdoc 2.8.14 pinned, live OpenAPI 3.1 at `/v3/api-docs` + Swagger UI; `mvn test` 305 green), pending adversarial review + QA + user validation | M |
 | TASK-WEB-016 | OpenAPI YAML for the Python voice runtime (`web_voice` `/api/voice/*`, hand-written from the HTTP contract doc) | M |
 
 ### Tier C — small comfort feature

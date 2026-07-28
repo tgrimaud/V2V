@@ -5,6 +5,14 @@ import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.observability.Slices;
+import com.voicesupport.shared.web.rest.ErrorResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +33,7 @@ import java.util.Locale;
 // {text, confidence?}; the runtime maps failures to a spoken degraded turn on its side.
 @RestController
 @RequestMapping("/api/conversation")
+@Tag(name = "Conversation")
 public class ConverseController {
 
     private static final Logger log = LoggerFactory.getLogger(ConverseController.class);
@@ -44,8 +53,20 @@ public class ConverseController {
     }
 
     @PostMapping("/converse")
+    @Operation(summary = "Converse (voice-runtime contract)",
+            description = "Full guarded pipeline (input guardrail, retrieval, LLM wording, output guardrail) "
+                    + "with short conversation memory keyed by conversation_id. Always returns a safe "
+                    + "{text, confidence?}; a blank transcript returns a listen prompt.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "A safe, contract-shaped answer or a listen prompt."),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid x-api-key when a shared secret is set "
+                    + "(empty body).", content = @Content),
+            @ApiResponse(responseCode = "503", description = "A required upstream is unavailable.",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<ConverseResponse> converse(
             @RequestBody ConverseRequest request,
+            @Parameter(description = "Optional shared secret; required only when the backend api-key is set.")
             @RequestHeader(value = "x-api-key", required = false) String providedKey,
             HttpServletResponse httpResponse) {
         if (!authorized(providedKey)) {
