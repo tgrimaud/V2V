@@ -48,6 +48,8 @@ public class RetrievalController {
                     + "optional fallback message and the grounded evidence (no LLM wording).")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Grounding decision and evidence."),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid x-api-key when a shared secret is set "
+                    + "(TASK-BE-019).", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request (e.g. blank question).",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "503", description = "A required upstream (vector store) is unavailable.",

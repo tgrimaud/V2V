@@ -3,8 +3,13 @@ package com.voicesupport.knowledge.infrastructure.adapter.in.rest;
 import com.voicesupport.knowledge.domain.model.valueobject.SyncReport;
 import com.voicesupport.knowledge.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
+import com.voicesupport.shared.web.rest.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +48,9 @@ public class KnowledgeController {
     @Operation(summary = "One-shot document upload",
             description = "Chunks and embeds an uploaded UTF-8 text/markdown file into the vector store. "
                     + "Returns {status, source, domain, chunks_created}.")
+    @ApiResponses(@ApiResponse(responseCode = "401",
+            description = "Missing/invalid x-api-key when a shared secret is set (TASK-BE-019).",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     public ResponseEntity<Map<String, Object>> ingest(
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Logical source name; defaults to the uploaded file name.")
@@ -69,6 +77,9 @@ public class KnowledgeController {
     @Operation(summary = "Sync all connectors",
             description = "Idempotently syncs every configured knowledge source (skip on unchanged "
                     + "content hash, upsert otherwise, delete-diff via the ledger).")
+    @ApiResponses(@ApiResponse(responseCode = "401",
+            description = "Missing/invalid x-api-key when a shared secret is set (TASK-BE-019).",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     public ResponseEntity<SyncReport> syncAll() {
         return ResponseEntity.ok(timedSync("syncAll", "all", syncKnowledgeUseCase::syncAll));
     }
@@ -76,6 +87,9 @@ public class KnowledgeController {
     @PostMapping("/sync/{sourceType}")
     @Operation(summary = "Sync one connector",
             description = "Idempotently syncs a single source type (e.g. markdown, csv).")
+    @ApiResponses(@ApiResponse(responseCode = "401",
+            description = "Missing/invalid x-api-key when a shared secret is set (TASK-BE-019).",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     public ResponseEntity<SyncReport> sync(
             @Parameter(description = "Connector source type to sync, e.g. markdown or csv.")
             @PathVariable("sourceType") String sourceType) {

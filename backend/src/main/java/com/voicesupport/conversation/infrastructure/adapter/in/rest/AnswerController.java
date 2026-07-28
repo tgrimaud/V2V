@@ -42,6 +42,8 @@ public class AnswerController {
                     + "{text, confidence?, grounded}. Never invents amounts; hands off when context is empty.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "A safe, contract-shaped answer."),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid x-api-key when a shared secret is set "
+                    + "(TASK-BE-019).", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "503", description = "A required upstream (LLM or vector store) is unavailable.",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })

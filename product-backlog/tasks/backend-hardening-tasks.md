@@ -11,7 +11,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
-| TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | Proposed (2026-07-28) — from the full adversarial review (blocking security finding); **doable now** |
+| TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — merge-ready |
 
 ---
 
@@ -519,9 +519,10 @@ behavioural contracts rather than mutation-chasing. Non-blocking notes recorded:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** Proposed (2026-07-28) — **doable now** (no external dependency).
+**Status:** ✅ QA validated (2026-07-28) on `task/TASK-BE-019-endpoint-auth` — adversarial
+review (93/100, Pass) and functional QA both passed; merge-ready (pending explicit merge request).
 **Priority:** High
-**Branch:** `task/TASK-BE-019-endpoint-auth` (to create)
+**Branch:** `task/TASK-BE-019-endpoint-auth`
 **Surfaced by:** full adversarial code+doc review 2026-07-28
 (`docs/architecture/reviews/full-adversarial-review-2026-07-28.md`, blocking finding).
 **Relates to:** `ConverseController`/`ConverseStreamController` (the existing optional
@@ -577,3 +578,79 @@ mode explicit (fail-closed) — without breaking the localhost pilot.
   layers free of transport concerns (gate in `shared/web`).
 - Runtime-affecting (adds a rejection path): record a `guardrail`/auth-reject outcome or
   structured log with the correlation id so QA can observe rejections.
+
+### Implementation notes (2026-07-28)
+
+Delivered on `task/TASK-BE-019-endpoint-auth` (branched from `feat/restart-from-scratch`):
+
+- **Central gate in `shared/web/security`** (no transport concern leaks into
+  domain/application):
+  - `ApiKeyGuard` — a plain (non-Spring) class holding the single shared-secret rule
+    (`apiKey == null || blank || equals(provided)`), so `/converse` and the newly-gated
+    paths share one definition of "authorized".
+  - `ApiKeyAuthInterceptor` (`HandlerInterceptor`) — reads `x-api-key`, delegates to
+    `ApiKeyGuard`, and on failure writes the sanitized `ErrorResponse` (**401 `ERR_401`**,
+    generic message, `correlation_id`) via the configured `ObjectMapper` **before** any
+    use case runs. Logs a privacy-safe `[AUTH] rejected … method/path/correlation_id`
+    (no header value) so QA can observe rejections.
+  - `WebSecurityMvcConfig` (`WebMvcConfigurer`) — registers the interceptor on
+    `/api/knowledge/**`, `/api/conversation/answer`, `/api/conversation/retrieve`. Reads
+    the key via `@Value` and builds `ApiKeyGuard` itself (no injected `@Component`) so the
+    auto-loaded `WebMvcConfigurer` resolves cleanly under every `@WebMvcTest` slice.
+- **Empty-key decision (documented):** kept the **existing pilot semantics** — an empty
+  `voice-support.conversation.api-key` (`CONVERSATION_API_KEY`) leaves the endpoints open
+  (localhost pilot),   and any configured key is enforced identically across `/converse`
+  and the four newly-gated endpoints. This is consistent with `/converse` (ADR-0021) and
+  does not break the dev/localhost KB-sync flow. **Any non-localhost deployment MUST set
+  `CONVERSATION_API_KEY`** — documented in `application.yml` and this ticket (ADR-0021 owns
+  the `/converse` gate this reuses). (Full fail-closed
+  by default is intentionally deferred to avoid diverging from the converse contract and
+  breaking the pilot; revisit if/when a hardened default profile is introduced.)
+- **Converse endpoints** kept their own inline gate (same rule) and their documented
+  **empty-body** 401 to avoid touching already-tested controllers; the newly-gated paths
+  use the richer `ErrorResponse` 401 body. This minor body-shape difference is noted for a
+  future unification.
+- **OpenAPI (TASK-BE-016) updated:** `/answer`, `/retrieve` and all `/api/knowledge/*`
+  operations now document the **401** response (`ErrorResponse` schema); the existing
+  `x-api-key` security scheme already covers the header.
+- **Tests (`mvn test` 312 green, +7):** `ProtectedEndpointsApiKeyTest` (`@WebMvcTest` over
+  Answer/Retrieval/Knowledge controllers) proves each path is rejected **401 + `error_code`**
+  without a key and with a wrong key, accepted **200** with the matching key, and that the
+  use cases never run on a rejected request (fakes throw if invoked). All pre-existing slice
+  tests stay green (gate open-by-default when no key is set), ArchUnit OK.
+
+### Adversarial review remediation (2026-07-28)
+
+Self-review before QA (adversarial-code-review skill, score **93/100**, QA gate **Pass**). Two
+non-blocking findings fixed in-loop:
+
+- **Constant-time key comparison:** `ApiKeyGuard.authorized` now uses
+  `MessageDigest.isEqual(...)` instead of `String.equals` — a plain equals short-circuits on the
+  first differing byte and leaks the shared secret through response timing on a security gate.
+- **Dead code:** removed the unused `isEnforced()` helper (YAGNI).
+
+Remaining non-blocking (accepted): the converse endpoints keep their empty-body 401 vs the new
+paths' `ErrorResponse` 401 (documented, future unification); CORS preflight `OPTIONS` is not a
+concern (server-to-server callers, no browser CORS on these routes). `mvn test` **312** green.
+
+### QA validation (2026-07-28)
+
+QA (skill `qa-functional-latency`) — **GO**, functional + live smoke passed:
+
+- **Live gate smoke** — a dedicated backend instance on port `8081` (`CONVERSATION_API_KEY=s3cret`,
+  real pgvector + Ollama + Mistral; the running `8080` instance untouched):
+  - `POST /api/conversation/answer`, `/retrieve`, `/api/knowledge/sync` **without** key → **401**;
+    wrong key → **401**.
+  - `POST /api/conversation/retrieve` with the valid key + valid body → **200** (full RAG path);
+    `/converse` no-key → **401**, good-key → **200** (pre-existing gate intact, no regression).
+  - Unauthenticated surfaces stay open: `actuator/health` → **200**, `v3/api-docs` → **200**
+    (no over-gating).
+  - 401 body sanitized: `{"error_code":"ERR_401","message":"…","correlation_id":"…"}` — no secret
+    leak, correlation id present.
+- **Regression automation** — `ProtectedEndpointsApiKeyTest` **7/7** green (interceptor exercised
+  through the real MVC stack; confirmed live that the interceptor is wired in the full app context,
+  not just the `@WebMvcTest` slice).
+- **Latency** — transport-layer header check + constant-time compare is sub-ms and not a measured
+  ADR-0018 pipeline slice; 401s short-circuit **before** LLM/DB (faster-failing than the open path).
+- **Residual (non-blocking):** `/converse` empty-body 401 vs new-endpoints' `ErrorResponse` 401
+  (cosmetic; future unification).
