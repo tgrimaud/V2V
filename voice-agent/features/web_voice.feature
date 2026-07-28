@@ -40,3 +40,10 @@ Feature: Web voice STT ingress
     Given the same captured audio for both runtimes
     When the turn is processed by the stdlib and pipecat runtimes
     Then both runtimes produce identical WAV output
+
+  # TASK-WEB-016 - the runtime publishes a discoverable, valid OpenAPI description
+  Scenario: The voice runtime publishes its API description for tooling
+    Given the web voice runtime server is running
+    When a tooling client fetches the OpenAPI description
+    Then it receives a valid OpenAPI document served as YAML
+    And the document describes every voice endpoint the server exposes

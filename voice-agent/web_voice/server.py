@@ -50,10 +50,12 @@ from .runtime import (  # noqa: E402
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+OPENAPI_PATH = Path(__file__).resolve().parent / "openapi.yaml"
 STT_ROUTE = "/api/voice/stt"
 TTS_ROUTE = "/api/voice/tts"
 TURN_ROUTE = "/api/voice/turn"
 WEBRTC_OFFER_ROUTE = "/api/voice/webrtc/offer"
+OPENAPI_ROUTE = "/api/voice/openapi.yaml"
 RUNTIME_ENV_VAR = "VOICE_RUNTIME"
 BACKEND_ENV_VAR = "VOICE_BACKEND"
 WEBRTC_ENV_VAR = "VOICE_WEBRTC"
@@ -88,6 +90,9 @@ def build_handler(
             if path == "/favicon.ico":
                 self.send_response(204)
                 self.end_headers()
+                return
+            if path == OPENAPI_ROUTE:
+                self._serve_openapi()
                 return
             filename = "index.html" if path in ("/", "") else path.lstrip("/")
             self._serve_static(filename)
@@ -194,6 +199,19 @@ def build_handler(
             if length > MAX_AUDIO_BYTES:
                 return None
             return self.rfile.read(length) if length else b""
+
+        def _serve_openapi(self) -> None:
+            # Serve the hand-written OpenAPI spec (TASK-WEB-016). Committed alongside the
+            # code and mirrors docs/architecture/voice-runtime-http-contract.md.
+            if not OPENAPI_PATH.is_file():
+                self._send_json(404, {"error": "not_found"})
+                return
+            body = OPENAPI_PATH.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/yaml; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def _serve_static(self, filename: str) -> None:
             target = (STATIC_DIR / filename).resolve()

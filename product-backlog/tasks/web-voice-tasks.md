@@ -1524,9 +1524,30 @@ Scenario: The first turn no longer pays the full cold-start penalty
 **Parent:** EPIC-006 (Voice2Voice) — cross-cutting API hardening
 **Related:** TASK-BE-016 (OpenAPI for the Java backend)
 **Classification:** V1 hardening
-**Status:** Scheduled — Sprint 9 (hardening/assainissement). Proposed (2026-07-21) — cross-cutting, out of the Sprint 8 CSV theme; paired with TASK-BE-016 (backend OpenAPI).
+**Status:** Implemented (2026-07-28, Sprint 9) — hand-written OpenAPI 3.0.3 spec
+`voice-agent/web_voice/openapi.yaml` describing every `/api/voice/*` endpoint
+(`stt`, `tts`, `turn`, `webrtc/offer`) plus the meta spec route: audio bodies
+(`audio/pcm` in, `audio/wav` out), query-param envelope (`conversation_id`,
+`session_id`, `correlation_id`, `language`), the full `/turn` `X-Voice-*`/`X-Answer-*`
+response headers incl. degraded contract, the two error shapes (`VoiceErrorBody`
+client-safe, `GuardError` for size/route/webrtc guards) and the 413/502/503 codes —
+all verified 1:1 against `server.py` (25 MiB / 5000-char guards, port 8090, exact
+`error_code`s). Served at `GET /api/voice/openapi.yaml` (`application/yaml`) via the
+stdlib handler. Tests: `tests/test_voice_openapi.py` (5) — structural validity, schema
+contract, a **drift guard** asserting documented paths == the server route constants,
+and a live serve+parse round-trip. unittest **390** green (full `discover`, incl. the
+5 new spec tests), behave unaffected (non-runtime doc/spec surface).
+Adversarial review ~95/100 (no blocking findings; one test rename for accuracy). The
+spec mirrors `docs/architecture/voice-runtime-http-contract.md` (source of truth).
+**QA: Go** — `docs/qa/task-web-016-voice-openapi-qa.md`: both AC met; the committed
+**and the live-served** bytes pass the industry-standard `openapi-spec-validator`
+(added as a test-only dep); a Behave discovery scenario (`web_voice.feature`, +1) starts
+the runtime, fetches `GET /api/voice/openapi.yaml` (`application/yaml`, 13 629 B), schema-
+validates it and asserts documented paths == server routes; unittest **390** green, behave
+**30 scenarios / 140 steps** green. Latency N/A (static meta route, not a journey slice).
+Merge-ready — awaiting the user's explicit merge request.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-016-voice-openapi` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-016-voice-openapi`
 
 ### Context
 

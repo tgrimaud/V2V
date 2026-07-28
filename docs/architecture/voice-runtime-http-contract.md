@@ -4,7 +4,12 @@
 (`voice-agent/web_voice/server.py`): the batch Voice2Voice loop (US-019, Sprint 5)
 and the streaming WebRTC signaling surface (Sprint 6, TASK-WEB-007/009).
 **Status:** current through `feat/sprint-6-streaming`. Single source of truth for
-these endpoints — no code-only contract remains for the streaming surface.
+these endpoints — no code-only contract remains for the streaming surface. A
+machine-readable OpenAPI 3 mirror is committed at
+[`voice-agent/web_voice/openapi.yaml`](../../voice-agent/web_voice/openapi.yaml)
+(served at `GET /api/voice/openapi.yaml`); this document stays authoritative and the
+spec is kept in sync with it — a `tests/test_voice_openapi.py` drift guard fails if a
+route is added/removed without updating the spec (TASK-WEB-016).
 **Related:** [conversation contract ADR-0021](adrs/ADR-0021-conversation-backend-answer-contract.md),
 [target voice path ADR-0002](adrs/ADR-0002-pipecat-gradium-target-voice-path.md),
 [voice journey timing](../observability/voice-journey-timing.md).

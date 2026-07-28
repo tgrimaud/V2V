@@ -1,0 +1,392 @@
+openapi: 3.0.3
+info:
+  title: Voice Support Bot — Voice Runtime HTTP API
+  version: "1.0.0"
+  description: >-
+    HTTP surface of the Python voice runtime (`voice-agent/web_voice/server.py`):
+    the batch Voice2Voice loop (`/api/voice/stt`, `/api/voice/tts`, `/api/voice/turn`)
+    and the streaming WebRTC signaling seam (`/api/voice/webrtc/offer`). This spec is
+    hand-written (the runtime uses the stdlib `http.server` with no framework, so there
+    is no auto-generated spec) and is the machine-readable mirror of
+    `docs/architecture/voice-runtime-http-contract.md` — that document stays the source
+    of truth; drift is caught in review (TASK-WEB-016).
+
+
+    Conventions: audio in is raw PCM16 mono 16 kHz (`audio/pcm`); audio out is WAV
+    (`audio/wav`, PCM16 mono + 44-byte header). All endpoints are same-origin and
+    unauthenticated on the pilot host (identity gated by OQ-001 / RF-006). Requests
+    carry an optional envelope via query params; missing ids are generated. Errors are
+    JSON with a stable `error_code`, a generic client-safe `message` and the
+    `correlation_id`; the raw provider reason is never in the body (TASK-WEB-006 /
+    RF-013) — the full sanitized reason stays server-side in the turn telemetry,
+    retrievable by `correlation_id`.
+  license:
+    name: Proprietary
+servers:
+  - url: http://127.0.0.1:8090
+    description: Local pilot host (default --host/--port)
+
+tags:
+  - name: Voice batch
+    description: Batch Voice2Voice HTTP loop (STT, TTS, full turn).
+  - name: Voice streaming
+    description: WebRTC signaling for the streaming Voice2Voice loop.
+  - name: Meta
+    description: The API description itself.
+
+paths:
+  /api/voice/stt:
+    post:
+      tags: [Voice batch]
+      summary: Transcribe audio (voice-in only)
+      description: >-
+        Voice-in only (no answer, no audio out). The body is raw PCM16 audio; the
+        response is the full STT result JSON on success.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/Language'
+      requestBody:
+        required: true
+        content:
+          audio/pcm:
+            schema:
+              $ref: '#/components/schemas/Pcm16Audio'
+      responses:
+        '200':
+          description: Transcription succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SttSuccess'
+        '413':
+          $ref: '#/components/responses/AudioTooLarge'
+        '502':
+          $ref: '#/components/responses/VoiceError'
+
+  /api/voice/tts:
+    post:
+      tags: [Voice batch]
+      summary: Synthesize speech (voice-out only)
+      description: >-
+        Voice-out only. The text is passed as a query parameter (there is no request
+        body); the response is a WAV clip of the spoken text. Empty text is reported
+        `unavailable` (`error_code: empty_text`) and invents no audio.
+      parameters:
+        - name: text
+          in: query
+          required: true
+          description: Text to synthesize (URL-encoded). Max 5000 characters.
+          schema:
+            type: string
+            maxLength: 5000
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/Language'
+      responses:
+        '200':
+          description: Synthesis succeeded.
+          content:
+            audio/wav:
+              schema:
+                $ref: '#/components/schemas/WavAudio'
+        '413':
+          $ref: '#/components/responses/TextTooLarge'
+        '502':
+          $ref: '#/components/responses/VoiceError'
+
+  /api/voice/turn:
+    post:
+      tags: [Voice batch]
+      summary: Full Voice2Voice loop (STT → backend answer → TTS)
+      description: >-
+        Runs `STT → backend answer → TTS` in one call. The body is raw PCM16 audio; the
+        200 body is the spoken answer WAV, with the transcript and answer text returned
+        as `X-Voice-*` response headers (sent only to the requesting client, never
+        logged). Degraded mode (backend unavailable / low confidence / empty answer)
+        still returns 200 with a safe spoken fallback and `X-Answer-Outcome: degraded`
+        plus a sanitized `X-Answer-Degraded-Reason`; it fails closed with a 502 JSON
+        body only when no audio can be produced.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/Language'
+      requestBody:
+        required: true
+        content:
+          audio/pcm:
+            schema:
+              $ref: '#/components/schemas/Pcm16Audio'
+      responses:
+        '200':
+          description: Spoken answer (WAV). May be a safe degraded fallback.
+          headers:
+            X-Correlation-Id:
+              description: Correlation id for the turn.
+              schema:
+                type: string
+            X-Voice-Transcript:
+              description: The transcript (percent-encoded UTF-8).
+              schema:
+                type: string
+            X-Voice-Answer:
+              description: The spoken answer text (percent-encoded UTF-8).
+              schema:
+                type: string
+            X-Answer-Provider:
+              description: Backend that answered.
+              schema:
+                type: string
+                enum: [stub-backend, http-backend]
+            X-Answer-Outcome:
+              description: Whether the answer is a normal success or a safe degraded fallback.
+              schema:
+                type: string
+                enum: [success, degraded]
+            X-Answer-Degraded-Reason:
+              description: Present only when degraded — why the safe fallback was spoken.
+              schema:
+                type: string
+                enum: [backend_unavailable, low_confidence, empty_answer]
+          content:
+            audio/wav:
+              schema:
+                $ref: '#/components/schemas/WavAudio'
+        '413':
+          $ref: '#/components/responses/AudioTooLarge'
+        '502':
+          description: >-
+            Fails closed — the loop could not produce audio. `error_code` is the STT
+            failure code (or `no_transcript`) when STT did not succeed, or the TTS
+            failure code (or `no_audio`) when no audio was produced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceErrorBody'
+
+  /api/voice/webrtc/offer:
+    post:
+      tags: [Voice streaming]
+      summary: WebRTC SDP offer → answer signaling
+      description: >-
+        Signaling seam for the streaming Voice2Voice loop (ADR-0002 target). Exchanges
+        an SDP offer for an SDP answer; media (16 kHz Opus audio) then flows over the
+        peer connection, not over HTTP. `pc_id` + `restart_pc` appear only on
+        renegotiation of an existing peer connection. One correlation id is shared by
+        every turn in the call. Availability depends on the WebRTC runtime being
+        installed (`--webrtc auto|on|off`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebRtcOffer'
+      responses:
+        '200':
+          description: SDP answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebRtcAnswer'
+        '413':
+          $ref: '#/components/responses/AudioTooLarge'
+        '502':
+          description: SDP negotiation failed (no SDP/session detail is leaked).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardError'
+              example:
+                error: webrtc_negotiation_failed
+        '503':
+          description: The WebRTC runtime is not available on this server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardError'
+              example:
+                error: webrtc_unavailable
+
+  /api/voice/openapi.yaml:
+    get:
+      tags: [Meta]
+      summary: This OpenAPI description (YAML)
+      description: Returns this hand-written specification, served for discovery and tooling.
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+components:
+  parameters:
+    ConversationId:
+      name: conversation_id
+      in: query
+      required: false
+      description: Conversation id for memory continuity; generated when absent.
+      schema:
+        type: string
+    SessionId:
+      name: session_id
+      in: query
+      required: false
+      description: External channel session id; generated when absent.
+      schema:
+        type: string
+    CorrelationId:
+      name: correlation_id
+      in: query
+      required: false
+      description: Correlation id propagated across the turn telemetry; generated when absent.
+      schema:
+        type: string
+    Language:
+      name: language
+      in: query
+      required: false
+      description: Optional answer/voice language hint (fr|en).
+      schema:
+        type: string
+        enum: [fr, en]
+
+  responses:
+    AudioTooLarge:
+      description: The audio body exceeds the 25 MiB guard.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GuardError'
+          example:
+            error: audio_too_large
+    TextTooLarge:
+      description: The TTS text exceeds the 5000-character guard.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GuardError'
+          example:
+            error: text_too_large
+    VoiceError:
+      description: >-
+        The voice service could not process this request (failed/unavailable). The
+        raw provider reason is never echoed (TASK-WEB-006 / RF-013).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VoiceErrorBody'
+
+  schemas:
+    Pcm16Audio:
+      type: string
+      format: binary
+      description: Raw PCM16 mono 16 kHz audio bytes (Content-Type audio/pcm).
+    WavAudio:
+      type: string
+      format: binary
+      description: WAV audio (PCM16 mono + 44-byte header, Content-Type audio/wav).
+    SttSuccess:
+      type: object
+      description: Successful STT result.
+      properties:
+        transcript:
+          type: string
+          example: bonjour pourquoi ma facture augmente
+        provider:
+          type: string
+          example: gradium-stt
+        outcome:
+          type: string
+          example: success
+        duration_ms:
+          type: number
+          format: double
+          example: 2301.4
+        stt_request_ms:
+          type: number
+          format: double
+          example: 2296.0
+        correlation_id:
+          type: string
+        error_code:
+          type: string
+          nullable: true
+          example: null
+        error_reason:
+          type: string
+          nullable: true
+          example: null
+      required: [transcript, provider, outcome, correlation_id]
+    VoiceErrorBody:
+      type: object
+      description: >-
+        Client-safe error body for a failed/unavailable voice turn. Carries only a
+        stable code, the correlation id and a generic message; no provider text,
+        audio, path or secret.
+      properties:
+        outcome:
+          type: string
+          description: Turn outcome.
+          example: failed
+          enum: [failed, unavailable]
+        error_code:
+          type: string
+          description: Stable machine-readable code.
+          example: stt_error
+        correlation_id:
+          type: string
+        message:
+          type: string
+          description: Generic, author-controlled, client-safe message.
+          example: The voice service could not process this request. Please try again.
+      required: [outcome, error_code, correlation_id, message]
+    GuardError:
+      type: object
+      description: >-
+        Minimal guard/negotiation error body (request-size guards, unknown route,
+        WebRTC availability/negotiation). Distinct from VoiceErrorBody.
+      properties:
+        error:
+          type: string
+          enum:
+            - audio_too_large
+            - text_too_large
+            - not_found
+            - webrtc_unavailable
+            - webrtc_negotiation_failed
+      required: [error]
+    WebRtcOffer:
+      type: object
+      description: SDP offer from the browser/headless client.
+      properties:
+        sdp:
+          type: string
+          example: v=0…
+        type:
+          type: string
+          enum: [offer]
+        pc_id:
+          type: string
+          description: Peer-connection id; present only on renegotiation.
+        restart_pc:
+          type: boolean
+          description: Present only on renegotiation of an existing peer connection.
+      required: [sdp, type]
+    WebRtcAnswer:
+      type: object
+      description: SDP answer plus the per-call correlation id.
+      properties:
+        sdp:
+          type: string
+          example: v=0…
+        type:
+          type: string
+          enum: [answer]
+        correlation_id:
+          type: string
+      required: [sdp, type, correlation_id]
