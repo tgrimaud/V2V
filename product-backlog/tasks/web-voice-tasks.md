@@ -1688,8 +1688,10 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
 
 **Parent:** EPIC-006 (Voice2Voice journey foundation)
 **Classification:** V1 hardening (degraded mode)
-**Status:** 🚧 Implemented (2026-07-28) on `task/TASK-WEB-018-streaming-stt-degraded-fallback`
-— pending adversarial code review + QA before merge. Full live validation still needs Gradium.
+**Status:** ✅ QA validated (2026-07-28) on `task/TASK-WEB-018-streaming-stt-degraded-fallback`
+— adversarial review and functional QA both passed; merge-ready (pending explicit merge request).
+Live Gradium-voice confirmation of the spoken fallback is deferred to pilot (validated
+deterministically with fakes here).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-018-streaming-stt-degraded-fallback`
 **Surfaced by:** full adversarial code+doc review 2026-07-28
@@ -1780,3 +1782,22 @@ Delivered on `task/TASK-WEB-018-streaming-stt-degraded-fallback` (branched from
 - **Architecture:** `web_voice` (composition layer) may import `conversation_backend`
   (`streaming_runtime` already does); `test_architecture_separation` stays green (the STT/TTS
   half-separation and `conversation_backend` neutrality rules are untouched).
+
+### QA validation (2026-07-28)
+
+QA (skill `qa-functional-latency`) — **GO** (deterministic; no live Gradium in this QA env):
+
+- **Functional (failure → audible fallback):** `test_streaming_stt_processor.py` — 12 unittests
+  green, including `test_provider_error_speaks_degraded_fallback` (StreamingSttError → **no** final
+  transcript, plain `TextFrame` fallback spoken, **digit/currency-free** per DEC-002,
+  `voice.stt.degraded_spoken` event + metric with correlation id) and
+  `test_finalize_timeout_speaks_degraded_fallback` (`asyncio.TimeoutError`). No transcript is
+  fabricated; barge-in remains intact.
+- **BDD regression:** Behave `streaming_stt.feature` — 2 scenarios / 9 steps green, incl.
+  "A streaming STT finalize failure speaks the safe degraded fallback".
+- **Full suite re-run:** `./.venv/bin/python -m unittest discover tests` and `./.venv/bin/behave`
+  green (see counts below).
+- **Latency:** the fallback is on the **exceptional** STT-failure path, not an SLO journey — it
+  replaces a silent call with a short fixed TTS phrase; no pipeline-slice latency claimed.
+- **Residual (non-blocking / info):** live-voice (Gradium streaming) confirmation of the spoken
+  fallback deferred to pilot; the failure→spoken-fallback contract is fully covered by fakes.
