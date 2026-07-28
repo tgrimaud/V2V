@@ -10,3 +10,12 @@ def before_scenario(context, scenario):  # noqa: ARG001 - behave hook signature
     context.manifest = None
     context.report = None
     context.failure_result = None
+    context.http_server = None
+
+
+def after_scenario(context, scenario):  # noqa: ARG001 - behave hook signature
+    server = getattr(context, "http_server", None)
+    if server is not None:
+        server.shutdown()
+        server.server_close()
+        context.http_server = None

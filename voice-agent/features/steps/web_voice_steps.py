@@ -1,6 +1,10 @@
+import threading
+from http.client import HTTPConnection
 from pathlib import Path
 
+import yaml
 from behave import given, then, when
+from openapi_spec_validator import validate as validate_openapi
 
 from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, DEGRADED_FALLBACK_TEXT
 from stt_validation import SttOutcome, TelemetryRecorder
@@ -14,6 +18,15 @@ from stt_validation.pipeline_timing import (
 from tts_synthesis import FixtureTtsProvider
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
 from web_voice.runtime import PipecatTurnProcessor, StdlibTurnProcessor
+from web_voice.server import (
+    OPENAPI_ROUTE,
+    STT_ROUTE,
+    TTS_ROUTE,
+    TURN_ROUTE,
+    WEBRTC_OFFER_ROUTE,
+    WebVoiceHTTPServer,
+    build_handler,
+)
 
 SECRET_PATH = "/private/customer/invoice-9931.pcm"
 BACKEND_SECRET = "token sk-abcdef123456 at /srv/secret-customer.wav"
@@ -205,3 +218,37 @@ def step_process_both_runtimes(context):
 def step_identical_wav(context):
     assert context.stdlib_wav == context.pipecat_wav, "runtimes diverged"
     assert context.stdlib_wav and context.stdlib_wav[:4] == b"RIFF"
+
+
+@given("the web voice runtime server is running")
+def step_server_running(context):
+    server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor=None))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    context.http_server = server  # torn down by after_scenario
+    context.server_port = server.server_address[1]
+
+
+@when("a tooling client fetches the OpenAPI description")
+def step_fetch_openapi(context):
+    conn = HTTPConnection("127.0.0.1", context.server_port, timeout=10)
+    conn.request("GET", OPENAPI_ROUTE)
+    response = conn.getresponse()
+    context.openapi_status = response.status
+    context.openapi_content_type = response.getheader("Content-Type") or ""
+    context.openapi_body = response.read()
+    conn.close()
+
+
+@then("it receives a valid OpenAPI document served as YAML")
+def step_valid_openapi_yaml(context):
+    assert context.openapi_status == 200, context.openapi_status
+    assert "application/yaml" in context.openapi_content_type, context.openapi_content_type
+    context.openapi_doc = yaml.safe_load(context.openapi_body.decode("utf-8"))
+    validate_openapi(context.openapi_doc)  # raises if the doc is not a valid OpenAPI 3 spec
+
+
+@then("the document describes every voice endpoint the server exposes")
+def step_openapi_covers_routes(context):
+    documented = set(context.openapi_doc["paths"].keys())
+    exposed = {STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE, OPENAPI_ROUTE}
+    assert documented == exposed, f"spec drift: documented={documented} exposed={exposed}"

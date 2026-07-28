@@ -20,3 +20,7 @@ opencv-python>=4.11,<5   # required by the SmallWebRTCTransport import (cv2/RawV
 
 # Dev / test
 behave>=1.2
+# QA gate for TASK-WEB-016: validates web_voice/openapi.yaml against the OpenAPI 3
+# schema (used by the Behave discovery scenario and QA). Test-only, not imported by
+# the runtime.
+openapi-spec-validator>=0.7,<1

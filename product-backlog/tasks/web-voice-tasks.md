@@ -1539,6 +1539,13 @@ and a live serve+parse round-trip. unittest **390** green (full `discover`, incl
 5 new spec tests), behave unaffected (non-runtime doc/spec surface).
 Adversarial review ~95/100 (no blocking findings; one test rename for accuracy). The
 spec mirrors `docs/architecture/voice-runtime-http-contract.md` (source of truth).
+**QA: Go** — `docs/qa/task-web-016-voice-openapi-qa.md`: both AC met; the committed
+**and the live-served** bytes pass the industry-standard `openapi-spec-validator`
+(added as a test-only dep); a Behave discovery scenario (`web_voice.feature`, +1) starts
+the runtime, fetches `GET /api/voice/openapi.yaml` (`application/yaml`, 13 629 B), schema-
+validates it and asserts documented paths == server routes; unittest **390** green, behave
+**30 scenarios / 140 steps** green. Latency N/A (static meta route, not a journey slice).
+Merge-ready — awaiting the user's explicit merge request.
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-016-voice-openapi`
 
