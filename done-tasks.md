@@ -637,3 +637,37 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/bugs/BUG-002-ambiguous-fallback-wording-ignores-language-stickiness.md`, `product-backlog/tasks/kb-ingestion-tasks.md` — tickets closed/merged
 - `done-tasks.md` — this entry
 - (implementation + tests + QA docs landed via the merged ticket stack)
+
+## 2026-07-27 — TASK-WEB-010 / US-041: end the call on a customer farewell
+
+**Summary:**
+
+- Delivered conversational end-of-call on a customer closing formula (US-041) with a
+  **deterministic, no-LLM** design (ADR-0035): a `ClosingIntentDetector` matches French
+  closing phrases with accent-insensitive, word-boundary token matching plus negation and
+  embedded-request guards, and a `CallEndFarewellProcessor` FrameProcessor runs a
+  confirmation turn ("Souhaitez-vous autre chose ?") before ending.
+- The processor sits on a **new `pre_answer` seam** of `StreamingVoiceSession` (between STT
+  and the answer stage). It speaks by pushing a plain `TextFrame`, suppresses the answer on a
+  closing, and ends the call on a positive done-confirmation **or** a bounded
+  confirmation-scoped silence timeout — never on the first closing word.
+- Ending reuses the **TASK-WEB-008 `drain()`** path via an injected `end_call(signal)`
+  callback wired by the WebRTC signaling, keeping the processor transport-agnostic and
+  unit-testable. Emits `voice.call_end` reason telemetry (`customer_farewell` vs
+  `client_stop`/`client_drop`) under the call correlation id.
+- All phrase sets and timeouts are env-tunable
+  (`VOICE_FAREWELL_ENABLED/PROMPT/CLOSING/PHRASES/DONE_PHRASES/CONFIRM_TIMEOUT_S`).
+- Adversarial review ≥90% caught a real bug: a repeated closing in the confirmation turn
+  ("non, au revoir") was treated as a new request; fixed so a repeated `detect_closing` match
+  during confirmation counts as done. Full suite green (385 unit + 11 features/29 scenarios);
+  merged fast-forward into `feat/restart-from-scratch`, user-validated live.
+
+### Files changed
+- `voice-agent/web_voice/closing_intent.py` — `ClosingIntentDetector` (normalize + guarded matching)
+- `voice-agent/web_voice/call_end_farewell.py` — `CallEndFarewellProcessor` FSM + confirmation timer
+- `voice-agent/web_voice/webrtc_signaling.py` — farewell wiring, `end_call` teardown, reason telemetry, env config
+- `voice-agent/web_voice/streaming_runtime.py` — `pre_answer` processor sequence
+- `voice-agent/tests/test_closing_intent.py`, `voice-agent/tests/test_call_end_farewell.py`, `voice-agent/tests/test_webrtc_signaling.py`
+- `voice-agent/features/call_end_farewell.feature` (+ steps) — BDD end-to-end + false-positive guard
+- `docs/architecture/adrs/ADR-0035-conversational-end-of-call-on-customer-farewell.md` (+ ADR README)
+- `product-backlog/{tasks/web-voice-tasks.md,stories/v1-user-stories.md,sprints/sprint-9-hardening.md,backlog-index.md}`
