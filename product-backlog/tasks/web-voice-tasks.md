@@ -1688,10 +1688,9 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
 
 **Parent:** EPIC-006 (Voice2Voice journey foundation)
 **Classification:** V1 hardening (degraded mode)
-**Status:** ✅ QA validated (2026-07-28) on `task/TASK-WEB-018-streaming-stt-degraded-fallback`
-— adversarial review and functional QA both passed; merge-ready (pending explicit merge request).
-Live Gradium-voice confirmation of the spoken fallback is deferred to pilot (validated
-deterministically with fakes here).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `62fce07`) —
+adversarial review + functional QA (GO) passed; done. Live Gradium-voice confirmation of the
+spoken fallback is deferred to pilot (validated deterministically with fakes here).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-018-streaming-stt-degraded-fallback`
 **Surfaced by:** full adversarial code+doc review 2026-07-28

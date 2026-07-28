@@ -519,8 +519,8 @@ behavioural contracts rather than mutation-chasing. Non-blocking notes recorded:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** ✅ QA validated (2026-07-28) on `task/TASK-BE-019-endpoint-auth` — adversarial
-review (93/100, Pass) and functional QA both passed; merge-ready (pending explicit merge request).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) —
+adversarial review (93/100, Pass) + functional QA (GO) passed; done.
 **Priority:** High
 **Branch:** `task/TASK-BE-019-endpoint-auth`
 **Surfaced by:** full adversarial code+doc review 2026-07-28
