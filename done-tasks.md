@@ -712,6 +712,11 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
   Web UI at `:8090` renders (Record + FR/EN selector + transcript), no console errors
   (Chrome DevTools MCP). Batch `/turn` latency ~10.5 s is expected (whole-clip batch STT+TTS;
   streaming is the latency lever, TASK-WEB-014/015, deferred to the pilot-gate theme).
+- **User-validated live (2026-07-28):** the user ran a real-mic browser turn (`272e6163…`,
+  `silence_window` end-of-turn) — STT success, backend grounded (confidence 0.748,
+  `outcome=success`, not degraded), TTS success, playback OK, correlation id continuous across
+  every slice — and reviewed both Swagger surfaces (backend `/swagger-ui.html`, voice
+  `/api/voice/openapi.yaml`). Sprint 9 accepted.
 - **Next:** Sprint 10 = customer identity + BSS/PDF evidence + deterministic comparison
   (EPIC-002/003/004, gated by OQ-001/003/004); Sprint 11 = telephony + Genesys (EPIC-007).
 
