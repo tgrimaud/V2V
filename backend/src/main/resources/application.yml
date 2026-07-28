@@ -138,8 +138,11 @@ voice-support:
       # BUG-003: raised 4 -> 8 to over-fetch so the answer-bearing chunk is not evicted by
       # near-duplicate keyword-dense chunks under a brittle dense-only top-K.
       top-k: ${CONVERSATION_RETRIEVAL_TOP_K:8}
-    # ADR-0021 conversation endpoint (POST /api/conversation/converse). Optional shared
-    # secret: when set, requests must carry a matching x-api-key header. Empty = open (pilot).
+    # ADR-0021 shared secret for the write/read API. When set, requests must carry a
+    # matching x-api-key header on every protected path: POST /api/conversation/converse[-stream]
+    # (inline gate), POST /api/conversation/answer, POST /api/conversation/retrieve and all
+    # /api/knowledge/** ingestion + sync endpoints (central ApiKeyAuthInterceptor, TASK-BE-019).
+    # Empty = open (localhost pilot only); any non-localhost deployment MUST set this.
     api-key: ${CONVERSATION_API_KEY:}
     memory:
       # Short conversation memory (TASK-BE-006): prior turns per conversation placed in the
