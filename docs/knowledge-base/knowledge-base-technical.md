@@ -4,14 +4,15 @@
 > For a non-technical guide on **adding and editing content**, see
 > [`knowledge-base-guide.md`](./knowledge-base-guide.md).
 
-> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** this document
-> describes the **target** KB/RAG architecture as implemented on the `main`
-> reference. **None of it runs on this branch** — there is no Java backend, no
-> `pgvector`, no Ollama embeddings, no `KnowledgeSyncService`/`KnowledgeController`
-> and no `ConversationOrchestrator` here. The only code on this branch is the
-> Python STT-validation slice. Present-tense wording below ("the bot answers…",
-> "embeddings are served by Ollama today", `cd backend && mvn test`,
-> `POST /api/knowledge/sync`) refers to the target/`main` system, not this checkout.
+> **Branch state (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** the KB/RAG
+> architecture described here **is built on this branch** — the Java backend runs
+> `pgvector` (768-dim Ollama `nomic-embed-text` embeddings), the
+> `KnowledgeSyncService`/`KnowledgeController` and the RAG answer engine. Note two
+> differences from the legacy `main` reference: there is **no `ConversationOrchestrator`
+> / query-time multi-agent routing in V1** (retrieval spans all domains, filtered by
+> `audience`), and the backend runs on **port 8080** (`cd backend && mvn test`,
+> `POST /api/knowledge/sync`, `POST /api/conversation/converse`). Some legacy
+> examples further down may still show `:8081` — use 8080.
 
 This document describes how the bot's Knowledge Base (KB) works: its
 architecture, the data model, the ingestion and synchronization pipelines, the

@@ -2,14 +2,21 @@
 
 This branch is a **from-scratch restart branch** for the Voice Support Bot V1.
 
-The previous implementation remains preserved on `main` and can be used as a
-backup/reference. On this branch, implementation code and runtime scaffolding
-have been removed so the project can restart from the validated product and
-architecture baseline.
+The previous implementation remains preserved on `main` as a backup/reference.
+The restart began by removing the old stack and rebuilding from the validated
+product and architecture baseline. Through **Sprint 9** the restart has rebuilt a
+runnable two-service stack (Python voice runtime + Java conversation backend).
+
+> **Restart history vs current state.** The branch *started* by deleting the old
+> `backend/`, `frontend/`, `agent/bot.py`, `bridge_server.py` and Docker Compose.
+> Since then the backend, the RAG answer engine, streaming/WebRTC/barge-in and a
+> minimal `docker-compose.yml` (Postgres + Ollama) have been **rebuilt** from
+> scratch. The only piece **not** rebuilt is the standalone React `frontend/`; the
+> web client is now the static page served by the voice runtime (`web_voice/`).
 
 ## Current Repository State On This Branch
 
-This branch intentionally keeps:
+This branch keeps the product/architecture baseline:
 
 - product scope and backlog;
 - architecture decisions and target documentation;
@@ -17,40 +24,56 @@ This branch intentionally keeps:
 - knowledge-base content;
 - shared agent guidance.
 
-This branch intentionally removes (the previous full V1 stack, preserved on `main`):
+Rebuilt and runnable on this branch today:
 
-- Java backend implementation;
-- React frontend implementation;
-- the Pipecat voice agent (`agent/bot.py`) and the legacy WebSocket bridge (`bridge_server.py`);
-- Docker Compose and implementation runtime scaffolding.
+- `voice-agent/` — Python voice runtime (STT/TTS/answer loop, streaming, WebRTC);
+- `backend/` — Java Spring Boot conversation backend (RAG, guardrails, memory);
+- `docker-compose.yml` — Postgres (`pgvector`, port 5433) + Ollama for embeddings.
+
+Not present on this branch:
+
+- the standalone React `frontend/` (superseded by the `web_voice/` static client);
+- the legacy `agent/bot.py` and `bridge_server.py` (preserved on `main`).
 
 ## What Actually Runs On This Branch Today
 
-Since the reset, a full **web Voice2Voice loop** has been rebuilt from scratch
-(Sprints 1–5). It is the only runnable code here, all in Python under `voice-agent/`:
+A full **web Voice2Voice loop** rebuilt from scratch, delivered through **Sprint 9**
+across two services:
 
-- `voice-agent/stt_validation/` — STT (voice-in): fixture + real **Gradium**
-  providers, WER quality scoring, OpenTelemetry-style telemetry, per-slice timing
-  (US-036), and CLIs.
-- `voice-agent/tts_synthesis/` — TTS (voice-out): fixture + real **Gradium**
-  providers and a synthesis runner (mirror of the STT half).
-- `voice-agent/conversation_backend/` — neutral answer seam (`BackendAnswerPort`)
-  with a deterministic **stub** (default, offline) and an **HTTP** adapter
-  (`VOICE_BACKEND_URL`), plus the safe **degraded-mode** fallback.
-- `voice-agent/voice_pipeline/` + `voice-agent/web_voice/` — the HTTP server and
-  the batch loop: browser mic → 16 kHz PCM16 → `POST /api/voice/turn` →
-  STT → backend answer → TTS → WAV playback. The loop runs through a **Pipecat**
-  pipeline by default (`--runtime {stdlib,pipecat}`), with `--provider {fixture,gradium}`
-  and `--backend {stub,http}` selectable at startup.
-- `voice-agent/voice_common/` — neutral shared telemetry, sanitization and per-slice
-  timing (the STT/TTS halves never import each other; enforced by an architecture test).
-- `voice-agent/fixtures/`, `voice-agent/tests/` (unittest), `voice-agent/features/` (Behave).
+**Python voice runtime (`voice-agent/`, default port `8090`):**
 
-Delivered capability = **audio in → transcript → answer → spoken answer out**, with
-a single correlation id and per-slice latency evidence end to end.
-**Not yet built** (target only): billing/invoice comparison, RAG, multi-agent
-routing, guardrails, phone Voice2Voice, Genesys handoff, and streaming/WebRTC +
-barge-in (Sprint 6). See `voice-agent/README.md` to run it and
+- `stt_validation/` — STT (voice-in): fixture + real **Gradium** providers (batch
+  REST **and** streaming WebSocket), WER quality scoring, telemetry, per-slice
+  timing (US-036).
+- `tts_synthesis/` — TTS (voice-out): fixture + real **Gradium** providers, batch
+  and **streaming** synthesis.
+- `conversation_backend/` — neutral answer seam (`BackendAnswerPort`) with a
+  deterministic **stub** (offline) and an **HTTP** adapter (`VOICE_BACKEND_URL`)
+  that calls the Java backend, plus the safe **degraded-mode** fallback.
+- `voice_pipeline/` + `web_voice/` — HTTP server + batch loop (`POST /api/voice/turn`)
+  **and** the streaming **WebRTC** loop (`POST /api/voice/webrtc/offer`) with
+  energy-based end-of-turn detection and native **barge-in** interruption.
+- `voice_common/` — neutral shared telemetry, sanitization, per-slice timing.
+
+**Java conversation backend (`backend/`, default port `8080`):**
+
+- Hexagonal Spring Boot app: **RAG** retrieval over **pgvector** (Ollama
+  `nomic-embed-text`, 768-dim) with domain + audience filters, input/output
+  **guardrails** (incl. the DEC-002 no-fabricated-amount invariant), three-band
+  retrieval **confidence** policy, conversation **memory**, and per-slice
+  correlation-id observability.
+- **Chat LLM = Mistral** (`mistral-small-latest`, default; Ollama alternative);
+  **embeddings = Ollama** — the two are distinct models.
+- Endpoints: `POST /api/conversation/converse`, `/converse-stream`, `/answer`,
+  `/retrieve`; `POST /api/knowledge/ingest`, `/sync`; OpenAPI/Swagger UI.
+
+Delivered capability = **audio in → transcript → RAG-grounded answer → spoken
+answer out**, streaming or batch, with a single correlation id and per-slice
+latency evidence end to end.
+**Not yet built** (target only): customer identity, read-only BSS access,
+invoice PDF extraction + deterministic comparison, escalation contract + Genesys
+handoff, and phone (Twilio) Voice2Voice — see Sprints 10–11.
+See `voice-agent/README.md` to run the full stack and
 `product-backlog/backlog-index.md` for sprint status.
 
 ## V1 Product Outcome

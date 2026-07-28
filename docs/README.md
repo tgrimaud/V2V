@@ -1,10 +1,14 @@
 # Voice Support Bot Documentation
 
-> **Branch state (`feat/restart-from-scratch`):** most docs here describe the
-> **target** V1 (and the `main` reference implementation). The **only runnable
-> code on this branch** is the Python web Voice2Voice loop under `voice-agent/`
-> (STT → backend answer → TTS via `POST /api/voice/turn`, Sprints 1–5). For what
-> actually runs, start at `voice-agent/README.md` and
+> **Branch state (`feat/restart-from-scratch`, through Sprint 9):** the runnable
+> code on this branch is a **two-service** web Voice2Voice stack: the Python voice
+> runtime under `voice-agent/` (batch `POST /api/voice/turn` **and** streaming
+> WebRTC with barge-in) and the Java conversation backend under `backend/` (RAG
+> over pgvector, guardrails, memory; `POST /api/conversation/converse` etc.), plus
+> `docker-compose.yml` (Postgres + Ollama). **Still target-only:** billing/BSS,
+> invoice comparison, escalation/Genesys handoff, telephony, and the standalone
+> React frontend. Sections in these docs that describe those parts are design
+> intent. For what actually runs, start at `voice-agent/README.md` and
 > `product-backlog/backlog-index.md`.
 
 ## Structure

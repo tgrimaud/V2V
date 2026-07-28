@@ -1,15 +1,17 @@
 # V1 Scope - Operator Invoice Explanation Assistant
 
-> **Current delivery (`feat/restart-from-scratch`, 2026-07-10):** this document
-> defines the **target** V1. The only slice built so far is **STT validation**
-> (web mic / fixtures → Gradium transcript + per-slice latency). Billing/BSS,
-> invoice comparison, evidence-backed explanation, TTS/voice-out, phone Voice2Voice
-> and Genesys handoff are **not built yet**. Consequently the latency slice table
-> and the `time_to_first_audio` pilot criterion below are only partially measurable
-> today: only the `channel_ingress` and `stt` slices are instrumented (there is no
-> TTS, so no end-to-end `time_to_first_audio`). See
+> **Current delivery (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** this
+> document defines the **target** V1. What is **built** on this branch is the full
+> **web Voice2Voice loop** with a **RAG-grounded answer engine**: web mic → Gradium
+> STT (batch + streaming) → Java backend (RAG over pgvector, guardrails, three-band
+> confidence, memory) → Gradium TTS (batch + streaming) → playback, over batch
+> `POST /api/voice/turn` and streaming WebRTC with barge-in. The full
+> `time_to_first_audio` / mouth-to-ear latency slices are now instrumented
+> end-to-end (ADR-0029 pilot gate). **Not built yet:** Billing/BSS access, invoice
+> PDF extraction + deterministic comparison, customer identity, phone (Twilio)
+> Voice2Voice, and Genesys handoff (Sprints 10–11). See
 > `docs/observability/voice-journey-timing.md` and
-> `product-backlog/sprints/sprint-stt-validation.md`.
+> `product-backlog/backlog-index.md`.
 
 ## Product Hierarchy
 

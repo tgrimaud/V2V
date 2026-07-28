@@ -1,12 +1,13 @@
 # Functional Specification — Voice Support Bot
 
-> **Current delivery (`feat/restart-from-scratch`, 2026-07-10):** this is the
-> **target** functional spec. On this branch only the STT-in slice is built (web
-> mic / fixtures → Gradium transcript). Present-tense phrasing such as "the
-> existing backend" or "the stack can be launched via Docker Compose" is target /
-> `main` reference, not runnable here — the backend, TTS/voice-out, RAG,
-> multi-agent routing and Docker Compose were removed on this branch. Voice-out
-> (an oral answer) is explicitly **not yet delivered**.
+> **Current delivery (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** this is
+> the **target** functional spec. Built on this branch: the full web Voice2Voice
+> loop (STT + voice-out TTS, batch + streaming WebRTC, barge-in), a RAG-grounded
+> Java backend (guardrails, confidence, memory), and a minimal Docker Compose
+> (Postgres + Ollama). **Still target-only:** billing/BSS access, invoice PDF
+> extraction + deterministic comparison, customer identity, phone (Twilio)
+> Voice2Voice, Genesys handoff, and query-time multi-agent routing. The standalone
+> React frontend is not rebuilt (the web client is the `web_voice/` static page).
 
 ## Document Status
 

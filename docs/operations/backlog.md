@@ -4,12 +4,16 @@ This is the technical and operational backlog. Product epics and user stories
 live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 [`docs/product/v1-scope.md`](../product/v1-scope.md).
 
-> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** the previous full
-> stack was removed and preserved on `main`. On this branch, the **only delivered
-> code is the STT-validation slice** (`voice-agent/stt_validation` + `web_voice`:
-> audio in → Gradium transcript + per-slice latency). Items marked `Done` below
-> refer to work delivered **on the `main` reference**, not this branch — they are
-> "To rebuild" here. See `product-backlog/sprints/sprint-stt-validation.md`.
+> **Branch state (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** the restart
+> has rebuilt a **two-service** web Voice2Voice stack on this branch: the Python
+> voice runtime (`voice-agent/` — STT/TTS, batch + streaming WebRTC, barge-in) and
+> the Java conversation backend (`backend/` — RAG over pgvector, guardrails,
+> confidence, memory, observability), plus `docker-compose.yml` (Postgres + Ollama).
+> **Not yet built on this branch** (the `Done`-on-`main` items and the V1 Core
+> sections below): read-only BSS access, invoice PDF extraction + deterministic
+> comparison, customer identity, escalation/Genesys handoff, and telephony — these
+> are the Sprint 10–11 targets. See `product-backlog/backlog-index.md` for the
+> authoritative sprint/task status.
 
 ## Classification
 

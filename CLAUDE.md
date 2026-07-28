@@ -6,11 +6,15 @@
 
 > Self-contained guidance: when working in this repo, use **only** this repository's `CLAUDE.md` / `AGENTS.md` and the skills under `voice-support-bot/.cursor/skills/`. Do **not** apply the workspace-root `BMad/claude.md`, `BMad/agents.md`, or root `.cursor/skills/` (those govern `cursor-usage-dashboard/`).
 
-> Branch note: `feat/restart-from-scratch` intentionally removes the previous
-> backend, frontend, voice-agent and Docker Compose implementation. The previous
-> code remains preserved on `main` as backup/reference; this branch restarts from
-> product scope, architecture decisions, backlog, BSS docs and knowledge-base
-> content.
+> Branch note: `feat/restart-from-scratch` began by removing the previous stack
+> (preserved on `main` as backup/reference), then **rebuilt from scratch**. Through
+> **Sprint 9** the branch now runs a two-service stack: the Python voice runtime
+> (`voice-agent/` — STT/TTS, batch + streaming WebRTC, barge-in) and a rebuilt Java
+> conversation backend (`backend/` — RAG over pgvector, guardrails, confidence,
+> memory), plus a minimal `docker-compose.yml` (Postgres + Ollama). Only the
+> standalone React `frontend/` and the legacy `agent/bot.py` / `bridge_server.py`
+> remain un-rebuilt (the web client is the `web_voice/` static page). Still
+> target-only: billing/BSS, invoice comparison, escalation/Genesys, telephony.
 
 > Delivery rule: no development starts without a ticket. Each user story, bug or
 > technical task uses its own branch named after the ticket
@@ -31,10 +35,14 @@
 | Integration docs | `docs/integrations/` | Galaxion/BSS contracts and missing inputs |
 | Knowledge base | `knowledge-base/` | Billing/support/commercial content for future RAG |
 
-The `voice-agent/` directory is **rebuilt from scratch on this branch** and is the
-only runnable code here (full web Voice2Voice loop, Sprints 1–5). The other former
-executable directories (`backend/`, `frontend/`, the old `agent/bot.py` and
-`bridge_server.py`, `docker-compose.yml`) exist on `main`, not on the restart branch.
+Both `voice-agent/` (Python voice runtime, port 8090) and `backend/` (Java Spring
+Boot conversation engine, port 8080) are **rebuilt from scratch on this branch** and
+are runnable (full web Voice2Voice loop with RAG, streaming + barge-in, through
+Sprint 9), together with a minimal `docker-compose.yml` (Postgres + Ollama). The
+rebuilt backend's API differs from the legacy `main` one (`/api/conversation/converse`,
+`/converse-stream`, `/answer`, `/retrieve`; no `/ask`, `/ask-stream`, `/seed`). Not
+present on this branch: the standalone React `frontend/` and the legacy `agent/bot.py`
+/ `bridge_server.py` (those live on `main`).
 
 ## Product scope V1
 

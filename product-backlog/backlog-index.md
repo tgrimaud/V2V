@@ -2,10 +2,16 @@
 
 ## Restart Baseline
 
-This branch restarts implementation from scratch. The previous implementation is
-kept on `main` as backup/reference. All V1 backlog items below are therefore
-reset to `Draft` until Product, Architecture, Security and Delivery review them
-against the new empty-codebase plan.
+This branch restarts implementation from scratch (previous implementation kept on
+`main` as backup/reference). **EPIC** rows below stay at product-level `Draft` on
+purpose — they are re-accepted by Product/Architecture/Security/Delivery, not by
+delivery progress. **Delivery has, however, progressed:** through **Sprint 9** the
+web Voice2Voice loop, the Java RAG answer engine, streaming/WebRTC/barge-in and
+observability are built and validated. The authoritative *delivered* state is the
+**Sprint registry** and the **story/task Status columns** below (e.g. US-003, US-019,
+US-036, US-041 and Sprints STT→9 marked Done), not the epic rows. Epics whose
+stories are largely delivered (notably EPIC-006 Voice2Voice foundation for the web
+channel) remain `Draft` only for want of a formal product re-acceptance pass.
 
 ## V1 Epics
 
@@ -105,6 +111,7 @@ against the new empty-codebase plan.
 | TASK-ENV-001 | Standardize the voice-agent test virtualenv (fix `pipecat` `ModuleNotFoundError`) | Developer experience | ✅ Done (Sprint 5, 2026-07-15) | Medium |
 | TASK-WEB-006 | Genericize voice error responses — stop echoing raw provider error text in `/stt` `/tts` `/turn` 502 bodies; return error_code + correlation id, keep full reason server-side (closes RF-013) | V1 hardening | ✅ Validated + merged into `feat/sprint-6-streaming` (2026-07-16) | Low |
 | TASK-DOC-001 | Refresh stale "current-state" docs after Sprint 5 (README, CLAUDE.md, architecture spine, dev guide, docs/README, backlog statuses, ADR index, `.env.example`) — from the full-branch code review | Documentation | Done (2026-07-15) | Medium |
+| TASK-DOC-002 | Reconcile "current-state" docs after Sprint 9 (README, CLAUDE.md, architecture spine, ADR index + ADR-0032 row, docs/README, dev guide, operations/backlog, v1-scope, channel-identity-boundary, backlog-index epic note) — from the full adversarial code+doc review drift register D1–D14 | Documentation | In progress (2026-07-28) — `docs/architecture/reviews/full-adversarial-review-2026-07-28.md`; branch `task/TASK-DOC-002-doc-drift` | Medium |
 | TASK-WEB-012 | Confidence policy for billing answers — treat a `SUCCESS` answer with no confidence as degraded, or require the HTTP backend to emit confidence (closes RF-022, DEC-002) | V1 hardening | ✅ Implemented (2026-07-27) — three-band backend confidence policy + env-tunable Python client floor (RF-022); ADR-0034. Definitive threshold value still gated by OQ-002 | Medium |
 | TASK-WEB-013 | Unify telemetry imports in `web_voice` — point `ingress.py` at `voice_common.telemetry` for symmetry with `egress.py` (closes RF-023) | V1 hardening | ✅ Merged into `feat/sprint-9-hardening` (2026-07-23, ff; branch deleted) — one-line import change, 334 unittest + 26 behave green. Not runtime-affecting (same classes via shim) | Low |
 | TASK-WEB-014 | Instrument true mouth-to-ear latency — fold `channel_egress` (WebRTC) + end-of-turn hold into a perceived-latency metric and evaluate vs ADR-0029 (closes the ADR-0018/TASK-WEB-009 known gap) | V1 pilot gate | ✅ Merged into `feat/restart-from-scratch` (2026-07-23) — `voice_to_first_audio` composite + `ChannelEgressProbe` (WebRTC egress) + ADR-0029 gate + client first-audible proxy; unittest 334 / behave 26 green; docs updated. Remaining before pilot: warm live sample vs real backend + adversarial/QA (pilot-readiness latency theme, off billing) | High |

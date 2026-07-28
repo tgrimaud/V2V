@@ -1,11 +1,12 @@
 # Channel And Identity Boundary
 
-> **Branch state (`feat/restart-from-scratch`):** this document defines the
-> **target** responsibility boundary. US-003 validated that boundary **as a design**,
-> not as built software. On this branch, only the STT-in slice exists (web voice
-> ingress → Gradium transcript + channel-ingress telemetry). TTS, turn detection,
-> barge-in, the backend, guardrails, escalation and Genesys handoff are target,
-> not implemented here.
+> **Branch state (`feat/restart-from-scratch`, Sprint 9):** this document defines
+> the **target** responsibility boundary. Built on this branch: the web voice
+> channel + runtime (STT, TTS, turn detection, streaming WebRTC, barge-in) and the
+> Java backend (RAG, guardrails, confidence, memory) — the channel↔backend split
+> below is implemented for the web channel. **Still target, not implemented:**
+> customer identity resolution (OQ-001), read-only BSS evidence access, the
+> escalation contract and Genesys handoff.
 
 ## Objective
 
@@ -128,10 +129,12 @@ ownership boundary; it does not require the final API contract to be implemented
 
 ## Acceptance Evidence For US-003
 
-`US-003` is accepted as the baseline for the STT validation sprint. It validates
-the **boundary design** (who owns what), not a built implementation of every
-responsibility below — on this branch only STT-in + channel-ingress telemetry is
-implemented; the rest is target ownership.
+`US-003` is accepted as the baseline for the STT validation sprint. It validated
+the **boundary design** (who owns what). Through Sprint 9 the web channel↔backend
+split below is implemented (STT/TTS, streaming WebRTC, barge-in on the channel
+side; RAG, guardrails, confidence, memory on the backend side). Still target
+ownership, not implemented: customer identity resolution, read-only BSS evidence
+access, the escalation contract and Genesys handoff.
 
 Validation:
 

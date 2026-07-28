@@ -1,20 +1,29 @@
 # Development Guide
 
-> **Branch state (`feat/restart-from-scratch`, updated 2026-07-15):** this branch is a
-> deliberate restart. The Java backend, React frontend, target Pipecat agent
-> (`agent/bot.py`) and legacy bridge (`bridge_server.py`) were removed (preserved on
-> `main`). The **only runnable code here is the Python voice slice** under
-> `voice-agent/`, which now covers the full **voice-in → backend answer → voice-out**
-> loop: STT validation (Sprint 1/2), TTS voice-out (Sprint 3, TASK-WEB-002), a
-> **Pipecat batch runtime** since Sprint 4 (TASK-WEB-005, selectable via
-> `--runtime {stdlib,pipecat}`, default `pipecat`) and, since Sprint 5
-> (TASK-WEB-003 A–G), a real **backend answer bridge** (`--backend {stub,http}`,
-> default `stub`) with a safe degraded-mode fallback. There is no streaming/WebRTC
-> or barge-in yet (Sprint 6). The "Working On This Branch"
-> section below is accurate for this branch. Everything from "## Target V1 Stack"
-> onward describes the target stack (reference on `main`) and does **not** run here —
-> do not follow those `mvn` / `npm` / `docker compose` / `agent.bot` steps against
-> this checkout.
+> **Branch state (`feat/restart-from-scratch`, updated 2026-07-28, Sprint 9):** this
+> branch started as a restart (the old stack was removed, preserved on `main`) and
+> has since **rebuilt two runnable services from scratch**:
+>
+> - **Python voice runtime** (`voice-agent/`, port `8090`): the full **voice-in →
+>   backend answer → voice-out** loop, both **batch** (`POST /api/voice/turn`) and
+>   **streaming WebRTC** (`POST /api/voice/webrtc/offer`) with energy end-of-turn
+>   detection and native **barge-in** (Sprints 6–8), Gradium STT/TTS (batch +
+>   streaming), a Pipecat runtime (`--runtime {stdlib,pipecat}`), and a backend
+>   answer bridge (`--backend {stub,http}`) with a safe degraded-mode fallback.
+> - **Java conversation backend** (`backend/`, port `8080`): a rebuilt hexagonal
+>   Spring Boot app — **RAG** over pgvector, guardrails, three-band confidence,
+>   memory, observability. **Its API differs from the legacy `main` reference below**
+>   (`POST /api/conversation/converse` / `/converse-stream` / `/answer` / `/retrieve`,
+>   **port 8080**, no `/ask`, `/ask-stream`, `/seed`, no query-time multi-agent
+>   routing in V1).
+> - **Infra:** `docker-compose.yml` (Postgres/pgvector on 5433 + Ollama).
+>
+> The "Working On This Branch" section below is accurate for this branch.
+> Everything from "## Target V1 Stack" onward is the **legacy `main` reference**
+> (Pipecat `agent/bot.py`, React frontend, `:8081`, `/api/conversation/ask*`,
+> `/seed`, multi-agent `AgentProfile`, `DomainServiceConfig`). It is kept as build
+> reference only — **do not run those commands against this checkout, and do not
+> copy its port/endpoint names**; they do not match the rebuilt backend above.
 
 ## Working On This Branch (Python voice slice — the only runnable code)
 
@@ -68,10 +77,38 @@ VOICE_RUNTIME=stdlib python3 -m web_voice.server --provider fixture
 python3 scripts/ab_parity.py --iterations 20
 ```
 
-Endpoints: `POST /api/voice/stt` (PCM16 in → transcript JSON), `POST /api/voice/tts`
-(`?text=` → WAV), and `POST /api/voice/turn` (PCM16 in → full STT → backend answer →
-TTS → WAV in one call, with the transcript + spoken answer returned as `X-Voice-*`
-headers). All three keep the same contract on both runtimes.
+Endpoints (voice runtime, port `8090`): `POST /api/voice/stt` (PCM16 in →
+transcript JSON), `POST /api/voice/tts` (`?text=` → WAV), `POST /api/voice/turn`
+(PCM16 in → full STT → backend answer → TTS → WAV in one call, transcript + spoken
+answer returned as `X-Voice-*` headers), `POST /api/voice/webrtc/offer` (streaming
+live loop), and `GET /api/voice/openapi.yaml` (OpenAPI spec). The batch endpoints
+keep the same contract on both runtimes.
+
+### Java backend on this branch (rebuilt)
+
+The Java backend under `backend/` runs on this branch and is what the voice runtime
+targets with `--backend http`. It needs Postgres (`pgvector`) + Ollama for
+embeddings (via `docker-compose.yml`) and a `MISTRAL_API_KEY` for chat.
+
+```bash
+# Infra (Postgres/pgvector on 5433 + Ollama)
+docker compose up -d postgres ollama
+docker exec -it $(docker compose ps -q ollama) ollama pull nomic-embed-text
+
+# Backend (port 8080) — load the repo-root .env for MISTRAL_API_KEY
+cd backend && export $(grep -v '^#' ../.env | xargs) && mvn spring-boot:run
+
+# Domain unit tests (no DB / no Ollama required — manual fakes, no @SpringBootTest)
+cd backend && mvn test
+```
+
+Backend endpoints (port `8080`): `POST /api/conversation/converse` (sync answer),
+`/converse-stream` (SSE), `/answer`, `/retrieve`; `POST /api/knowledge/ingest`
+(one-shot upload) and `/sync` / `/sync/{sourceType}` (connector sync); Swagger UI
+and `/v3/api-docs`. Chat = **Mistral** (`voice-support.llm.provider=mistral-api`,
+default; `ollama` alternative); embeddings = **Ollama** `nomic-embed-text` (768-dim).
+The wiring lives in split config classes (`ConversationConfig`, `KnowledgeConfig`,
+`LlmConfig`, `KnowledgeSeamConfig`), not a single `DomainServiceConfig`.
 
 Troubleshooting (current branch):
 

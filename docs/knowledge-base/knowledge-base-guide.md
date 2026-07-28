@@ -4,13 +4,12 @@
 > knowledge** — no programming required.
 > For the internals, see [`knowledge-base-technical.md`](./knowledge-base-technical.md).
 
-> **Branch state (`feat/restart-from-scratch`, 2026-07-10):** the KB **content**
-> (`knowledge-base/*.md`) exists and can be authored, but the **runtime that
-> ingests and answers from it is not built on this branch** — there is no backend,
-> no vector store and no assistant here (only the STT-validation slice runs). The
-> "sync", `curl .../api/knowledge/...` and "ask the assistant" steps below describe
-> the **target** behaviour (preserved on `main`) and will work again once the
-> conversation backend is rebuilt.
+> **Branch state (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** the KB
+> **content** (`knowledge-base/*.md`) exists and the **runtime that ingests and
+> answers from it is now built** on this branch — the Java backend runs the vector
+> store (pgvector) and the RAG assistant. The "sync", `curl .../api/knowledge/...`
+> and "ask the assistant" steps below work against the rebuilt backend on **port
+> 8080** (some examples further down may still show the legacy `:8081` — use 8080).
 
 This guide explains how the virtual assistant gets its answers, how to write and
 update that knowledge, and how to publish your changes.

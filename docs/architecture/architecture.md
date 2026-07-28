@@ -1,30 +1,45 @@
 # Architecture — Voice Support Bot
 
-> Restart branch note: on `feat/restart-from-scratch`, the previous
-> implementation code has been removed. **This entire document (diagrams, routes,
-> domain model, adapters, sequences below) describes the TARGET architecture for
-> the rebuild — present-tense wording refers to the design intent and to the
-> `main` reference implementation, not to code runnable on this branch.** The
-> former executable implementation remains on `main` as backup/reference.
+> Restart branch note: on `feat/restart-from-scratch`, the previous implementation
+> was first removed, then rebuilt from scratch. **Some sections below still describe
+> the full TARGET architecture** (billing/BSS, Genesys, telephony, Redis, React
+> frontend) that is **not yet built** — present-tense wording in those sections
+> refers to design intent and to the `main` reference implementation. Read the
+> "What is actually built on this branch today" block below for the current state.
 >
-> **What is actually built on this branch today** is a full **web Voice2Voice
-> loop** in Python under `voice-agent/`: **STT** (`stt_validation/` — fixture + real
-> Gradium STT), **TTS** (`tts_synthesis/` — fixture + real Gradium TTS), a neutral
-> **answer seam** (`conversation_backend/` — `BackendAnswerPort` with a deterministic
-> `stub` default and an `http` adapter, plus a safe degraded-mode fallback), and the
-> HTTP server (`web_voice/`) + batch pipeline (`voice_pipeline/`). `POST
-> /api/voice/turn` runs the whole loop server-side (browser mic → 16 kHz PCM16 →
-> STT → backend answer → TTS → WAV → playback); `/api/voice/stt` and `/api/voice/tts`
-> remain available. Cross-cutting utilities (telemetry, sanitization, per-slice
-> pipeline timing) live in a neutral `voice_common/` package; the STT and TTS halves
-> never import each other (enforced by an architecture test). Since **Sprint 4
-> (TASK-WEB-005)** the loop runs through a **Pipecat pipeline** by default (selected
-> via `--runtime {stdlib,pipecat}`), with `--provider {fixture,gradium}` and
-> `--backend {stub,http}` selectable at startup — but in **batch parity only**:
-> still no WebRTC transport and no streaming (Sprint 6). Not built yet: Java backend,
-> Pipecat WebRTC agent, React frontend, RAG/pgvector, streaming/barge-in
-> (TASK-WEB-004/008), billing comparison, Genesys. See `voice-agent/README.md` and
-> `product-backlog/backlog-index.md` for sprint status.
+> **What is actually built on this branch today (through Sprint 9)** is a full
+> **web Voice2Voice loop** across two rebuilt services:
+>
+> - **Python voice runtime** (`voice-agent/`, port `8090`): **STT**
+>   (`stt_validation/` — fixture + real Gradium, batch REST **and** streaming
+>   WebSocket), **TTS** (`tts_synthesis/` — fixture + real Gradium, batch **and**
+>   streaming), a neutral **answer seam** (`conversation_backend/` —
+>   `BackendAnswerPort` with a `stub` default and an `http` adapter to the Java
+>   backend, plus a safe degraded-mode fallback), the HTTP server (`web_voice/`) +
+>   batch pipeline (`voice_pipeline/`). Both the **batch** loop
+>   (`POST /api/voice/turn`) and the **streaming WebRTC** loop
+>   (`POST /api/voice/webrtc/offer`) run end to end, with energy-based end-of-turn
+>   detection and native **barge-in** (Sprints 6–8). Runs through a **Pipecat**
+>   pipeline by default (`--runtime {stdlib,pipecat}`, `--provider {fixture,gradium}`,
+>   `--backend {stub,http}`). Neutral `voice_common/` holds telemetry, sanitization
+>   and per-slice timing; STT and TTS halves never import each other (architecture test).
+> - **Java conversation backend** (`backend/`, port `8080`): hexagonal Spring Boot
+>   app with **RAG** over **pgvector** (Ollama `nomic-embed-text`, 768-dim, domain +
+>   audience filters), input/output **guardrails** (incl. DEC-002 no-fabricated-amount),
+>   three-band retrieval **confidence**, conversation **memory**, and per-slice
+>   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
+>   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve}`,
+>   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
+> - **Infra:** `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama).
+>
+> **Not built yet** (target only, Sprints 10–11): customer identity, read-only BSS
+> access, invoice PDF extraction + deterministic comparison, escalation contract +
+> Genesys handoff, phone (Twilio) Voice2Voice, Redis session store, and the
+> standalone React frontend (the web client is the `web_voice/` static page).
+> Route/port tables further down this document may still show the legacy
+> `main` contract (`/api/conversation/ask`, `ask-stream`, `:8081`, `agent/bot.py`,
+> `:7860` Pipecat UI, `:5173` React); the authoritative current contract is the one
+> in this block. See `voice-agent/README.md` and `product-backlog/backlog-index.md`.
 
 ## Overview
 
@@ -667,10 +682,11 @@ To add a new LLM provider (for example OpenAI):
 ### Replacing Gradium (STT/TTS)
 
 On this branch, STT lives in `voice-agent/stt_validation/gradium_provider.py`
-behind the `SttProvider` protocol (`transcribe()`); swap providers by adding a
-new implementation and selecting it in `provider_factory.py`. In the target
-Pipecat agent, the equivalent would be `agent/gradium_stt.py` / `gradium_tts.py`
-(on `main` reference); TTS is not built on this branch.
+(batch + streaming) behind the `SttProvider` protocol, and TTS lives in
+`voice-agent/tts_synthesis/gradium_tts_provider.py` (batch + streaming) behind the
+TTS port; swap providers by adding a new implementation and selecting it in the
+respective `provider_factory.py`. (The legacy `main` Pipecat agent used
+`agent/gradium_stt.py` / `gradium_tts.py`.)
 
 ### Adding a Transport
 
