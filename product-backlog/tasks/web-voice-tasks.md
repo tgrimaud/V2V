@@ -1681,3 +1681,65 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
   mouth-to-ear p50 5850 / p95 6240 ms; `barge_in_count=2` yet all turns cleanly separated. Full numbers
   in `docs/qa/task-web-017-per-turn-telemetry-qa.md`. (Composite p95 exceeds ADR-0018/0029 gates due to
   ~4 s Gradium STT finalize — pre-existing, owned by TASK-STT-010/011, out of WEB-017 scope.)
+
+---
+
+## TASK-WEB-018 — Speak A Degraded Fallback On Streaming STT Failure
+
+**Parent:** EPIC-006 (Voice2Voice journey foundation)
+**Classification:** V1 hardening (degraded mode)
+**Status:** Proposed (2026-07-28) — **doable now** (logic exists; full validation needs Gradium).
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-018-streaming-stt-degraded-fallback` (to create)
+**Surfaced by:** full adversarial code+doc review 2026-07-28
+(`docs/architecture/reviews/full-adversarial-review-2026-07-28.md`, medium functional finding).
+**Relates to:** TASK-WEB-006 (generic voice error responses / RF-013), ADR-0021 (degraded
+answer contract), ADR-0023 (streaming STT finalization), ADR-0025 (barge-in / interruption).
+
+### Context
+
+There is a **behavioural asymmetry** between the two transports on STT failure:
+
+- **Batch `/turn` (HTTP):** an STT failure returns a **502 JSON** (`server.py`), so the
+  caller knows the turn failed.
+- **Streaming WebRTC:** on STT finalize timeout/error, `_emit_stt_failure`
+  (`voice-agent/web_voice/streaming_stt_processor.py:218-222, 303-315`) records telemetry
+  but **does not push a `TranscriptionFrame`** — so the answer step never runs and no
+  degraded fallback is spoken. The call can go **silent** on a real STT failure, which is
+  worse than the batch path.
+
+### Objective
+
+Make streaming STT failure **audible and safe**: when finalize fails, the customer hears
+the safe degraded fallback (or an explicit end-of-call), consistent with the degraded
+policy already used everywhere else (no invented amount, no fabricated transcript).
+
+### Scope
+
+- On streaming STT finalize timeout/error, drive the existing degraded path: emit a
+  degraded answer turn (reusing `conversation_backend/degraded.py`
+  `DEGRADED_FALLBACK_TEXT`) through TTS, or a bounded, explicit end-of-call, instead of
+  silently swallowing the failure.
+- Keep the failure telemetry (`stt` slice `outcome=error`, correlation id / turn id) and
+  add a `voice.stt.degraded_spoken` (or equivalent) outcome event so QA can observe that
+  a fallback was actually spoken.
+- Do not fabricate a transcript; the degraded text must remain digit/currency-free
+  (DEC-002) and language-appropriate.
+- Ensure barge-in/interruption interaction stays correct (a degraded utterance is still
+  interruptible).
+
+### Acceptance
+
+- A simulated streaming STT finalize failure results in a **spoken** degraded fallback
+  (or explicit end-of-call), never silence — proven by a unit test on
+  `StreamingSttProcessor` and a Behave scenario.
+- The `stt` slice still records `outcome=error` with the correlation id / `turn_index`,
+  plus a new outcome event proving the fallback was spoken.
+- No transcript fabrication; degraded text is digit/currency-free.
+- `./.venv/bin/python -m unittest discover tests` + `./.venv/bin/behave` green.
+
+### Notes
+
+- This closes the batch-vs-streaming degraded-mode gap noted in the review; pair the QA
+  wording with TASK-WEB-006 (generic error surfaces) so client-facing behaviour is
+  consistent across transports.

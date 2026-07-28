@@ -6,7 +6,7 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 | Task | Trigger | Status |
 |---|---|---|
 | TASK-DOC-001 | Full-branch code review after Sprint 5 | Done (2026-07-15) — tracked in `backlog-index.md` |
-| TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | In progress (2026-07-28) |
+| TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
 
 ---
 
@@ -17,9 +17,10 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 **Related review:** `docs/architecture/reviews/full-adversarial-review-2026-07-28.md`
 (full adversarial code + documentation review; drift register D1–D14)
 **Classification:** Documentation
-**Status:** In progress (2026-07-28) — fixes landed on branch, pending user validation.
+**Status:** ✅ Done (2026-07-28) — validated and merged into `feat/restart-from-scratch`
+(fast-forward `24995a9..4770ee0`, 15 files); ticket branch deleted (local + remote).
 **Priority:** Medium
-**Branch:** `task/TASK-DOC-002-doc-drift`
+**Branch:** `task/TASK-DOC-002-doc-drift` (merged, deleted)
 
 ### Objective
 
@@ -72,9 +73,15 @@ impact).
   legacy-`main` reference.
 - `git diff --check` passes; all touched docs remain in English.
 
-### Follow-up Tickets Proposed By The Review (not part of this doc task)
+### Follow-up Tickets Spawned By The Review (not part of this doc task)
 
-- `TASK-BE-0xx` — authenticate/isolate `/api/knowledge/*`, `/answer`, `/retrieve`.
-- `TASK-WEB-0xx` — speak a degraded fallback on streaming STT failure (parity with batch 502).
-- `TASK-OBS-0xx` — OTLP exporter / OpenTelemetry spans, or record accepted residual risk in ADR-0028.
-- Latency: close or evidence-based re-negotiate the ADR-0029 pilot gate.
+- **TASK-BE-019** — authenticate/isolate `/api/knowledge/ingest`, `/sync`,
+  `/api/conversation/answer`, `/retrieve` (`product-backlog/tasks/backend-hardening-tasks.md`).
+- **TASK-WEB-018** — speak a degraded fallback on streaming STT failure, parity with
+  the batch `/turn` 502 (`product-backlog/tasks/web-voice-tasks.md`).
+- **TASK-OBS-001** — OTLP exporter / OpenTelemetry spans (backend Tracing→OTel bridge +
+  voice OTLP), or record the accepted residual risk in ADR-0028
+  (`product-backlog/tasks/observability-tasks.md`).
+- **Latency (already tracked):** the ADR-0029 pilot-gate closure is covered by the
+  existing **TASK-WEB-015** (perceived-latency optimization levers) + a warm live
+  sample — no new ticket created.

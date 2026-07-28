@@ -11,6 +11,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-016 | OpenAPI/Swagger for the Java backend (`springdoc-openapi`) | V1 hardening | TASK-BE-002 | Proposed (2026-07-21) — out of Sprint 8 theme |
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
+| TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | Proposed (2026-07-28) — from the full adversarial review (blocking security finding); **doable now** |
 
 ---
 
@@ -511,3 +512,68 @@ behavioural contracts rather than mutation-chasing. Non-blocking notes recorded:
   speed, so the threshold-95 gate carries no CI-flake risk.
 - The `elapsedMs` timing survivors would require a production `Clock`/time port to kill — tracked as
   a future follow-up, out of this test-only scope.
+
+---
+
+## TASK-BE-019 — Authenticate/Isolate The Unauthenticated Backend Endpoints
+
+**Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
+**Classification:** V1 security hardening
+**Status:** Proposed (2026-07-28) — **doable now** (no external dependency).
+**Priority:** High
+**Branch:** `task/TASK-BE-019-endpoint-auth` (to create)
+**Surfaced by:** full adversarial code+doc review 2026-07-28
+(`docs/architecture/reviews/full-adversarial-review-2026-07-28.md`, blocking finding).
+**Relates to:** `ConverseController`/`ConverseStreamController` (the existing optional
+`x-api-key` gate), TASK-BE-012 (error contract), ADR-0010 (industrialization: contracts
++ security before real channels).
+
+### Context
+
+Only `POST /api/conversation/converse` and `/converse-stream` honour the optional
+`x-api-key` gate (and only when `CONVERSATION_API_KEY` is set). The following endpoints
+have **no authentication at all**:
+
+- `POST /api/knowledge/ingest` and `POST /api/knowledge/sync` — **write** to the vector
+  store (an unauthenticated write surface / KB-poisoning + DoS vector);
+- `POST /api/conversation/answer` and `POST /api/conversation/retrieve` — read the RAG
+  surface (retrieval can echo full KB chunk text, a data-exposure surface).
+
+When `CONVERSATION_API_KEY` is empty, `authorized()` also returns true for any/missing
+header, so nothing is protected. This is acceptable for a strictly localhost pilot but
+is a blocking exposure for any non-localhost deployment.
+
+### Objective
+
+Bring every state-changing and evidence-reading endpoint under the same auth boundary
+as `/converse`, or bind them to an internal-only network surface, and make the failure
+mode explicit (fail-closed) — without breaking the localhost pilot.
+
+### Scope
+
+- Apply the existing `x-api-key` check (or a shared filter/interceptor) to
+  `/api/knowledge/ingest`, `/api/knowledge/sync[/{sourceType}]`,
+  `/api/conversation/answer`, `/api/conversation/retrieve`.
+- Decide and document the empty-key behaviour: either **fail-closed** (reject when no key
+  is configured) or explicitly bind these routes to localhost/internal for the pilot;
+  record the decision (short ADR note or in this ticket).
+- Return the sanitized `ErrorResponse` (TASK-BE-012) `401`/`403` with `correlation_id`,
+  never a stack/verbose body.
+- Keep OpenAPI (TASK-BE-016) accurate: mark the newly-gated endpoints with the
+  `x-api-key` security scheme.
+
+### Acceptance
+
+- An unauthenticated call to `/api/knowledge/ingest`, `/sync`, `/answer`, `/retrieve`
+  (with a key configured) returns a sanitized `401/403`, not a 200.
+- The localhost pilot path still works with the configured key (or documented
+  localhost binding).
+- `@WebMvcTest` security tests cover each newly-gated endpoint (authorized + rejected).
+- `mvn test` + ArchUnit green; OpenAPI reflects the security scheme.
+
+### Notes
+
+- Not RAG/LLM behaviour — purely the transport auth boundary; keep domain/application
+  layers free of transport concerns (gate in `shared/web`).
+- Runtime-affecting (adds a rejection path): record a `guardrail`/auth-reject outcome or
+  structured log with the correlation id so QA can observe rejections.

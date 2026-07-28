@@ -156,13 +156,13 @@ Backend and voice runtime are both strong individually (~88 / ~85). Points deduc
 ## Recommended Changes (prioritized)
 
 **1. Must fix before production**
-- Authenticate/isolate write+answer+retrieve endpoints; non-default credentials.
-- Close (or evidence-based re-negotiate) the ADR-0029 latency gate.
-- Implement + test industrial failure modes (provider outage, Redis/DB, duplicates); make streaming STT failure non-silent.
-- Add distributed tracing/OTLP or formally accept the residual risk.
+- Authenticate/isolate write+answer+retrieve endpoints (**TASK-BE-019**); non-default credentials.
+- Close (or evidence-based re-negotiate) the ADR-0029 latency gate (**TASK-WEB-015**, existing).
+- Implement + test industrial failure modes (provider outage, Redis/DB, duplicates); make streaming STT failure non-silent (**TASK-WEB-018**).
+- Add distributed tracing/OTLP or formally accept the residual risk (**TASK-OBS-001**).
 
 **2. Should fix before pilot**
-- **Reconcile all current-state documentation** (drift register D1–D14) — cheapest high-impact fix; create a `TASK-DOC-002`.
+- **Reconcile all current-state documentation** (drift register D1–D14) — done via **TASK-DOC-002** (merged 2026-07-28).
 - Implement the escalation contract/event in the backend.
 - Land Silero VAD verdict upgrade; add live-provider contract tests.
 
