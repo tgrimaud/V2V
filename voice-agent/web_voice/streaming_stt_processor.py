@@ -27,10 +27,12 @@ from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
+    TextFrame,
     TranscriptionFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from conversation_backend import DEGRADED_FALLBACK_TEXT
 from stt_validation.models import SttOutcome
 from stt_validation.streaming import FinalTranscript, StreamingSttError
 from voice_common.sanitization import sanitize_error
@@ -50,6 +52,13 @@ from .end_of_turn import (
 
 DEFAULT_PROVIDER_NAME = "gradium-stt-streaming"
 STT_REQUEST_SPAN = "stt.request"
+# TASK-WEB-018: when streaming STT finalize fails (timeout / provider error), the loop
+# must not go silent — it speaks the safe degraded fallback (same policy as the batch
+# path and the backend degraded mode). This event proves a fallback was actually driven
+# to TTS so QA can distinguish "spoke a safe fallback" from "silent call".
+STT_DEGRADED_SPOKEN_EVENT = "voice.stt.degraded_spoken"
+STT_DEGRADED_SPOKEN_METRIC = "voice.stt.degraded_spoken.count"
+STT_DEGRADED_REASON = "stt_finalize_failed"
 # Barge-in observability (TASK-WEB-008): emitted when speech onset while the bot is
 # speaking triggers an interruption of the spoken answer.
 BARGE_IN_EVENT = "voice.barge_in.detected"
@@ -219,6 +228,7 @@ class StreamingSttProcessor(FrameProcessor):
         except (StreamingSttError, asyncio.TimeoutError) as exc:
             await session.aclose()
             self._emit_stt_failure(exc, tail.elapsed_ms())
+            await self._speak_degraded_fallback(direction)
             return
         await self._emit_partials(session, direction)
         await session.aclose()
@@ -239,6 +249,31 @@ class StreamingSttProcessor(FrameProcessor):
         if self._session is not None:
             await self._session.aclose()
             self._session = None
+
+    async def _speak_degraded_fallback(self, direction: FrameDirection) -> None:
+        """Speak the safe degraded fallback when streaming STT finalize fails (TASK-WEB-018).
+
+        Pushes a *plain* `TextFrame` (never a `TranscriptionFrame` — no transcript is
+        fabricated) so the downstream TTS stage synthesises the digit/currency-free
+        fallback (DEC-002). Without this the streaming path goes silent on an STT
+        failure — worse than the batch `/turn` 502. The fallback is a normal bot answer,
+        so the output transport emits `BotStartedSpeakingFrame` and barge-in /
+        interruption apply unchanged (a customer can still cut the degraded utterance).
+        """
+        self._emit_degraded_spoken()
+        await self.push_frame(TextFrame(text=DEGRADED_FALLBACK_TEXT), direction)
+
+    def _emit_degraded_spoken(self) -> None:
+        if self._telemetry is None or self._envelope is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "degraded_reason": STT_DEGRADED_REASON,
+        }
+        self._telemetry.record(STT_DEGRADED_SPOKEN_EVENT, **attrs)
+        self._telemetry.metric(STT_DEGRADED_SPOKEN_METRIC, 1, **attrs)
 
     def _emit_barge_in(self) -> None:
         if self._telemetry is None or self._envelope is None:

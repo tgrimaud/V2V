@@ -1688,9 +1688,10 @@ the whole dialogue end to end). Enable per-turn latency distributions from live/
 
 **Parent:** EPIC-006 (Voice2Voice journey foundation)
 **Classification:** V1 hardening (degraded mode)
-**Status:** Proposed (2026-07-28) — **doable now** (logic exists; full validation needs Gradium).
+**Status:** 🚧 Implemented (2026-07-28) on `task/TASK-WEB-018-streaming-stt-degraded-fallback`
+— pending adversarial code review + QA before merge. Full live validation still needs Gradium.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-018-streaming-stt-degraded-fallback` (to create)
+**Branch:** `task/TASK-WEB-018-streaming-stt-degraded-fallback`
 **Surfaced by:** full adversarial code+doc review 2026-07-28
 (`docs/architecture/reviews/full-adversarial-review-2026-07-28.md`, medium functional finding).
 **Relates to:** TASK-WEB-006 (generic voice error responses / RF-013), ADR-0021 (degraded
@@ -1743,3 +1744,39 @@ policy already used everywhere else (no invented amount, no fabricated transcrip
 - This closes the batch-vs-streaming degraded-mode gap noted in the review; pair the QA
   wording with TASK-WEB-006 (generic error surfaces) so client-facing behaviour is
   consistent across transports.
+
+### Implementation notes (2026-07-28)
+
+Delivered on `task/TASK-WEB-018-streaming-stt-degraded-fallback` (branched from
+`feat/restart-from-scratch`):
+
+- **`StreamingSttProcessor._finalize` failure branch now speaks a fallback.** On a
+  `StreamingSttError` **or** `asyncio.TimeoutError` from `session.finish()` /
+  `wait_final()`, after `aclose()` + the existing `stt.failure` telemetry, the processor
+  calls the new `_speak_degraded_fallback(direction)` which pushes a **plain `TextFrame`**
+  carrying `conversation_backend.DEGRADED_FALLBACK_TEXT` downstream. Both TTS stages
+  (`TtsFrameProcessor`, `StreamingTtsProcessor`) synthesise plain `TextFrame`s (exact-type
+  allowlist), so the customer hears the safe fallback instead of silence. **No transcript
+  is fabricated** — a `TranscriptionFrame` is never emitted on failure, so the answer/LLM
+  step is not driven with invented text; the digit/currency-free text satisfies DEC-002.
+- **Barge-in preserved:** the fallback is a normal bot answer, so the output transport
+  emits `BotStartedSpeakingFrame` upstream and the existing anti-echo barge-in gate makes
+  the degraded utterance interruptible with no extra code (TASK-WEB-008 path unchanged).
+- **Observability:** kept the `stt` slice `outcome=error` (`stt.failure` event + `stt.request`
+  span with the correlation id / turn id) and added a new **`voice.stt.degraded_spoken`**
+  outcome event + **`voice.stt.degraded_spoken.count`** metric (attrs: correlation_id,
+  channel, provider, `degraded_reason="stt_finalize_failed"`) so QA can distinguish "spoke a
+  safe fallback" from a silent call.
+- **Tests (`./.venv/bin/python -m unittest discover tests` = 391 green;
+  `./.venv/bin/behave` = 11 features / 31 scenarios / 146 steps green):**
+  - `test_streaming_stt_processor.py`: `test_provider_error_speaks_degraded_fallback`
+    (StreamingSttError → no final, fallback spoken, digit-free, `voice.stt.degraded_spoken`
+    event+metric with the correlation id) and `test_finalize_timeout_speaks_degraded_fallback`
+    (`asyncio.TimeoutError` via a stalled `wait_final` + small `final_timeout_s`). The sink
+    now captures plain `TextFrame`s (exact type) alongside interims/finals.
+  - `streaming_stt.feature`: new scenario "A streaming STT finalize failure speaks the safe
+    degraded fallback" (no final transcript, fallback spoken, no digit/amount, degraded-spoken
+    event observable).
+- **Architecture:** `web_voice` (composition layer) may import `conversation_backend`
+  (`streaming_runtime` already does); `test_architecture_separation` stays green (the STT/TTS
+  half-separation and `conversation_backend` neutrality rules are untouched).
