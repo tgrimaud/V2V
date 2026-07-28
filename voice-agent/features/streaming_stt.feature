@@ -18,3 +18,12 @@ Feature: Streaming STT partial and final transcripts
     When the audio streams to the streaming STT processor
     Then no final transcript is produced
     And the streaming provider is never opened
+
+  # TASK-WEB-018 - a streaming STT finalize failure must be audible, never silent
+  Scenario: A streaming STT finalize failure speaks the safe degraded fallback
+    Given a customer speaking but the streaming STT provider fails to finalize
+    When the audio streams to the streaming STT processor
+    Then no final transcript is produced
+    And the safe degraded fallback is spoken to the customer
+    And the spoken fallback contains no digit or amount
+    And a degraded-spoken outcome event is recorded via OpenTelemetry

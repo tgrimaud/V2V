@@ -29,11 +29,13 @@ from pipecat.frames.frames import (  # noqa: E402
     InterimTranscriptionFrame,
     InterruptionFrame,
     StartFrame,
+    TextFrame,
     TranscriptionFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline  # noqa: E402
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
 
+from conversation_backend import DEGRADED_FALLBACK_TEXT  # noqa: E402
 from stt_validation.streaming import FinalTranscript, PartialTranscript, StreamingSttError  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from web_voice.end_of_turn import (  # noqa: E402
@@ -41,7 +43,12 @@ from web_voice.end_of_turn import (  # noqa: E402
     END_OF_TURN_SPAN,
     StreamingEndOfTurnDetector,
 )
-from web_voice.streaming_stt_processor import STT_REQUEST_SPAN, StreamingSttProcessor  # noqa: E402
+from web_voice.streaming_stt_processor import (  # noqa: E402
+    STT_DEGRADED_SPOKEN_EVENT,
+    STT_DEGRADED_SPOKEN_METRIC,
+    STT_REQUEST_SPAN,
+    StreamingSttProcessor,
+)
 
 SAMPLE_RATE = 16000
 FRAME_MS = 20
@@ -84,11 +91,12 @@ def _echo_frame() -> InputAudioRawFrame:
 class FakeSession:
     """Releases one scripted partial per audio frame; folds all into the final."""
 
-    def __init__(self, partials, final_text, *, error=None):
+    def __init__(self, partials, final_text, *, error=None, final_delay_s=0.0):
         self._queued = list(partials)
         self._released: list[PartialTranscript] = []
         self._final_text = final_text
         self._error = error
+        self._final_delay_s = final_delay_s
         self.finished = False
         self.closed = False
 
@@ -106,6 +114,9 @@ class FakeSession:
     async def wait_final(self) -> FinalTranscript:
         if self._error is not None:
             raise self._error
+        if self._final_delay_s:
+            # Stalls past the processor's final_timeout_s so wait_for raises TimeoutError.
+            await asyncio.sleep(self._final_delay_s)
         return FinalTranscript(self._final_text)
 
     async def aclose(self) -> None:
@@ -142,6 +153,7 @@ class _Sink(FrameProcessor):
         super().__init__()
         self.finals: list[str] = []
         self.interims: list[str] = []
+        self.texts: list[str] = []
         self.interruptions = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
@@ -150,6 +162,10 @@ class _Sink(FrameProcessor):
             self.interims.append(frame.text)
         elif isinstance(frame, TranscriptionFrame):
             self.finals.append(frame.text)
+        elif type(frame) is TextFrame:
+            # Plain answer/degraded TextFrame (exact type; STT subclasses handled above)
+            # — the frame the TTS stage would synthesise (TASK-WEB-018 fallback).
+            self.texts.append(frame.text)
         elif isinstance(frame, InterruptionFrame):
             self.interruptions += 1
         await self.push_frame(frame, direction)
@@ -284,18 +300,47 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.finals, [])
         self.assertTrue(session.closed)
 
-    async def test_provider_error_degrades_without_final(self):
-        # GIVEN the provider fails to produce a final
+    async def test_provider_error_speaks_degraded_fallback(self):
+        # GIVEN the provider fails to produce a final (StreamingSttError on wait_final)
         session = FakeSession([], "", error=StreamingSttError("boom"))
         telemetry = TelemetryRecorder()
         processor = _processor(FakeProvider(session), telemetry)
         # WHEN a full turn streams through
         frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
         sink = await _drive(processor, frames)
-        # THEN no final transcript is pushed and a sanitized stt.failure is recorded
+        # THEN no fabricated transcript is pushed, the session is closed and a sanitized
+        # stt.failure is still recorded (outcome=error, correlation id preserved)
         self.assertEqual(sink.finals, [])
         self.assertTrue(session.closed)
         self.assertTrue(any(e.name == "stt.failure" for e in telemetry.events()))
+        # AND the safe degraded fallback is spoken (a plain TextFrame to TTS, TASK-WEB-018)
+        # so the call is never silent — the text is digit/currency-free (DEC-002)
+        self.assertEqual(sink.texts, [DEGRADED_FALLBACK_TEXT])
+        self.assertFalse(any(ch.isdigit() for ch in DEGRADED_FALLBACK_TEXT))
+        # AND a degraded-spoken outcome event + metric prove the fallback was driven
+        spoken = [e for e in telemetry.events() if e.name == STT_DEGRADED_SPOKEN_EVENT]
+        self.assertEqual(len(spoken), 1)
+        self.assertEqual(spoken[0].attributes["correlation_id"], "corr-1")
+        self.assertEqual(spoken[0].attributes["degraded_reason"], "stt_finalize_failed")
+        self.assertTrue(any(m.name == STT_DEGRADED_SPOKEN_METRIC for m in telemetry.metrics()))
+
+    async def test_finalize_timeout_speaks_degraded_fallback(self):
+        # GIVEN wait_final stalls past the processor's final timeout (asyncio.TimeoutError)
+        session = FakeSession([], "", final_delay_s=0.5)
+        telemetry = TelemetryRecorder()
+        processor = StreamingSttProcessor(
+            FakeProvider(session), _envelope(), telemetry,
+            detector=_detector(), final_timeout_s=0.05,
+        )
+        # WHEN a full turn streams through
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        sink = await _drive(processor, frames)
+        # THEN the stalled turn fails safe: no final, session closed, degraded spoken
+        self.assertEqual(sink.finals, [])
+        self.assertTrue(session.closed)
+        self.assertEqual(sink.texts, [DEGRADED_FALLBACK_TEXT])
+        self.assertTrue(any(e.name == "stt.failure" for e in telemetry.events()))
+        self.assertTrue(any(e.name == STT_DEGRADED_SPOKEN_EVENT for e in telemetry.events()))
 
     async def test_finalizes_on_end_frame_client_stop(self):
         # GIVEN speech with no trailing silence window before the stream ends

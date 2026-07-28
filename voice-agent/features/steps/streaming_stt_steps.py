@@ -9,15 +9,21 @@ from pipecat.frames.frames import (
     InputAudioRawFrame,
     InterimTranscriptionFrame,
     StartFrame,
+    TextFrame,
     TranscriptionFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from stt_validation.streaming import FinalTranscript, PartialTranscript
+from conversation_backend import DEGRADED_FALLBACK_TEXT
+from stt_validation.streaming import FinalTranscript, PartialTranscript, StreamingSttError
 from voice_common.telemetry import TelemetryRecorder
 from web_voice.end_of_turn import DEFAULT_AMPLITUDE_THRESHOLD, StreamingEndOfTurnDetector
-from web_voice.streaming_stt_processor import STT_REQUEST_SPAN, StreamingSttProcessor
+from web_voice.streaming_stt_processor import (
+    STT_DEGRADED_SPOKEN_EVENT,
+    STT_REQUEST_SPAN,
+    StreamingSttProcessor,
+)
 
 SAMPLE_RATE = 16000
 FRAME_MS = 20
@@ -34,10 +40,11 @@ def _silence_frame() -> InputAudioRawFrame:
 
 
 class _FakeSession:
-    def __init__(self, partials, final_text):
+    def __init__(self, partials, final_text, *, error=None):
         self._queued = list(partials)
         self._released = []
         self._final_text = final_text
+        self._error = error
         self.closed = False
 
     async def send_audio(self, pcm):
@@ -52,6 +59,8 @@ class _FakeSession:
         return None
 
     async def wait_final(self):
+        if self._error is not None:
+            raise self._error
         return FinalTranscript(self._final_text)
 
     async def aclose(self):
@@ -88,6 +97,7 @@ class _Sink(FrameProcessor):
         super().__init__()
         self.finals = []
         self.interims = []
+        self.texts = []
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
@@ -95,6 +105,9 @@ class _Sink(FrameProcessor):
             self.interims.append(frame.text)
         elif isinstance(frame, TranscriptionFrame):
             self.finals.append(frame.text)
+        elif type(frame) is TextFrame:
+            # Plain answer/degraded TextFrame the TTS stage would synthesise (TASK-WEB-018).
+            self.texts.append(frame.text)
         await self.push_frame(frame, direction)
 
 
@@ -151,6 +164,12 @@ def step_silent(context):
     context.frames = [_silence_frame()] * 12
 
 
+@given("a customer speaking but the streaming STT provider fails to finalize")
+def step_failing_finalize(context):
+    _build(context, _FakeSession([], "", error=StreamingSttError("boom")))
+    context.frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+
+
 @when("the audio streams to the streaming STT processor")
 def step_stream(context):
     context.sink = asyncio.run(_run(context.processor, context.frames))
@@ -183,3 +202,20 @@ def step_no_final(context):
 @then("the streaming provider is never opened")
 def step_not_opened(context):
     assert context.provider.open_count == 0, context.provider.open_count
+
+
+@then("the safe degraded fallback is spoken to the customer")
+def step_degraded_spoken(context):
+    assert context.sink.texts == [DEGRADED_FALLBACK_TEXT], context.sink.texts
+
+
+@then("the spoken fallback contains no digit or amount")
+def step_no_digit(context):
+    spoken = context.sink.texts[0] if context.sink.texts else ""
+    assert not any(ch.isdigit() for ch in spoken), spoken
+
+
+@then("a degraded-spoken outcome event is recorded via OpenTelemetry")
+def step_degraded_event(context):
+    names = [e.name for e in context.telemetry.events()]
+    assert STT_DEGRADED_SPOKEN_EVENT in names, names
