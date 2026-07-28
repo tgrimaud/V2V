@@ -131,8 +131,11 @@ reuses the `CorrelationId` source, per the note above):
 
 **Parent:** EPIC-005 (Answer engine) — cross-cutting API hardening
 **Classification:** V1 hardening
-**Status:** Implemented (2026-07-28) — pending adversarial review + QA acceptance + user live
-validation. Added `springdoc-openapi-starter-webmvc-ui` (pinned **2.8.14**) → live OpenAPI **3.1.0**
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-07-28, fast-forward `bf9ec5c..f000d2d`)
+as part of the Sprint 9 closure. Adversarial review **94/100** (no blocking findings). Post-merge
+integration green: backend **305**, voice-agent unittest 390, behave 30/140. Live-confirmed on the
+RF-019 warm stack (springdoc active, `Started VoiceSupportApplication`, `/v3/api-docs` + Swagger UI
+served, `/api/conversation/converse` answering). Added `springdoc-openapi-starter-webmvc-ui` (pinned **2.8.14**) → live OpenAPI **3.1.0**
 doc at `/v3/api-docs` (+ `.yaml`) and Swagger UI at `/swagger-ui.html`, paths pinned in
 `application.yml`. `OpenApiConfig` (shared) sets the API info + an optional `x-api-key` security
 scheme and an `OperationCustomizer` that documents the cross-cutting `X-Correlation-Id` request

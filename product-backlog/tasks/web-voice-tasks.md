@@ -1545,7 +1545,8 @@ spec mirrors `docs/architecture/voice-runtime-http-contract.md` (source of truth
 the runtime, fetches `GET /api/voice/openapi.yaml` (`application/yaml`, 13 629 B), schema-
 validates it and asserts documented paths == server routes; unittest **390** green, behave
 **30 scenarios / 140 steps** green. Latency N/A (static meta route, not a journey slice).
-Merge-ready — awaiting the user's explicit merge request.
+**Merged** into `feat/restart-from-scratch` (2026-07-28, merge commit `a2be7a5`) as part of the
+Sprint 9 closure; post-merge integration green (backend 305, unittest 390, behave 30/140).
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-016-voice-openapi`
 

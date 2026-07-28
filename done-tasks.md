@@ -671,3 +671,55 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `voice-agent/features/call_end_farewell.feature` (+ steps) — BDD end-to-end + false-positive guard
 - `docs/architecture/adrs/ADR-0035-conversational-end-of-call-on-customer-farewell.md` (+ ADR README)
 - `product-backlog/{tasks/web-voice-tasks.md,stories/v1-user-stories.md,sprints/sprint-9-hardening.md,backlog-index.md}`
+
+## 2026-07-28 — Sprint 9 (Hardening / Assainissement) closed: OpenAPI pair merged + RF-019 live re-validation
+
+**Summary:**
+
+- **Closed Sprint 9** (hardening/assainissement). Everything merged into
+  `feat/restart-from-scratch`; sprint status flipped to ✅ Done across the sprint file
+  (`## Status` + roadmap row), the `backlog-index.md` registry and this ledger.
+- **TASK-BE-016 — OpenAPI/Swagger for the Java backend.** `springdoc-openapi` pinned to
+  **2.8.14** (2.8.15+ registers a swagger-ui path pattern rejected by Spring Boot 3.4.1's
+  `PathPatternParser` → "No more pattern data allowed after ** pattern element"; upgrade
+  path is Spring Boot ≥3.4.7). Aligned `swagger-annotations` to **2.2.38** in
+  dependencyManagement to kill a duplicate non-Jakarta 2.2.25 on the classpath
+  (`NoSuchMethodError: Parameter.validationGroups()`). `OpenApiConfig` sets API info + an
+  `x-api-key` security scheme and an `OperationCustomizer` documenting the `X-Correlation-Id`
+  request/response header on every operation; `@Tag`/`@Operation`/`@Schema` on all six
+  controllers + DTOs. Live OpenAPI 3.1 at `/v3/api-docs(.yaml)` + Swagger UI at
+  `/swagger-ui.html`. `mvn test` 305 green; adversarial 94/100. Fast-forwarded
+  `bf9ec5c..f000d2d`.
+- **TASK-WEB-016 — OpenAPI 3 spec for the Python voice runtime.** The runtime serves
+  `/api/voice/*` on the stdlib `http.server` (no framework → no auto-generated spec), so a
+  hand-written `web_voice/openapi.yaml` (3.0.3) mirrors
+  `docs/architecture/voice-runtime-http-contract.md` and is served at
+  `GET /api/voice/openapi.yaml`. Covers stt/tts/turn/webrtc + meta route, audio bodies, the
+  query-param envelope, the `/turn` `X-Voice-*`/`X-Answer-*` degraded headers, and the two
+  error shapes (`VoiceErrorBody`/`GuardError`), verified 1:1 against `server.py`. Regression
+  net: `tests/test_voice_openapi.py` (structural + **drift guard** vs the server route
+  constants + live serve) and a Behave discovery scenario that schema-validates the served
+  bytes with `openapi-spec-validator` (added test-only). QA **Go**
+  (`docs/qa/task-web-016-voice-openapi-qa.md`). Merged `a2be7a5`.
+- **Post-merge integration green:** backend **305**, voice-agent unittest **390**, behave
+  **30 scenarios / 140 steps**.
+- **RF-019 — live re-validation of the browser answering loop.** Brought up the warm stack
+  (Postgres pgvector + Ollama `nomic-embed-text` embeddings + Mistral `mistral-api` chat +
+  Gradium STT/TTS). `POST /api/conversation/converse` → 200 grounded FR billing answer
+  (confidence 0.76, 0.83 s). Full `POST /api/voice/turn` loop → 200, Gradium STT WER 0
+  (`Pourquoi ma facture de téléphone est plus élevée que le mois dernier ?`), Mistral answer
+  `outcome=success` (`http-backend`), 530 KB TTS WAV, correlation id, answer ≠ transcript.
+  Web UI at `:8090` renders (Record + FR/EN selector + transcript), no console errors
+  (Chrome DevTools MCP). Batch `/turn` latency ~10.5 s is expected (whole-clip batch STT+TTS;
+  streaming is the latency lever, TASK-WEB-014/015, deferred to the pilot-gate theme).
+- **Next:** Sprint 10 = customer identity + BSS/PDF evidence + deterministic comparison
+  (EPIC-002/003/004, gated by OQ-001/003/004); Sprint 11 = telephony + Genesys (EPIC-007).
+
+### Files changed
+- `backend/pom.xml`, `backend/src/main/resources/application.yml`
+- `backend/src/main/java/com/voicesupport/shared/config/OpenApiConfig.java` (+ `OpenApiConfigTest`)
+- backend REST controllers + DTOs (Health/Knowledge/Answer/Retrieval/Converse/ConverseStream + request/response records, `ErrorResponse`) — Swagger annotations
+- `voice-agent/web_voice/openapi.yaml`, `voice-agent/web_voice/server.py` (serve route)
+- `voice-agent/tests/test_voice_openapi.py`, `voice-agent/features/web_voice.feature` (+ steps), `voice-agent/features/environment.py`, `voice-agent/requirements.txt`
+- `docs/architecture/voice-runtime-http-contract.md`, `docs/qa/task-web-016-voice-openapi-qa.md`
+- `product-backlog/{sprints/sprint-9-hardening.md, backlog-index.md, tasks/web-voice-tasks.md, tasks/backend-hardening-tasks.md}`

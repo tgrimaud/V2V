@@ -15,8 +15,8 @@ per-turn latency measurement they depend on).
 
 ## Status
 
-**Status:** In progress (opened 2026-07-23). Scope set by user decision after the Sprint 8
-live tests surfaced BUG-005 and TASK-WEB-017. Delivered so far: TASK-WEB-013 + TASK-WEB-017
+**Status:** ✅ Done (closed 2026-07-28). Scope set by user decision after the Sprint 8
+live tests surfaced BUG-005 and TASK-WEB-017. Delivered: TASK-WEB-013 + TASK-WEB-017
 (both merged); BUG-004 closed (live-validated, fix already merged); TASK-ENV-001 + TASK-STT-012
 reconciled as already-delivered; **BUG-005 + TASK-WEB-012/RF-022** merged into
 `feat/restart-from-scratch` (2026-07-27, KB audience boundary + weak-confidence clarify band +
@@ -24,8 +24,18 @@ env-tunable Python floor; ADR-0034; adversarial 92/100; Java 262 / Python 353 + 
 **user-validated live** on the browser voice path); **BUG-001** merged (2026-07-27, intent-aware
 cyber guardrail; adversarial 93/100; backend 273 green; live QA passed); **TASK-QA-018** merged
 (2026-07-27, mutation testing 97 % killed/strength, threshold 95); **RF-017** merged (2026-07-27,
-stub DEC-002 no-amount invariant enforced at import). Remaining: TASK-BE-016, TASK-WEB-016,
-TASK-WEB-010, RF-019.
+stub DEC-002 no-amount invariant enforced at import); **TASK-WEB-010** merged (2026-07-27,
+call-end farewell, ADR-0035, user live-validated). **Closure (2026-07-28):** the Tier B OpenAPI
+pair merged into `feat/restart-from-scratch` — **TASK-BE-016** (springdoc 2.8.14, live OpenAPI 3.1
++ Swagger UI, `mvn test` 305 green, adversarial 94/100; ff `bf9ec5c..f000d2d`) and **TASK-WEB-016**
+(hand-written `web_voice/openapi.yaml` + drift guard + Behave discovery scenario, QA Go; merge
+`a2be7a5`). Post-merge integration green: backend **305**, voice-agent unittest **390**, behave
+**30 scenarios / 140 steps**. **RF-019** re-validated live (2026-07-28) on the warm stack
+(PG + Ollama `nomic-embed-text` + Mistral `mistral-api` + Gradium STT/TTS): `/api/conversation/converse`
+→ 200 grounded FR billing answer (confidence 0.76, 0.83 s); full `/api/voice/turn` loop → 200,
+STT WER 0 (`Pourquoi ma facture… le mois dernier ?`), Mistral answer `outcome=success`, 530 KB TTS
+WAV, correlation id; web UI at `:8090` renders (Record + FR/EN + transcript), no console errors.
+All Sprint 9 tickets are Done/merged.
 
 ## Roadmap Context
 
@@ -33,7 +43,7 @@ TASK-WEB-010, RF-019.
 |---|---|---|
 | Sprint 7 | Real answer engine — RAG over the KB (EPIC-005) | ✅ Done (2026-07-20) |
 | Sprint 8 | CSV KB ingestion — `CsvArticleConnector` + embedding `DomainClassifier` | ✅ Done (2026-07-23) |
-| **Sprint 9** | **Hardening / assainissement — small improvements & set-aside debt — this sprint** | Planned (2026-07-23) |
+| **Sprint 9** | **Hardening / assainissement — small improvements & set-aside debt — this sprint** | ✅ Done (closed 2026-07-28) |
 | Sprint 10 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 | Sprint 11 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
@@ -64,7 +74,7 @@ Grouped by tier. Full ticket details live in the linked task files / bug tickets
 | TASK-ENV-001 | Standardize the `voice-agent` test virtualenv | S | ✅ Already delivered (Sprint 5, on restart) — stale status reconciled 2026-07-23, no work needed |
 | TASK-STT-012 | Streaming VAD-based end-of-turn detection | S | ✅ Already delivered (Sprint 6, merged to restart — review 93/100 + QA Go) — stale status reconciled 2026-07-23, no work needed |
 | RF-017 | Assert the stub DEC-002 no-amount invariant at import time (or close as superseded by the HTTP backend default) | S | ✅ Done (2026-07-27, task/RF-017) — `assert_no_fabricated_amount()` enforces the digit/currency-free invariant at import in `stub_backend.py` (fail-fast `ValueError`), guard itself tested; 356 unittest + 27 behave green. **Independent adversarial review 93/100 (QA gate Pass), no blocking findings** — digit-anchored parity with the production `OutputGuardrail` documented per the non-blocking finding |
-| RF-019 | Live re-validation of the browser answering loop (Chrome DevTools MCP) — the live stack is already up | S/M | Gated (manual live QA) |
+| RF-019 | Live re-validation of the browser answering loop (Chrome DevTools MCP) — the live stack is already up | S/M | ✅ Done (2026-07-28) — warm stack (PG + Ollama `nomic-embed-text` + Mistral + Gradium): `/converse` 200 grounded FR answer (conf 0.76, 0.83 s); full `/api/voice/turn` 200, STT WER 0, Mistral `success`, 530 KB TTS WAV, correlation id; web UI at `:8090` renders (Record + FR/EN + transcript), no console errors |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — test effectiveness, not just coverage | M | ✅ Done (merged 2026-07-27, `58cdb2c`) — 97 % killed / 97 % strength, threshold 95, 9 equivalent survivors accepted |
 
 ### Tier B — API / documentation hardening
