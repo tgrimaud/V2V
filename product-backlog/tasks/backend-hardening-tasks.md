@@ -618,3 +618,17 @@ Delivered on `task/TASK-BE-019-endpoint-auth` (branched from `feat/restart-from-
   without a key and with a wrong key, accepted **200** with the matching key, and that the
   use cases never run on a rejected request (fakes throw if invoked). All pre-existing slice
   tests stay green (gate open-by-default when no key is set), ArchUnit OK.
+
+### Adversarial review remediation (2026-07-28)
+
+Self-review before QA (adversarial-code-review skill, score **93/100**, QA gate **Pass**). Two
+non-blocking findings fixed in-loop:
+
+- **Constant-time key comparison:** `ApiKeyGuard.authorized` now uses
+  `MessageDigest.isEqual(...)` instead of `String.equals` — a plain equals short-circuits on the
+  first differing byte and leaks the shared secret through response timing on a security gate.
+- **Dead code:** removed the unused `isEnforced()` helper (YAGNI).
+
+Remaining non-blocking (accepted): the converse endpoints keep their empty-body 401 vs the new
+paths' `ErrorResponse` 401 (documented, future unification); CORS preflight `OPTIONS` is not a
+concern (server-to-server callers, no browser CORS on these routes). `mvn test` **312** green.
