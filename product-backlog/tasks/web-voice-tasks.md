@@ -2142,8 +2142,20 @@ Scenario: The streamed path preserves conversation memory and safe failure
 ADR-0029 (pilot latency criterion)
 **Depends on:** TASK-WEB-014 (live baseline), TASK-BE-017 (backend LLM/embedding warm-up path)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
+**Status:** In progress (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
 `feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 2) per user decision 2026-07-29.
+Runtime implemented 2026-07-29: **STT session pre-warm** (`SessionWarmer`, extracted from
+`TtsSessionWarmer` so both share one provider-agnostic warmer; `StreamingSttProcessor` pre-opens a
+spare at `StartFrame`, hands it out on the first `_open_session`, discards any unused spare on
+`EndFrame`/`CancelFrame` — no leak; `VOICE_STT_PREWARM=0` disables) + **connect-time backend
+warm-up trigger** (`AnswerProcessor` fires `backend.warm_up()` once on `StartFrame`, off the
+critical path via `asyncio.to_thread`, failure non-blocking → recorded as a `miss`;
+`HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL consuming
+TASK-BE-017; `VOICE_BACKEND_WARMUP=0` disables). Telemetry: `voice.backend.warmup` event +
+`voice.backend.warmup.count` metric (outcome `success`/`miss`). Tests: unittest **439 green**
+(new: STT pre-warm lifecycle/no-leak/fallback, backend trigger once/disabled/absent/failure/miss,
+HTTP `warm_up` URL-derivation/non-2xx/fault/no-key-leak, env toggles), behave **12/33/154 green**.
+Pending: **live** cold-vs-warm turn-1 sample (real backend, needs TASK-BE-017 `/warm-up` reachable).
 **Priority:** High
 
 ### Objective

@@ -51,3 +51,8 @@ class StubBackendAdapter:
             outcome=AnswerOutcome.SUCCESS,
             correlation_id=request.correlation_id,
         )
+
+    def warm_up(self) -> bool:
+        # No cold models offline: warm-up is a symmetric no-op so the connect-time trigger
+        # (TASK-WEB-021) is harmless in dev/tests and mirrors the HTTP adapter's contract.
+        return True

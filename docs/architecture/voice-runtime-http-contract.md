@@ -79,6 +79,20 @@ on. The trigger is a runtime-local timer (Flow A, no broker) per ADR-0036.
 | `VOICE_BACKEND_API_KEY` | no | Sent as `x-api-key`; never logged or echoed |
 | `VOICE_BACKEND_TIMEOUT_S` | no (default `8.0`) | Per-request timeout |
 
+Connect-time warm-up (TASK-WEB-021, lever 2) is env-only and removes the first-turn
+cold-start penalty by warming the STT session and the backend models on WebRTC connect:
+
+- `VOICE_STT_PREWARM` (`0`/`false`/`no`/`off` disables; on by default) — the
+  `StreamingSttProcessor` pre-opens a spare streaming STT session at `StartFrame` and
+  hands it to the first turn (a failed spare falls back to a fresh open; any unused spare
+  is discarded on end/cancel — no leak).
+- `VOICE_BACKEND_WARMUP` (`0`/`false`/`no`/`off` disables; on by default) — the
+  `AnswerProcessor` fires `backend.warm_up()` once at `StartFrame`, off the critical path;
+  the `http` backend POSTs to the `/warm-up` sibling of `VOICE_BACKEND_URL` (see the
+  backend `POST /api/conversation/warm-up`, TASK-BE-017). A failed warm-up never blocks the
+  first real turn. Observability: `voice.backend.warmup` event + `voice.backend.warmup.count`
+  metric with `correlation_id`, `provider` and `outcome` (`success`/`miss`).
+
 All endpoints are same-origin, unauthenticated on the pilot host (identity is
 gated by OQ-001 / RF-006). Requests carry an optional envelope via query params
 `conversation_id`, `session_id`, `correlation_id`; missing ids are generated.

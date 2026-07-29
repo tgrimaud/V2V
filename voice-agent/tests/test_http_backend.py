@@ -160,6 +160,53 @@ class HttpBackendDegradedTest(unittest.TestCase):
         self.assertNotIn(API_KEY, json.dumps(result.to_dict()))
 
 
+class HttpBackendWarmUpTest(unittest.TestCase):
+    """TASK-BE-017 / lever 2: best-effort connect-time warm-up of the backend models."""
+
+    def test_warm_up_posts_to_the_derived_endpoint_with_the_key(self) -> None:
+        # GIVEN a converse endpoint URL and a capturing transport returning 200
+        transport = _CapturingTransport(HttpResponse(200, json.dumps({"fullyWarmed": True})))
+        adapter = HttpBackendAdapter(ENDPOINT, api_key=API_KEY, transport=transport)
+        # WHEN warm-up is triggered
+        warmed = adapter.warm_up()
+        # THEN it POSTs to the /warm-up sibling of the converse URL with the key header
+        self.assertTrue(warmed)
+        call = transport.calls[0]
+        self.assertEqual(call["url"], "https://backend.internal/api/conversation/warm-up")
+        self.assertEqual(call["headers"]["x-api-key"], API_KEY)
+        self.assertEqual(call["body"], b"")
+
+    def test_warm_up_derives_from_a_converse_stream_url(self) -> None:
+        # GIVEN a streaming converse URL
+        transport = _CapturingTransport(HttpResponse(200, "{}"))
+        adapter = HttpBackendAdapter(
+            "https://backend.internal/api/conversation/converse-stream", transport=transport
+        )
+        # WHEN warm-up is triggered -> THEN it still targets the /warm-up sibling
+        adapter.warm_up()
+        self.assertEqual(transport.calls[0]["url"], "https://backend.internal/api/conversation/warm-up")
+
+    def test_warm_up_returns_false_on_non_2xx(self) -> None:
+        # GIVEN the warm-up endpoint returns a 503
+        adapter = HttpBackendAdapter(ENDPOINT, transport=_CapturingTransport(HttpResponse(503, "down")))
+        # WHEN triggered -> THEN it reports "not warmed" (never raises)
+        self.assertFalse(adapter.warm_up())
+
+    def test_warm_up_swallows_transport_faults(self) -> None:
+        # GIVEN a transport that raises (endpoint unreachable / timeout)
+        adapter = HttpBackendAdapter(ENDPOINT, transport=_CapturingTransport(error=TimeoutError("timed out")))
+        # WHEN triggered -> THEN it returns False and never raises (best-effort)
+        self.assertFalse(adapter.warm_up())
+
+    def test_warm_up_never_leaks_the_key_even_when_the_transport_raises(self) -> None:
+        # GIVEN a transport whose fault message carries the key
+        adapter = HttpBackendAdapter(
+            ENDPOINT, api_key=API_KEY, transport=_CapturingTransport(error=RuntimeError(f"boom {API_KEY}"))
+        )
+        # WHEN triggered -> THEN no exception surfaces (so nothing to leak) and it returns False
+        self.assertFalse(adapter.warm_up())
+
+
 class HttpBackendWithTelemetryTest(unittest.TestCase):
     def test_low_confidence_success_is_degraded_by_the_answer_step(self) -> None:
         # GIVEN an HTTP success with a low confidence, wrapped by the shared answer step

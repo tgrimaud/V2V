@@ -145,6 +145,18 @@ def _silence_window_config() -> dict[str, float]:
     return {"silence_window_ms": value}
 
 
+def _stt_prewarm_enabled() -> bool:
+    """Whether to pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2).
+
+    On by default; disabled only by an explicit falsy value so a deployment can turn the
+    STT pre-warm off (e.g. an ASR provider that drops idle sockets) without a code change.
+    """
+    raw = os.environ.get("VOICE_STT_PREWARM")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
 def _warn_silence_clamp_once(requested: float) -> None:
     """Warn (once per process) that a below-floor end-of-turn hold was clamped."""
     global _silence_clamp_warned
@@ -341,6 +353,9 @@ class WebRtcSignalingService:
             # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
             # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
             **_silence_window_config(),
+            # Pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2);
+            # VOICE_STT_PREWARM=0 disables it without a code change.
+            prewarm=_stt_prewarm_enabled(),
         )
         farewell = self._build_farewell_processor(envelope, telemetry)
         session = StreamingVoiceSession(

@@ -23,14 +23,18 @@ from uuid import uuid4
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    CancelFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
+    StartFrame,
     TextFrame,
     TranscriptionFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+from .session_warmer import SessionWarmer
 
 from conversation_backend import DEGRADED_FALLBACK_TEXT
 from stt_validation.models import SttOutcome
@@ -94,6 +98,7 @@ class StreamingSttProcessor(FrameProcessor):
         final_timeout_s: float = DEFAULT_FINAL_TIMEOUT_S,
         barge_in_amplitude_threshold: int = DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD,
         barge_in_confirm_frames: int = DEFAULT_BARGE_IN_CONFIRM_FRAMES,
+        prewarm: bool = True,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -101,6 +106,13 @@ class StreamingSttProcessor(FrameProcessor):
         self._telemetry = telemetry
         self._provider_name = provider_name
         self._final_timeout_s = final_timeout_s
+        # TASK-WEB-021 lever 2: pre-open the first turn's STT session at pipeline start so
+        # its connect + setup handshake is off the per-turn critical path. Gradium's ASR
+        # socket is single-use, so we pre-open a *spare* (not reuse); the spare is handed
+        # out on the first `_open_session` and any unused spare is discarded at teardown
+        # so a pre-warmed connection is never leaked. Tests opt out to assert the raw path.
+        self._prewarm = prewarm
+        self._warmer = SessionWarmer(provider)
         self._barge_in_amplitude_threshold = barge_in_amplitude_threshold
         self._barge_in_confirm_frames = max(1, barge_in_confirm_frames)
         # TASK-WEB-015 lever 3: the trailing-silence hold is env-tunable (via the
@@ -138,8 +150,18 @@ class StreamingSttProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
             await self._on_audio(frame, direction)
+        elif isinstance(frame, StartFrame):
+            # Pre-open the first turn's STT session at pipeline start (TASK-WEB-021).
+            if self._prewarm:
+                self._warmer.start()
+            await self.push_frame(frame, direction)
         elif isinstance(frame, EndFrame):
             await self._on_end(direction)
+            await self._warmer.aclose()
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, CancelFrame):
+            # Cancelled call: drop any unused spare so a pre-warmed socket is never leaked.
+            await self._warmer.aclose()
             await self.push_frame(frame, direction)
         elif isinstance(frame, (BotStartedSpeakingFrame, BotStoppedSpeakingFrame)):
             # The output transport emits these upstream as it starts / stops playing the
@@ -205,7 +227,10 @@ class StreamingSttProcessor(FrameProcessor):
             await self._discard_session()
 
     async def _open_session(self) -> None:
-        self._session = await self._provider.open()
+        # With pre-warm, hand out the spare opened at StartFrame (its connect+setup is
+        # already paid); otherwise open on demand. `acquire()` falls back to a fresh open
+        # if the spare's open failed, so a cold/failed spare never blocks the turn.
+        self._session = await self._warmer.acquire() if self._prewarm else await self._provider.open()
         self._turn_timer = Timer()
         self._first_partial_ms = None
 

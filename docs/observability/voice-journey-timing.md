@@ -185,6 +185,20 @@ canonical slice and builds a `LatencyReport` (nearest-rank p50/p95/p99) per
 instrumented slice. Spans accumulate on a single `TelemetryRecorder` across the
 reviewed sample, so percentiles sharpen as the sample grows.
 
+### Connect-time warm-up observability (TASK-WEB-021, lever 2)
+
+The connect-time warm-up (STT session pre-warm + backend LLM/embedding warm call, both
+fired at `StartFrame` to remove the turn-1 cold-start penalty) is **not** a per-turn
+latency slice — it is off the critical path — but it is observable so QA can tell a warm
+turn-1 from a cold one. The backend warm-up trigger emits a `voice.backend.warmup` event
+and a `voice.backend.warmup.count` metric carrying `correlation_id`, `provider` and
+`outcome` (`success` when the backend reports warmed, `miss` on any failure/timeout — a
+miss never blocks the first turn). The STT pre-warm is inferred from the first turn's
+`stt` slice (a warm turn-1 no longer carries the session-open cost). Both are env-tunable:
+`VOICE_STT_PREWARM=0` / `VOICE_BACKEND_WARMUP=0` disable them. When reading a turn-1 sample,
+confirm a `voice.backend.warmup` `success` was recorded at connect before attributing a low
+turn-1 latency to the warm path.
+
 ## Reproduce
 
 ```bash

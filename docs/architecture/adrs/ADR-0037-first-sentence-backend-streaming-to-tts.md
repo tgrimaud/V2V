@@ -119,6 +119,22 @@ runtime-owned; the backend LLM/embedding warm call is a **backend** concern (nee
 backend warm endpoint) and is tracked as a backend follow-up, not shipped blind from
 the runtime.
 
+**Delivered (TASK-WEB-021, 2026-07-29).** The `TtsSessionWarmer` was extracted into a
+provider-agnostic `SessionWarmer` (`web_voice/session_warmer.py`); `TtsSessionWarmer`
+is now a thin subclass, so STT and TTS share one warmer with identical
+open/acquire/aclose semantics. `StreamingSttProcessor` pre-opens a spare STT session at
+`StartFrame`, hands it out on the first `_open_session` (a failed spare falls back to a
+fresh on-demand open — never blocks the turn), and discards any unused spare on
+`EndFrame`/`CancelFrame` (no leak). The backend warm call is wired from `AnswerProcessor`:
+on `StartFrame` it fires `backend.warm_up()` once, off the critical path
+(`asyncio.to_thread`), swallowing any fault (recorded as a `miss`, never blocks connect);
+`HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL
+(consuming TASK-BE-017), with a generous timeout since the cold call runs off-path.
+Both are env-tunable: `VOICE_STT_PREWARM=0` and `VOICE_BACKEND_WARMUP=0` disable them.
+Observability: `voice.backend.warmup` event + `voice.backend.warmup.count` metric carry
+the correlation id, provider and `outcome` (`success`/`miss`). Still pending: a **live**
+cold-vs-warm turn-1 sample (real backend with `/warm-up` reachable) to confirm the delta.
+
 ## Status of TASK-WEB-015 at this ADR
 
 - **Lever 3 (end-of-turn hold tuning):** implemented (env-tunable
@@ -126,5 +142,8 @@ the runtime.
   offline, deterministic, testable now.
 - **Lever 1 (this ADR):** designed + gated on the DEC-002 SSE contract and the
   TASK-WEB-014 live baseline (default-off feature flag).
-- **Lever 2:** designed (mirror `TtsSessionWarmer`), scheduled with the live pass;
-  backend warm call split to a backend follow-up.
+- **Lever 2 (TASK-WEB-021):** runtime **delivered** — shared `SessionWarmer` pre-opens
+  the first STT session at connect (no leak, `VOICE_STT_PREWARM`) + non-blocking
+  `backend.warm_up()` trigger from `AnswerProcessor` (`POST /warm-up`, TASK-BE-017,
+  `VOICE_BACKEND_WARMUP`); telemetry `voice.backend.warmup` (success/miss). Pending the
+  live turn-1 cold-vs-warm sample.

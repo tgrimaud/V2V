@@ -30,6 +30,10 @@ from .models import AnswerOutcome, AnswerRequest, AnswerResult
 from .port import EmptyTranscriptError
 
 DEFAULT_TIMEOUT_S = 8.0
+# Warm-up (TASK-BE-017 / lever 2) runs a cold LLM + embedding call, which can take
+# several seconds on the very first hit — give it a more generous ceiling than a turn,
+# since it runs off the per-turn critical path and a timeout just means "not warmed".
+WARM_UP_TIMEOUT_S = 30.0
 # Provisional conversation contract (formalized by the TASK-WEB-003-G ADR): the
 # request carries the transcript + traceability ids; the response carries the answer
 # text and an optional confidence. `answer` is accepted as an alias for `text`.
@@ -79,6 +83,26 @@ class HttpBackendAdapter:
         except Exception as exc:  # noqa: BLE001 - any transport fault degrades to a safe reply
             return self._degraded(request, exc)
         return self._map_response(request, response)
+
+    def warm_up(self) -> bool:
+        """Best-effort connect-time warm-up of the backend models (TASK-BE-017 / lever 2).
+
+        POSTs to the warm-up endpoint derived from the converse URL so the first real
+        turn does not pay the cold LLM + embedding cost. Runs off the per-turn critical
+        path; never raises and never leaks the key — any fault returns False (not warmed).
+        """
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["x-api-key"] = self._api_key
+        try:
+            response = self._transport(self._warm_up_url(), headers, b"", WARM_UP_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 - warm-up is best-effort; a fault must never surface
+            return False
+        return 200 <= response.status < 300
+
+    def _warm_up_url(self) -> str:
+        base = self._url.rsplit("/", 1)[0]
+        return f"{base}/warm-up"
 
     def _headers(self, request: AnswerRequest) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
