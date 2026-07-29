@@ -19,11 +19,16 @@ Sprint 12**.
 ## Status
 
 **Status:** In progress (started 2026-07-29). Scope set by user decision 2026-07-29 (promote
-pilot-latency ahead of billing; add spoken filler phrases to the scope). First ticket done to
-the merge-ready gate: **TASK-WEB-019** (generic spoken filler, US-020) on
-`task/TASK-WEB-019-filler-phrase` — adversarial review 92/100 + QA GO
-(`docs/qa/task-web-019-filler-qa-report.md`), awaiting the user's explicit merge. Remaining:
-TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
+pilot-latency ahead of billing; add spoken filler phrases to the scope).
+
+**Sprint branch:** `feat/sprint-10-pilot-latency` (off `feat/restart-from-scratch`). Adopting the
+**two-level branch model** (decision 2026-07-29): ticket branches fork from and merge back into
+this sprint branch (`git merge --no-ff`); the sprint branch merges into `feat/restart-from-scratch`
+only at sprint closure, on the user's explicit request. See `docs/operations/development-workflow.md`.
+
+First ticket integrated into the sprint branch: **TASK-WEB-019** (generic spoken filler, US-020) —
+adversarial review 92/100 + QA GO (`docs/qa/task-web-019-filler-qa-report.md`), merged into
+`feat/sprint-10-pilot-latency`. Remaining: TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
 
 ## Roadmap Context
 
@@ -55,7 +60,7 @@ TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | Merged; pilot closure pending in this sprint |
 | TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | Planned |
-| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Merge-ready — V1 generic filler (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); merge on user request |
+| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
 

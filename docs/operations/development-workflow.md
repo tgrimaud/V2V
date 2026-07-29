@@ -19,21 +19,35 @@ ticket, create the ticket first, get the scope clear enough for delivery, then
 start implementation. This applies to user stories, bugs, technical tasks,
 documentation changes that affect delivery, and process/tooling changes.
 
-Each development ticket uses its own branch:
+### Branch model: sprint branch + ticket branches
 
-- user story branch: `us/US-XXX-short-name`;
-- bug fix branch: `fix/BUG-XXX-short-name`;
-- technical task branch: `task/TASK-XXX-short-name`.
+Delivery uses a **two-level branch model** (decision 2026-07-29):
 
-The branch name must include the ticket id. Do not group unrelated tickets in one
-branch. If QA finds bugs during a story, create explicit bug tickets and fix each
-bug through the bug ticket lifecycle. Small related fixes may share the same bug
-branch only when they are part of the same root defect and QA evidence.
+1. **Sprint branch** — one integration branch per sprint, named
+   `feat/sprint-NN-short-theme` (e.g. `feat/sprint-10-pilot-latency`), created from the
+   delivery branch `feat/restart-from-scratch` at sprint start. It aggregates every ticket
+   of the sprint.
+2. **Ticket branch** — each development ticket still uses its own branch, created **from the
+   current sprint branch** (not from `feat/restart-from-scratch`):
+   - user story branch: `us/US-XXX-short-name`;
+   - bug fix branch: `fix/BUG-XXX-short-name`;
+   - technical task branch: `task/TASK-XXX-short-name`.
 
-The user remains the final validator. No branch is merged into another delivery
-branch or into `main` unless the user explicitly asks for that merge. Passing
-developer tests, adversarial review and QA validation makes a branch merge-ready;
-it does not authorize the merge.
+The ticket branch name must include the ticket id. Do not group unrelated tickets in one
+ticket branch. A ticket branch is merged **into its sprint branch** once it is merge-ready
+(developer tests + adversarial review ≥ 90% + QA GO); prefer `git merge --no-ff` so each
+ticket integration is a visible marker on the sprint branch. If QA finds bugs during a story,
+create explicit bug tickets and fix each bug through the bug ticket lifecycle on its own
+branch off the sprint branch. Small related fixes may share the same bug branch only when
+they are part of the same root defect and QA evidence.
+
+The sprint branch is merged into `feat/restart-from-scratch` **only when the sprint is closed**
+and only on the user's explicit request (see the sprint-closure rule in `AGENTS.md`).
+
+The user remains the final validator. No branch — ticket **or** sprint — is merged into another
+delivery branch or into `main` unless the user explicitly asks for that merge. Passing
+developer tests, adversarial review and QA validation makes a branch merge-ready; it does not
+authorize the merge.
 
 ## OpenTelemetry By Default
 
@@ -80,7 +94,9 @@ For each selected user story:
 
 1. Confirm the story is in `product-backlog/stories/v1-user-stories.md`. If the
    requested work has no ticket, create one before implementation.
-2. Create or switch to a dedicated branch named `us/US-XXX-short-name`.
+2. Ensure the sprint branch `feat/sprint-NN-short-theme` exists (create it from
+   `feat/restart-from-scratch` at sprint start if it does not), then create or switch to a
+   dedicated ticket branch named `us/US-XXX-short-name` **off the sprint branch**.
 3. Confirm its parent epic and acceptance criteria are still valid.
 4. Assign the implementation owner:
    - frontend developer if the story is mostly UI/web interaction;
@@ -283,9 +299,12 @@ docs is treated as an incomplete ticket.
 ## Workflow Summary
 
 ```text
+Sprint start
+  -> Create sprint branch feat/sprint-NN-short-theme from feat/restart-from-scratch
+
 Select US
   -> Verify/create ticket
-  -> Create dedicated branch named after the ticket
+  -> Create ticket branch named after the ticket, OFF the sprint branch
   -> Assign frontend/backend developer
   -> Assign QA in parallel
   -> Developer implements + self-checks
@@ -296,8 +315,12 @@ Select US
       -> if bugs: QA creates bug ticket, developer fixes on bug branch,
          adversarial review repeats, QA retests
   -> Update documentation if needed (or state "documentation not affected")
-  -> Branch is merge-ready when gates pass
-  -> Merge only when the user explicitly asks
+  -> Ticket branch is merge-ready when gates pass
+  -> Merge ticket branch INTO the sprint branch (git merge --no-ff) when the user asks
+
+Sprint close
+  -> Merge sprint branch INTO feat/restart-from-scratch (only on the user's explicit request)
+  -> Flip sprint file + backlog-index registry + done-tasks.md to Done, commit + push
 ```
 
 ## Open Process Questions

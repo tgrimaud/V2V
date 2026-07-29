@@ -16,14 +16,17 @@
 > remain un-rebuilt (the web client is the `web_voice/` static page). Still
 > target-only: billing/BSS, invoice comparison, escalation/Genesys, telephony.
 
-> Delivery rule: no development starts without a ticket. Each user story, bug or
-> technical task uses its own branch named after the ticket
-> (`us/US-XXX-short-name`, `fix/BUG-XXX-short-name`,
-> `task/TASK-XXX-short-name`). The user is the final validator; do not merge any
-> branch unless the user explicitly asks for the merge.
+> Delivery rule: no development starts without a ticket. Branching uses a **two-level
+> model** (decision 2026-07-29): one sprint branch `feat/sprint-NN-short-theme` per sprint,
+> created from `feat/restart-from-scratch`, and each user story / bug / technical task on its
+> own ticket branch (`us/US-XXX-short-name`, `fix/BUG-XXX-short-name`,
+> `task/TASK-XXX-short-name`) created **off the current sprint branch**. A merge-ready ticket
+> branch merges into its sprint branch (`git merge --no-ff`); the sprint branch merges into
+> `feat/restart-from-scratch` only at sprint closure. The user is the final validator; do not
+> merge any branch — ticket or sprint — unless the user explicitly asks for the merge.
 > When the user says a ticket is validated, record the validation, rerun checks,
 > then commit and push the ticket branch automatically. Merge still requires an
-> explicit user request.
+> explicit user request. Full model + diagram: `docs/operations/development-workflow.md`.
 
 ## Application layout
 
