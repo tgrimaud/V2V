@@ -28,7 +28,22 @@ only at sprint closure, on the user's explicit request. See `docs/operations/dev
 
 First ticket integrated into the sprint branch: **TASK-WEB-019** (generic spoken filler, US-020) —
 adversarial review 92/100 + QA GO (`docs/qa/task-web-019-filler-qa-report.md`), merged into
-`feat/sprint-10-pilot-latency`. Remaining: TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
+`feat/sprint-10-pilot-latency`. In progress: **TASK-WEB-015** on `task/TASK-WEB-015-latency-levers` —
+**lever 3 delivered + live-accepted** (env-tunable end-of-turn hold; live pass 2026-07-29 = −150 ms
+deterministic 500→350, 0 false-cut, tuned default 350 ms recommended), **levers 1 & 2 designed**
+(ADR-0037), gated on the DEC-002 vetted-stream backend contract + the TASK-WEB-014 live baseline.
+
+**Live pilot pass 2026-07-29 (TASK-WEB-014 measurement closure).** A warm live sample against the
+**real backend** (streaming WebRTC, headphones) measured mouth-to-ear `voice_to_first_audio` p95
+**≈ 4.1–4.4 s** and `time_to_first_audio` p95 **≈ 3.8–3.9 s** → **ADR-0029 gate FAIL** (criteria
+≤ 1.5 s / ≤ 1.2 s), dominated by the serial STT (~1 s p50) + backend first-token (~1 s p50) slices;
+TTS is flat (pre-warmed). This is the honest pilot number TASK-WEB-014 was missing → **NO-GO on the
+latency gate as-is**, fix path = TASK-WEB-015 **levers 1 (SSE first-sentence → TTS) + 2 (connect-time
+warm-up)**, now confirmed as the decisive work. The spoken filler (TASK-WEB-019) fired live on the
+slowest turns without skewing `tts_first_audio`. Write-up + evidence:
+`docs/qa/streaming-voice-qa-report.md` (Live Pilot Pass 2026-07-29),
+`docs/qa/streaming-latency-eot{500,350}-live-2026-07-29.json`. Remaining: TASK-WEB-015 levers 1 & 2
+(live before/after) + formal adversarial/QA sign-off of the TASK-WEB-014 closure.
 
 ## Roadmap Context
 
@@ -58,8 +73,11 @@ adversarial review 92/100 + QA GO (`docs/qa/task-web-019-filler-qa-report.md`), 
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | Merged; pilot closure pending in this sprint |
-| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | Planned |
+| TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | **Live sample captured 2026-07-29**: mouth-to-ear p95 ≈ 4.1–4.4 s → **ADR-0029 gate FAIL** (NO-GO as-is); fix path = WEB-015 levers 1 & 2. Formal adversarial/QA sign-off pending |
+| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | **Lever 3 done + live-accepted** (−150 ms, 0 false-cut, tuned default 350 ms). Levers 1 & 2 **split out** into TASK-WEB-020 / TASK-WEB-021 (+ backend TASK-BE-017) on 2026-07-29 |
+| TASK-WEB-020 | Lever 1 — stream the backend answer to TTS on the first vetted sentence (consume `converse-stream` SSE instead of blocking `/converse`) | Optimize | To do — backend stream already DEC-002-safe per sentence; feature-flagged; depends on TASK-BE-017 + live baseline |
+| TASK-WEB-021 | Lever 2 — connect-time warm-up of the STT session + first LLM/embedding call (mirror `TtsSessionWarmer`) | Optimize | To do — removes the turn-1 cold-start penalty; depends on TASK-BE-017 |
+| TASK-BE-017 | Backend support for the levers — warm-up path (lever 2) + vetted-stream contract test / optional early confidence (lever 1) | Enable | To do — backend dependency of TASK-WEB-020/021 |
 | TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
@@ -83,3 +101,9 @@ Full ticket details live in `tasks/web-voice-tasks.md`.
   behaviour is observable via telemetry.
 - Each ticket passes adversarial review ≥ 90% then QA before the branch is merge-ready. Merge
   only on the user's explicit request.
+
+**Progress (2026-07-29).** TASK-WEB-014 live mouth-to-ear sample **captured** (real backend) →
+ADR-0029 gate **FAIL** (p95 ≈ 4.1–4.4 s; the measurement bar is met, the latency bar is not —
+NO-GO as-is). TASK-WEB-015 **lever 3 measured before/after** (−150 ms deterministic, 0 false-cut,
+tuned default 350 ms). Still open for exit: TASK-WEB-015 levers 1 & 2 (live before/after) — the
+decisive latency work — and the formal adversarial/QA sign-off of the TASK-WEB-014 closure.

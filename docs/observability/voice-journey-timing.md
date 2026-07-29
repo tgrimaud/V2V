@@ -227,6 +227,63 @@ the streaming composite section above) and prints the pilot-acceptance gate
 [`docs/qa/streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md) and the
 ADR-0018 evidence section.
 
+#### Pilot-latency live pass: end-of-turn hold before/after (TASK-WEB-015 lever 3)
+
+The lever-3 mechanism (env-tunable hold, ADR-0037) is delivered and reviewed, but its
+**behavioural acceptance** — does a shorter hold actually cut perceived latency without
+raising the false-endpoint (premature-cut) rate — is a **live** gate. Capture it with
+the same harness, against the **real backend** (`--backend http`, not the stub, per
+TASK-WEB-014), by running the sample twice and comparing:
+
+```bash
+cd voice-agent
+set -a && source ../.env && set +a
+# A) baseline hold (500 ms default): start the real-backend streaming server, capture stderr
+python3 -m web_voice.server --host 127.0.0.1 --port 8090 \
+  --provider gradium --backend http --runtime pipecat \
+  --webrtc auto --stt-mode streaming --tts-mode streaming 2> /tmp/eot-500.jsonl
+python3 scripts/webrtc_live_client.py --url http://127.0.0.1:8090 --audio speech.wav --hold 12  # xN warm turns
+
+# B) tuned hold (350 ms): same run with the override (a below-floor value clamps + warns once)
+VOICE_END_OF_TURN_SILENCE_MS=350 python3 -m web_voice.server --host 127.0.0.1 --port 8090 \
+  --provider gradium --backend http --runtime pipecat \
+  --webrtc auto --stt-mode streaming --tts-mode streaming 2> /tmp/eot-350.jsonl
+python3 scripts/webrtc_live_client.py --url http://127.0.0.1:8090 --audio speech.wav --hold 12  # xN warm turns
+
+# C) report each against the ADR-0029 mouth-to-ear gate and compare end_of_turn + voice_to_first_audio
+python3 scripts/streaming_latency_report.py --input /tmp/eot-500.jsonl --channel web --provider gradium-streaming --warm
+python3 scripts/streaming_latency_report.py --input /tmp/eot-350.jsonl --channel web --provider gradium-streaming --warm
+```
+
+Read the win from the `end_of_turn` slice (p50/p95 should drop by ≈ the hold delta) and
+the `voice_to_first_audio` composite (mouth-to-ear p95 vs ADR-0029 ≤ 1.5 s). Read the
+**cost** — the false-cut rate — from the `voice.end_of_turn` telemetry: each turn's span
+now carries the **configured** `silence_window_ms` (so the two runs are distinguishable)
+plus `end_of_turn_signal`; a spike in mid-utterance `client_stop`/premature
+`silence_window` cuts at 350 ms vs 500 ms is the premature-endpoint regression to gate
+on. Keep 500 ms unless the shorter hold holds a comparable false-cut rate on real audio.
+
+**Measured live 2026-07-29 (real backend, streaming WebRTC, warm, headphones).** Two
+sessions, only the hold changed (evidence:
+[`streaming-latency-eot500-live-2026-07-29.json`](../qa/streaming-latency-eot500-live-2026-07-29.json),
+[`streaming-latency-eot350-live-2026-07-29.json`](../qa/streaming-latency-eot350-live-2026-07-29.json)):
+
+| Metric | 500 ms | 350 ms | Read |
+|---|---:|---:|---|
+| `end_of_turn` p50/p95 | 500 / 500 | 350 / 350 | **−150 ms deterministic** (the controlled change) |
+| false-cut (premature `client_stop`) | 0/6 | 0/10 | no premature-endpoint regression at 350 ms |
+| `stt` p50/p95 | 940 / 1780 | 1169 / 2367 | dominant, varies per utterance |
+| `backend_first_token` p50/p95 | 1012 / 2550 | 943 / 2002 | dominant (full answer waited, no lever 1 yet) |
+| `voice_to_first_audio` (m2e) p95 | 4448 | 4140 | ADR-0029 ≤ 1500 ms → **FAIL** both |
+
+Reading: the hold drops by exactly its delta, false-cut stayed 0 at 350 ms, but the
+mouth-to-ear composite is **dominated by STT + backend (~2 s together)** so the −150 ms is
+inside the session-to-session noise. Lever 3 is a safe tuned default
+(`VOICE_END_OF_TURN_SILENCE_MS=350`) but does not move the ADR-0029 gate on its own — that
+is the job of levers 1 (backend SSE first-sentence → TTS) and 2 (connect-time warm-up). The
+full pilot pass is written up in
+[`streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md#live-pilot-pass--real-backend-mouth-to-ear--lever-3-beforeafter-2026-07-29).
+
 The `backend_first_token` slice is measured for both the `stub` and `http`
 backends (the span comes from `voice_pipeline/answer.py`, not the adapter), and a
 degraded turn still measures backend + TTS + egress because the safe fallback is

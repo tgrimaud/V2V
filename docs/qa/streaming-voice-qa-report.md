@@ -214,10 +214,87 @@ spans), `tests/test_channel_egress_probe.py` (egress emission on the WebRTC path
 `tests/test_streaming_latency_report.py` (mouth-to-ear + ADR-0029 gate). Full suite:
 unittest **334** green, behave **10 features / 26 scenarios / 120 steps** green.
 
-**Pending before pilot sign-off (honest gap):** a **warm live sample against the real
-backend** to record measured `voice_to_first_audio` p50/p95/p99 and evaluate the
-ADR-0029 gate. The instrumentation and gate are in place; the measured mouth-to-ear
-number is the remaining input (ticket is an out-of-sprint pre-pilot measurement).
+**Warm live sample against the real backend — captured 2026-07-29** (see the next
+section). The instrumentation and gate are in place and now fed by a real mouth-to-ear
+measurement: `voice_to_first_audio` p95 **≈ 4.1–4.4 s** over the streaming WebRTC path
+with the real backend (Gradium streaming STT/TTS + Mistral + Ollama + pgvector) →
+**ADR-0029 gate FAIL** (criterion ≤ 1.5 s). This is the measurement TASK-WEB-014 was
+missing; the go/no-go is **NO-GO on the pilot latency gate as-is**, dominated by the
+serial STT (~1 s) + backend (~1 s) slices — exactly the cost the TASK-WEB-015 levers 1
+(SSE first-sentence streaming) and 2 (connect-time warm-up) target.
+
+## Live Pilot Pass — Real Backend Mouth-To-Ear + Lever-3 Before/After (2026-07-29)
+
+**Tickets:** TASK-WEB-014 (mouth-to-ear live closure) + TASK-WEB-015 lever 3 (end-of-turn
+hold behavioural acceptance). **Branch:** `task/TASK-WEB-015-latency-levers`.
+**Config:** streaming WebRTC (`/webrtc.html`), `--provider gradium --backend http
+--stt-mode streaming --tts-mode streaming`, **real backend** (Mistral chat + Ollama
+`nomic-embed-text` + pgvector), co-located dev host, warm server, headphones, natural
+human turns with clear pauses. Two live sessions were captured with only the end-of-turn
+hold changed: **500 ms** (default) then **350 ms** (`VOICE_END_OF_TURN_SILENCE_MS=350`).
+Evidence: [`streaming-latency-eot500-live-2026-07-29.json`](./streaming-latency-eot500-live-2026-07-29.json),
+[`streaming-latency-eot350-live-2026-07-29.json`](./streaming-latency-eot350-live-2026-07-29.json).
+
+### Per-slice + composite (ms)
+
+| Slice / composite | 500 ms p50 / p95 | 350 ms p50 / p95 | Note |
+|---|---:|---:|---|
+| `end_of_turn` (hold) | 500 / 500 | **350 / 350** | **−150 ms deterministic** (the only controlled change) |
+| `stt` | 940 / 1780 | 1169 / 2367 | dominant; varies by utterance length/session |
+| `backend_first_token` | 1012 / 2550 | 943 / 2002 | dominant; full LLM answer waited before TTS (no lever 1 yet) |
+| `tts_first_audio` | 209 / 376 | 206 / 375 | flat — pre-warmed (TASK-WEB-011) ✅ |
+| `channel_egress` (runtime) | ~0.05 | ~0.05 | runtime egress; browser-audible add-on is a stated residual gap |
+| **`time_to_first_audio`** | 2271 / **3948** | 2480 / **3790** | ADR-0029 sub-target ≤ 1200 ms → **FAIL** |
+| **`voice_to_first_audio` (mouth-to-ear)** | 2771 / **4448** | 2830 / **4140** | ADR-0029 primary ≤ 1500 ms → **FAIL** |
+
+Sample: 500 ms run = 6 turns (all with complete composite); 350 ms run = 10 turns (6 with
+a complete first-audio chain). At N=6 the p95 equals the max, so the cold **turn 1** (m2e
+4448 ms at 500 ms / 4140 ms at 350 ms) sets the p95; warm turns range ~2.1–3.3 s m2e.
+
+### ADR-0029 gate
+
+| Metric | Criterion p95 | 500 ms measured | 350 ms measured | Verdict |
+|---|---:|---:|---:|---|
+| mouth-to-ear (`voice_to_first_audio`) | ≤ 1500 ms | 4448 ms (−2948) | 4140 ms (−2640) | **FAIL** |
+| `time_to_first_audio` | ≤ 1200 ms | 3948 ms (−2748) | 3790 ms (−2590) | **FAIL** |
+
+**Go/no-go: NO-GO on the pilot latency gate as-is.** The real-backend mouth-to-ear p95
+(~4.1–4.4 s) is ~2.7× over the ≤ 1.5 s criterion, dominated by the two serial slices
+**STT (~1 s p50)** + **backend first-token (~1 s p50)**. TTS is already flat (pre-warmed).
+
+### Lever-3 behavioural acceptance (500 → 350 ms)
+
+- **Gain:** the `end_of_turn` slice drops exactly **−150 ms** (500.0 → 350.0), deterministic
+  and reversible via env var (250 ms safe floor enforced, verified by the clamp test).
+- **Cost (false-cut rate):** every end-of-turn was a clean `silence_window` signal —
+  **0/6 at 500 ms and 0/10 at 350 ms** premature `client_stop` cuts. No premature-endpoint
+  regression observed at 350 ms in a calm, headphones, clear-pause session.
+- **Composite is noise-dominated:** the −150 ms is swamped by STT/backend session-to-session
+  variance (the 350 ms session happened to draw slower STT, p50 1169 vs 940 ms), so the
+  mouth-to-ear composite does **not** show a clean 150 ms improvement — expected, since the
+  hold is <5 % of a ~2.8 s warm `time_to_first_audio`.
+- **Verdict — lever 3 accepted, deployable:** adopt `VOICE_END_OF_TURN_SILENCE_MS=350` as
+  the tuned pilot default (free −150 ms, 0 observed false-cuts, reversible). **Residual:**
+  0/10 in one calm session is not a strong statistical guarantee; the false-cut risk in a
+  noisy environment stays to be watched (env-tunable, so reversible without a redeploy).
+  Lever 3 **alone does not move the ADR-0029 gate** — that needs levers 1 & 2.
+
+### Spoken filler (TASK-WEB-019) observed live
+
+The generic spoken filler fired on the slowest turns (500 ms run: 1× on the cold turn 1;
+350 ms run: 2×, turns 1 and 10), each at `wait_ms=1200`, `provider=http-backend`, and did
+**not** pollute the `tts_first_audio` distribution (flat 202–376 ms) — confirming both the
+US-020 behaviour and the "filler must not skew `tts_first_audio` p95" invariant in a real
+call.
+
+### What this pass establishes
+
+1. **TASK-WEB-014 measurement is now real** (not stub, not fixture): mouth-to-ear p95
+   ≈ 4.1–4.4 s with the real backend → the honest pilot number the ticket was missing.
+2. **Levers 1 & 2 are confirmed as the decisive work** (STT + backend own ~2 s of the
+   composite; TTS + hold are already small), validating the ADR-0037 prioritisation.
+3. **Lever 3 is behaviourally safe at 350 ms** in this environment and is a keeper as a
+   tuned default, but marginal against the gate.
 
 ## Component Findings
 | Brick | Status | Findings | Next action |

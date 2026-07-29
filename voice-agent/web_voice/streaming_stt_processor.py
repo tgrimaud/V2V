@@ -90,6 +90,7 @@ class StreamingSttProcessor(FrameProcessor):
         detector: StreamingEndOfTurnDetector | None = None,
         provider_name: str = DEFAULT_PROVIDER_NAME,
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
+        silence_window_ms: float = DEFAULT_SILENCE_WINDOW_MS,
         final_timeout_s: float = DEFAULT_FINAL_TIMEOUT_S,
         barge_in_amplitude_threshold: int = DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD,
         barge_in_confirm_frames: int = DEFAULT_BARGE_IN_CONFIRM_FRAMES,
@@ -102,9 +103,12 @@ class StreamingSttProcessor(FrameProcessor):
         self._final_timeout_s = final_timeout_s
         self._barge_in_amplitude_threshold = barge_in_amplitude_threshold
         self._barge_in_confirm_frames = max(1, barge_in_confirm_frames)
+        # TASK-WEB-015 lever 3: the trailing-silence hold is env-tunable (via the
+        # signaling wiring) so a deployment can trade ~150 ms of latency against the
+        # premature-cut risk without a code change. An injected detector still wins.
         self._detector = detector or StreamingEndOfTurnDetector(
             sample_rate_hz=sample_rate_hz,
-            silence_window_ms=DEFAULT_SILENCE_WINDOW_MS,
+            silence_window_ms=silence_window_ms,
             amplitude_threshold=DEFAULT_AMPLITUDE_THRESHOLD,
             min_utterance_ms=DEFAULT_MIN_UTTERANCE_MS,
         )
@@ -313,6 +317,10 @@ class StreamingSttProcessor(FrameProcessor):
             "provider": self._provider_name,
             "end_of_turn_signal": detection.signal,
             "trailing_silence_ms": round(detection.trailing_silence_ms, 3),
+            # Configured hold (TASK-WEB-015 lever 3): lets QA correlate the false-cut
+            # rate to the deployed window, even on client_stop turns where slice_ms is
+            # the (short) real trailing silence rather than the window.
+            "silence_window_ms": self._detector.silence_window_ms,
             "speech_end_ms": round(detection.speech_end_ms, 3)
             if detection.speech_end_ms is not None
             else None,

@@ -315,6 +315,101 @@ class FarewellConfigTest(unittest.TestCase):
         self.assertEqual(_farewell_config()["closing_phrases"], ("au revoir", "ciao"))
 
 
+class SilenceWindowConfigTest(unittest.TestCase):
+    """TASK-WEB-015 lever 3: env-tunable end-of-turn hold, clamped to a safe floor."""
+
+    def setUp(self) -> None:
+        self._saved = __import__("os").environ.pop("VOICE_END_OF_TURN_SILENCE_MS", None)
+
+    def tearDown(self) -> None:
+        import os
+
+        if self._saved is None:
+            os.environ.pop("VOICE_END_OF_TURN_SILENCE_MS", None)
+        else:
+            os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = self._saved
+
+    def test_unset_yields_no_override(self) -> None:
+        from web_voice.webrtc_signaling import _silence_window_config
+
+        # GIVEN no override -> THEN the processor default applies (empty config)
+        self.assertEqual(_silence_window_config(), {})
+
+    def test_valid_override_above_floor_is_honoured(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import _silence_window_config
+
+        # GIVEN a value above the safe floor -> THEN it is used as-is
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "350"
+        self.assertEqual(_silence_window_config(), {"silence_window_ms": 350.0})
+
+    def test_below_floor_is_clamped_not_honoured(self) -> None:
+        import os
+
+        from web_voice.end_of_turn import MIN_SAFE_SILENCE_WINDOW_MS
+        from web_voice.webrtc_signaling import _silence_window_config
+
+        # GIVEN a reckless low value -> THEN it is clamped to the safe floor
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "50"
+        self.assertEqual(_silence_window_config(), {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS})
+
+    def test_invalid_or_non_positive_falls_back_to_default(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import _silence_window_config
+
+        # GIVEN a non-numeric / non-positive value -> THEN no override (default wins)
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "soon"
+        self.assertEqual(_silence_window_config(), {})
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "0"
+        self.assertEqual(_silence_window_config(), {})
+
+    def test_below_floor_logs_a_clamp_warning_once(self) -> None:
+        import os
+
+        import web_voice.webrtc_signaling as signaling
+
+        # GIVEN a reckless low value and no prior clamp warning this process
+        signaling._silence_clamp_warned = False
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "50"
+        # WHEN the config is read twice
+        with self.assertLogs("web_voice.webrtc_signaling", level="WARNING") as captured:
+            signaling._silence_window_config()
+            signaling._silence_window_config()
+        # THEN exactly one warning naming the clamp is emitted (no per-connection spam)
+        clamp_lines = [m for m in captured.output if "below the safe floor" in m]
+        self.assertEqual(len(clamp_lines), 1)
+
+    def test_processor_applies_the_tuned_window_to_its_detector(self) -> None:
+        from web_voice.streaming_stt_processor import StreamingSttProcessor
+
+        # GIVEN a processor built with a tuned-down hold
+        proc = StreamingSttProcessor(
+            SimpleNamespace(name="stt"),
+            SimpleNamespace(correlation_id="c", channel="web_voice", external_session_id="s"),
+            silence_window_ms=350.0,
+        )
+        # THEN its end-of-turn detector fires on 350 ms of trailing silence, not 500 ms
+        self.assertEqual(proc._detector.silence_window_ms, 350.0)
+
+    def test_end_of_turn_telemetry_carries_the_configured_window(self) -> None:
+        from web_voice.end_of_turn import SIGNAL_CLIENT_STOP, EndOfTurnResult
+        from web_voice.streaming_stt_processor import StreamingSttProcessor
+
+        # GIVEN a processor with a tuned hold and a client_stop detection (short silence)
+        proc = StreamingSttProcessor(
+            SimpleNamespace(name="stt"),
+            SimpleNamespace(correlation_id="c", channel="web_voice", external_session_id="s"),
+            silence_window_ms=350.0,
+        )
+        detection = EndOfTurnResult(True, SIGNAL_CLIENT_STOP, 120.0, 90.0, 90.0)
+        # THEN the end_of_turn attrs expose the configured window, not just the short silence
+        attrs = proc._end_of_turn_attrs(detection)
+        self.assertEqual(attrs["silence_window_ms"], 350.0)
+        self.assertEqual(attrs["trailing_silence_ms"], 90.0)
+
+
 @unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
 class FarewellWiringTest(unittest.IsolatedAsyncioTestCase):
     def _service(self):
