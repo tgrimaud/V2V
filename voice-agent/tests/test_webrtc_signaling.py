@@ -365,6 +365,22 @@ class SilenceWindowConfigTest(unittest.TestCase):
         os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "0"
         self.assertEqual(_silence_window_config(), {})
 
+    def test_below_floor_logs_a_clamp_warning_once(self) -> None:
+        import os
+
+        import web_voice.webrtc_signaling as signaling
+
+        # GIVEN a reckless low value and no prior clamp warning this process
+        signaling._silence_clamp_warned = False
+        os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "50"
+        # WHEN the config is read twice
+        with self.assertLogs("web_voice.webrtc_signaling", level="WARNING") as captured:
+            signaling._silence_window_config()
+            signaling._silence_window_config()
+        # THEN exactly one warning naming the clamp is emitted (no per-connection spam)
+        clamp_lines = [m for m in captured.output if "below the safe floor" in m]
+        self.assertEqual(len(clamp_lines), 1)
+
     def test_processor_applies_the_tuned_window_to_its_detector(self) -> None:
         from web_voice.streaming_stt_processor import StreamingSttProcessor
 
@@ -375,7 +391,23 @@ class SilenceWindowConfigTest(unittest.TestCase):
             silence_window_ms=350.0,
         )
         # THEN its end-of-turn detector fires on 350 ms of trailing silence, not 500 ms
-        self.assertEqual(proc._detector._silence_window_ms, 350.0)
+        self.assertEqual(proc._detector.silence_window_ms, 350.0)
+
+    def test_end_of_turn_telemetry_carries_the_configured_window(self) -> None:
+        from web_voice.end_of_turn import SIGNAL_CLIENT_STOP, EndOfTurnResult
+        from web_voice.streaming_stt_processor import StreamingSttProcessor
+
+        # GIVEN a processor with a tuned hold and a client_stop detection (short silence)
+        proc = StreamingSttProcessor(
+            SimpleNamespace(name="stt"),
+            SimpleNamespace(correlation_id="c", channel="web_voice", external_session_id="s"),
+            silence_window_ms=350.0,
+        )
+        detection = EndOfTurnResult(True, SIGNAL_CLIENT_STOP, 120.0, 90.0, 90.0)
+        # THEN the end_of_turn attrs expose the configured window, not just the short silence
+        attrs = proc._end_of_turn_attrs(detection)
+        self.assertEqual(attrs["silence_window_ms"], 350.0)
+        self.assertEqual(attrs["trailing_silence_ms"], 90.0)
 
 
 @unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")

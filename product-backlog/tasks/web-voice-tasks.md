@@ -1431,7 +1431,13 @@ instrumented baseline, not blind**)
 **Classification:** V1 pilot gate (perceived latency)
 **Status:** In progress (Sprint 10, 2026-07-29) — **lever 3 delivered** (env-tunable
 end-of-turn hold `VOICE_END_OF_TURN_SILENCE_MS`, clamped to a 250 ms safe floor,
-default 500 ms; unit tests + docs; unittest **421** green, behave **33** green). **Lever
+default 500 ms; unit tests + docs; unittest **423** green, behave **33** green).
+Adversarial review **93/100 — QA gate Pass** (mechanism), no blocking finding; the two
+non-blocking observability recommendations were **applied**: the `voice.end_of_turn`
+span now carries the **configured** `silence_window_ms` (so QA can correlate the live
+false-cut rate to the deployed hold even on `client_stop` turns), and a below-floor
+override logs a **one-per-process** clamp warning. The behavioural acceptance (false-cut
+rate, `time_to_first_audio` gain) remains a **live-pass** gate (TASK-WEB-014). **Lever
 1** (backend SSE → first-sentence TTS) **designed and recorded in ADR-0037**, gated on
 the DEC-002 vetted-stream contract from the backend and the TASK-WEB-014 live baseline
 (default-off feature flag — must not ship blind / must stay billing-safe). **Lever 2**

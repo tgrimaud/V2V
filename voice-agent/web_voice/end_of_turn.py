@@ -194,6 +194,17 @@ class StreamingEndOfTurnDetector:
         """
         return self._has_speech
 
+    @property
+    def silence_window_ms(self) -> float:
+        """The configured trailing-silence hold (TASK-WEB-015 lever 3).
+
+        Exposed so the STT processor can stamp the *configured* window on the
+        `voice.end_of_turn` telemetry: on a `client_stop` turn `slice_ms` is the real
+        (short) trailing silence, not the window, so QA needs the configured value to
+        analyse the false-cut rate against the deployed hold.
+        """
+        return self._silence_window_ms
+
     def reset(self) -> None:
         self._elapsed_ms = 0.0
         self._speech_ms = 0.0

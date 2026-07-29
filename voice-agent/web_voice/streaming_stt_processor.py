@@ -317,6 +317,10 @@ class StreamingSttProcessor(FrameProcessor):
             "provider": self._provider_name,
             "end_of_turn_signal": detection.signal,
             "trailing_silence_ms": round(detection.trailing_silence_ms, 3),
+            # Configured hold (TASK-WEB-015 lever 3): lets QA correlate the false-cut
+            # rate to the deployed window, even on client_stop turns where slice_ms is
+            # the (short) real trailing silence rather than the window.
+            "silence_window_ms": self._detector.silence_window_ms,
             "speech_end_ms": round(detection.speech_end_ms, 3)
             if detection.speech_end_ms is not None
             else None,

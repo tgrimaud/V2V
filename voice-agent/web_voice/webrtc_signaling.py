@@ -16,10 +16,16 @@ starts flowing once the pipeline `StartFrame` triggers `connection.connect()`.
 """
 
 import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
+
+_logger = logging.getLogger(__name__)
+# Warn at most once per process when the end-of-turn hold override is clamped to the
+# safe floor, so an operator sees the effective value without per-connection spam.
+_silence_clamp_warned = False
 
 from voice_common.otel_export import export_recorder
 from voice_common.telemetry import TelemetryRecorder
@@ -133,7 +139,23 @@ def _silence_window_config() -> dict[str, float]:
         return {}
     if value <= 0:
         return {}
-    return {"silence_window_ms": max(value, MIN_SAFE_SILENCE_WINDOW_MS)}
+    if value < MIN_SAFE_SILENCE_WINDOW_MS:
+        _warn_silence_clamp_once(value)
+        return {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS}
+    return {"silence_window_ms": value}
+
+
+def _warn_silence_clamp_once(requested: float) -> None:
+    """Warn (once per process) that a below-floor end-of-turn hold was clamped."""
+    global _silence_clamp_warned
+    if _silence_clamp_warned:
+        return
+    _silence_clamp_warned = True
+    _logger.warning(
+        "VOICE_END_OF_TURN_SILENCE_MS=%.0f is below the safe floor; clamped to %.0f ms",
+        requested,
+        MIN_SAFE_SILENCE_WINDOW_MS,
+    )
 
 
 @dataclass
