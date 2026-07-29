@@ -1923,16 +1923,39 @@ pipeline, not the Pipecat `main` branch:
   Gradium STT/TTS target). If Gradium is later adopted as a **full speech-to-speech** engine, the
   injection point changes and this ticket must be re-scoped against Gradium's own API.
 
+### Trigger design & transport (decided — ADR-0036)
+
+The filler trigger belongs to the **live per-turn path (Flow A)**, so it uses request/response
++ SSE, **never a message broker** (a broker would add latency to a latency feature, force
+RPC-over-broker correlation, and risk a filler arriving after the answer or for the wrong turn —
+worse than no filler). Two broker-free designs:
+
+- **V1 — runtime-local `AnswerProcessor` timer (default).** Start a timer around the backend
+  `answer()` call; if no answer/first-audio by the perceived-wait threshold, speak **one generic**
+  filler as a background task. No backend signal, no new channel; works with the current blocking
+  `BackendAnswerPort.answer() -> AnswerResult`. A second (longer) threshold triggers the
+  "still working" / escalate fallback (our own timer — Pipecat's `on_completion_timeout` is an
+  in-Pipecat `LLMService` event and does not fire in our split runtime).
+- **Enhancement — tailored filler over the existing SSE stream.** To tailor the phrase per
+  detected intent, make the runtime adapter **stream-aware** and have the backend emit an **early
+  intra-turn event** (e.g. `phase=retrieving` / `intent=...`) on its SSE stream (TASK-BE-007)
+  *before* the first answer token. This is the split-architecture equivalent of Pipecat's
+  `on_function_calls_started`; the SSE stream *is* the event channel (trivial correlation, no
+  ordering/wrong-turn risk). Requires the runtime HTTP adapter to consume streaming (today it
+  does a blocking POST → single `AnswerResult`).
+
 ### Dependencies / open questions
 
-- **Architecture (ADR needed at implementation):** confirm the `AnswerProcessor`-timer hook
-  point, the plain-`TextFrame` vs widened-allowlist decision, and how the filler composes with
-  barge-in and the streaming TTS processor. Capture in a new ADR under
-  `docs/architecture/adrs/` before coding, extending ADR-0025 (barge-in) rather than duplicating.
+- **Architecture (ADR-0036, Proposed):** the request/response-+-SSE vs broker decision is
+  recorded in ADR-0036. Still to confirm at implementation: the `AnswerProcessor`-timer hook,
+  the plain-`TextFrame` vs widened-allowlist decision (see Pipecat feasibility above), and how the
+  filler composes with barge-in / the streaming TTS processor — capture as an addendum to
+  ADR-0036 or an extension of ADR-0025 before coding.
 - **Product (OQ):** exact wording set and default threshold value are product/UX decisions; keep
   them configurable and confirm the pilot wording with Product before QA sign-off.
-- **Product/Architecture (deferred):** per-intent fillers depend on a backend→runtime intent
-  signal that does not exist yet — out of V1 scope unless Product prioritizes it.
+- **Product/Architecture (deferred):** per-intent tailored fillers depend on (a) the backend
+  emitting an early intra-turn SSE event with intent and (b) the runtime adapter becoming
+  stream-aware — out of V1 scope unless Product prioritizes it.
 
 ### Definition of done
 
