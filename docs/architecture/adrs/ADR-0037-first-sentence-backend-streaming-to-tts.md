@@ -119,12 +119,23 @@ runtime-owned; the backend LLM/embedding warm call is a **backend** concern (nee
 backend warm endpoint) and is tracked as a backend follow-up, not shipped blind from
 the runtime.
 
-## Status of TASK-WEB-015 at this ADR
+## Status of the levers at this ADR
 
-- **Lever 3 (end-of-turn hold tuning):** implemented (env-tunable
-  `VOICE_END_OF_TURN_SILENCE_MS`, clamped to a 250 ms safe floor, default 500 ms) —
-  offline, deterministic, testable now.
-- **Lever 1 (this ADR):** designed + gated on the DEC-002 SSE contract and the
-  TASK-WEB-014 live baseline (default-off feature flag).
-- **Lever 2:** designed (mirror `TtsSessionWarmer`), scheduled with the live pass;
-  backend warm call split to a backend follow-up.
+- **Lever 3 (end-of-turn hold tuning):** implemented + live-accepted (env-tunable
+  `VOICE_END_OF_TURN_SILENCE_MS`, clamped to a 250 ms safe floor, default 500 ms;
+  tuned pilot default 350 ms recommended) — TASK-WEB-015.
+- **Lever 1 (this ADR):** designed; split to **TASK-WEB-020**. Key de-risking
+  finding (2026-07-29): the backend `POST /api/conversation/converse-stream` (SSE,
+  ADR-0013) **already** emits guardrail-vetted sentences one at a time via
+  `GuardedSentenceEmitter`, so DEC-002 is enforced backend-side and lever 1 needs
+  **no backend contract change for safety** — it consumes the existing vetted stream.
+  Locked by a service-level contract test (no chunk before vetting; blocked sentence
+  stops the stream + safe hand-off) plus a lever-1 incremental-delivery test (first
+  vetted sentence reaches the consumer before the full answer completes).
+- **Lever 2:** designed (mirror `TtsSessionWarmer`), split to **TASK-WEB-021**. The
+  **backend** LLM/embedding warm call is delivered under **TASK-BE-017**:
+  `POST /api/conversation/warm-up` exercises the embedding (retrieval) + the LLM once,
+  touches no conversation memory, discards the output, is repeatable and non-blocking
+  (a warm-up miss returns 200 with per-model flags false), and records `warmup_embedding`
+  / `warmup_llm` latency slices. The runtime STT-session pre-warm + connect trigger
+  remain runtime-owned in TASK-WEB-021.

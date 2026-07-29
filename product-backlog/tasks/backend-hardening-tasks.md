@@ -665,9 +665,15 @@ DEC-002 (no invented / ungrounded amounts), ADR-0029 (pilot latency criterion)
 **Depends on:** — (backend already has `converse-stream` + grounding/guardrail pipeline)
 **Blocks:** TASK-WEB-020 (lever 1 confidence-at-open, optional), TASK-WEB-021 (lever 2 warm-up)
 **Classification:** V1 pilot gate (perceived latency — backend side)
-**Status:** To do (Sprint 10, branch `task/TASK-BE-017-voice-latency-support` off
+**Status:** In progress (Sprint 10, branch `task/TASK-BE-017-voice-latency-support` off
 `feat/sprint-10-pilot-latency`). Created 2026-07-29 as the backend dependency of the
-TASK-WEB-020/021 voice latency levers.
+TASK-WEB-020/021 voice latency levers. **Implemented 2026-07-29:** warm-up path
+(`WarmUpUseCase` / `WarmUpService` / `POST /api/conversation/warm-up`, api-key gated,
+side-effect-free, non-blocking, `warmup_embedding`/`warmup_llm` slices) + the vetted-stream
+contract test (service-level: no chunk before vetting, blocked→hand-off) + a lever-1
+incremental-delivery contract test. `mvn test` **320 green**, ArchUnit OK. The optional
+early confidence signal is **deferred** pending the TASK-WEB-020 confidence-policy decision.
+Adversarial review + QA pending before merge.
 **Priority:** High
 
 ### Objective
