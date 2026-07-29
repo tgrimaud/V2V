@@ -148,13 +148,17 @@ def _silence_window_config() -> dict[str, float]:
 def _stt_prewarm_enabled() -> bool:
     """Whether to pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2).
 
-    On by default; disabled only by an explicit falsy value so a deployment can turn the
-    STT pre-warm off (e.g. an ASR provider that drops idle sockets) without a code change.
+    OFF by default (opt-in) pending a live validation of Gradium's idle-socket behaviour:
+    if the ASR server drops a pre-opened socket while it waits for the first utterance, the
+    spare would be stale at speech time and turn 1 would degrade (worse than a cold open).
+    `acquire()` only recovers from an open *failure*, not from a stale-but-opened session,
+    so this stays opt-in (`VOICE_STT_PREWARM=1`) until the live turn-1 sample confirms it is
+    safe. The connect-time backend warm-up (the larger, side-effect-free win) stays on.
     """
     raw = os.environ.get("VOICE_STT_PREWARM")
     if raw is None:
-        return True
-    return raw.strip().lower() not in ("0", "false", "no", "off")
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 def _warn_silence_clamp_once(requested: float) -> None:
@@ -354,7 +358,8 @@ class WebRtcSignalingService:
             # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
             **_silence_window_config(),
             # Pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2);
-            # VOICE_STT_PREWARM=0 disables it without a code change.
+            # opt-in via VOICE_STT_PREWARM=1 (off by default pending live idle-socket
+            # validation — see _stt_prewarm_enabled).
             prewarm=_stt_prewarm_enabled(),
         )
         farewell = self._build_farewell_processor(envelope, telemetry)

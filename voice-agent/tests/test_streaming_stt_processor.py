@@ -46,6 +46,8 @@ from web_voice.end_of_turn import (  # noqa: E402
 from web_voice.streaming_stt_processor import (  # noqa: E402
     STT_DEGRADED_SPOKEN_EVENT,
     STT_DEGRADED_SPOKEN_METRIC,
+    STT_PREWARM_EVENT,
+    STT_PREWARM_METRIC,
     STT_REQUEST_SPAN,
     StreamingSttProcessor,
 )
@@ -468,6 +470,48 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         # the turn still finalizes (open called twice: failed spare + on-demand)
         self.assertEqual(provider.open_count, 2)
         self.assertEqual(sink.finals, ["bonjour"])
+
+    async def test_prewarm_hit_emits_observability_event(self):
+        # GIVEN pre-warm on with a recorder and a normal first turn
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(FakeProvider(session), telemetry, prewarm=True)
+        # WHEN the first turn opens its session (from the pre-opened spare)
+        await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN a prewarm event + count metric prove the spare was used (hit), so QA can tell
+        # a pre-warm hit from a fallback without inferring it from slice timing
+        event = next(e for e in telemetry.events() if e.name == STT_PREWARM_EVENT)
+        self.assertEqual(event.attributes["outcome"], "hit")
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        # provider is the processor's provider_name (defaults to the streaming STT name)
+        self.assertEqual(event.attributes["provider"], "gradium-stt-streaming")
+        self.assertTrue(event.attributes["prewarm_hit"])
+        self.assertTrue(any(m.name == STT_PREWARM_METRIC for m in telemetry.metrics()))
+
+    async def test_prewarm_fallback_emits_fallback_outcome(self):
+        # GIVEN the pre-warm spare open fails, then an on-demand open succeeds
+        class _FlakyProvider:
+            name = "flaky-streaming-stt"
+
+            def __init__(self, ready_session):
+                self._ready = ready_session
+                self.open_count = 0
+
+            async def open(self):
+                self.open_count += 1
+                if self.open_count == 1:
+                    raise StreamingSttError("spare open failed")
+                return self._ready
+
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(_FlakyProvider(session), telemetry, prewarm=True)
+        # WHEN the first turn opens its session (spare failed -> on-demand)
+        await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN the prewarm event reports the fallback outcome (not a hit)
+        event = next(e for e in telemetry.events() if e.name == STT_PREWARM_EVENT)
+        self.assertEqual(event.attributes["outcome"], "fallback")
+        self.assertFalse(event.attributes["prewarm_hit"])
 
 
 if __name__ == "__main__":

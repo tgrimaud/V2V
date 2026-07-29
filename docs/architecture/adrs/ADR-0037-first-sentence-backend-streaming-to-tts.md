@@ -130,10 +130,19 @@ on `StartFrame` it fires `backend.warm_up()` once, off the critical path
 (`asyncio.to_thread`), swallowing any fault (recorded as a `miss`, never blocks connect);
 `HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL
 (consuming TASK-BE-017), with a generous timeout since the cold call runs off-path.
-Both are env-tunable: `VOICE_STT_PREWARM=0` and `VOICE_BACKEND_WARMUP=0` disable them.
-Observability: `voice.backend.warmup` event + `voice.backend.warmup.count` metric carry
-the correlation id, provider and `outcome` (`success`/`miss`). Still pending: a **live**
-cold-vs-warm turn-1 sample (real backend with `/warm-up` reachable) to confirm the delta.
+Observability: `voice.backend.warmup` (success/miss) + `voice.stt.prewarm` (hit/fallback/
+cold) events with count metrics, all carrying correlation id + provider.
+
+Adversarial-review fixes (2026-07-29): the STT pre-warm is **off by default (opt-in via
+`VOICE_STT_PREWARM=1`)** because `acquire()` only recovers from an open *failure*, not from
+a spare that the ASR server drops while idle — a stale spare would degrade turn 1, so it
+stays opt-in until a live sample confirms Gradium's idle behaviour. The connect-time
+backend warm-up (side-effect-free, the larger win) stays on by default (`VOICE_BACKEND_WARMUP`).
+`SessionWarmer.aclose()` no longer swallows an external `CancelledError` (only the spare's
+own expected cancellation); `HttpBackendAdapter` derives the `/warm-up` URL robustly
+(trailing slash / query stripped). Still pending: a **live** cold-vs-warm turn-1 sample
+(real backend with `/warm-up` reachable) to confirm the delta and to decide flipping STT
+pre-warm on by default.
 
 ## Status of TASK-WEB-015 at this ADR
 
@@ -143,7 +152,8 @@ cold-vs-warm turn-1 sample (real backend with `/warm-up` reachable) to confirm t
 - **Lever 1 (this ADR):** designed + gated on the DEC-002 SSE contract and the
   TASK-WEB-014 live baseline (default-off feature flag).
 - **Lever 2 (TASK-WEB-021):** runtime **delivered** — shared `SessionWarmer` pre-opens
-  the first STT session at connect (no leak, `VOICE_STT_PREWARM`) + non-blocking
-  `backend.warm_up()` trigger from `AnswerProcessor` (`POST /warm-up`, TASK-BE-017,
-  `VOICE_BACKEND_WARMUP`); telemetry `voice.backend.warmup` (success/miss). Pending the
-  live turn-1 cold-vs-warm sample.
+  the first STT session at connect (no leak; **opt-in** `VOICE_STT_PREWARM=1`, off by
+  default pending live idle-socket validation) + non-blocking `backend.warm_up()` trigger
+  from `AnswerProcessor` (`POST /warm-up`, TASK-BE-017, `VOICE_BACKEND_WARMUP` on by
+  default); telemetry `voice.backend.warmup` (success/miss) + `voice.stt.prewarm`
+  (hit/fallback/cold). Pending the live turn-1 cold-vs-warm sample.

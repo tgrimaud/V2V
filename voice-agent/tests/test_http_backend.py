@@ -186,6 +186,19 @@ class HttpBackendWarmUpTest(unittest.TestCase):
         adapter.warm_up()
         self.assertEqual(transport.calls[0]["url"], "https://backend.internal/api/conversation/warm-up")
 
+    def test_warm_up_url_handles_trailing_slash_and_query(self) -> None:
+        # GIVEN converse URLs with a trailing slash or a query string
+        for raw in (
+            "https://backend.internal/api/conversation/converse/",
+            "https://backend.internal/api/conversation/converse?trace=1",
+        ):
+            transport = _CapturingTransport(HttpResponse(200, "{}"))
+            HttpBackendAdapter(raw, transport=transport).warm_up()
+            # THEN the derived warm-up URL is clean (no trailing slash / query leak)
+            self.assertEqual(
+                transport.calls[0]["url"], "https://backend.internal/api/conversation/warm-up", raw
+            )
+
     def test_warm_up_returns_false_on_non_2xx(self) -> None:
         # GIVEN the warm-up endpoint returns a 503
         adapter = HttpBackendAdapter(ENDPOINT, transport=_CapturingTransport(HttpResponse(503, "down")))

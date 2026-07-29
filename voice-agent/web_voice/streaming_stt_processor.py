@@ -34,7 +34,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from .session_warmer import SessionWarmer
+from .session_warmer import ACQUIRE_HIT, SessionWarmer
 
 from conversation_backend import DEGRADED_FALLBACK_TEXT
 from stt_validation.models import SttOutcome
@@ -67,6 +67,14 @@ STT_DEGRADED_REASON = "stt_finalize_failed"
 # speaking triggers an interruption of the spoken answer.
 BARGE_IN_EVENT = "voice.barge_in.detected"
 BARGE_IN_METRIC = "voice.barge_in.count"
+# Connect-time STT pre-warm observability (TASK-WEB-021 lever 2): emitted at the first
+# turn's session open so QA can tell a pre-warm hit (spare reused, connect+setup off the
+# turn path) from a fallback (spare open failed -> fresh on-demand open) without inferring
+# it from slice timing. A spare that opened but was closed by the server while idle still
+# reports "hit" here but then fails on send/finalize -> surfaces as the existing
+# stt.failure + degraded fallback, so a stale spare is never silent.
+STT_PREWARM_EVENT = "voice.stt.prewarm"
+STT_PREWARM_METRIC = "voice.stt.prewarm.count"
 # Anti-echo barge-in gate (TASK-WEB-008). Without headphones the bot's own audio
 # re-enters the mic even with browser echo cancellation, and an energy VAD reads it as
 # speech -> the bot self-interrupts. To cut the bot only on a *real* customer barge-in,
@@ -230,9 +238,25 @@ class StreamingSttProcessor(FrameProcessor):
         # With pre-warm, hand out the spare opened at StartFrame (its connect+setup is
         # already paid); otherwise open on demand. `acquire()` falls back to a fresh open
         # if the spare's open failed, so a cold/failed spare never blocks the turn.
-        self._session = await self._warmer.acquire() if self._prewarm else await self._provider.open()
+        if self._prewarm:
+            self._session = await self._warmer.acquire()
+            self._emit_prewarm_outcome(self._warmer.last_acquire)
+        else:
+            self._session = await self._provider.open()
         self._turn_timer = Timer()
         self._first_partial_ms = None
+
+    def _emit_prewarm_outcome(self, outcome: str | None) -> None:
+        if self._telemetry is None or self._envelope is None or outcome is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "outcome": outcome,
+        }
+        self._telemetry.record(STT_PREWARM_EVENT, prewarm_hit=(outcome == ACQUIRE_HIT), **attrs)
+        self._telemetry.metric(STT_PREWARM_METRIC, 1, **attrs)
 
     async def _emit_partials(self, session: Any, direction: FrameDirection) -> None:
         for partial in session.poll_partials():

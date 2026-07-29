@@ -15,6 +15,12 @@ fresh on-demand open whose failure propagates so the caller reports it (never si
 import asyncio
 from typing import Any
 
+# Outcome of the last acquire(), exposed for observability (TASK-WEB-021): the caller can
+# emit it so QA can tell a pre-warm hit from a fallback without guessing from slice timing.
+ACQUIRE_HIT = "hit"  # the pre-opened spare was used (connect+setup was off the turn path)
+ACQUIRE_FALLBACK = "fallback"  # the spare's open failed -> a fresh on-demand open was used
+ACQUIRE_COLD = "cold"  # no spare was pre-opened (start() not called) -> on-demand open
+
 
 class SessionWarmer:
     """Keeps one streaming provider session pre-opened, off the per-turn critical path."""
@@ -22,6 +28,9 @@ class SessionWarmer:
     def __init__(self, provider: Any) -> None:
         self._provider = provider
         self._task: "asyncio.Future[Any] | None" = None
+        # Set by acquire() to ACQUIRE_HIT / ACQUIRE_FALLBACK / ACQUIRE_COLD for observability;
+        # None until the first acquire(). A consumer that ignores it (TTS) is unaffected.
+        self.last_acquire: str | None = None
 
     def start(self) -> None:
         """Begin opening a spare session in the background (idempotent)."""
@@ -32,13 +41,18 @@ class SessionWarmer:
         """Return a ready session: the pre-opened spare if its open succeeded, else a
         fresh on-demand open. A failed or absent spare never blocks the turn; an
         on-demand open failure propagates so the caller reports it (never a silent turn).
+        Records the outcome in `last_acquire` for the caller to surface as telemetry.
         """
         task, self._task = self._task, None
         if task is not None:
             try:
-                return await task
+                session = await task
+                self.last_acquire = ACQUIRE_HIT
+                return session
             except Exception:
-                pass  # spare open failed -> fall back to a fresh on-demand open
+                self.last_acquire = ACQUIRE_FALLBACK  # spare open failed -> fresh open
+                return await self._provider.open()
+        self.last_acquire = ACQUIRE_COLD
         return await self._provider.open()
 
     async def aclose(self) -> None:
@@ -50,8 +64,17 @@ class SessionWarmer:
         task.cancel()
         try:
             session = await task
-        except BaseException:
-            return  # cancelled before it opened, or the open failed -> nothing to close
+        except asyncio.CancelledError:
+            # The spare task's own cancellation (what we just requested) is expected and
+            # must be swallowed. But if OUR coroutine is being cancelled externally, the
+            # CancelledError must propagate — swallowing it would suppress the outer cancel
+            # (repo rule: never absorb an external CancelledError).
+            current = asyncio.current_task()
+            if current is not None and current.cancelling() > 0:
+                raise
+            return
+        except Exception:
+            return  # the spare open failed -> nothing to close
         try:
             await session.aclose()
         except Exception:

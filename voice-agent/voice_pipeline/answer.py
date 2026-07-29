@@ -214,7 +214,12 @@ class AnswerProcessor(FrameProcessor):
         self._telemetry = telemetry
         # TASK-WEB-021: resolve the connect-time warm-up toggle once; an explicit override
         # (tests) still wins over the environment. Keeps a reference to the fire-and-forget
-        # warm-up task so it is not garbage-collected before it runs.
+        # warm-up task so it is not garbage-collected before it runs. The task is
+        # intentionally NOT cancelled at teardown: it warms the *shared* backend model, so
+        # letting it finish benefits the next connect too, and it is off the critical path
+        # (bounded by the HTTP warm-up timeout). On the long-lived server loop it always
+        # completes; only a process exiting immediately after a 1-turn call could drop it,
+        # which is harmless (best-effort warm-up).
         self._backend_warmup = backend_warmup_enabled() if backend_warmup is None else backend_warmup
         self._warmup_task: "asyncio.Task[None] | None" = None
         # RF-022: resolve the env-tunable floor once at construction; an explicit override

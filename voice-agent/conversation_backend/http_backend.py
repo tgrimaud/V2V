@@ -101,8 +101,14 @@ class HttpBackendAdapter:
         return 200 <= response.status < 300
 
     def _warm_up_url(self) -> str:
-        base = self._url.rsplit("/", 1)[0]
-        return f"{base}/warm-up"
+        # Derive the /warm-up sibling of the converse endpoint robustly: drop any query /
+        # fragment and a trailing slash before replacing the last path segment, so
+        # ".../converse", ".../converse-stream", ".../converse/" and ".../converse?x=1"
+        # all map to ".../warm-up".
+        parts = urllib.parse.urlsplit(self._url)
+        path = parts.path.rstrip("/")
+        base = path.rsplit("/", 1)[0] if "/" in path else path
+        return urllib.parse.urlunsplit((parts.scheme, parts.netloc, f"{base}/warm-up", "", ""))
 
     def _headers(self, request: AnswerRequest) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}

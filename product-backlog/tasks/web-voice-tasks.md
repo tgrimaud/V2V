@@ -2151,11 +2151,20 @@ spare at `StartFrame`, hands it out on the first `_open_session`, discards any u
 warm-up trigger** (`AnswerProcessor` fires `backend.warm_up()` once on `StartFrame`, off the
 critical path via `asyncio.to_thread`, failure non-blocking → recorded as a `miss`;
 `HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL consuming
-TASK-BE-017; `VOICE_BACKEND_WARMUP=0` disables). Telemetry: `voice.backend.warmup` event +
-`voice.backend.warmup.count` metric (outcome `success`/`miss`). Tests: unittest **439 green**
-(new: STT pre-warm lifecycle/no-leak/fallback, backend trigger once/disabled/absent/failure/miss,
-HTTP `warm_up` URL-derivation/non-2xx/fault/no-key-leak, env toggles), behave **12/33/154 green**.
-Pending: **live** cold-vs-warm turn-1 sample (real backend, needs TASK-BE-017 `/warm-up` reachable).
+TASK-BE-017; `VOICE_BACKEND_WARMUP` on by default). Telemetry: `voice.backend.warmup`
+(success/miss) + `voice.stt.prewarm` (hit/fallback/cold) events + count metrics.
+**Adversarial review 2026-07-29 (82→ fixes applied):** STT pre-warm made **opt-in
+`VOICE_STT_PREWARM=1` (off by default)** since `acquire()` only recovers from an open
+failure, not a server-dropped idle spare (stale spare would degrade turn 1) — kept off
+until the live sample confirms Gradium's idle behaviour; backend warm-up stays on.
+`SessionWarmer.aclose()` no longer swallows an external `CancelledError`; `_warm_up_url`
+hardened (trailing slash / query); backend warm-up task documented fire-and-forget (warms
+the shared model, not cancelled at teardown). Tests: unittest **442 green** (STT pre-warm
+lifecycle/no-leak/fallback + hit/fallback observability events, backend trigger
+once/disabled/absent/failure/miss, HTTP `warm_up` URL-derivation incl. trailing-slash/query
+/non-2xx/fault/no-key-leak, env toggles), behave **12/33/154 green**.
+Pending: **live** cold-vs-warm turn-1 sample (real backend, needs TASK-BE-017 `/warm-up`
+reachable) — also gates the decision to flip STT pre-warm on by default.
 **Priority:** High
 
 ### Objective

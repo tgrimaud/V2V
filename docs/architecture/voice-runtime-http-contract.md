@@ -82,10 +82,14 @@ on. The trigger is a runtime-local timer (Flow A, no broker) per ADR-0036.
 Connect-time warm-up (TASK-WEB-021, lever 2) is env-only and removes the first-turn
 cold-start penalty by warming the STT session and the backend models on WebRTC connect:
 
-- `VOICE_STT_PREWARM` (`0`/`false`/`no`/`off` disables; on by default) — the
+- `VOICE_STT_PREWARM` (**off by default; opt-in** via `1`/`true`/`yes`/`on`) — the
   `StreamingSttProcessor` pre-opens a spare streaming STT session at `StartFrame` and
   hands it to the first turn (a failed spare falls back to a fresh open; any unused spare
-  is discarded on end/cancel — no leak).
+  is discarded on end/cancel — no leak). Opt-in until a live sample confirms the ASR
+  server does not drop the pre-opened socket while it waits for the first utterance (a
+  stale spare would degrade turn 1). On the first turn's open the processor emits a
+  `voice.stt.prewarm` event + `voice.stt.prewarm.count` metric with `outcome`
+  (`hit`/`fallback`/`cold`), so QA can confirm the spare was actually reused.
 - `VOICE_BACKEND_WARMUP` (`0`/`false`/`no`/`off` disables; on by default) — the
   `AnswerProcessor` fires `backend.warm_up()` once at `StartFrame`, off the critical path;
   the `http` backend POSTs to the `/warm-up` sibling of `VOICE_BACKEND_URL` (see the

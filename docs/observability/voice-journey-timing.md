@@ -193,11 +193,16 @@ latency slice — it is off the critical path — but it is observable so QA can
 turn-1 from a cold one. The backend warm-up trigger emits a `voice.backend.warmup` event
 and a `voice.backend.warmup.count` metric carrying `correlation_id`, `provider` and
 `outcome` (`success` when the backend reports warmed, `miss` on any failure/timeout — a
-miss never blocks the first turn). The STT pre-warm is inferred from the first turn's
-`stt` slice (a warm turn-1 no longer carries the session-open cost). Both are env-tunable:
-`VOICE_STT_PREWARM=0` / `VOICE_BACKEND_WARMUP=0` disable them. When reading a turn-1 sample,
-confirm a `voice.backend.warmup` `success` was recorded at connect before attributing a low
-turn-1 latency to the warm path.
+miss never blocks the first turn). The STT pre-warm emits a `voice.stt.prewarm` event +
+`voice.stt.prewarm.count` metric at the first turn's session open, with `outcome`
+(`hit` = spare reused, `fallback` = spare open failed → fresh open, `cold` = no spare), so
+QA reads the reuse directly instead of inferring it from slice timing. A spare that opened
+but was dropped by the server while idle still reports `hit` here, then fails on
+send/finalize → the existing `stt.failure` + degraded fallback fire (never silent).
+Toggles: `VOICE_BACKEND_WARMUP` (on by default), `VOICE_STT_PREWARM` (**off by default,
+opt-in** pending live idle-socket validation). When reading a turn-1 sample, confirm a
+`voice.backend.warmup` `success` (and, if STT pre-warm is enabled, a `voice.stt.prewarm`
+`hit`) was recorded at connect before attributing a low turn-1 latency to the warm path.
 
 ## Reproduce
 
