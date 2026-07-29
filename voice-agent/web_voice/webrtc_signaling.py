@@ -38,6 +38,7 @@ from .closing_intent import (
     ClosingIntentDetector,
 )
 from .egress import WebVoiceEgress
+from .end_of_turn import MIN_SAFE_SILENCE_WINDOW_MS
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 from .streaming_runtime import StreamingVoiceSession
@@ -113,6 +114,26 @@ def _barge_in_config() -> dict[str, int]:
         except ValueError:
             continue
     return config
+
+
+def _silence_window_config() -> dict[str, float]:
+    """Read the optional end-of-turn hold override (TASK-WEB-015 lever 3).
+
+    `VOICE_END_OF_TURN_SILENCE_MS` tunes the trailing-silence window (default 500 ms)
+    down toward `MIN_SAFE_SILENCE_WINDOW_MS` to shave latency. A value below the floor
+    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop
+    into constant premature cuts; unset or invalid -> the processor default applies.
+    """
+    raw = os.environ.get("VOICE_END_OF_TURN_SILENCE_MS")
+    if raw is None:
+        return {}
+    try:
+        value = float(raw)
+    except ValueError:
+        return {}
+    if value <= 0:
+        return {}
+    return {"silence_window_ms": max(value, MIN_SAFE_SILENCE_WINDOW_MS)}
 
 
 @dataclass
@@ -294,6 +315,10 @@ class WebRtcSignalingService:
             # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset
             # count. Unset -> the processor defaults apply.
             **_barge_in_config(),
+            # End-of-turn hold, tunable without a code change (TASK-WEB-015 lever 3):
+            # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
+            # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
+            **_silence_window_config(),
         )
         farewell = self._build_farewell_processor(envelope, telemetry)
         session = StreamingVoiceSession(

@@ -41,6 +41,14 @@ Barge-in tuning (TASK-WEB-008) is env-only: `VOICE_BARGE_IN_THRESHOLD` (amplitud
 and `VOICE_BARGE_IN_FRAMES` (sustained-onset frame count); unset → processor
 defaults apply.
 
+End-of-turn hold tuning (TASK-WEB-015 lever 3) is env-only on the WebRTC streaming
+path: `VOICE_END_OF_TURN_SILENCE_MS` shortens the trailing-silence confirmation
+window (default `500`) to shave perceived latency. Shorter holds raise the
+false-endpoint (premature-cut) risk, so the value is clamped to a safe floor
+(`250` ms); a value below the floor is clamped (never honoured), and an unset,
+invalid or non-positive value keeps the `500` ms default. Confirm the live
+false-cut rate before lowering the deployed value.
+
 End-of-call farewell (TASK-WEB-010, ADR-0035) is env-only on the WebRTC path:
 `VOICE_FAREWELL_ENABLED` (`0`/`false` disables the feature), `VOICE_FAREWELL_PROMPT`
 (confirmation question, default "Souhaitez-vous autre chose ?"),

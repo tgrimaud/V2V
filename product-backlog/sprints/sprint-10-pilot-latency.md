@@ -28,7 +28,10 @@ only at sprint closure, on the user's explicit request. See `docs/operations/dev
 
 First ticket integrated into the sprint branch: **TASK-WEB-019** (generic spoken filler, US-020) —
 adversarial review 92/100 + QA GO (`docs/qa/task-web-019-filler-qa-report.md`), merged into
-`feat/sprint-10-pilot-latency`. Remaining: TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
+`feat/sprint-10-pilot-latency`. In progress: **TASK-WEB-015** on `task/TASK-WEB-015-latency-levers` —
+**lever 3 delivered** (env-tunable end-of-turn hold), **levers 1 & 2 designed** (ADR-0037), gated on
+the DEC-002 vetted-stream backend contract + the TASK-WEB-014 live baseline. Remaining: TASK-WEB-015
+levers 1 & 2 (live pass) and TASK-WEB-014 live closure.
 
 ## Roadmap Context
 
@@ -59,7 +62,7 @@ adversarial review 92/100 + QA GO (`docs/qa/task-web-019-filler-qa-report.md`), 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | Merged; pilot closure pending in this sprint |
-| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | Planned |
+| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | In progress — lever 3 done; levers 1-2 designed (ADR-0037), gated on live pass |
 | TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.

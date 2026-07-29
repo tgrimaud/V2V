@@ -1429,12 +1429,17 @@ speech-to-speech), TASK-WEB-011 (TTS pre-warm — the precedent for lever 2)
 **Depends on:** TASK-WEB-014 (mouth-to-ear measurement — **optimize against a real
 instrumented baseline, not blind**)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** Proposed (2026-07-20, from the Sprint 7 demo) — **out-of-sprint
-pilot-readiness follow-up**, kept **off the billing theme**
-(identity/BSS/PDF/comparison, now Sprint 10); schedule in the pilot-readiness latency
-pass, after TASK-WEB-014 has published the mouth-to-ear baseline.
+**Status:** In progress (Sprint 10, 2026-07-29) — **lever 3 delivered** (env-tunable
+end-of-turn hold `VOICE_END_OF_TURN_SILENCE_MS`, clamped to a 250 ms safe floor,
+default 500 ms; unit tests + docs; unittest **421** green, behave **33** green). **Lever
+1** (backend SSE → first-sentence TTS) **designed and recorded in ADR-0037**, gated on
+the DEC-002 vetted-stream contract from the backend and the TASK-WEB-014 live baseline
+(default-off feature flag — must not ship blind / must stay billing-safe). **Lever 2**
+(connect-time warm-up) designed (mirror `TtsSessionWarmer`), scheduled with the
+TASK-WEB-014 live pass; the backend LLM/embedding warm call is split to a backend
+follow-up. Levers 1 & 2 need a warm+cold live before/after sample to claim their win.
 **Priority:** High
-**Branch:** `task/TASK-WEB-015-perceived-latency-levers` (to be created when scheduled)
+**Branch:** `task/TASK-WEB-015-latency-levers` (off `feat/sprint-10-pilot-latency`)
 
 ### Objective
 

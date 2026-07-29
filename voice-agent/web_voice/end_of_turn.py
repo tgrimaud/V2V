@@ -24,6 +24,13 @@ DEFAULT_FRAME_MS = 20.0
 # added latency the detector contributes once speech ends (the confirmation
 # hold), which is exactly what the end_of_turn slice measures.
 DEFAULT_SILENCE_WINDOW_MS = 500.0
+# Safe floor for a tuned-down hold (TASK-WEB-015 lever 3). Shortening the window
+# cuts latency but raises the false-endpoint (premature cut) risk: too low and a
+# natural mid-sentence pause is read as end-of-turn. The signaling env reader
+# clamps any tuning to this floor so a misconfiguration can never drop it into the
+# constant-premature-cut regime. Confirm the real false-cut rate on live audio
+# before lowering the deployed value toward it.
+MIN_SAFE_SILENCE_WINDOW_MS = 250.0
 # Peak |amplitude| above which a frame counts as speech. ~3% of int16 full scale
 # (32767); low enough to catch quiet speech, high enough to reject line noise.
 DEFAULT_AMPLITUDE_THRESHOLD = 1000
