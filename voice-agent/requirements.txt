@@ -18,6 +18,13 @@ aiortc>=1.14,<2
 opencv-python>=4.11,<5   # required by the SmallWebRTCTransport import (cv2/RawVideoTrack)
 # av (PyAV) is pulled transitively by aiortc.
 
+# OTLP export (TASK-OBS-001 / ADR-0028 addendum): only used when OTLP export is turned on
+# (OTEL_EXPORTER_OTLP_ENDPOINT / VOICE_OTEL_EXPORT). voice_common/otel_export.py imports these
+# lazily and is a no-op when export is off, so the base runtime never touches them. HTTP/proto
+# exporter (collector port 4318) — avoids the grpc dependency.
+opentelemetry-sdk>=1.27,<2
+opentelemetry-exporter-otlp-proto-http>=1.27,<2
+
 # Dev / test
 behave>=1.2
 # QA gate for TASK-WEB-016: validates web_voice/openapi.yaml against the OpenAPI 3

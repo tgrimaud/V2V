@@ -57,7 +57,14 @@ springdoc:
 
 # Observability (TASK-BE-009): expose Micrometer metrics via actuator so per-slice latency
 # (voice_support.slice, tagged slice/channel/provider/outcome) is queryable locally with
-# client-side p50/p95/p99 percentiles. No external exporter is wired for the pilot.
+# client-side p50/p95/p99 percentiles.
+#
+# OTLP export (TASK-OBS-001, ADR-0028 addendum) is ADDITIVE and DEFAULT OFF:
+#   - metrics export is disabled unless OTEL_METRICS_EXPORT_ENABLED=true;
+#   - trace sampling is 0.0 unless OTEL_TRACES_SAMPLER_ARG>0.
+# With both inert, nothing is recorded/shipped and no collector connection is attempted, so
+# offline tests and normal startup are unchanged. Point OTEL_EXPORTER_OTLP_ENDPOINT at the
+# opt-in collector (deploy/observability/) and flip the two flags to export.
 management:
   endpoints:
     web:
@@ -71,6 +78,17 @@ management:
     distribution:
       percentiles:
         voice_support.slice: 0.5, 0.95, 0.99
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:false}
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: ${OTEL_METRICS_EXPORT_STEP:10s}
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.0}
 
 voice-support:
   knowledge:

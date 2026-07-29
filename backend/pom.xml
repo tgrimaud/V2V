@@ -71,12 +71,29 @@
         </dependency>
 
         <!-- Observability (TASK-BE-009): Micrometer MeterRegistry + actuator metrics for
-             per-slice latency (retrieval / LLM) with client-side p50/p95/p99 percentiles.
-             No exporter is wired for the pilot; a Micrometer Tracing OTel bridge can be added
-             later to promote the same slice timings to distributed spans (ADR-0028). -->
+             per-slice latency (retrieval / LLM) with client-side p50/p95/p99 percentiles. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- OTLP export (TASK-OBS-001, ADR-0028 addendum): env-gated, DEFAULT OFF. These add an
+             OpenTelemetry upgrade path with no change to instrumented call sites — the existing
+             meters export via OTLP and HTTP server spans are produced by Spring's observation
+             autoconfig. Kept inert by config (management.otlp.metrics.export.enabled=false +
+             management.tracing.sampling.probability=0.0), so offline tests/startup are unchanged;
+             a collector is only contacted when the OTEL_* env vars turn export on. Versions are
+             managed by the Spring Boot BOM. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

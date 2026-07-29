@@ -1,0 +1,33 @@
+# OpenTelemetry Collector config for the local, opt-in observability stack (TASK-OBS-001).
+# Receives OTLP (gRPC 4317 / HTTP 4318) from the Java backend and the Python voice runtime,
+# and writes to stdout (debug) + a Prometheus scrape endpoint. This is a validation aid only;
+# it is not wired into any default run of the app.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  # Human-readable dump of received spans/metrics for local validation.
+  debug:
+    verbosity: detailed
+  # Scrapeable metrics at http://localhost:8889/metrics.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]

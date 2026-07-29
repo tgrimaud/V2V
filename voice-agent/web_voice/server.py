@@ -36,6 +36,7 @@ from tts_synthesis.provider_factory import (  # noqa: E402
     build_provider as build_tts_provider,
     build_streaming_provider as build_streaming_tts_provider,
 )
+from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
 from .egress import WebVoiceEgress  # noqa: E402
@@ -307,6 +308,8 @@ def _log_turn(telemetry: TelemetryRecorder) -> None:
         "events": [event.__dict__ for event in telemetry.events()],
     }
     print(json.dumps(payload, sort_keys=True), file=sys.stderr)
+    # Additive OTLP export (TASK-OBS-001): no-op unless OTEL export env is set; never raises.
+    export_recorder(telemetry)
 
 
 def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:

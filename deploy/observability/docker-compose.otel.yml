@@ -1,0 +1,19 @@
+# Opt-in OpenTelemetry Collector for local OTLP validation (TASK-OBS-001, ADR-0028 addendum).
+# NOT part of any default run. Bring it up only when validating OTLP export:
+#
+#   docker compose -f deploy/observability/docker-compose.otel.yml up
+#
+# Then enable export on each service (see deploy/observability/README.md):
+#   backend:  OTEL_METRICS_EXPORT_ENABLED=true OTEL_TRACES_SAMPLER_ARG=1.0 \
+#             OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ... mvn spring-boot:run
+#   voice:    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ... <run the voice runtime>
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus scrape (collector-exported metrics)

@@ -21,6 +21,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from voice_common.otel_export import export_recorder
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
@@ -140,6 +141,9 @@ def _log_telemetry(telemetry: TelemetryRecorder) -> None:
     # it is block-buffered, so without an explicit flush the dump can sit unwritten
     # until the process exits — losing the evidence for TASK-WEB-009 measurement.
     print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
+    # Additive OTLP export (TASK-OBS-001): no-op unless OTEL_EXPORTER_OTLP_ENDPOINT /
+    # VOICE_OTEL_EXPORT is set; never raises, so the stderr evidence above is authoritative.
+    export_recorder(telemetry)
 
 
 class WebRtcSignalingService:

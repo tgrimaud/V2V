@@ -6,6 +6,12 @@ Accepted (2026-07-19). Records the observability approach implemented by
 **TASK-BE-009** for the answer-engine backend (`voice-support-bot/backend`), on top
 of the modular decomposition (ADR-0027) and the answer contract (ADR-0021).
 
+**Amended 2026-07-29 (TASK-OBS-001):** adds an **env-gated OTLP export** path on both
+the backend and the voice runtime (default **off** → unchanged offline/pilot behaviour)
+and **formally accepts** the Micrometer + structured-logs + stderr-spans default as the
+pilot residual risk, with an explicit trigger that makes OTLP export mandatory. See the
+addendum at the end of this ADR.
+
 ## Context
 
 Runtime work in this project is required to be observable per latency slice
@@ -99,3 +105,82 @@ logged (existing `[CONVERSE]` behavior, unchanged).
   non-body endpoints (`/retrieve`, `/answer`, future GETs) would have no id, and there
   would be no continuity mechanism for a generated id; a filter guarantees an id
   always exists and is always cleared.
+
+## Addendum (2026-07-29, TASK-OBS-001): OTLP export + accepted pilot residual risk
+
+The full adversarial review (2026-07-28) flagged that neither service exports
+**distributed OpenTelemetry data over OTLP**, and that the deviation from the project
+OTel rule (DEC-010 / ADR-0010) was documented here but never *formally accepted* as a
+pilot residual risk. TASK-OBS-001 resolves both, taking the **hybrid** path.
+
+### 1. Accepted pilot residual risk (governance)
+
+For **V1 / pilot**, the default observability stack stays:
+
+- **Backend:** Micrometer meters (`voice_support.slice` timer + `prompt_chars` /
+  `answer_chars` / `answer_language` / `guardrail_block`) exposed via actuator, plus
+  `[TELEMETRY]`/`[CONVERSE]`/… structured logs carrying the `correlation_id` (MDC).
+- **Voice runtime:** `TelemetryRecorder` events/spans/metrics serialized to **stderr**
+  per turn/call.
+
+This is **accepted as sufficient for pilot QA**: latency slices are queryable
+(actuator percentiles) and reportable (stderr dumps), and a turn is followable
+runtime → backend under one `correlation_id` (the cross-service **join key**). No
+metrics/tracing collector runs in the pilot, so distributed OTLP export is **not**
+required to meet pilot acceptance.
+
+**Mandatory-export trigger.** OTLP export (below) becomes **mandatory** — no longer
+optional — as soon as **any** of the following holds:
+
+- the system runs as **more than one deployed service** in a shared (non-localhost)
+  environment where log/stderr correlation is no longer practical;
+- **real channels** are onboarded (telephony/Genesys/WhatsApp per ADR-0010) or any
+  non-localhost / multi-tenant deployment;
+- an SLO is claimed to an external stakeholder (needs queryable, retained
+  p50/p95/p99 across services, not per-run stderr dumps).
+
+Until a trigger fires, running with export **off** is an explicitly accepted residual
+risk (owner: architecture; revisit at the Sprint 10/11 channel/telephony work).
+
+### 2. Env-gated OTLP export (wiring, additive, default off)
+
+OTLP export is **additive** — the Micrometer/actuator and stderr evidence above are
+never removed.
+
+- **Backend.** Added `micrometer-registry-otlp` (metrics) and
+  `micrometer-tracing-bridge-otel` + `opentelemetry-exporter-otlp` (spans). No
+  instrumented call site changed — the existing meters export over OTLP and HTTP
+  server spans are produced by Spring's observation autoconfig. Gating (all default to
+  **inert**): `management.otlp.metrics.export.enabled=${OTEL_METRICS_EXPORT_ENABLED:false}`
+  and `management.tracing.sampling.probability=${OTEL_TRACES_SAMPLER_ARG:0.0}` — with
+  export disabled and 0.0 sampling, nothing is recorded or shipped and no collector
+  connection is attempted, so `mvn test` (no `@SpringBootTest`) and normal startup are
+  unchanged. Endpoints default to `http://localhost:4318` and are overridable via the
+  standard `OTEL_EXPORTER_OTLP_*` env vars.
+- **Voice runtime.** `voice_common/otel_export.py` translates a `TelemetryRecorder`'s
+  spans/events/metrics into OTel spans (with `correlation_id` / `conversation_id` /
+  `turn_index` as attributes) and ships them over OTLP/HTTP. It is called best-effort
+  next to the existing stderr dump (`_log_telemetry`, `_log_turn`) and is a **no-op**
+  unless `OTEL_EXPORTER_OTLP_ENDPOINT` (or `VOICE_OTEL_EXPORT`) is set; the
+  `opentelemetry` SDK is imported lazily and any failure is swallowed (stderr note),
+  so offline runs and the test suite are unaffected.
+- **Cross-service.** The shared `correlation_id` remains the join key on both sides
+  (attribute on spans, MDC in logs). Full **W3C `traceparent`** propagation on the
+  runtime → backend HTTP call (one trace id end to end) is the remaining step of the
+  full-export path and is deferred with option (a) validation.
+
+### 3. Local collector recipe (opt-in)
+
+`deploy/observability/` ships an opt-in OpenTelemetry Collector (`docker-compose.otel.yml`
++ `otel-collector-config.yaml`, `debug`/Prometheus exporters) plus a README with the
+env vars to flip export on for both services. It is **not** wired into any default run.
+
+### 4. What is validated now vs deferred
+
+- **Validated offline:** export is inert by default (backend suite + startup unchanged;
+  voice suite unchanged); the voice translation `TelemetryRecorder → OTel spans` is unit
+  tested with an in-memory span exporter (no network).
+- **Deferred (needs a running collector, option a full validation):** a single voice
+  turn producing one **correlated trace** across runtime and backend exported to the
+  collector, and `traceparent` propagation on the HTTP hop. Tracked as the remainder of
+  TASK-OBS-001 / the mandatory-export trigger.
