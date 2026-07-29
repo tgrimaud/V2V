@@ -7,7 +7,7 @@ export/tracing layer on top of the per-slice instrumentation already built.
 
 | Task | Title | Classification | Status |
 |---|---|---|---|
-| TASK-OBS-001 | OpenTelemetry export (OTLP) for backend + voice runtime, or accept the residual risk in ADR-0028 | V1 hardening (observability) | 🚧 Implemented — hybrid (2026-07-29) on `task/TASK-OBS-001-otel-export` — pending adversarial review + QA |
+| TASK-OBS-001 | OpenTelemetry export (OTLP) for backend + voice runtime, or accept the residual risk in ADR-0028 | V1 hardening (observability) | ✅ Review 93/100 + QA GO (2026-07-29) on `task/TASK-OBS-001-otel-export` — hybrid, merge-ready (awaiting user validation) |
 
 ---
 
@@ -15,11 +15,14 @@ export/tracing layer on top of the per-slice instrumentation already built.
 
 **Parent:** EPIC-010 (Observability, latency and pilot validation)
 **Classification:** V1 hardening (observability)
-**Status:** 🚧 Implemented — **hybrid** (2026-07-29) on `task/TASK-OBS-001-otel-export` —
+**Status:** ✅ Review + QA passed — **hybrid** (2026-07-29) on `task/TASK-OBS-001-otel-export` —
 option (b) residual-risk acceptance in ADR-0028 **and** env-gated OTLP wiring (default off)
-on both services + opt-in collector recipe. Pending adversarial review + QA before merge.
-Full cross-service correlated-trace validation (traceparent propagation) remains deferred
-behind the mandatory-export trigger.
+on both services + opt-in collector recipe. Adversarial code review **93/100 (Pass)**; QA GO
+(backend `mvn test` green, voice unittest 396 + behave 11/31/146 green, OTLP-specific tests 5
+green, default-off gate verified inert, live backend→collector smoke exported real traces +
+metrics, telemetry attributes confirmed technical-only → no PII egress). **Merge-ready** —
+awaiting explicit user validation/merge. Full cross-service correlated-trace validation
+(traceparent propagation) remains deferred behind the mandatory-export trigger.
 **Priority:** Medium
 **Branch:** `task/TASK-OBS-001-otel-export` (to create)
 **Surfaced by:** full adversarial code+doc review 2026-07-28
