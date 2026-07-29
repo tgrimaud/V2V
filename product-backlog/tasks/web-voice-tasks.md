@@ -1804,7 +1804,7 @@ QA (skill `qa-functional-latency`) — **GO** (deterministic; no live Gradium in
 **Parent:** EPIC-006 (Voice2Voice journey foundation) + EPIC-010 (observability, latency, pilot)
 **Delivers:** US-020 — *Receive a quick spoken acknowledgement during long analysis*
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** Planned (Sprint 10 — pilot-latency, added 2026-07-29)
+**Status:** Merge-ready — V1 (generic filler) on `task/TASK-WEB-019-filler-phrase` (2026-07-29); adversarial review 92/100 (one barge-in cleanup finding fixed); QA GO (`docs/qa/task-web-019-filler-qa-report.md`); merge on explicit user request
 **Priority:** Medium
 **Sprint:** Sprint 10 (pilot-readiness latency & perceived latency)
 **Relates to:** TASK-WEB-014 (mouth-to-ear latency metric — provides the wait signal),
@@ -1964,3 +1964,34 @@ worse than no filler). Two broker-free designs:
   tests with fakes (no live engine needed for the deterministic contract).
 - `voice.filler.spoken` event + metric emitted with correlation id and per-turn id.
 - ADR recorded; adversarial review ≥ 90% then QA GO; branch merge-ready (merge on user request).
+
+### V1 implementation (2026-07-29, `task/TASK-WEB-019-filler-phrase`)
+
+Delivered the **runtime-local timer** design (V1 above), broker-free per ADR-0036:
+
+- **`voice_pipeline/filler.py` (new):** owns the phrase set + env config + the DEC-002 guard.
+  - `VOICE_FILLER_ENABLED` (on by default; `0/false/no/off` disables), `VOICE_FILLER_THRESHOLD_MS`
+    (perceived-wait, default `1200`), `VOICE_FILLER_PHRASES` (`|`-separated FR; any digit-bearing
+    entry is dropped, empty override → built-in set). Built-in phrases assert no digit at import.
+  - `pick_phrase()` chooses among 2–3 neutral variants ("Un instant, je vérifie." …) to avoid a
+    robotic canned line.
+- **`AnswerProcessor` (voice_pipeline/answer.py):** wraps the backend call with a concurrent
+  filler task. The backend already runs off-loop via `asyncio.to_thread`, so the timer runs
+  concurrently. An `asyncio.Event` (`answered`) is set the moment the answer settles; the filler
+  only speaks if the threshold elapses **and** the answer is not yet ready (double-checked race
+  guard) — so a late filler can never follow the reply. The filler is pushed as a **plain
+  `TextFrame`** (chosen over widening the TTS allowlist, mirroring TASK-WEB-018) → the existing TTS
+  stages synthesize it and barge-in / interruption apply unchanged.
+- **At most once per turn**, skipped entirely on fast turns and when disabled.
+- **Observability:** `voice.filler.spoken` event + `voice.filler.spoken.count` metric with
+  `correlation_id`, `channel`, `provider`, `wait_ms` (and per-turn baggage when the recorder has a
+  turn set). The real answer's `tts_first_audio` span is untouched (no distribution pollution).
+- **Tests:** `tests/test_filler.py` (config/DEC-002/pick), filler cases in
+  `tests/test_answer_processor.py` (slow→filler-then-answer ordering, fast→skip, disabled→skip,
+  no-digit, observability), and `features/filler.feature` (+ steps). Full suite green
+  (415 unittests, 12 Behave features / 33 scenarios).
+- **Docs:** env vars documented in `docs/architecture/voice-runtime-http-contract.md`.
+
+Deferred to the enhancement path (unchanged): per-intent tailored fillers over an early intra-turn
+SSE event (needs backend intent signal + stream-aware adapter); a second "still working"/escalate
+threshold.

@@ -7,6 +7,7 @@ telemetry span with only lengths (never the raw transcript or answer).
 
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,10 @@ from types import SimpleNamespace
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
+import asyncio  # noqa: E402
+
 from pipecat.frames.frames import TextFrame, TranscriptionFrame  # noqa: E402
+from pipecat.processors.frame_processor import FrameDirection  # noqa: E402
 from pipecat.tests.utils import run_test  # noqa: E402
 
 from conversation_backend import (  # noqa: E402
@@ -34,6 +38,7 @@ from voice_pipeline.answer import (  # noqa: E402
     answer_with_telemetry,
     resolve_confidence_threshold,
 )
+from voice_pipeline.filler import FILLER_SPOKEN_EVENT, FILLER_SPOKEN_METRIC  # noqa: E402
 
 
 def _envelope() -> SimpleNamespace:
@@ -54,6 +59,25 @@ class _FakeBackend:
             text=self._text,
             provider=self.name,
             outcome=self._outcome,
+            correlation_id=request.correlation_id,
+        )
+
+
+class _SlowBackend:
+    """Backend that blocks (in the worker thread) longer than the filler threshold."""
+
+    name = "fake-backend"
+
+    def __init__(self, delay_s: float = 0.05, text: str = "voici la reponse") -> None:
+        self._delay_s = delay_s
+        self._text = text
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        time.sleep(self._delay_s)
+        return AnswerResult(
+            text=self._text,
+            provider=self.name,
+            outcome=AnswerOutcome.SUCCESS,
             correlation_id=request.correlation_id,
         )
 
@@ -154,6 +178,111 @@ class AnswerProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(plain), 1)
         self.assertEqual(plain[0].text, DEGRADED_FALLBACK_TEXT)
         self.assertIs(processor.result.outcome, AnswerOutcome.DEGRADED)
+
+
+class FillerPhraseTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-019: a short holding phrase is spoken when the answer is slow (US-020)."""
+
+    async def _run(self, processor: AnswerProcessor) -> list[str]:
+        down, _up = await run_test(
+            processor,
+            frames_to_send=[TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")],
+        )
+        return [f.text for f in down if isinstance(f, TextFrame) and not isinstance(f, TranscriptionFrame)]
+
+    async def test_slow_answer_speaks_the_filler_before_the_answer(self) -> None:
+        # GIVEN a backend slower than a low filler threshold
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.08, text="voici la reponse"),
+            _envelope(),
+            filler_threshold_ms=10,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through
+        texts = await self._run(processor)
+        # THEN the filler is spoken first, then the real answer (order preserved)
+        self.assertEqual(texts, ["Un instant.", "voici la reponse"])
+
+    async def test_fast_answer_skips_the_filler(self) -> None:
+        # GIVEN a fast backend and a high threshold (the wait never reaches it)
+        processor = AnswerProcessor(
+            _FakeBackend(text="voici la reponse"),
+            _envelope(),
+            filler_threshold_ms=10_000,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through
+        texts = await self._run(processor)
+        # THEN only the answer is spoken (no filler)
+        self.assertEqual(texts, ["voici la reponse"])
+
+    async def test_disabled_filler_never_speaks_even_when_slow(self) -> None:
+        # GIVEN the filler disabled with a slow backend and a tiny threshold
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.05),
+            _envelope(),
+            filler_enabled_flag=False,
+            filler_threshold_ms=1,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through -> THEN only the answer is spoken
+        texts = await self._run(processor)
+        self.assertEqual(texts, ["voici la reponse"])
+
+    async def test_filler_carries_no_billing_content_dec_002(self) -> None:
+        # GIVEN the built-in phrase set (no override) with a slow backend
+        processor = AnswerProcessor(_SlowBackend(delay_s=0.06), _envelope(), filler_threshold_ms=10)
+        # WHEN the filler fires -> THEN the spoken phrase carries no digit / amount
+        texts = await self._run(processor)
+        self.assertEqual(len(texts), 2)  # filler + answer
+        self.assertFalse(any(ch.isdigit() for ch in texts[0]))
+
+    async def test_filler_is_observable_with_correlation_and_wait(self) -> None:
+        # GIVEN a recorder and a slow backend past the threshold
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.06),
+            _envelope(),
+            telemetry,
+            filler_threshold_ms=10,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN the filler fires
+        await self._run(processor)
+        # THEN a spoken event + count metric carry the correlation id, channel and wait
+        event = next(r for r in telemetry.events() if r.name == FILLER_SPOKEN_EVENT)
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        self.assertEqual(event.attributes["channel"], "web_voice")
+        self.assertEqual(event.attributes["provider"], "fake-backend")
+        self.assertAlmostEqual(event.attributes["wait_ms"], 10.0)
+        metric = next(m for m in telemetry.metrics() if m.name == FILLER_SPOKEN_METRIC)
+        self.assertEqual(metric.value, 1)
+
+    async def test_cancellation_mid_wait_drops_the_pending_filler(self) -> None:
+        # GIVEN a slow turn whose filler has NOT yet fired (threshold not reached)
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.3),
+            _envelope(),
+            filler_threshold_ms=1000,
+            filler_phrases=["Un instant."],
+        )
+        pushed: list[str] = []
+
+        async def _record(frame, direction):  # noqa: ANN001 - test double for push_frame
+            if isinstance(frame, TextFrame):
+                pushed.append(frame.text)
+
+        processor.push_frame = _record  # type: ignore[method-assign]
+        frame = TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")
+        # WHEN the turn is cancelled (barge-in) while still waiting on the backend
+        task = asyncio.create_task(processor._answer(frame, FrameDirection.DOWNSTREAM))
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        # THEN the pending filler is dropped and never speaks out of turn afterwards
+        await asyncio.sleep(0.05)
+        self.assertEqual(pushed, [])
 
 
 class AnswerTelemetryTest(unittest.TestCase):

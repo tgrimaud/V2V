@@ -97,6 +97,23 @@ It is useful to separate two very different communication concerns:
 - **Do nothing (silence during long waits):** rejected — US-020 explicitly requires a spoken
   acknowledgement so the caller knows the turn is progressing.
 
+## Implementation addendum (2026-07-29 — TASK-WEB-019 V1)
+
+The V1 filler was implemented on the Flow-A path as decided here, resolving the two open
+implementation points the ticket flagged:
+
+- **Hook point = the `AnswerProcessor` backend dispatch.** The backend already runs off the
+  event loop (`asyncio.to_thread`), so a concurrent `asyncio` timer task runs alongside it with
+  no extra channel. An `asyncio.Event` set when the answer settles guarantees the filler only
+  speaks if the perceived-wait threshold elapses first (double-checked), so a late filler can
+  never follow the reply.
+- **Plain `TextFrame`, not `TTSSpeakFrame`.** Chosen over widening the TTS exact-type allowlist,
+  mirroring the TASK-WEB-018 degraded-fallback route, so barge-in / interruption apply unchanged
+  and the transcript-leak safeguard is untouched.
+
+No broker was introduced (as decided). The tailored per-intent filler over an early intra-turn
+SSE event remains the sanctioned enhancement; it does not change this ADR.
+
 ## Related Documents
 
 - TASK-WEB-019 (spoken filler / acknowledgement) and US-020 — `product-backlog/tasks/web-voice-tasks.md`, `product-backlog/stories/v1-user-stories.md`

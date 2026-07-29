@@ -12,6 +12,7 @@ It imports only pipecat, the neutral `conversation_backend` contract and the sha
 
 import asyncio
 import os
+from collections.abc import Sequence
 from typing import Any
 
 from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
@@ -31,6 +32,15 @@ from conversation_backend import (
 )
 from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import TelemetryRecorder, Timer
+from voice_pipeline.filler import (
+    FILLER_SPOKEN_EVENT,
+    FILLER_SPOKEN_METRIC,
+    FILLER_TRIGGER_REASON,
+    filler_enabled,
+    pick_phrase,
+    resolve_filler_phrases,
+    resolve_filler_threshold_ms,
+)
 
 # The backend latency slice (US-036, registered in voice_common/pipeline_timing.py).
 # `backend.first_token` is the time-to-first-token slice; `backend.request` is the
@@ -174,6 +184,9 @@ class AnswerProcessor(FrameProcessor):
         telemetry: Any = None,
         *,
         confidence_threshold: float | None = None,
+        filler_enabled_flag: bool | None = None,
+        filler_threshold_ms: float | None = None,
+        filler_phrases: Sequence[str] | None = None,
     ) -> None:
         super().__init__()
         self._backend = backend
@@ -184,6 +197,11 @@ class AnswerProcessor(FrameProcessor):
         self._confidence_threshold = (
             confidence_threshold if confidence_threshold is not None else resolve_confidence_threshold()
         )
+        # TASK-WEB-019: spoken filler config resolved once; explicit overrides win over env.
+        self._filler_enabled = filler_enabled() if filler_enabled_flag is None else filler_enabled_flag
+        threshold_ms = filler_threshold_ms if filler_threshold_ms is not None else resolve_filler_threshold_ms()
+        self._filler_threshold_s = threshold_ms / 1000.0
+        self._filler_phrases = tuple(filler_phrases) if filler_phrases else resolve_filler_phrases()
         # Last AnswerResult, read by the pipeline / turn processor for the response.
         self.result: Any = None
 
@@ -196,20 +214,75 @@ class AnswerProcessor(FrameProcessor):
 
     async def _answer(self, frame: TranscriptionFrame, direction: FrameDirection) -> None:
         request = AnswerRequest.from_envelope(frame.text, self._envelope)
+        # Speak a holding phrase concurrently if the answer is slow (TASK-WEB-019).
+        answered = asyncio.Event()
+        filler_task = asyncio.create_task(self._run_filler(answered, request, direction))
         try:
-            # The backend does blocking work (adapter I/O later); keep it off the loop.
-            result = await asyncio.to_thread(
-                lambda: answer_with_telemetry(
-                    self._backend,
-                    request,
-                    self._telemetry,
-                    confidence_threshold=self._confidence_threshold,
-                )
-            )
+            result = await self._call_backend(request)
+            # Settle the filler before the answer so a late filler can't follow the reply.
+            await self._stop_filler(answered, filler_task)
         except EmptyTranscriptError:
             # Nothing to answer: never invent a turn, so no text flows downstream.
             self.result = None
             return
+        finally:
+            # On any exit (empty transcript, or barge-in cancelling this turn mid-wait)
+            # a still-pending filler must be dropped so it can never speak out of turn.
+            self._cancel_filler(filler_task)
         self.result = result
         if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
             await self.push_frame(TextFrame(text=result.text), direction)
+
+    async def _call_backend(self, request: AnswerRequest) -> AnswerResult:
+        # The backend does blocking work (adapter I/O later); keep it off the loop.
+        return await asyncio.to_thread(
+            lambda: answer_with_telemetry(
+                self._backend,
+                request,
+                self._telemetry,
+                confidence_threshold=self._confidence_threshold,
+            )
+        )
+
+    async def _stop_filler(self, answered: asyncio.Event, filler_task: "asyncio.Task[None]") -> None:
+        """Signal the answer is settled and let the filler task finish (fired or skipped)."""
+        answered.set()
+        try:
+            await filler_task
+        except Exception:  # noqa: BLE001 - a filler/telemetry fault must never break the turn
+            pass
+
+    def _cancel_filler(self, filler_task: "asyncio.Task[None]") -> None:
+        # Best-effort drop of a still-pending filler; never awaited here so an outer
+        # cancellation (barge-in) is not masked. A completed task is left untouched.
+        if not filler_task.done():
+            filler_task.cancel()
+
+    async def _run_filler(
+        self, answered: asyncio.Event, request: AnswerRequest, direction: FrameDirection
+    ) -> None:
+        """Speak one filler once the perceived-wait threshold elapses without an answer."""
+        if not self._filler_enabled:
+            return
+        try:
+            await asyncio.wait_for(answered.wait(), timeout=self._filler_threshold_s)
+            return  # answered before the threshold: the wait was short, no filler needed
+        except asyncio.TimeoutError:
+            pass
+        if answered.is_set():  # race guard: the answer landed exactly at the threshold
+            return
+        await self.push_frame(TextFrame(text=pick_phrase(self._filler_phrases)), direction)
+        self._emit_filler_spoken(request)
+
+    def _emit_filler_spoken(self, request: AnswerRequest) -> None:
+        if self._telemetry is None:
+            return
+        attrs = {
+            "correlation_id": request.correlation_id,
+            "channel": request.channel,
+            "provider": self._backend.name,
+            "wait_ms": round(self._filler_threshold_s * 1000.0, 3),
+            "trigger": FILLER_TRIGGER_REASON,
+        }
+        self._telemetry.record(FILLER_SPOKEN_EVENT, **attrs)
+        self._telemetry.metric(FILLER_SPOKEN_METRIC, 1, **attrs)
