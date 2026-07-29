@@ -2019,3 +2019,189 @@ Delivered the **runtime-local timer** design (V1 above), broker-free per ADR-003
 Deferred to the enhancement path (unchanged): per-intent tailored fillers over an early intra-turn
 SSE event (needs backend intent signal + stream-aware adapter); a second "still working"/escalate
 threshold.
+
+---
+
+## TASK-WEB-020 - Lever 1: Stream The Backend Answer To TTS On The First Vetted Sentence
+
+**Parent:** EPIC-010 (+ EPIC-005)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop), US-040 (pilot readiness)
+**Related decisions:** ADR-0037 (first-sentence backend streaming to TTS — this ticket
+implements lever 1), ADR-0013 (backend SSE guarded-sentence streaming), DEC-002 (no invented
+/ ungrounded amounts), ADR-0029 (pilot latency criterion this lever lowers toward)
+**Depends on:** TASK-WEB-014 (live baseline — optimize against a real measurement), TASK-BE-017
+(backend warm-up + vetted-stream contract confirmation for voice consumption)
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** To do (Sprint 10, branch `task/TASK-WEB-020-stream-first-sentence` off
+`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 1) per user decision 2026-07-29.
+**Priority:** High
+
+### Objective
+
+Cut perceived time-to-first-audio on the streaming WebRTC path by starting TTS on the **first
+backend sentence** instead of waiting for the **whole** answer. Live baseline (2026-07-29):
+`backend_first_token` p50 ≈ 1012 ms and today equals `backend.request` (the runtime waits the
+full answer), so this lever targets the largest single slice.
+
+### Context (measured + code reality)
+
+The voice runtime today calls the **blocking** answer path (`AnswerProcessor._call_backend` →
+`POST /api/conversation/converse`) and only hands a single `TextFrame` (the complete answer) to
+the streaming TTS. The backend **already** exposes a guarded streaming endpoint —
+`POST /api/conversation/converse-stream` (Server-Sent Events, ADR-0013 / TASK-BE-007) — whose
+`chunk` events are emitted **one guardrail-vetted sentence at a time**: `GuardedSentenceEmitter`
+grounds first, then runs the output guardrail on **each sentence before emitting it**, and stops
+the stream + emits the safe hand-off if a sentence is blocked. **DEC-002 is therefore already
+enforced sentence-by-sentence on the backend stream** — this lever consumes that contract; it does
+not weaken it.
+
+### Scope
+
+- Add a **streaming backend consumer** to the voice path that reads the SSE `chunk`/`done`/`error`
+  events and hands each `chunk` (already a vetted sentence) to the streaming TTS as it arrives, so
+  first audio starts on the first sentence.
+- Preserve the **exact safety and contract** of the blocking path: grounding + per-sentence
+  guardrail (backend), the runtime's confidence handling, conversation memory recording, the
+  degraded/UNAVAILABLE outcome, and the sanitized error contract.
+- Preserve **barge-in**: an interruption mid-answer must cancel the in-flight SSE stream (and the
+  TTS) cleanly — `asyncio.CancelledError` handling + best-effort stream close, no leaked session,
+  no sentence voiced after cancellation.
+- **Feature-flagged, default-off** initially (env toggle) so the blocking path stays the safe
+  fallback; the stream path is switched on for the live before/after pass.
+- Keep the **spoken filler** (TASK-WEB-019) coherent: first audio now usually arrives before the
+  filler threshold, so the filler should rarely fire; verify no double-speak (filler + first
+  sentence) and no `tts_first_audio` skew.
+- Update TASK-WEB-014 telemetry so `backend_first_token` reflects the **first sentence** and the
+  composite/mouth-to-ear improvement is measurable per slice.
+
+### Out Of Scope
+
+- Any change to **what** the bot says about a bill (DEC-002 content stays backend-owned).
+- Backend changes to the guarded-stream itself (owned by TASK-BE-017 if any hardening is needed).
+- Lever 2 (connect-time warm-up, TASK-WEB-021) and lever 3 (end-of-turn hold, delivered).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The bot starts speaking on the first vetted sentence
+  Given a warm streaming WebRTC session on the web channel with the real backend
+  When the customer asks a knowledge-grounded question
+  Then the bot begins speaking the first sentence before the full answer is finished
+  And the measured time-to-first-audio improves against the TASK-WEB-014 baseline
+```
+
+```gherkin
+Scenario: Streaming never voices unsafe or ungrounded content
+  Given the backend blocks a sentence that would state an unsupported amount
+  When the answer is streamed to the caller
+  Then that sentence is never spoken
+  And the caller hears the safe hand-off message instead, exactly as on the non-streamed path
+```
+
+```gherkin
+Scenario: A barge-in during the streamed answer stops it cleanly
+  Given the bot is speaking a streamed answer
+  When the customer interrupts
+  Then the bot stops speaking and no further sentence of that answer is voiced
+  And the next turn starts normally with no leftover audio or leaked connection
+```
+
+```gherkin
+Scenario: The streamed path preserves conversation memory and safe failure
+  Given a streamed answer completes or the backend becomes unavailable mid-stream
+  Then the turn is recorded in conversation memory as on the blocking path
+  And an unavailable backend yields the same client-safe degraded outcome, no raw provider text
+```
+
+### Required Evidence
+
+- Developer tests for the SSE consumer seam (fake SSE `chunk`/`done`/`error`, fake streaming TTS):
+  first-sentence-to-TTS ordering, blocked-sentence hand-off, barge-in cancellation mid-stream (no
+  leak, no post-cancel speech), degraded/error mapping, memory recording, feature-flag on/off.
+- A warm + cold **live** before/after sample (real backend), per-slice + composite p50/p95/p99
+  vs the TASK-WEB-014 baseline (500 ms and tuned-hold configs), with the ADR-0029 gate re-evaluated.
+- Updated ADR-0037 (Proposed → Accepted once live-validated), streaming QA report go/no-go,
+  `voice-runtime-http-contract.md` + `voice-journey-timing.md`.
+- No API key / raw audio / path leak; DEC-002 invariant re-checked on the streamed path.
+
+### Open Questions
+
+- **Runtime confidence policy vs. early speech:** the blocking path can downgrade a low-confidence
+  answer before speaking; the SSE `done` confidence arrives at the end. Decide whether to (a) trust
+  the backend per-sentence guardrail + grounding gate as sufficient, or (b) gate lever 1 on a
+  grounded/high-confidence verdict exposed at stream open (TASK-BE-017) and fall back to blocking
+  otherwise. Owner: Architecture + Product (DEC-002 boundary).
+
+---
+
+## TASK-WEB-021 - Lever 2: Connect-Time Warm-Up Of The STT Session + First LLM/Embedding Call
+
+**Parent:** EPIC-010 (+ EPIC-006)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop), US-040 (pilot readiness)
+**Related decisions:** ADR-0037 (lever 2), TASK-WEB-011 (TTS pre-warm — the precedent this mirrors),
+ADR-0029 (pilot latency criterion)
+**Depends on:** TASK-WEB-014 (live baseline), TASK-BE-017 (backend LLM/embedding warm-up path)
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** To do (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
+`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 2) per user decision 2026-07-29.
+**Priority:** High
+
+### Objective
+
+Remove the first-turn cold-start penalty (live baseline: turn 1 mouth-to-ear ≈ 4.1–4.4 s vs warm
+turns ≈ 2.1–3.3 s; ADR-0037 estimate ≈ −450 ms) by warming the STT streaming session and the
+backend LLM/embedding on WebRTC connect, so the **first real turn is already warm**.
+
+### Context
+
+TASK-WEB-011 already pre-warms the **TTS** session off the per-turn path (`TtsSessionWarmer`:
+open a spare at `StartFrame`, hand it out on the first turn, discard any unused spare at teardown —
+no leak). The **STT streaming session open** and the **first LLM/embedding call** are still paid on
+turn 1. This lever applies the same pattern to those two costs, provider-agnostically.
+
+### Scope
+
+- **STT warm-up:** on WebRTC connect (session start), open a throwaway/spare streaming STT session
+  so the first real utterance does not pay the session-open latency; discard any unused spare at
+  call end with **no leaked session** (mirror `TtsSessionWarmer` lifecycle).
+- **Backend LLM/embedding warm-up:** on connect, trigger a tiny warm call so the first grounded
+  answer does not pay cold model/embedding latency. The backend-side warm path is TASK-BE-017; this
+  ticket wires the runtime trigger and handles its failure gracefully (a failed warm-up must never
+  block or delay the first real turn).
+- **Env-tunable + safe:** a toggle to disable warm-up; warm-up runs off the per-turn critical path
+  and never voices anything; no secret logged.
+- Measure the **turn-1** delta against the TASK-WEB-014 baseline (cold vs warm).
+
+### Out Of Scope
+
+- Lever 1 (TASK-WEB-020) and lever 3 (delivered).
+- The backend warm endpoint implementation itself (TASK-BE-017).
+- Any change to answer content or guardrails.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The first turn no longer pays the full cold-start penalty
+  Given a freshly connected WebRTC session with warm-up enabled
+  When the very first turn is measured
+  Then its time-to-first-audio is within a stated margin of a warm turn
+  And the turn-1 penalty is reduced against the TASK-WEB-014 baseline
+```
+
+```gherkin
+Scenario: Warm-up never leaks a session or blocks the first turn
+  Given warm-up is enabled and a spare STT session was pre-opened
+  When the caller connects and then speaks, or hangs up before speaking
+  Then no STT/LLM session is left open after the call ends
+  And a failed warm-up still lets the first real turn proceed normally
+```
+
+### Required Evidence
+
+- Developer tests for the STT warm-up lifecycle (open-at-connect, hand-out on first turn, discard
+  unused spare with no leak, failed-spare falls back to on-demand open) and the backend warm-up
+  trigger (fires once at connect, failure is non-blocking).
+- A **live** cold-vs-warm turn-1 sample (real backend) showing the reduced first-turn penalty vs
+  the TASK-WEB-014 baseline.
+- Updated ADR-0037 evidence + streaming QA report + `voice-journey-timing.md`.
+- No API key / raw audio / path leak.

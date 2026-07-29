@@ -74,7 +74,10 @@ slowest turns without skewing `tts_first_audio`. Write-up + evidence:
 | Ticket | Title | Role | Status |
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | **Live sample captured 2026-07-29**: mouth-to-ear p95 ≈ 4.1–4.4 s → **ADR-0029 gate FAIL** (NO-GO as-is); fix path = WEB-015 levers 1 & 2. Formal adversarial/QA sign-off pending |
-| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | In progress — **lever 3 live-accepted** (−150 ms, 0 false-cut, tuned default 350 ms); levers 1-2 designed (ADR-0037), gated on live pass |
+| TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | **Lever 3 done + live-accepted** (−150 ms, 0 false-cut, tuned default 350 ms). Levers 1 & 2 **split out** into TASK-WEB-020 / TASK-WEB-021 (+ backend TASK-BE-017) on 2026-07-29 |
+| TASK-WEB-020 | Lever 1 — stream the backend answer to TTS on the first vetted sentence (consume `converse-stream` SSE instead of blocking `/converse`) | Optimize | To do — backend stream already DEC-002-safe per sentence; feature-flagged; depends on TASK-BE-017 + live baseline |
+| TASK-WEB-021 | Lever 2 — connect-time warm-up of the STT session + first LLM/embedding call (mirror `TtsSessionWarmer`) | Optimize | To do — removes the turn-1 cold-start penalty; depends on TASK-BE-017 |
+| TASK-BE-017 | Backend support for the levers — warm-up path (lever 2) + vetted-stream contract test / optional early confidence (lever 1) | Enable | To do — backend dependency of TASK-WEB-020/021 |
 | TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
