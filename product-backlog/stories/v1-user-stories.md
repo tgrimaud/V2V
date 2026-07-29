@@ -480,7 +480,7 @@ Scenario: Web Voice2Voice journey
 
 **Parent:** EPIC-006
 **Classification:** V1 core
-**Status:** Draft
+**Status:** Planned (Sprint 10 — pilot-latency; delivered by TASK-WEB-019)
 **Priority:** Medium
 
 ### User Story

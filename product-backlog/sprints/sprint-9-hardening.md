@@ -48,8 +48,9 @@ Done/merged and the sprint is user-accepted.
 | Sprint 7 | Real answer engine — RAG over the KB (EPIC-005) | ✅ Done (2026-07-20) |
 | Sprint 8 | CSV KB ingestion — `CsvArticleConnector` + embedding `DomainClassifier` | ✅ Done (2026-07-23) |
 | **Sprint 9** | **Hardening / assainissement — small improvements & set-aside debt — this sprint** | ✅ Done (closed 2026-07-28) |
-| Sprint 10 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
-| Sprint 11 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
+| Sprint 10 | Pilot-readiness latency & perceived latency (TASK-WEB-014/015 + TASK-WEB-019/US-020) | Planned (next) — promoted ahead of billing 2026-07-29 |
+| Sprint 11 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
+| Sprint 12 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
 ## Why now (state that justifies the sprint)
 

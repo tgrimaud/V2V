@@ -1798,3 +1798,107 @@ QA (skill `qa-functional-latency`) — **GO** (deterministic; no live Gradium in
   replaces a silent call with a short fixed TTS phrase; no pipeline-slice latency claimed.
 - **Residual (non-blocking / info):** live-voice (Gradium streaming) confirmation of the spoken
   fallback deferred to pilot; the failure→spoken-fallback contract is fully covered by fakes.
+
+## TASK-WEB-019 — Spoken Filler / Acknowledgement While The Answer Is Being Prepared
+
+**Parent:** EPIC-006 (Voice2Voice journey foundation) + EPIC-010 (observability, latency, pilot)
+**Delivers:** US-020 — *Receive a quick spoken acknowledgement during long analysis*
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** Planned (Sprint 10 — pilot-latency, added 2026-07-29)
+**Priority:** Medium
+**Sprint:** Sprint 10 (pilot-readiness latency & perceived latency)
+**Relates to:** TASK-WEB-014 (mouth-to-ear latency metric — provides the wait signal),
+TASK-WEB-015 (optimization levers — reduce how often the filler is needed), TASK-WEB-008 /
+ADR-0025 (barge-in / interruption), TASK-WEB-018 (degraded spoken fallback — a sibling
+"speak instead of silence" behaviour), DEC-002 (no invented amounts).
+
+### Problem / Product intent
+
+When a billing answer genuinely needs time (backend orchestration + LLM wording + TTS), the
+caller currently hears **silence** on the voice channel. On a phone-like experience, silence
+reads as "the call dropped" or "the bot is broken". US-020 asks for a **short spoken
+acknowledgement** so the caller knows the turn is still progressing and stays engaged, and
+**later** receives the reliable explanation or an escalation.
+
+This is a *perceived-latency* feature: it does not make the real answer faster (that is
+TASK-WEB-015), it makes the unavoidable wait feel handled.
+
+### Scope
+
+In scope:
+
+- Detect that the current turn's answer preparation has exceeded a **perceived-wait threshold**
+  and, only then, speak **one** short neutral holding phrase on the voice channel.
+- Keep the real answer flow intact: when the answer is ready it is spoken as today; if it fails
+  or confidence is too low, the existing degraded fallback / escalation behaviour still applies.
+- Preserve barge-in: the caller can interrupt the filler exactly like any bot speech.
+- Make the phrase(s), threshold and enable/disable **configurable** (env-tunable), default on
+  for voice channels.
+
+Out of scope:
+
+- Changing what the bot says about the bill, or letting the filler carry any billing content /
+  numbers (DEC-002 — the phrase is content-free, e.g. a neutral "one moment, I'm checking that").
+- Text channel behaviour (this is a spoken-wait concern).
+- Reducing the actual backend/LLM/TTS time (that is TASK-WEB-015).
+
+### Business rules
+
+- The filler is spoken **at most once per turn**, and only when the wait crosses the configured
+  threshold — never on fast turns.
+- The filler must **never** contain figures, amounts, dates or any invoice specifics (DEC-002).
+- The filler must be **interruptible** (barge-in) and must not delay or replace the real answer;
+  if the answer becomes ready while the filler is still playing, the real answer follows the
+  same barge-in/telemetry rules already in place.
+- If the answer ultimately fails, the caller still gets the safe degraded fallback / escalation,
+  not just the filler.
+
+### Acceptance criteria
+
+```gherkin
+Scenario: The bot acknowledges when analysis takes longer than the comfortable wait
+  Given the bot needs more time than the perceived-wait threshold to prepare the answer
+  When the customer is waiting on a voice channel
+  Then the bot speaks one short neutral acknowledgement
+  And the customer later receives the reliable explanation or an escalation
+
+Scenario: Fast turns are not padded with a filler
+  Given the bot prepares the answer within the perceived-wait threshold
+  When the customer is waiting on a voice channel
+  Then the bot speaks only the answer, with no acknowledgement phrase
+
+Scenario: The acknowledgement carries no billing content
+  Given the bot speaks a holding acknowledgement
+  Then the phrase contains no amount, date or invoice specifics
+
+Scenario: The customer can interrupt the acknowledgement
+  Given the bot is speaking the holding acknowledgement
+  When the customer starts speaking
+  Then the bot stops and listens, exactly as during a normal answer
+```
+
+### Observability (mandatory — runtime behaviour)
+
+- A `voice.filler.spoken` outcome event + a `voice.filler.spoken.count` metric, carrying
+  `correlation_id`, per-turn id, `channel`, `provider` and the `wait_ms` that triggered it, so
+  QA can report how often and after what wait the filler fires (p50/p95 of trigger wait).
+- The filler must not corrupt the existing per-slice latency distributions (mirror the
+  TASK-WEB-008 lesson: emit outcome-specific events, keep the real `tts_first_audio` span for
+  the actual answer, not the filler).
+
+### Dependencies / open questions
+
+- **Architecture (ADR needed at implementation):** where the wait threshold is measured and the
+  filler is injected in the streaming pipeline, and how it composes with barge-in and with the
+  streaming TTS processor. To be captured in a new ADR under `docs/architecture/adrs/` before
+  coding, extending ADR-0025 (barge-in) rather than duplicating it.
+- **Product (OQ):** exact wording set and default threshold value are product/UX decisions; keep
+  them configurable and confirm the pilot wording with Product before QA sign-off.
+
+### Definition of done
+
+- US-020 acceptance criteria pass via Behave scenarios on the voice runtime.
+- Threshold-gated single-filler behaviour + DEC-002 content rule + barge-in covered by unit
+  tests with fakes (no live engine needed for the deterministic contract).
+- `voice.filler.spoken` event + metric emitted with correlation id and per-turn id.
+- ADR recorded; adversarial review ≥ 90% then QA GO; branch merge-ready (merge on user request).
