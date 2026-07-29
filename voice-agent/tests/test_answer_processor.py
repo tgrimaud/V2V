@@ -15,7 +15,10 @@ from types import SimpleNamespace
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
+import asyncio  # noqa: E402
+
 from pipecat.frames.frames import TextFrame, TranscriptionFrame  # noqa: E402
+from pipecat.processors.frame_processor import FrameDirection  # noqa: E402
 from pipecat.tests.utils import run_test  # noqa: E402
 
 from conversation_backend import (  # noqa: E402
@@ -254,6 +257,32 @@ class FillerPhraseTest(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(event.attributes["wait_ms"], 10.0)
         metric = next(m for m in telemetry.metrics() if m.name == FILLER_SPOKEN_METRIC)
         self.assertEqual(metric.value, 1)
+
+    async def test_cancellation_mid_wait_drops_the_pending_filler(self) -> None:
+        # GIVEN a slow turn whose filler has NOT yet fired (threshold not reached)
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.3),
+            _envelope(),
+            filler_threshold_ms=1000,
+            filler_phrases=["Un instant."],
+        )
+        pushed: list[str] = []
+
+        async def _record(frame, direction):  # noqa: ANN001 - test double for push_frame
+            if isinstance(frame, TextFrame):
+                pushed.append(frame.text)
+
+        processor.push_frame = _record  # type: ignore[method-assign]
+        frame = TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")
+        # WHEN the turn is cancelled (barge-in) while still waiting on the backend
+        task = asyncio.create_task(processor._answer(frame, FrameDirection.DOWNSTREAM))
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        # THEN the pending filler is dropped and never speaks out of turn afterwards
+        await asyncio.sleep(0.05)
+        self.assertEqual(pushed, [])
 
 
 class AnswerTelemetryTest(unittest.TestCase):

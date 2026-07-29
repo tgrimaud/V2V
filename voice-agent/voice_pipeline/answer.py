@@ -218,25 +218,31 @@ class AnswerProcessor(FrameProcessor):
         answered = asyncio.Event()
         filler_task = asyncio.create_task(self._run_filler(answered, request, direction))
         try:
-            # The backend does blocking work (adapter I/O later); keep it off the loop.
-            result = await asyncio.to_thread(
-                lambda: answer_with_telemetry(
-                    self._backend,
-                    request,
-                    self._telemetry,
-                    confidence_threshold=self._confidence_threshold,
-                )
-            )
+            result = await self._call_backend(request)
+            # Settle the filler before the answer so a late filler can't follow the reply.
+            await self._stop_filler(answered, filler_task)
         except EmptyTranscriptError:
             # Nothing to answer: never invent a turn, so no text flows downstream.
-            await self._stop_filler(answered, filler_task)
             self.result = None
             return
-        # Stop the filler timer before the answer so a late filler can't follow the reply.
-        await self._stop_filler(answered, filler_task)
+        finally:
+            # On any exit (empty transcript, or barge-in cancelling this turn mid-wait)
+            # a still-pending filler must be dropped so it can never speak out of turn.
+            self._cancel_filler(filler_task)
         self.result = result
         if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
             await self.push_frame(TextFrame(text=result.text), direction)
+
+    async def _call_backend(self, request: AnswerRequest) -> AnswerResult:
+        # The backend does blocking work (adapter I/O later); keep it off the loop.
+        return await asyncio.to_thread(
+            lambda: answer_with_telemetry(
+                self._backend,
+                request,
+                self._telemetry,
+                confidence_threshold=self._confidence_threshold,
+            )
+        )
 
     async def _stop_filler(self, answered: asyncio.Event, filler_task: "asyncio.Task[None]") -> None:
         """Signal the answer is settled and let the filler task finish (fired or skipped)."""
@@ -245,6 +251,12 @@ class AnswerProcessor(FrameProcessor):
             await filler_task
         except Exception:  # noqa: BLE001 - a filler/telemetry fault must never break the turn
             pass
+
+    def _cancel_filler(self, filler_task: "asyncio.Task[None]") -> None:
+        # Best-effort drop of a still-pending filler; never awaited here so an outer
+        # cancellation (barge-in) is not masked. A completed task is left untouched.
+        if not filler_task.done():
+            filler_task.cancel()
 
     async def _run_filler(
         self, answered: asyncio.Event, request: AnswerRequest, direction: FrameDirection
