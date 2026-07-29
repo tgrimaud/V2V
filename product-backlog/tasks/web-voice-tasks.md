@@ -1886,14 +1886,53 @@ Scenario: The customer can interrupt the acknowledgement
   TASK-WEB-008 lesson: emit outcome-specific events, keep the real `tts_first_audio` span for
   the actual answer, not the filler).
 
+### Pipecat feasibility (verified 2026-07-29 against the installed runtime)
+
+Checked against **pipecat-ai 1.5.0** (our pin, `pipecat-ai>=1.5,<2`) and our actual `web_voice`
+pipeline, not the Pipecat `main` branch:
+
+- **The primitive exists in our version.** `TTSSpeakFrame` already carries an
+  `append_to_context` field in 1.5.0, and `LLMService` exposes both `on_function_calls_started`
+  and `on_completion_timeout`. So the *shared snippet* is real API, not main-only.
+- **But its hook point does NOT map to our architecture.** The shared pattern hooks
+  `llm.event_handler("on_function_calls_started")` — it assumes the **LLM + tool-calling run
+  inside Pipecat**. Our runtime does not: the pipeline is
+  `transport.input → stt → answer → tts → transport.output`, where `answer` is `AnswerProcessor`
+  → `BackendAnswerPort` (**HTTP to the Java backend**). There is **no in-Pipecat `LLMService`**
+  and no Pipecat-visible tool call (RAG/BSS/LLM reasoning is server-side and opaque to Pipecat).
+  → `on_function_calls_started` / `on_completion_timeout` **can never fire** in our runtime.
+- **Our equivalent hook point = the `AnswerProcessor` dispatch.** The moment the transcript is
+  sent to the backend is the exact analogue of "function call started". Implementation: start a
+  timer when `AnswerProcessor` dispatches the backend request; if no answer/first-audio by the
+  perceived-wait threshold, emit **one** filler; a second (longer) threshold triggers the
+  "still working" / escalate fallback — our own timer, since `on_completion_timeout` is unusable.
+- **Frame-type gotcha (must not reuse `TTSSpeakFrame` blindly).** Both our TTS stages
+  (`StreamingTtsProcessor`, `TtsFrameProcessor`) use an **exact-type allowlist**
+  `type(frame) is TextFrame` and **forward every subclass untouched** (the TASK-WEB-018 /
+  transcript-leak safeguard). `TTSSpeakFrame` is a `TextFrame` *subclass* → it would be
+  forwarded **unsynthesized** (silent). So the filler must be pushed as a **plain
+  `TextFrame(filler)`** (mirroring the TASK-WEB-018 degraded fallback), or the allowlist must be
+  explicitly widened to accept `TTSSpeakFrame`. Prefer the plain-`TextFrame` route for
+  consistency with the existing degraded-fallback path.
+- **Per-tool tailored fillers don't map to V1.** The snippet tailors phrases by
+  `call.function_name`; we expose no tools to Pipecat, so per-intent fillers would require the
+  **backend to signal intent** back to the runtime. V1 = one generic phrase (2–3 random variants
+  to avoid a robotic line); per-intent tailoring is a later enhancement gated on a backend intent
+  signal.
+- **Gradium caveat confirmed.** This assumes the STT→backend→TTS discrete pipeline (current
+  Gradium STT/TTS target). If Gradium is later adopted as a **full speech-to-speech** engine, the
+  injection point changes and this ticket must be re-scoped against Gradium's own API.
+
 ### Dependencies / open questions
 
-- **Architecture (ADR needed at implementation):** where the wait threshold is measured and the
-  filler is injected in the streaming pipeline, and how it composes with barge-in and with the
-  streaming TTS processor. To be captured in a new ADR under `docs/architecture/adrs/` before
-  coding, extending ADR-0025 (barge-in) rather than duplicating it.
+- **Architecture (ADR needed at implementation):** confirm the `AnswerProcessor`-timer hook
+  point, the plain-`TextFrame` vs widened-allowlist decision, and how the filler composes with
+  barge-in and the streaming TTS processor. Capture in a new ADR under
+  `docs/architecture/adrs/` before coding, extending ADR-0025 (barge-in) rather than duplicating.
 - **Product (OQ):** exact wording set and default threshold value are product/UX decisions; keep
   them configurable and confirm the pilot wording with Product before QA sign-off.
+- **Product/Architecture (deferred):** per-intent fillers depend on a backend→runtime intent
+  signal that does not exist yet — out of V1 scope unless Product prioritizes it.
 
 ### Definition of done
 
