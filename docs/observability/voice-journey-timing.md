@@ -263,6 +263,27 @@ plus `end_of_turn_signal`; a spike in mid-utterance `client_stop`/premature
 `silence_window` cuts at 350 ms vs 500 ms is the premature-endpoint regression to gate
 on. Keep 500 ms unless the shorter hold holds a comparable false-cut rate on real audio.
 
+**Measured live 2026-07-29 (real backend, streaming WebRTC, warm, headphones).** Two
+sessions, only the hold changed (evidence:
+[`streaming-latency-eot500-live-2026-07-29.json`](../qa/streaming-latency-eot500-live-2026-07-29.json),
+[`streaming-latency-eot350-live-2026-07-29.json`](../qa/streaming-latency-eot350-live-2026-07-29.json)):
+
+| Metric | 500 ms | 350 ms | Read |
+|---|---:|---:|---|
+| `end_of_turn` p50/p95 | 500 / 500 | 350 / 350 | **−150 ms deterministic** (the controlled change) |
+| false-cut (premature `client_stop`) | 0/6 | 0/10 | no premature-endpoint regression at 350 ms |
+| `stt` p50/p95 | 940 / 1780 | 1169 / 2367 | dominant, varies per utterance |
+| `backend_first_token` p50/p95 | 1012 / 2550 | 943 / 2002 | dominant (full answer waited, no lever 1 yet) |
+| `voice_to_first_audio` (m2e) p95 | 4448 | 4140 | ADR-0029 ≤ 1500 ms → **FAIL** both |
+
+Reading: the hold drops by exactly its delta, false-cut stayed 0 at 350 ms, but the
+mouth-to-ear composite is **dominated by STT + backend (~2 s together)** so the −150 ms is
+inside the session-to-session noise. Lever 3 is a safe tuned default
+(`VOICE_END_OF_TURN_SILENCE_MS=350`) but does not move the ADR-0029 gate on its own — that
+is the job of levers 1 (backend SSE first-sentence → TTS) and 2 (connect-time warm-up). The
+full pilot pass is written up in
+[`streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md#live-pilot-pass--real-backend-mouth-to-ear--lever-3-beforeafter-2026-07-29).
+
 The `backend_first_token` slice is measured for both the `stub` and `http`
 backends (the span comes from `voice_pipeline/answer.py`, not the adapter), and a
 degraded turn still measures backend + TTS + egress because the safe fallback is

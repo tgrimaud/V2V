@@ -1321,12 +1321,17 @@ reporting + dev tests + docs done on `task/TASK-WEB-014-mouth-to-ear-latency`; u
 mouth-to-ear composite (EOT hold + STT + backend + TTS + `channel_egress`), `ChannelEgressProbe`
 emitting `web.voice.egress` on the WebRTC streaming path, ADR-0029 gate in
 `streaming_latency_report`, and a client-side first-audible proxy. Closes the
-ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known gap. **Remaining before
-pilot sign-off:** capture a **warm live sample against the real backend** and record
-measured `voice_to_first_audio` p50/p95/p99 vs the ADR-0029 gate — an out-of-sprint
-pre-pilot measurement in the pilot-readiness latency theme (off the billing theme, now
-Sprint 10); voice + backend are frozen so the sample stays valid whenever run. Adversarial
-review + QA go/no-go pending.
+ADR-0018 / TASK-WEB-009 `channel_egress` + end-of-turn known gap. **Warm live sample
+against the real backend captured 2026-07-29 (Sprint 10):** streaming WebRTC, warm,
+headphones, real backend (Gradium streaming STT/TTS + Mistral + Ollama + pgvector) —
+measured `voice_to_first_audio` p95 **≈ 4.1–4.4 s** and `time_to_first_audio` p95
+**≈ 3.8–3.9 s** → **ADR-0029 gate FAIL** (criteria ≤ 1.5 s / ≤ 1.2 s), dominated by the
+serial STT (~1 s p50) + backend first-token (~1 s p50) slices; TTS is flat (pre-warmed).
+Evidence `docs/qa/streaming-latency-eot{500,350}-live-2026-07-29.json`; write-up in
+`docs/qa/streaming-voice-qa-report.md` (Live Pilot Pass 2026-07-29). **Go/no-go: NO-GO on
+the pilot latency gate as-is** — the perceived number is honest and the fix path is
+TASK-WEB-015 levers 1 (SSE first-sentence → TTS) + 2 (connect-time warm-up), not more
+measurement. Formal adversarial review + QA sign-off of the closure still pending.
 **Priority:** High
 **Branch:** `task/TASK-WEB-014-mouth-to-ear-latency`
 
@@ -1436,8 +1441,16 @@ Adversarial review **93/100 — QA gate Pass** (mechanism), no blocking finding;
 non-blocking observability recommendations were **applied**: the `voice.end_of_turn`
 span now carries the **configured** `silence_window_ms` (so QA can correlate the live
 false-cut rate to the deployed hold even on `client_stop` turns), and a below-floor
-override logs a **one-per-process** clamp warning. The behavioural acceptance (false-cut
-rate, `time_to_first_audio` gain) remains a **live-pass** gate (TASK-WEB-014). **Lever
+override logs a **one-per-process** clamp warning. **Lever 3 behaviourally accepted on a
+live pass (2026-07-29)** — real backend, streaming WebRTC, warm, headphones; two sessions
+500 ms vs 350 ms (evidence `docs/qa/streaming-latency-eot{500,350}-live-2026-07-29.json`):
+the `end_of_turn` slice drops exactly **−150 ms** (500→350) with **0 false-cut**
+(0/6 at 500 ms, 0/10 at 350 ms premature `client_stop`). **Recommendation: adopt
+`VOICE_END_OF_TURN_SILENCE_MS=350` as the tuned pilot default** (free −150 ms, reversible,
+250 ms floor kept). The −150 ms is <5 % of a ~2.8 s warm `time_to_first_audio` and is
+swamped by STT/backend variance, so **lever 3 alone does not move the ADR-0029 gate**
+(mouth-to-ear p95 ≈ 4.1–4.4 s → FAIL) — confirming levers 1 & 2 are the decisive work.
+See `docs/qa/streaming-voice-qa-report.md` (Live Pilot Pass 2026-07-29). **Lever
 1** (backend SSE → first-sentence TTS) **designed and recorded in ADR-0037**, gated on
 the DEC-002 vetted-stream contract from the backend and the TASK-WEB-014 live baseline
 (default-off feature flag — must not ship blind / must stay billing-safe). **Lever 2**

@@ -1,0 +1,268 @@
+{
+  "adr_0018_gate": {
+    "criterion_p95_ms": 800.0,
+    "margin_ms": -3147.86,
+    "measured_p95_ms": 3947.86,
+    "status": "fail"
+  },
+  "adr_0029_gate": {
+    "mouth_to_ear_p95": {
+      "criterion_p95_ms": 1500.0,
+      "margin_ms": -2947.909,
+      "measured_p95_ms": 4447.909,
+      "status": "fail"
+    },
+    "status": "fail",
+    "time_to_first_audio_p95": {
+      "criterion_p95_ms": 1200.0,
+      "margin_ms": -2747.86,
+      "measured_p95_ms": 3947.86,
+      "status": "fail"
+    }
+  },
+  "barge_in_count": 4,
+  "metric_distributions": {
+    "stt.time_to_final_ms": {
+      "count": 6,
+      "max_ms": 1779.926,
+      "min_ms": 409.211,
+      "p50_ms": 940.175,
+      "p95_ms": 1779.926,
+      "p99_ms": 1779.926
+    },
+    "stt.time_to_first_partial_ms": {
+      "count": 6,
+      "max_ms": 2033.722,
+      "min_ms": 1071.96,
+      "p50_ms": 1531.612,
+      "p95_ms": 2033.722,
+      "p99_ms": 2033.722
+    },
+    "tts.time_to_first_audio_ms": {
+      "count": 7,
+      "max_ms": 375.843,
+      "min_ms": 202.706,
+      "p50_ms": 208.513,
+      "p95_ms": 375.843,
+      "p99_ms": 375.843
+    },
+    "tts.time_to_last_audio_ms": {
+      "count": 7,
+      "max_ms": 7006.905,
+      "min_ms": 1291.588,
+      "p50_ms": 4765.096,
+      "p95_ms": 7006.905,
+      "p99_ms": 7006.905
+    }
+  },
+  "per_slice": {
+    "slices": [
+      {
+        "latency": null,
+        "measured": false,
+        "note": "no channel-ingress span in this sample",
+        "slice": "channel_ingress"
+      },
+      {
+        "latency": {
+          "count": 6,
+          "max_ms": 500.0,
+          "min_ms": 500.0,
+          "p50_ms": 500.0,
+          "p95_ms": 500.0,
+          "p99_ms": 500.0
+        },
+        "measured": true,
+        "note": null,
+        "slice": "end_of_turn"
+      },
+      {
+        "latency": {
+          "count": 6,
+          "max_ms": 1779.926,
+          "min_ms": 409.211,
+          "p50_ms": 940.175,
+          "p95_ms": 1779.926,
+          "p99_ms": 1779.926
+        },
+        "measured": true,
+        "note": null,
+        "slice": "stt"
+      },
+      {
+        "latency": {
+          "count": 6,
+          "max_ms": 2549.88,
+          "min_ms": 792.124,
+          "p50_ms": 1012.159,
+          "p95_ms": 2549.88,
+          "p99_ms": 2549.88
+        },
+        "measured": true,
+        "note": null,
+        "slice": "backend_first_token"
+      },
+      {
+        "latency": {
+          "count": 7,
+          "max_ms": 375.843,
+          "min_ms": 202.706,
+          "p50_ms": 208.513,
+          "p95_ms": 375.843,
+          "p99_ms": 375.843
+        },
+        "measured": true,
+        "note": null,
+        "slice": "tts_first_audio"
+      },
+      {
+        "latency": {
+          "count": 6,
+          "max_ms": 0.056,
+          "min_ms": 0.044,
+          "p50_ms": 0.048,
+          "p95_ms": 0.056,
+          "p99_ms": 0.056
+        },
+        "measured": true,
+        "note": null,
+        "slice": "channel_egress"
+      }
+    ]
+  },
+  "per_turn": [
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "77e5f342-d39e-4bde-8f26-35acb3215521",
+      "slices_ms": {
+        "backend_first_token": 2549.88,
+        "channel_egress": 0.049,
+        "end_of_turn": 500.0,
+        "stt": 1029.614,
+        "tts_first_audio": 368.366
+      },
+      "time_to_first_audio_ms": 3947.86,
+      "turn_index": 1,
+      "voice_to_first_audio_ms": 4447.909
+    },
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "33df7113-2b8b-44f4-bfdb-15705473f616",
+      "slices_ms": {
+        "backend_first_token": 1104.992,
+        "channel_egress": 0.051,
+        "end_of_turn": 500.0,
+        "stt": 478.4,
+        "tts_first_audio": 203.575
+      },
+      "time_to_first_audio_ms": 1786.967,
+      "turn_index": 2,
+      "voice_to_first_audio_ms": 2287.018
+    },
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "0747cc21-02fc-4ec2-b956-2e7c3efdfcd2",
+      "slices_ms": {
+        "backend_first_token": 913.025,
+        "channel_egress": 0.044,
+        "end_of_turn": 500.0,
+        "stt": 1225.549,
+        "tts_first_audio": 375.843
+      },
+      "time_to_first_audio_ms": 2514.417,
+      "turn_index": 3,
+      "voice_to_first_audio_ms": 3014.461
+    },
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "e683013f-edfd-4adb-ba53-5094564c791c",
+      "slices_ms": {
+        "backend_first_token": 1012.159,
+        "channel_egress": 0.056,
+        "end_of_turn": 500.0,
+        "stt": 409.211,
+        "tts_first_audio": 208.513
+      },
+      "time_to_first_audio_ms": 1629.883,
+      "turn_index": 4,
+      "voice_to_first_audio_ms": 2129.939
+    },
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "796882ea-b3e8-4f16-b40a-d48195a0c451",
+      "slices_ms": {
+        "backend_first_token": 792.124,
+        "channel_egress": 0.045,
+        "end_of_turn": 500.0,
+        "stt": 1779.926,
+        "tts_first_audio": 203.854
+      },
+      "time_to_first_audio_ms": 2775.904,
+      "turn_index": 5,
+      "voice_to_first_audio_ms": 3275.949
+    },
+    {
+      "correlation_id": "ff2a949a-8661-4742-ad01-316e67dcb939",
+      "message_id": "22c4844d-c43d-4fe1-a641-a5deb718e713",
+      "slices_ms": {
+        "backend_first_token": 1116.112,
+        "channel_egress": 0.048,
+        "end_of_turn": 500.0,
+        "stt": 940.175,
+        "tts_first_audio": 214.245
+      },
+      "time_to_first_audio_ms": 2270.532,
+      "turn_index": 6,
+      "voice_to_first_audio_ms": 2770.58
+    }
+  ],
+  "provider_baseline": null,
+  "sample": {
+    "calls": 1,
+    "channel": "web",
+    "environment": "co-located dev host",
+    "note": null,
+    "provider": "gradium-streaming",
+    "turns_with_first_audio": 6,
+    "turns_with_mouth_to_ear": 6,
+    "warm": true
+  },
+  "time_to_first_audio": {
+    "component_slices": [
+      "stt",
+      "backend_first_token",
+      "tts_first_audio"
+    ],
+    "latency": {
+      "count": 6,
+      "max_ms": 3947.86,
+      "min_ms": 1629.883,
+      "p50_ms": 2270.532,
+      "p95_ms": 3947.86,
+      "p99_ms": 3947.86
+    },
+    "measured": true,
+    "name": "time_to_first_audio",
+    "note": null
+  },
+  "voice_to_first_audio": {
+    "component_slices": [
+      "end_of_turn",
+      "stt",
+      "backend_first_token",
+      "tts_first_audio",
+      "channel_egress"
+    ],
+    "latency": {
+      "count": 6,
+      "max_ms": 4447.909,
+      "min_ms": 2129.939,
+      "p50_ms": 2770.58,
+      "p95_ms": 4447.909,
+      "p99_ms": 4447.909
+    },
+    "measured": true,
+    "name": "voice_to_first_audio",
+    "note": "channel_egress folded as runtime egress (frame -> WebRTC transport); the browser-audible add-on beyond runtime egress stays a stated residual gap"
+  }
+}
