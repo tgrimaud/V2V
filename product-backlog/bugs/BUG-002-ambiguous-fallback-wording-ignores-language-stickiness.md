@@ -170,7 +170,7 @@ LLM answer, the telemetry, and every canned guardrail message.
 
 ## Closure
 
-- **Closed by:** pending user validation (final validator; merge on explicit request)
-- **Closed date:**
+- **Closed by:** user validation + merge into `feat/restart-from-scratch` (Sprint 8 closure)
+- **Closed date:** 2026-07-23
 - **Closure reason:** Fix implemented, adversarial review 94/100, unit+BDD green (211), live QA
   retest PASS. Ready to merge on the user's go.

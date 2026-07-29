@@ -388,9 +388,9 @@ pipeline wiring.
 **Depends on:** TASK-STT-008 (Gradium provider)
 **Pairs with:** TASK-WEB-004 (streaming TTS voice-out) — the two form the low-latency voice loop
 **Classification:** V1 pilot gate
-**Status:** Implemented (Sprint 6, 2026-07-16) — stacked on TASK-STT-012; live WebRTC
-gate green (streaming `stt.request` tail **818 ms** vs ~3.4 s batch); RF-007 closed;
-pending adversarial review + QA acceptance + user validation
+**Status:** ✅ Merged into `feat/restart-from-scratch` (Sprint 6, 2026-07-16, `e12b42f`;
+validated by user in `51aacdc`, branch deleted post-merge) — stacked on TASK-STT-012; live
+WebRTC gate green (streaming `stt.request` tail **818 ms** vs ~3.4 s batch); RF-007 closed
 **Priority:** High (latency-driven)
 **Branch:** `task/TASK-STT-010-streaming-stt`
 

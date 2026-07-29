@@ -304,13 +304,13 @@ adversarial review, mirroring the Sprint 3/4 discipline.
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | Implemented — review 96/100, merge-ready (pending user validation) |
-| TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | Validated by user (2026-07-15) — review 96/100, merge-ready (merge on request) |
-| TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | Implemented — merge-ready (pending user validation) |
-| TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | Implemented — review 93/100, merge-ready (pending user validation) |
-| TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | Validated by user 2026-07-15 (checks re-run: 182 unit + 15 behave green) — merge-ready (merge on explicit request) |
-| TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | Implemented — merge-ready (pending user validation); resolves RF-020 |
-| TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | Planned |
+| TASK-WEB-003-A | Conversation contract + `BackendAnswerPort` (seam, no provider) | Contract | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15) — review 96/100 |
+| TASK-WEB-003-B | Deterministic stub backend adapter (default, offline/dev + tests) | Provider | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15) — validated by user, review 96/100 |
+| TASK-WEB-003-C | HTTP backend adapter + `--backend {stub,http}` selection (env `VOICE_BACKEND`) | Provider | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `80f1797`) — review 93/100 |
+| TASK-WEB-003-D | Wire the bridge into the runtime: transcript → backend answer → TTS text, on both runtimes | Integration | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `54982c4`) — review 93/100 |
+| TASK-WEB-003-E | End-to-end telemetry: `backend.request`/`backend.first_token` span + `BACKEND_FIRST_TOKEN` slice (closes US-036 gap) | Observability | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `55146c4`) — validated by user; 182 unit + 15 behave green |
+| TASK-WEB-003-F | Degraded mode: backend unavailable / low confidence → safe spoken fallback | Robustness | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `4bf7ad0`) — review 94/100; resolves RF-020 |
+| TASK-WEB-003-G | QA + behave (e2e loop + degraded) + per-slice latency table + docs + conversation-contract ADR | QA / Docs | ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `d2a8c5b`) |
 
 Delivery order: A → B → D → E → F → C → G (C may precede D if the HTTP path is needed
 earlier; D-before-C makes the answering loop visible ASAP on the stub).
@@ -401,9 +401,8 @@ Scenario: The runtime can target a real conversation endpoint
 **Required Evidence:** fake-transport tests (success + error mapping + no key leak),
 no live backend required.
 
-**Status:** Implemented on `task/TASK-WEB-003-C-http-backend` (from
-`feat/sprint-5-backend-bridge`, which already carries E+F); adversarial review 93/100
-(QA gate Pass), merge-ready, pending user validation. New `conversation_backend/http_backend.py` (`HttpBackendAdapter`,
+**Status:** ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `80f1797`);
+adversarial review 93/100 (QA gate Pass). New `conversation_backend/http_backend.py` (`HttpBackendAdapter`,
 `BackendAnswerPort`) with an **injectable transport** (default stdlib `urllib`, so
 unit tests never hit the network). `answer` posts `{transcript, conversation_id,
 correlation_id, channel}` as JSON and maps a 2xx response's `text` (alias `answer`) +
@@ -518,9 +517,8 @@ Scenario: Safe fallback when the backend cannot answer
 **Required Evidence:** developer tests for unavailable + low-confidence paths;
 sanitized error contract; degraded outcome attribute in telemetry.
 
-**Status:** Implemented on `task/TASK-WEB-003-F-degraded-mode` (from
-`task/TASK-WEB-003-E-backend-telemetry`); adversarial review 94/100 (QA gate Pass),
-merge-ready, pending user validation.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (Sprint 5, 2026-07-15, `4bf7ad0`);
+adversarial review 94/100 (QA gate Pass).
 The safe fallback lives in the neutral contract (`conversation_backend/degraded.py`):
 `DEGRADED_FALLBACK_TEXT` (no digit / amount, DEC-002), `DEFAULT_CONFIDENCE_THRESHOLD`
 (0.5) and the `degraded_answer(...)` builder. The **policy** lives in the shared

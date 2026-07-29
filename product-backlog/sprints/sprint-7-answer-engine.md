@@ -986,8 +986,8 @@ merged back once validated (adversarial review ≥ 90% + QA), following
 | Ticket | Branch | Status |
 |---|---|---|
 | TASK-BE-001 | `task/TASK-BE-001-framework-decision` | ✅ Done (2026-07-18) — ADR-0026 + ADR-0027 |
-| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Validated by user (2026-07-18) — review 94/100 + QA PASS; merge-ready (awaiting explicit merge) |
-| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | ✅ Validated by user (2026-07-18) — adversarial review 94/100 + QA PASS; `mvn test` 42 green (5 Cucumber BDD scenarios); live latency cold sync p50 1422 ms / warm 5 ms / one-shot ingest 27 ms; merge-ready (awaiting explicit merge) |
+| TASK-BE-002 | `task/TASK-BE-002-backend-scaffold` | ✅ Merged into `feat/restart-from-scratch` (2026-07-18, `f12e4be`) — validated by user, review 94/100 + QA PASS |
+| TASK-BE-003 | `task/TASK-BE-003-kb-ingestion` | ✅ Merged into `feat/restart-from-scratch` (2026-07-18, `4c01e60`) — validated by user, adversarial review 94/100 + QA PASS; `mvn test` 42 green (5 Cucumber BDD scenarios); live latency cold sync p50 1422 ms / warm 5 ms / one-shot ingest 27 ms |
 | TASK-BE-004 | `task/TASK-BE-004-rag-retrieval-guardrails` | ✅ Validated + merged into `feat/sprint-7-answer-engine` (2026-07-19, ff; branch deleted) — adversarial review 93/100 + QA GO; `mvn test` 86 green (6 grounding Cucumber scenarios); live RAG retrieval p50 30 ms / p95 37 ms (warm), guardrail refusal 0 ms |
 | TASK-BE-005 | `task/TASK-BE-005-llm-wording` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19) — provider-agnostic grounded LLM wording (DEC-002); adversarial review + QA GO |
 | TASK-BE-006 | `task/TASK-BE-006-conversation-endpoint` | ✅ Validated by user + merged into `feat/sprint-7-answer-engine` (2026-07-19, merge commit) — ADR-0021 endpoint + short memory; review 92/100 (remediated) + QA GO; 123 tests green |

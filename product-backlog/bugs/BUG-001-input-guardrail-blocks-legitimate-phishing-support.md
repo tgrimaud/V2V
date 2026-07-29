@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-001
 - **Title:** Input guardrail blocks legitimate anti-phishing/scam-call support questions
-- **Status:** Fixed (implemented 2026-07-27) — pending adversarial review + QA retest
+- **Status:** ✅ Closed — validated by user + merged into `feat/restart-from-scratch` (2026-07-27, `b487e05`; Sprint 9); fix + adversarial review 93/100 + live QA retest PASS
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** User validation (live test during Sprint 8)
@@ -123,9 +123,9 @@ Developer fills this during resolution:
 
 ## Closure
 
-- **Closed by:** pending user validation / merge
-- **Closed date:**
-- **Closure reason:** Fix implemented + adversarial 93/100 + live QA passed; branch `fix/BUG-001-guardrail-phishing-support` pushed, merge on explicit user request.
+- **Closed by:** user validation + merge into `feat/restart-from-scratch` (`b487e05`)
+- **Closed date:** 2026-07-27
+- **Closure reason:** Fix implemented + adversarial 93/100 + live QA passed; merged into `feat/restart-from-scratch` (Sprint 9, marked merged & live-validated in `ac662ed`).
 
 ## Closure
 

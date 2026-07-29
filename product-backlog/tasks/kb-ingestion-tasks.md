@@ -16,7 +16,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 
 | Task | Title | Classification | Depends on | Status |
 |---|---|---|---|---|
-| TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | In review — implemented, adversarial 92/100, QA functional PASS (bulk latency → BE-014); awaiting user validation |
+| TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | ✅ Merged into `feat/restart-from-scratch` (Sprint 8, user-validated 2026-07-21, `23cb49b`; sprint closed `365251d`) — adversarial 92/100, QA functional PASS (bulk latency → BE-014) |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 
