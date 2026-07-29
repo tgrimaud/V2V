@@ -1804,7 +1804,7 @@ QA (skill `qa-functional-latency`) — **GO** (deterministic; no live Gradium in
 **Parent:** EPIC-006 (Voice2Voice journey foundation) + EPIC-010 (observability, latency, pilot)
 **Delivers:** US-020 — *Receive a quick spoken acknowledgement during long analysis*
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** In progress — V1 (generic filler) implemented on `task/TASK-WEB-019-filler-phrase` (2026-07-29); tests green; pending adversarial review ≥ 90% + QA GO
+**Status:** Merge-ready — V1 (generic filler) on `task/TASK-WEB-019-filler-phrase` (2026-07-29); adversarial review 92/100 (one barge-in cleanup finding fixed); QA GO (`docs/qa/task-web-019-filler-qa-report.md`); merge on explicit user request
 **Priority:** Medium
 **Sprint:** Sprint 10 (pilot-readiness latency & perceived latency)
 **Relates to:** TASK-WEB-014 (mouth-to-ear latency metric — provides the wait signal),

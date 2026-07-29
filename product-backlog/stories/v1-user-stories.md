@@ -480,7 +480,7 @@ Scenario: Web Voice2Voice journey
 
 **Parent:** EPIC-006
 **Classification:** V1 core
-**Status:** Planned (Sprint 10 — pilot-latency; delivered by TASK-WEB-019)
+**Status:** Merge-ready (Sprint 10 — pilot-latency; delivered by TASK-WEB-019, adversarial review 92/100 + QA GO 2026-07-29; merge on user request)
 **Priority:** Medium
 
 ### User Story

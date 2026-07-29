@@ -19,9 +19,11 @@ Sprint 12**.
 ## Status
 
 **Status:** In progress (started 2026-07-29). Scope set by user decision 2026-07-29 (promote
-pilot-latency ahead of billing; add spoken filler phrases to the scope). First ticket picked up:
-**TASK-WEB-019** (generic spoken filler) — V1 implemented on `task/TASK-WEB-019-filler-phrase`,
-tests green, pending adversarial review ≥ 90% + QA GO.
+pilot-latency ahead of billing; add spoken filler phrases to the scope). First ticket done to
+the merge-ready gate: **TASK-WEB-019** (generic spoken filler, US-020) on
+`task/TASK-WEB-019-filler-phrase` — adversarial review 92/100 + QA GO
+(`docs/qa/task-web-019-filler-qa-report.md`), awaiting the user's explicit merge. Remaining:
+TASK-WEB-015 (levers) and TASK-WEB-014 live closure.
 
 ## Roadmap Context
 
@@ -53,7 +55,7 @@ tests green, pending adversarial review ≥ 90% + QA GO.
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | Merged; pilot closure pending in this sprint |
 | TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | Planned |
-| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | In progress — V1 generic filler implemented (2026-07-29), tests green; pending adversarial review + QA |
+| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Merge-ready — V1 generic filler (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); merge on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
 
