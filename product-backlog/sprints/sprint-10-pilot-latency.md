@@ -18,8 +18,10 @@ Sprint 12**.
 
 ## Status
 
-**Status:** Planned (next). Scope set by user decision 2026-07-29 (promote pilot-latency ahead
-of billing; add spoken filler phrases to the scope).
+**Status:** In progress (started 2026-07-29). Scope set by user decision 2026-07-29 (promote
+pilot-latency ahead of billing; add spoken filler phrases to the scope). First ticket picked up:
+**TASK-WEB-019** (generic spoken filler) — V1 implemented on `task/TASK-WEB-019-filler-phrase`,
+tests green, pending adversarial review ≥ 90% + QA GO.
 
 ## Roadmap Context
 
@@ -27,7 +29,7 @@ of billing; add spoken filler phrases to the scope).
 |---|---|---|
 | Sprint 8 | CSV KB ingestion | ✅ Done (2026-07-23) |
 | Sprint 9 | Hardening / assainissement | ✅ Done (2026-07-28) |
-| **Sprint 10** | **Pilot-readiness latency & perceived latency — this sprint** | Planned (next) |
+| **Sprint 10** | **Pilot-readiness latency & perceived latency — this sprint** | In progress (started 2026-07-29) |
 | Sprint 11 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 | Sprint 12 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
@@ -51,7 +53,7 @@ of billing; add spoken filler phrases to the scope).
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | Merged; pilot closure pending in this sprint |
 | TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | Planned |
-| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Planned |
+| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | In progress — V1 generic filler implemented (2026-07-29), tests green; pending adversarial review + QA |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
 

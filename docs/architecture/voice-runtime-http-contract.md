@@ -51,6 +51,18 @@ confirmed farewell the runtime emits a `voice.call_end` event with
 `reason=customer_farewell` (vs `client_stop`/`client_drop` on a manual hangup/drop)
 under the call correlation id. Unset → detector defaults apply.
 
+Spoken filler / acknowledgement (TASK-WEB-019, US-020) is env-only and shared by
+both runtimes (it lives in the `AnswerProcessor`): `VOICE_FILLER_ENABLED`
+(`0`/`false`/`no`/`off` disables it; on by default), `VOICE_FILLER_THRESHOLD_MS`
+(perceived-wait threshold before a holding phrase is spoken, default `1200`) and
+`VOICE_FILLER_PHRASES` (`|`-separated FR phrases; any digit-bearing entry is dropped
+per DEC-002, empty override → built-in set). When the backend answer is not ready by
+the threshold the runtime speaks one short neutral holding phrase (e.g. "Un instant,
+je vérifie.") as a plain bot turn — so barge-in / interruption apply unchanged — then
+speaks the real answer, and emits a `voice.filler.spoken` event + `voice.filler.spoken.count`
+metric carrying the `correlation_id`, `channel`, `provider` and the `wait_ms` it triggered
+on. The trigger is a runtime-local timer (Flow A, no broker) per ADR-0036.
+
 `http` backend configuration (TASK-WEB-003-C):
 
 | Env | Required | Meaning |
