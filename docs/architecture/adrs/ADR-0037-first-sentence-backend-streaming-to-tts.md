@@ -119,6 +119,47 @@ runtime-owned; the backend LLM/embedding warm call is a **backend** concern (nee
 backend warm endpoint) and is tracked as a backend follow-up, not shipped blind from
 the runtime.
 
+**Delivered (TASK-WEB-021, 2026-07-29).** The `TtsSessionWarmer` was extracted into a
+provider-agnostic `SessionWarmer` (`web_voice/session_warmer.py`); `TtsSessionWarmer`
+is now a thin subclass, so STT and TTS share one warmer with identical
+open/acquire/aclose semantics. `StreamingSttProcessor` pre-opens a spare STT session at
+`StartFrame`, hands it out on the first `_open_session` (a failed spare falls back to a
+fresh on-demand open — never blocks the turn), and discards any unused spare on
+`EndFrame`/`CancelFrame` (no leak). The backend warm call is wired from `AnswerProcessor`:
+on `StartFrame` it fires `backend.warm_up()` once, off the critical path
+(`asyncio.to_thread`), swallowing any fault (recorded as a `miss`, never blocks connect);
+`HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL
+(consuming TASK-BE-017), with a generous timeout since the cold call runs off-path.
+Observability: `voice.backend.warmup` (success/miss) + `voice.stt.prewarm` (hit/fallback/
+cold) events with count metrics, all carrying correlation id + provider.
+
+Adversarial-review fixes (2026-07-29): the STT pre-warm is **off by default (opt-in via
+`VOICE_STT_PREWARM=1`)** because `acquire()` only recovers from an open *failure*, not from
+a spare that the ASR server drops while idle — a stale spare would degrade turn 1, so it
+stays opt-in until a live sample confirms Gradium's idle behaviour. The connect-time
+backend warm-up (side-effect-free, the larger win) stays on by default (`VOICE_BACKEND_WARMUP`).
+`SessionWarmer.aclose()` no longer swallows an external `CancelledError` (only the spare's
+own expected cancellation); `HttpBackendAdapter` derives the `/warm-up` URL robustly
+(trailing slash / query stripped).
+
+**Live turn-1 cold-vs-warm sample captured (2026-07-30, real backend + `/warm-up` via a
+TASK-BE-017 worktree; see the QA report "Live Lever-2 Pass" section).** Mechanism confirmed:
+`voice.backend.warmup = success` at connect on both treatment sessions; `voice.stt.prewarm
+= hit` on the first STT open of each session → **Gradium preserves the pre-opened idle
+socket**, spare reused on turn 1, **no fallback/leak** (opt-in `VOICE_STT_PREWARM=1`
+validated live). Turn-1 `stt.request` (379 ms) and `backend.first_token` (4.4 ms/char) are
+flat with warm turns. A **deterministic backend micro-benchmark** (fixed transcript, cold
+vs warm) isolates the mechanism from generation-length noise: without warm-up the turn-1
+backend cold penalty is **+448 ms typical and can spike to multiple seconds** (a cold first
+Mistral call + JVM JIT produced an 8.5 s call-1); with warm-up it is **bounded to
+~1.2–1.3 s** (residual ~300–390 ms). `/warm-up` costs ~0.7–1.4 s off-path.
+**Residual finding:** `/warm-up` warms embedding + LLM but **not** the full converse
+critical path (RAG/pgvector, guardrail, sentence emitter), leaving ~300 ms of turn-1 JIT —
+**follow-up:** have `/warm-up` run a full dummy converse so those paths warm off-path too.
+Lever 2 is a **turn-1-only** win and **does not move the ADR-0029 gate alone** — lever 1
+remains decisive. STT pre-warm stays **opt-in** (positive but small live sample, n=2),
+ready to flip default-on after a larger sample.
+
 ## Status of TASK-WEB-015 at this ADR
 
 - **Lever 3 (end-of-turn hold tuning):** implemented (env-tunable
@@ -126,5 +167,13 @@ the runtime.
   offline, deterministic, testable now.
 - **Lever 1 (this ADR):** designed + gated on the DEC-002 SSE contract and the
   TASK-WEB-014 live baseline (default-off feature flag).
-- **Lever 2:** designed (mirror `TtsSessionWarmer`), scheduled with the live pass;
-  backend warm call split to a backend follow-up.
+- **Lever 2 (TASK-WEB-021):** runtime **delivered** — shared `SessionWarmer` pre-opens
+  the first STT session at connect (no leak; **opt-in** `VOICE_STT_PREWARM=1`, off by
+  default pending live idle-socket validation) + non-blocking `backend.warm_up()` trigger
+  from `AnswerProcessor` (`POST /warm-up`, TASK-BE-017, `VOICE_BACKEND_WARMUP` on by
+  default); telemetry `voice.backend.warmup` (success/miss) + `voice.stt.prewarm`
+  (hit/fallback/cold). **Live turn-1 sample captured 2026-07-30** — mechanism confirmed
+  (warmup=success, prewarm=hit, Gradium keeps the idle socket, no fallback/leak); backend
+  cold penalty bounded from +448 ms (up to multi-second) to ~300–390 ms residual;
+  turn-1-only win, ADR-0029 gate still needs lever 1. Follow-up: warm the full converse
+  path (RAG/guardrail/sentence-emitter), not just embedding + LLM.

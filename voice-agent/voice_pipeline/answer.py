@@ -15,7 +15,7 @@ import os
 from collections.abc import Sequence
 from typing import Any
 
-from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import Frame, StartFrame, TextFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from conversation_backend import (
@@ -52,6 +52,25 @@ BACKEND_REQUEST_SPAN = "backend.request"
 # deployment can align it with the backend's own confidence policy without a code change.
 # It is a *safety net* below the backend grounding guardrail, not a replacement for it.
 CONFIDENCE_THRESHOLD_ENV_VAR = "VOICE_BACKEND_CONFIDENCE_THRESHOLD"
+
+# TASK-WEB-021 (lever 2): fire a best-effort backend warm-up (POST /warm-up) once at
+# pipeline start so the first real turn does not pay the cold LLM + embedding cost. Off
+# the critical path, non-blocking, and easily disabled per deployment via env.
+BACKEND_WARMUP_ENV_VAR = "VOICE_BACKEND_WARMUP"
+BACKEND_WARMUP_EVENT = "voice.backend.warmup"
+BACKEND_WARMUP_METRIC = "voice.backend.warmup.count"
+
+
+def backend_warmup_enabled() -> bool:
+    """Whether to trigger the connect-time backend warm-up (default on).
+
+    Disabled only by an explicit falsy value (`0`/`false`/`no`/`off`), so a deployment
+    can turn the trigger off without a code change while it stays on by default.
+    """
+    raw = os.environ.get(BACKEND_WARMUP_ENV_VAR)
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
 
 
 def resolve_confidence_threshold() -> float:
@@ -187,11 +206,22 @@ class AnswerProcessor(FrameProcessor):
         filler_enabled_flag: bool | None = None,
         filler_threshold_ms: float | None = None,
         filler_phrases: Sequence[str] | None = None,
+        backend_warmup: bool | None = None,
     ) -> None:
         super().__init__()
         self._backend = backend
         self._envelope = envelope
         self._telemetry = telemetry
+        # TASK-WEB-021: resolve the connect-time warm-up toggle once; an explicit override
+        # (tests) still wins over the environment. Keeps a reference to the fire-and-forget
+        # warm-up task so it is not garbage-collected before it runs. The task is
+        # intentionally NOT cancelled at teardown: it warms the *shared* backend model, so
+        # letting it finish benefits the next connect too, and it is off the critical path
+        # (bounded by the HTTP warm-up timeout). On the long-lived server loop it always
+        # completes; only a process exiting immediately after a 1-turn call could drop it,
+        # which is harmless (best-effort warm-up).
+        self._backend_warmup = backend_warmup_enabled() if backend_warmup is None else backend_warmup
+        self._warmup_task: "asyncio.Task[None] | None" = None
         # RF-022: resolve the env-tunable floor once at construction; an explicit override
         # (tests / callers) still wins over the environment.
         self._confidence_threshold = (
@@ -210,7 +240,39 @@ class AnswerProcessor(FrameProcessor):
         if isinstance(frame, TranscriptionFrame):
             await self._answer(frame, direction)
         else:
+            if isinstance(frame, StartFrame) and self._backend_warmup and self._warmup_task is None:
+                # Fire once at connect, off the critical path; never blocks StartFrame.
+                self._warmup_task = asyncio.create_task(self._warm_backend())
             await self.push_frame(frame, direction)
+
+    async def _warm_backend(self) -> None:
+        """Best-effort connect-time backend warm-up (TASK-WEB-021 / lever 2).
+
+        Calls the backend's `warm_up()` in a worker thread (blocking HTTP) so the cold
+        LLM + embedding cost is paid before the first turn. Any fault is swallowed (a
+        cold backend just means "not warmed"); it never breaks the connect. Skipped when
+        the backend does not expose `warm_up` (e.g. a test fake), so no fake needs it.
+        """
+        warm = getattr(self._backend, "warm_up", None)
+        if not callable(warm):
+            return
+        try:
+            warmed = await asyncio.to_thread(warm)
+        except Exception:  # noqa: BLE001 - warm-up is best-effort; never break the connect
+            warmed = False
+        self._emit_backend_warmup(bool(warmed))
+
+    def _emit_backend_warmup(self, warmed: bool) -> None:
+        if self._telemetry is None:
+            return
+        attrs = {
+            "correlation_id": getattr(self._envelope, "correlation_id", None),
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._backend.name,
+            "outcome": "success" if warmed else "miss",
+        }
+        self._telemetry.record(BACKEND_WARMUP_EVENT, **attrs)
+        self._telemetry.metric(BACKEND_WARMUP_METRIC, 1, **attrs)
 
     async def _answer(self, frame: TranscriptionFrame, direction: FrameDirection) -> None:
         request = AnswerRequest.from_envelope(frame.text, self._envelope)

@@ -2142,8 +2142,46 @@ Scenario: The streamed path preserves conversation memory and safe failure
 ADR-0029 (pilot latency criterion)
 **Depends on:** TASK-WEB-014 (live baseline), TASK-BE-017 (backend LLM/embedding warm-up path)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
+**Status:** In progress (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
 `feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 2) per user decision 2026-07-29.
+Runtime implemented 2026-07-29: **STT session pre-warm** (`SessionWarmer`, extracted from
+`TtsSessionWarmer` so both share one provider-agnostic warmer; `StreamingSttProcessor` pre-opens a
+spare at `StartFrame`, hands it out on the first `_open_session`, discards any unused spare on
+`EndFrame`/`CancelFrame` — no leak; `VOICE_STT_PREWARM=0` disables) + **connect-time backend
+warm-up trigger** (`AnswerProcessor` fires `backend.warm_up()` once on `StartFrame`, off the
+critical path via `asyncio.to_thread`, failure non-blocking → recorded as a `miss`;
+`HttpBackendAdapter.warm_up()` POSTs to the `/warm-up` sibling of the converse URL consuming
+TASK-BE-017; `VOICE_BACKEND_WARMUP` on by default). Telemetry: `voice.backend.warmup`
+(success/miss) + `voice.stt.prewarm` (hit/fallback/cold) events + count metrics.
+**Adversarial review 2026-07-29 (82→ fixes applied):** STT pre-warm made **opt-in
+`VOICE_STT_PREWARM=1` (off by default)** since `acquire()` only recovers from an open
+failure, not a server-dropped idle spare (stale spare would degrade turn 1) — kept off
+until the live sample confirms Gradium's idle behaviour; backend warm-up stays on.
+`SessionWarmer.aclose()` no longer swallows an external `CancelledError`; `_warm_up_url`
+hardened (trailing slash / query); backend warm-up task documented fire-and-forget (warms
+the shared model, not cancelled at teardown). Tests: unittest **442 green** (STT pre-warm
+lifecycle/no-leak/fallback + hit/fallback observability events, backend trigger
+once/disabled/absent/failure/miss, HTTP `warm_up` URL-derivation incl. trailing-slash/query
+/non-2xx/fault/no-key-leak, env toggles), behave **12/33/154 green**.
+**Live cold-vs-warm turn-1 sample captured 2026-07-30** (real backend + `/warm-up` from a
+TASK-BE-017 `git worktree`, no merge; full write-up in `docs/qa/streaming-voice-qa-report.md`
+"Live Lever-2 Pass" + evidence dumps `streaming-telemetry-lever2-{control,treatment}-2026-07-30.jsonl`).
+Mechanism confirmed: `voice.backend.warmup=success` at connect on both treatment sessions;
+`voice.stt.prewarm=hit` on the first STT open of each session → **Gradium preserves the
+pre-opened idle socket**, spare reused on turn 1, **no fallback/leak** (opt-in
+`VOICE_STT_PREWARM=1` validated live). Turn-1 `stt.request` (379 ms) and `backend.first_token`
+(4.4 ms/char) are flat with warm turns. Deterministic backend micro-benchmark (fixed
+transcript, cold vs warm) isolates the cold-start: **without warm-up +448 ms typical, up to
+multi-second** (an 8.5 s cold call-1 observed: cold first Mistral call + JVM JIT); **with
+warm-up bounded to ~1.2–1.3 s** (~300–390 ms residual). Composite m2e p95 −390 ms
+(control→treatment, noisy n=5). **Residual/follow-up:** `/warm-up` warms embedding+LLM but not
+the full converse path (RAG/pgvector, guardrail, sentence emitter) → have `/warm-up` run a
+dummy converse to warm those too. Lever 2 is a **turn-1-only** win and does **not** move the
+ADR-0029 gate alone — **lever 1 (TASK-WEB-020) remains decisive**. STT pre-warm kept **opt-in**
+(positive but small live sample, n=2), ready to flip default-on after a larger sample.
+**Validated by the user 2026-07-30**; checks re-run green (unittest **442** / behave
+**12 features · 33 scenarios · 154 steps**). **Status: merge-ready** — merge into
+`feat/sprint-10-pilot-latency` only on the user's explicit request.
 **Priority:** High
 
 ### Objective

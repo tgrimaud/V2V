@@ -33,9 +33,13 @@ from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_pipeline.answer import (  # noqa: E402
     BACKEND_FIRST_TOKEN_SPAN,
     BACKEND_REQUEST_SPAN,
+    BACKEND_WARMUP_ENV_VAR,
+    BACKEND_WARMUP_EVENT,
+    BACKEND_WARMUP_METRIC,
     CONFIDENCE_THRESHOLD_ENV_VAR,
     AnswerProcessor,
     answer_with_telemetry,
+    backend_warmup_enabled,
     resolve_confidence_threshold,
 )
 from voice_pipeline.filler import FILLER_SPOKEN_EVENT, FILLER_SPOKEN_METRIC  # noqa: E402
@@ -114,6 +118,28 @@ class _LowConfidenceBackend:
         )
 
 
+class _WarmBackend:
+    """Backend exposing the optional warm_up() (TASK-WEB-021 lever 2 trigger target)."""
+
+    name = "warm-backend"
+
+    def __init__(self, *, warmed: bool = True, raises: bool = False) -> None:
+        self._warmed = warmed
+        self._raises = raises
+        self.warm_up_calls = 0
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        return AnswerResult(
+            text="ok", provider=self.name, outcome=AnswerOutcome.SUCCESS, correlation_id=request.correlation_id
+        )
+
+    def warm_up(self) -> bool:
+        self.warm_up_calls += 1
+        if self._raises:
+            raise RuntimeError("warm-up boom")
+        return self._warmed
+
+
 def _request() -> AnswerRequest:
     return AnswerRequest(
         transcript="pourquoi ma facture augmente",
@@ -178,6 +204,98 @@ class AnswerProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(plain), 1)
         self.assertEqual(plain[0].text, DEGRADED_FALLBACK_TEXT)
         self.assertIs(processor.result.outcome, AnswerOutcome.DEGRADED)
+
+
+class BackendWarmUpTriggerTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-021 (lever 2): fire a best-effort backend warm-up once at connect."""
+
+    async def _run_start(self, processor: AnswerProcessor) -> None:
+        # run_test wraps the frames with a StartFrame (the connect trigger) + EndFrame.
+        await run_test(processor, frames_to_send=[])
+        if processor._warmup_task is not None:
+            await processor._warmup_task
+
+    async def test_start_frame_triggers_backend_warm_up_once(self) -> None:
+        # GIVEN a backend exposing warm_up() and the trigger enabled
+        backend = _WarmBackend(warmed=True)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts (StartFrame)
+        await self._run_start(processor)
+        # THEN warm_up is called exactly once, off the critical path
+        self.assertEqual(backend.warm_up_calls, 1)
+        # AND a success warm-up event + count metric are recorded with the correlation id
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "success")
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        self.assertEqual(event.attributes["provider"], "warm-backend")
+        self.assertTrue(any(m.name == BACKEND_WARMUP_METRIC for m in telemetry.metrics()))
+
+    async def test_disabled_flag_never_calls_warm_up(self) -> None:
+        # GIVEN the trigger disabled
+        backend = _WarmBackend()
+        processor = AnswerProcessor(backend, _envelope(), backend_warmup=False)
+        # WHEN the pipeline starts
+        await self._run_start(processor)
+        # THEN warm_up is never called and no task is scheduled
+        self.assertEqual(backend.warm_up_calls, 0)
+        self.assertIsNone(processor._warmup_task)
+
+    async def test_backend_without_warm_up_does_not_crash(self) -> None:
+        # GIVEN a backend that does NOT expose warm_up() (e.g. a fake) and the trigger on
+        backend = _FakeBackend()
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts -> THEN it is skipped without crashing / recording
+        await self._run_start(processor)
+        self.assertFalse(any(r.name == BACKEND_WARMUP_EVENT for r in telemetry.events()))
+
+    async def test_warm_up_failure_is_non_blocking_and_recorded_as_miss(self) -> None:
+        # GIVEN a backend whose warm_up() raises
+        backend = _WarmBackend(raises=True)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts
+        await self._run_start(processor)
+        # THEN the fault never surfaces and the outcome is recorded as a miss (not warmed)
+        self.assertEqual(backend.warm_up_calls, 1)
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "miss")
+
+    async def test_warm_up_miss_when_backend_reports_not_warmed(self) -> None:
+        # GIVEN a backend whose warm_up() returns False (cold / endpoint unavailable)
+        backend = _WarmBackend(warmed=False)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts -> THEN the outcome is a miss
+        await self._run_start(processor)
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "miss")
+
+
+class BackendWarmupEnabledTest(unittest.TestCase):
+    """`VOICE_BACKEND_WARMUP` toggle (default on; disabled only by an explicit falsy value)."""
+
+    def setUp(self) -> None:
+        self._saved = os.environ.pop(BACKEND_WARMUP_ENV_VAR, None)
+
+    def tearDown(self) -> None:
+        if self._saved is None:
+            os.environ.pop(BACKEND_WARMUP_ENV_VAR, None)
+        else:
+            os.environ[BACKEND_WARMUP_ENV_VAR] = self._saved
+
+    def test_unset_defaults_on(self) -> None:
+        self.assertTrue(backend_warmup_enabled())
+
+    def test_falsy_values_disable(self) -> None:
+        for value in ("0", "false", "no", "off", "OFF", " False "):
+            os.environ[BACKEND_WARMUP_ENV_VAR] = value
+            self.assertFalse(backend_warmup_enabled(), value)
+
+    def test_other_values_stay_on(self) -> None:
+        os.environ[BACKEND_WARMUP_ENV_VAR] = "1"
+        self.assertTrue(backend_warmup_enabled())
 
 
 class FillerPhraseTest(unittest.IsolatedAsyncioTestCase):

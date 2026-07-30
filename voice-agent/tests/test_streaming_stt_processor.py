@@ -46,6 +46,8 @@ from web_voice.end_of_turn import (  # noqa: E402
 from web_voice.streaming_stt_processor import (  # noqa: E402
     STT_DEGRADED_SPOKEN_EVENT,
     STT_DEGRADED_SPOKEN_METRIC,
+    STT_PREWARM_EVENT,
+    STT_PREWARM_METRIC,
     STT_REQUEST_SPAN,
     StreamingSttProcessor,
 )
@@ -65,9 +67,14 @@ def _detector(min_utterance_ms: float = 20.0) -> StreamingEndOfTurnDetector:
     )
 
 
-def _processor(provider, telemetry=None, *, min_utterance_ms: float = 20.0) -> StreamingSttProcessor:
+def _processor(
+    provider, telemetry=None, *, min_utterance_ms: float = 20.0, prewarm: bool = False
+) -> StreamingSttProcessor:
+    # prewarm defaults off here so these behavioural tests assert the raw detection path
+    # (open_count reflects only *turn* opens); the connect-time pre-warm (TASK-WEB-021)
+    # has its own dedicated tests below, mirroring the streaming TTS processor's split.
     return StreamingSttProcessor(
-        provider, _envelope(), telemetry, detector=_detector(min_utterance_ms)
+        provider, _envelope(), telemetry, detector=_detector(min_utterance_ms), prewarm=prewarm
     )
 
 
@@ -412,6 +419,99 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.interruptions, 0)
         self.assertFalse(any(e.name == "voice.barge_in.detected" for e in telemetry.events()))
         self.assertEqual(sink.finals, ["bonjour"])
+
+    async def test_prewarm_reuses_spare_for_first_turn_single_open(self):
+        # GIVEN pre-warm on (TASK-WEB-021): the spare opens at StartFrame
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        provider = FakeProvider(session)
+        processor = _processor(provider, prewarm=True)
+        # WHEN the first turn streams through
+        sink = await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN the turn is served by the pre-opened spare — opened exactly once, not
+        # re-opened on speech (proves the connect+setup was off the per-turn path)
+        self.assertEqual(provider.open_count, 1)
+        self.assertEqual(sink.finals, ["bonjour"])
+
+    async def test_prewarm_silence_only_discards_spare_no_leak(self):
+        # GIVEN pre-warm on and a stream that carries only silence
+        session = FakeSession([], "")
+        provider = FakeProvider(session)
+        processor = _processor(provider, prewarm=True)
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, [_silence_frame()] * 12)
+        # THEN the spare was opened at connect but is discarded (closed) on teardown, so a
+        # pre-warmed socket is never leaked; still no fabricated final / interim on silence
+        self.assertEqual(provider.open_count, 1)
+        self.assertTrue(session.closed)
+        self.assertEqual(sink.finals, [])
+        self.assertEqual(sink.interims, [])
+
+    async def test_prewarm_spare_open_failure_falls_back_to_on_demand(self):
+        # GIVEN the pre-warm spare open fails, then an on-demand open succeeds
+        class _FlakyProvider:
+            name = "flaky-streaming-stt"
+
+            def __init__(self, ready_session):
+                self._ready = ready_session
+                self.open_count = 0
+
+            async def open(self):
+                self.open_count += 1
+                if self.open_count == 1:
+                    raise StreamingSttError("spare open failed")
+                return self._ready
+
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        provider = _FlakyProvider(session)
+        processor = _processor(provider, prewarm=True)
+        # WHEN the first turn streams through
+        sink = await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN a failed spare never blocks the turn: acquire falls back to a fresh open and
+        # the turn still finalizes (open called twice: failed spare + on-demand)
+        self.assertEqual(provider.open_count, 2)
+        self.assertEqual(sink.finals, ["bonjour"])
+
+    async def test_prewarm_hit_emits_observability_event(self):
+        # GIVEN pre-warm on with a recorder and a normal first turn
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(FakeProvider(session), telemetry, prewarm=True)
+        # WHEN the first turn opens its session (from the pre-opened spare)
+        await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN a prewarm event + count metric prove the spare was used (hit), so QA can tell
+        # a pre-warm hit from a fallback without inferring it from slice timing
+        event = next(e for e in telemetry.events() if e.name == STT_PREWARM_EVENT)
+        self.assertEqual(event.attributes["outcome"], "hit")
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        # provider is the processor's provider_name (defaults to the streaming STT name)
+        self.assertEqual(event.attributes["provider"], "gradium-stt-streaming")
+        self.assertTrue(event.attributes["prewarm_hit"])
+        self.assertTrue(any(m.name == STT_PREWARM_METRIC for m in telemetry.metrics()))
+
+    async def test_prewarm_fallback_emits_fallback_outcome(self):
+        # GIVEN the pre-warm spare open fails, then an on-demand open succeeds
+        class _FlakyProvider:
+            name = "flaky-streaming-stt"
+
+            def __init__(self, ready_session):
+                self._ready = ready_session
+                self.open_count = 0
+
+            async def open(self):
+                self.open_count += 1
+                if self.open_count == 1:
+                    raise StreamingSttError("spare open failed")
+                return self._ready
+
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        processor = _processor(_FlakyProvider(session), telemetry, prewarm=True)
+        # WHEN the first turn opens its session (spare failed -> on-demand)
+        await _drive(processor, [_speech_frame()] * 3 + [_silence_frame()] * 10)
+        # THEN the prewarm event reports the fallback outcome (not a hit)
+        event = next(e for e in telemetry.events() if e.name == STT_PREWARM_EVENT)
+        self.assertEqual(event.attributes["outcome"], "fallback")
+        self.assertFalse(event.attributes["prewarm_hit"])
 
 
 if __name__ == "__main__":
