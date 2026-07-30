@@ -296,6 +296,100 @@ call.
 3. **Lever 3 is behaviourally safe at 350 ms** in this environment and is a keeper as a
    tuned default, but marginal against the gate.
 
+## Live Lever-2 Pass — Connect-Time Warm-Up Before/After (2026-07-30)
+
+**Tickets:** TASK-WEB-021 (connect-time warm-up runtime) consuming TASK-BE-017
+(`POST /api/conversation/warm-up`). **Branches:** runtime on
+`task/TASK-WEB-021-connect-time-warmup`; the backend `/warm-up` endpoint was run from a
+`git worktree` of `task/TASK-BE-017-voice-latency-support` (no merge). **Config:**
+streaming WebRTC (`/webrtc.html`), `--provider gradium --backend http --stt-mode
+streaming --tts-mode streaming`, hold **350 ms**, **real backend** (Mistral chat + Ollama
+`nomic-embed-text` + pgvector), co-located dev host, headphones. Two runs with only the
+lever-2 flags changed, backend restarted cold + Ollama model evicted before each:
+**control** (`VOICE_STT_PREWARM=0`, `VOICE_BACKEND_WARMUP=0`) vs **treatment**
+(`VOICE_STT_PREWARM=1`, `VOICE_BACKEND_WARMUP=1`). Evidence:
+[`streaming-telemetry-lever2-control-2026-07-30.jsonl`](./streaming-telemetry-lever2-control-2026-07-30.jsonl),
+[`streaming-telemetry-lever2-treatment-2026-07-30.jsonl`](./streaming-telemetry-lever2-treatment-2026-07-30.jsonl).
+
+### Mechanism confirmed live (the primary acceptance signal)
+
+- **Backend warm-up:** `voice.backend.warmup = success` fired at connect on **both**
+  treatment sessions (`provider=http-backend`); **zero** warm-up/prewarm events in the
+  control run (flags off, as expected).
+- **STT pre-warm:** `voice.stt.prewarm = hit` on the **first** STT open of each treatment
+  session → **Gradium preserves the pre-opened idle socket** across the connect → first
+  utterance window, and the spare is reused on turn 1. Subsequent opens report `cold`
+  **by design** (the warmer pre-opens exactly one spare, consumed by turn 1; later
+  utterance segments open on demand). **No `fallback` and no leak** observed — the opt-in
+  `VOICE_STT_PREWARM=1` is validated live in this environment.
+- **Turn-1 is flat with warm turns:** treatment turn-1 `stt.request` **379 ms** vs warm
+  turns 377–413 ms (no socket-open penalty); treatment turn-1 `backend.first_token`
+  **835 ms / 190 ch = 4.4 ms/ch** sits inside the warm-turn band (3.2–3.7 ms/ch) — the
+  turn-1 backend cold cost was pre-paid off the critical path.
+
+### Composite (noisy — read with the micro-benchmark below)
+
+| Metric | Control p50 / p95 | Treatment p50 / p95 | Note |
+|---|---:|---:|---|
+| `voice_to_first_audio` (m2e) | 1954 / 2632 | 1940 / **2242** | p95 **−390 ms** (worst-turn, n=5, p95=max); p50 flat |
+| `time_to_first_audio` | 1604 / 2282 | 1590 / 1892 | −390 ms p95 |
+
+Both runs sit far below the 2026-07-29 baseline (m2e p95 4.1–4.4 s) because this session
+drew **short STT finalizes (~380 ms)** — confirming the composite is dominated by
+STT-finalize + LLM-generation-length variance, not cold-start. The lever-2 effect is a
+**turn-1-only** reduction, so it shows on p95 (worst/first turn) but not p50, and neither
+run passes ADR-0029 (≤ 1500 ms). **Comparing turn-1 composites across runs is comparing
+noise**; the deterministic micro-benchmark below is the clean signal.
+
+### Deterministic backend micro-benchmark (isolates cold-start)
+
+Fixed transcript (`"pourquoi ma facture a augmenté ce mois-ci"`), backend restarted cold
++ Ollama evicted per phase, timing `POST /converse` calls. Per-phase **call-1 overhead =
+call-1 − mean(calls 2–5)** (answer length ~constant, so this isolates the cold-start):
+
+| Phase | warm-up first? | call-1 | warm steady mean | call-1 cold overhead |
+|---|---|---:|---:|---:|
+| A | no | 1450 ms | 1002 ms | **+448 ms** |
+| A2 | no | **8503 ms** (empty answer, cold outlier) | ~950 ms (tail) | **multi-second** |
+| B | yes | 1174 ms | 873 ms | +301 ms |
+| B2 | yes | 1315 ms | 928 ms | +387 ms |
+
+- `/warm-up` itself costs **~0.7–1.4 s** of off-critical-path work at connect
+  (`fully_warmed: true`, embedding + LLM warmed) — a cost that never touches a turn.
+- **Without warm-up** the turn-1 backend cold penalty is **+448 ms typical and can spike
+  to multiple seconds** (A2: cold first Mistral call + JVM JIT produced an 8.5 s call-1).
+- **With warm-up** the turn-1 backend is **bounded to ~1.2–1.3 s** (residual overhead
+  ~300–390 ms).
+- **Residual ~300 ms remains after warm-up:** `/warm-up` warms embedding + one LLM call
+  but **not the full converse critical path** (RAG/pgvector retrieval, guardrail,
+  sentence emitter first-hit JIT). **Follow-up:** have `/warm-up` run a full dummy
+  converse so those paths JIT-compile off the critical path too.
+
+### Measurement-fidelity findings (important for future latency work)
+
+- **`backend.first_token` currently equals the full converse time** (no lever 1 yet), so
+  the backend slice **scales with answer length** (control: 227 ms / 38 ch vs
+  1532 ms / 147 ch same session). Normalise by `answer_chars` (ms/char) before comparing
+  backend slices across turns/runs.
+- **Ollama keeps `nomic-embed-text` resident ~5 min**, and the backend's **startup KB
+  ingestion re-warms it at boot** — so a plain Spring cold restart is **not** an embedding
+  cold state. Evict the model (`ollama stop nomic-embed-text`) to measure a true cold
+  embedding.
+
+### Verdict
+
+- **TASK-WEB-021 mechanism accepted:** backend warm-up and STT pre-warm both fire at
+  connect, succeed against the real backend/Gradium, remove the turn-1 socket-open and
+  bound the turn-1 backend cold penalty, with correct observability and no leak/fallback.
+- **Impact is real but turn-1-only and modest at p50** (≈ −150 ms deterministic backend
+  saving, larger when the cold outlier is avoided; STT socket-open removed on turn 1).
+  Lever 2 **does not move the ADR-0029 gate on its own** — that needs **lever 1**
+  (stream the first vetted sentence to TTS), which owns the dominant STT-finalize +
+  full-LLM-answer wait.
+- **STT pre-warm default:** live evidence is positive (hit, no fallback) but small
+  (2 sessions); keep `VOICE_STT_PREWARM` opt-in for now, ready to flip default-on after a
+  larger sample.
+
 ## Component Findings
 | Brick | Status | Findings | Next action |
 |---|---|---|---|

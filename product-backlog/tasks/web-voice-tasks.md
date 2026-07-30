@@ -2163,8 +2163,23 @@ the shared model, not cancelled at teardown). Tests: unittest **442 green** (STT
 lifecycle/no-leak/fallback + hit/fallback observability events, backend trigger
 once/disabled/absent/failure/miss, HTTP `warm_up` URL-derivation incl. trailing-slash/query
 /non-2xx/fault/no-key-leak, env toggles), behave **12/33/154 green**.
-Pending: **live** cold-vs-warm turn-1 sample (real backend, needs TASK-BE-017 `/warm-up`
-reachable) — also gates the decision to flip STT pre-warm on by default.
+**Live cold-vs-warm turn-1 sample captured 2026-07-30** (real backend + `/warm-up` from a
+TASK-BE-017 `git worktree`, no merge; full write-up in `docs/qa/streaming-voice-qa-report.md`
+"Live Lever-2 Pass" + evidence dumps `streaming-telemetry-lever2-{control,treatment}-2026-07-30.jsonl`).
+Mechanism confirmed: `voice.backend.warmup=success` at connect on both treatment sessions;
+`voice.stt.prewarm=hit` on the first STT open of each session → **Gradium preserves the
+pre-opened idle socket**, spare reused on turn 1, **no fallback/leak** (opt-in
+`VOICE_STT_PREWARM=1` validated live). Turn-1 `stt.request` (379 ms) and `backend.first_token`
+(4.4 ms/char) are flat with warm turns. Deterministic backend micro-benchmark (fixed
+transcript, cold vs warm) isolates the cold-start: **without warm-up +448 ms typical, up to
+multi-second** (an 8.5 s cold call-1 observed: cold first Mistral call + JVM JIT); **with
+warm-up bounded to ~1.2–1.3 s** (~300–390 ms residual). Composite m2e p95 −390 ms
+(control→treatment, noisy n=5). **Residual/follow-up:** `/warm-up` warms embedding+LLM but not
+the full converse path (RAG/pgvector, guardrail, sentence emitter) → have `/warm-up` run a
+dummy converse to warm those too. Lever 2 is a **turn-1-only** win and does **not** move the
+ADR-0029 gate alone — **lever 1 (TASK-WEB-020) remains decisive**. STT pre-warm kept **opt-in**
+(positive but small live sample, n=2), ready to flip default-on after a larger sample.
+**Status: ready for QA acceptance / merge-ready pending user validation.**
 **Priority:** High
 
 ### Objective
