@@ -2179,7 +2179,9 @@ the full converse path (RAG/pgvector, guardrail, sentence emitter) → have `/wa
 dummy converse to warm those too. Lever 2 is a **turn-1-only** win and does **not** move the
 ADR-0029 gate alone — **lever 1 (TASK-WEB-020) remains decisive**. STT pre-warm kept **opt-in**
 (positive but small live sample, n=2), ready to flip default-on after a larger sample.
-**Status: ready for QA acceptance / merge-ready pending user validation.**
+**Validated by the user 2026-07-30**; checks re-run green (unittest **442** / behave
+**12 features · 33 scenarios · 154 steps**). **Status: merge-ready** — merge into
+`feat/sprint-10-pilot-latency` only on the user's explicit request.
 **Priority:** High
 
 ### Objective
