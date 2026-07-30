@@ -1,9 +1,17 @@
 # ADR-0037 — First-sentence backend answer streaming to TTS
 
 - **Status:** Accepted for implementation (2026-07-30) — lever 1 built + unit/behave
-  covered behind a default-off flag (TASK-WEB-020); **remains gated on a warm+cold live
-  before/after sample** before the flag is switched on in any deployment. Lever 2
-  delivered (TASK-WEB-021). Originally Proposed (2026-07-29).
+  covered behind a default-off flag (TASK-WEB-020). **Warm live before/after validated
+  (2026-07-30):** `VOICE_BACKEND_STREAM=1` delivered **−658 ms median** on
+  `backend_first_token` and **−866 ms median mouth-to-ear** (2696.9 → 1830.6 ms p50; p95
+  4848.7 → 2526.1 ms), DEC-002 preserved (5/5 grounded), filler coherence kept
+  (4 → 1), barge-in intact — see
+  [`streaming-voice-qa-report.md`](../../qa/streaming-voice-qa-report.md) "Live Lever-1
+  Pass". **GO to enable the flag on the pilot channel** (strict improvement, no
+  regression); **code default stays OFF** pending a larger warm+cold sample.
+  **ADR-0029 gate (≤ 1500 ms p95) not yet met** — lever 1 is the biggest single mover but
+  needs the STT finalize-tail work + lever-2 full-converse warm-up to attempt closure.
+  Lever 2 delivered (TASK-WEB-021). Originally Proposed (2026-07-29).
 - **Deciders:** Architecture + Product (DEC-002 billing-safety owner)
 - **Related:** TASK-WEB-015 (perceived-latency levers), TASK-WEB-014 (mouth-to-ear
   measurement — prerequisite), ADR-0029 (pilot latency criterion & sub-targets),

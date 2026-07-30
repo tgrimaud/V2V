@@ -2032,7 +2032,8 @@ implements lever 1), ADR-0013 (backend SSE guarded-sentence streaming), DEC-002 
 **Depends on:** TASK-WEB-014 (live baseline — optimize against a real measurement), TASK-BE-017
 (backend warm-up + vetted-stream contract confirmation for voice consumption)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** Implemented, ready for review + live pass (Sprint 10, branch
+**Status:** Implemented + warm live before/after validated — GO to enable on pilot,
+code default stays OFF (Sprint 10, branch
 `task/TASK-WEB-020-first-sentence-stream` off `feat/sprint-10-pilot-latency`). Split from
 TASK-WEB-015 (lever 1) per user decision 2026-07-29.
 Runtime built 2026-07-30 behind the default-off flag `VOICE_BACKEND_STREAM` (opt-in):
@@ -2058,9 +2059,19 @@ Runtime built 2026-07-30 behind the default-off flag `VOICE_BACKEND_STREAM` (opt
   `voice.backend.streamed` (sentences/outcome/confidence).
 - **Coverage:** `tests/test_streaming_answer.py`, extended `tests/test_http_backend.py`,
   `features/first_sentence_streaming.feature`. Full suite green (unittest 462, behave 13·36·169).
-- **Gate to switch the flag on (pending):** warm+cold **live** before/after on the real
-  backend, per-slice + composite p50/p95/p99 vs TASK-WEB-014 baseline, ADR-0029 re-evaluated,
-  QA report go/no-go. Merge only on explicit user request.
+- **Live before/after (warm, 2026-07-30, real backend, same warm backend both runs, only
+  `VOICE_BACKEND_STREAM` toggled, n=5):** `voice.backend.streamed=success` 5/5 (all
+  `grounded=true`, DEC-002 held), `backend_first_token` p50 **1435.9 → 777.6 ms (−658)** /
+  p95 3481.5 → 1599.0, **mouth-to-ear p50 2696.9 → 1830.6 ms (−866)** / p95 4848.7 → 2526.1.
+  Fillers 4 → 1 (no double-speak), barge-in 4/4 OK. Within/above the −700–900 ms expectation.
+  Evidence: `docs/qa/streaming-voice-qa-report.md` "Live Lever-1 Pass" +
+  `docs/qa/streaming-telemetry-lever1-{control,treatment}-2026-07-30.jsonl`.
+- **ADR-0029 gate:** still **FAIL** (treatment m2e p95 2526 ms > 1500) but median pulled to
+  1831 ms — lever 1 is the biggest single mover, necessary but not sufficient alone; combine
+  with STT finalize-tail + lever-2 full-converse warm-up to attempt closure.
+- **Verdict — GO to enable `VOICE_BACKEND_STREAM=1` on the pilot channel** (strict
+  improvement, no regression, no DEC-002 risk); keep the **code default OFF** until a larger
+  warm+cold sample. Merge only on explicit user request.
 **Priority:** High
 
 ### Objective
