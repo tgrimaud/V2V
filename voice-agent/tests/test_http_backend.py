@@ -245,5 +245,106 @@ class HttpBackendWithTelemetryTest(unittest.TestCase):
         self.assertNotIn(API_KEY, blob)
 
 
+class _StreamTransport:
+    """Fake SSE line transport: yields canned lines (or raises), and records the URL."""
+
+    def __init__(self, lines: list[str] | None = None, error: Exception | None = None) -> None:
+        self._lines = lines or []
+        self._error = error
+        self.calls: list[dict] = []
+        self.closed = False
+
+    def __call__(self, url, headers, body, timeout, control):
+        self.calls.append({"url": url, "headers": headers, "body": body, "timeout": timeout})
+        control.bind(self._close)
+        if self._error is not None:
+            raise self._error
+        # Mirror urllib's `for raw in resp`: yield one physical line at a time (with its
+        # trailing newline), not whole SSE blocks, so the parser sees real line framing.
+        for block in self._lines:
+            for line in block.splitlines(keepends=True):
+                if control.stopped:
+                    return
+                yield line
+
+    def _close(self) -> None:
+        self.closed = True
+
+
+def _chunk(text: str) -> str:
+    return f'event:chunk\ndata:{{"text":"{text}"}}\n\n'
+
+
+class HttpBackendStreamTest(unittest.TestCase):
+    """TASK-WEB-020 / lever 1: consume the guarded SSE stream one vetted sentence at a time."""
+
+    def test_stream_url_is_derived_from_the_converse_endpoint(self) -> None:
+        # GIVEN converse endpoints (plain, trailing slash, query, already-streaming)
+        cases = {
+            "https://b.internal/api/conversation/converse": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse/": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse?x=1": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse-stream": "https://b.internal/api/conversation/converse-stream",
+        }
+        for raw, expected in cases.items():
+            transport = _StreamTransport([_chunk("hi")])
+            list(HttpBackendAdapter(raw, stream_transport=transport).answer_stream(_request()))
+            # THEN the stream targets the converse-stream sibling
+            self.assertEqual(transport.calls[0]["url"], expected, raw)
+
+    def test_streams_chunks_then_done(self) -> None:
+        # GIVEN a stream of two chunks then a grounded done
+        lines = [
+            _chunk("Bonjour."),
+            _chunk("Votre facture a augmente."),
+            'event:done\ndata:{"text":"Bonjour. Votre facture a augmente.","confidence":0.9,"grounded":true}\n\n',
+        ]
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=_StreamTransport(lines))
+        # WHEN consumed
+        events = list(adapter.answer_stream(_request()))
+        # THEN two chunk events (in order) then a done carrying confidence/grounded
+        self.assertEqual([e.text for e in events if e.kind == "chunk"], ["Bonjour.", "Votre facture a augmente."])
+        done = next(e for e in events if e.kind == "done")
+        self.assertAlmostEqual(done.confidence, 0.9)
+        self.assertIs(done.grounded, True)
+
+    def test_connect_fault_yields_a_sanitized_error_event_not_a_raise(self) -> None:
+        # GIVEN a stream transport that fails to connect with a key-bearing message
+        transport = _StreamTransport(error=RuntimeError(f"unreachable {API_KEY}"))
+        adapter = HttpBackendAdapter(ENDPOINT, api_key=API_KEY, stream_transport=transport)
+        # WHEN consumed
+        events = list(adapter.answer_stream(_request()))
+        # THEN a single sanitized error event is produced (never raised, never leaks the key)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind, "error")
+        self.assertNotIn(API_KEY, f"{events[0].error_code} {events[0].error_reason}")
+
+    def test_empty_transcript_raises_before_opening_the_stream(self) -> None:
+        # GIVEN an empty transcript
+        transport = _StreamTransport([_chunk("x")])
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=transport)
+        # WHEN consumed -> THEN it stays UNAVAILABLE (no stream opened, never fabricates a turn)
+        with self.assertRaises(EmptyTranscriptError):
+            list(adapter.answer_stream(_request(transcript="   ")))
+        self.assertEqual(transport.calls, [])
+
+    def test_abort_stops_consuming_and_closes_the_stream(self) -> None:
+        # GIVEN a control aborted after opening the stream
+        from conversation_backend import StreamControl
+
+        transport = _StreamTransport([_chunk("one"), _chunk("two"), _chunk("three")])
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=transport)
+        control = StreamControl()
+        gen = adapter.answer_stream(_request(), control)
+        first = next(gen)
+        # WHEN aborted (barge-in) after the first sentence
+        control.abort()
+        rest = list(gen)
+        # THEN no further event is consumed and the underlying stream is closed
+        self.assertEqual(first.text, "one")
+        self.assertEqual(rest, [])
+        self.assertTrue(transport.closed)
+
+
 if __name__ == "__main__":
     unittest.main()

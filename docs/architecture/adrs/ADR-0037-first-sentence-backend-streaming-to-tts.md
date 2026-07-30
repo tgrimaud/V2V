@@ -1,7 +1,9 @@
 # ADR-0037 — First-sentence backend answer streaming to TTS
 
-- **Status:** Proposed (2026-07-29) — decision recorded now; implementation gated on
-  the TASK-WEB-014 live baseline (optimize against a measured baseline, not blind)
+- **Status:** Accepted for implementation (2026-07-30) — lever 1 built + unit/behave
+  covered behind a default-off flag (TASK-WEB-020); **remains gated on a warm+cold live
+  before/after sample** before the flag is switched on in any deployment. Lever 2
+  delivered (TASK-WEB-021). Originally Proposed (2026-07-29).
 - **Deciders:** Architecture + Product (DEC-002 billing-safety owner)
 - **Related:** TASK-WEB-015 (perceived-latency levers), TASK-WEB-014 (mouth-to-ear
   measurement — prerequisite), ADR-0029 (pilot latency criterion & sub-targets),
@@ -106,6 +108,69 @@ decision is recorded before the implementation and the implementation is gated.
   ordering hazards). Reserved for async/omnichannel (Sprint 12).
 - **Client-side sentence segmentation without a backend grounding guarantee.** The
   runtime cannot verify grounding, so it would risk DEC-002. Rejected.
+
+## Lever 1 delivered (2026-07-30, TASK-WEB-020)
+
+Implemented on the Flow A synchronous-per-turn path, behind the default-off env flag
+`VOICE_BACKEND_STREAM` (opt-in `1/true/yes/on`); the blocking `POST /converse` path
+stays the default and fallback. Capability-gated: the streaming path is taken only when
+the backend actually exposes `answer_stream`, so a stub/fake without it transparently
+stays blocking.
+
+- **Backend SSE contract confirmed = point 2(a), stronger.** `ConverseStreamSession`
+  emits `chunk` (one sentence), a terminal `done` (`{text, confidence?, grounded}`) and
+  a sanitized `error` (ErrorResponse). `GuardedSentenceEmitter` runs grounding **then
+  the output guardrail on each sentence before it is emitted**, and emits the safe
+  hand-off as a **terminal `chunk`** on a block. So DEC-002 is enforced **per sentence
+  on the stream** — no ungrounded amount can be voiced — which satisfies the ADR's
+  non-negotiable safety contract (point 2) without any new backend work.
+
+- **Confidence policy decision (Architecture + Product, the ADR's open lever-1
+  question): option A.** Because the backend already grounds + guardrail-vets every
+  emitted sentence, the terminal `done` confidence is treated as **advisory** on the
+  streamed path: a grounded but low-confidence answer is **logged**
+  (`voice.backend.stream.low_confidence`) and used for post-turn escalation, **not**
+  un-said (it was already spoken). A backend `error`, an empty stream, or a raising
+  adapter degrades to the same safe fallback the blocking path speaks; a non-grounded
+  `done` (`grounded=false`) maps the turn to `DEGRADED` while still voicing the
+  backend's own safe hand-off chunk. This keeps the full latency win with the DEC-002
+  amount-safety gate intact, and is why the flag ships **off** until a live sample
+  confirms the win and re-verifies guardrail behaviour.
+
+- **Seam + safety of the consumer.** New neutral contract in
+  `conversation_backend/streaming.py` (`AnswerStreamEvent`, `parse_sse_events`,
+  `StreamControl`, `StreamingBackendAnswerPort`); `HttpBackendAdapter.answer_stream`
+  consumes the SSE lazily (stdlib urllib, no new dependency), derives the
+  `converse-stream` sibling of the configured converse URL, mirrors the blocking
+  failure policy (never raises out, never leaks the key — a connect/mid-stream fault
+  becomes one sanitized `error` event). `voice_pipeline/streaming_answer.py`
+  (`StreamedAnswerRunner`) bridges the blocking generator to the loop with
+  `await asyncio.to_thread(next, it, SENTINEL)` per event and pushes one `TextFrame`
+  per vetted sentence; the streaming TTS synthesizes each incrementally (TASK-WEB-004,
+  unchanged). The spoken filler (TASK-WEB-019) is settled on the first pushed sentence
+  so it cannot double-speak.
+
+- **Barge-in.** An interruption cancels the runner; it catches `asyncio.CancelledError`,
+  calls `StreamControl.abort()` (sets the stop flag **and closes the socket** so a read
+  blocked mid-line unblocks), emits `voice.backend.stream.interrupted`, and re-raises —
+  no sentence is pushed after cancellation and the connection is closed (best-effort).
+
+- **Telemetry (US-036).** `backend.first_token` now stamps the **first sentence** (the
+  lever-1 win) and `backend.request` the total on the streamed path — same span names so
+  the existing per-slice distributions carry over; plus `voice.backend.streamed`
+  (sentence count, outcome, grounded, confidence) and the advisory/interrupted events
+  above.
+
+- **Coverage.** `tests/test_streaming_answer.py` (parser, runner ordering, blocked
+  hand-off, error/empty/raising degrade, option-A advisory, barge-in no-post-cancel-
+  speech + socket close, flag on/off + capability fallback), `tests/test_http_backend.py`
+  (URL derivation, chunk/done parse, sanitized error, empty transcript, abort closes),
+  and `features/first_sentence_streaming.feature`. Full suite green (unittest 462,
+  behave 13·36·169).
+
+- **Still pending (the gate to switch the flag on):** a warm+cold **live** before/after
+  sample on the real backend, per-slice + composite p50/p95/p99 vs the TASK-WEB-014
+  baseline, ADR-0029 gate re-evaluated, and the QA report go/no-go.
 
 ## Lever 2 note (connect-time warm-up) — recorded here, not a separate ADR
 

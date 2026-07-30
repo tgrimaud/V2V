@@ -32,6 +32,7 @@ from conversation_backend import (
 )
 from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import TelemetryRecorder, Timer
+from voice_pipeline.streaming_answer import StreamedAnswerRunner
 from voice_pipeline.filler import (
     FILLER_SPOKEN_EVENT,
     FILLER_SPOKEN_METRIC,
@@ -59,6 +60,24 @@ CONFIDENCE_THRESHOLD_ENV_VAR = "VOICE_BACKEND_CONFIDENCE_THRESHOLD"
 BACKEND_WARMUP_ENV_VAR = "VOICE_BACKEND_WARMUP"
 BACKEND_WARMUP_EVENT = "voice.backend.warmup"
 BACKEND_WARMUP_METRIC = "voice.backend.warmup.count"
+
+# TASK-WEB-020 (lever 1): stream the backend answer to TTS on the first vetted sentence
+# instead of waiting for the whole answer. Opt-in (default OFF) so the blocking path stays
+# the safe fallback until the live before/after pass validates the win (ADR-0037).
+BACKEND_STREAM_ENV_VAR = "VOICE_BACKEND_STREAM"
+
+
+def backend_stream_enabled() -> bool:
+    """Whether to stream the backend answer sentence-by-sentence (default OFF, opt-in).
+
+    Enabled only by an explicit truthy value (`1`/`true`/`yes`/`on`); anything else — and
+    an unset variable — keeps the safe blocking path, so the lever ships dark and is
+    switched on deliberately for the measured live pass.
+    """
+    raw = os.environ.get(BACKEND_STREAM_ENV_VAR)
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 def backend_warmup_enabled() -> bool:
@@ -207,11 +226,16 @@ class AnswerProcessor(FrameProcessor):
         filler_threshold_ms: float | None = None,
         filler_phrases: Sequence[str] | None = None,
         backend_warmup: bool | None = None,
+        backend_stream: bool | None = None,
     ) -> None:
         super().__init__()
         self._backend = backend
         self._envelope = envelope
         self._telemetry = telemetry
+        # TASK-WEB-020 (lever 1): resolve the streaming toggle once; an explicit override
+        # (tests) still wins over the environment. The streaming path is only taken when
+        # the backend actually exposes `answer_stream` (a fake without it stays blocking).
+        self._backend_stream = backend_stream_enabled() if backend_stream is None else backend_stream
         # TASK-WEB-021: resolve the connect-time warm-up toggle once; an explicit override
         # (tests) still wins over the environment. Keeps a reference to the fire-and-forget
         # warm-up task so it is not garbage-collected before it runs. The task is
@@ -280,20 +304,45 @@ class AnswerProcessor(FrameProcessor):
         answered = asyncio.Event()
         filler_task = asyncio.create_task(self._run_filler(answered, request, direction))
         try:
-            result = await self._call_backend(request)
-            # Settle the filler before the answer so a late filler can't follow the reply.
-            await self._stop_filler(answered, filler_task)
+            if self._stream_this_turn():
+                # Lever 1: push each vetted sentence as it streams (first audio on
+                # sentence 1). The runner pushes the frames itself; first push settles
+                # the filler so it can never follow the reply.
+                self.result = await self._stream_backend(request, answered, direction)
+            else:
+                result = await self._call_backend(request)
+                # Settle the filler before the answer so a late filler can't follow it.
+                await self._stop_filler(answered, filler_task)
+                self.result = result
+                if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
+                    await self.push_frame(TextFrame(text=result.text), direction)
         except EmptyTranscriptError:
             # Nothing to answer: never invent a turn, so no text flows downstream.
             self.result = None
             return
         finally:
-            # On any exit (empty transcript, or barge-in cancelling this turn mid-wait)
-            # a still-pending filler must be dropped so it can never speak out of turn.
+            # On any exit (empty transcript, barge-in cancelling this turn mid-wait, or
+            # the streamed turn settling) a still-pending filler must be dropped so it can
+            # never speak out of turn.
             self._cancel_filler(filler_task)
-        self.result = result
-        if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
-            await self.push_frame(TextFrame(text=result.text), direction)
+
+    def _stream_this_turn(self) -> bool:
+        # Take the streaming path only when enabled AND the backend can stream; a fake or
+        # a stub without `answer_stream` transparently keeps the blocking path.
+        return self._backend_stream and callable(getattr(self._backend, "answer_stream", None))
+
+    async def _stream_backend(
+        self, request: AnswerRequest, answered: asyncio.Event, direction: FrameDirection
+    ) -> AnswerResult:
+        async def push(text: str) -> None:
+            # First sentence is imminent: settle the filler so it cannot follow the reply.
+            answered.set()
+            await self.push_frame(TextFrame(text=text), direction)
+
+        runner = StreamedAnswerRunner(
+            self._backend, self._telemetry, confidence_threshold=self._confidence_threshold
+        )
+        return await runner.run(request, push)
 
     async def _call_backend(self, request: AnswerRequest) -> AnswerResult:
         # The backend does blocking work (adapter I/O later); keep it off the loop.

@@ -22,19 +22,32 @@ from .degraded import (
 from .http_backend import HttpBackendAdapter, HttpBackendError, HttpResponse
 from .models import AnswerOutcome, AnswerRequest, AnswerResult, ConversationEnvelope
 from .port import BackendAnswerPort, EmptyTranscriptError
+from .streaming import (
+    CHUNK,
+    DONE,
+    ERROR,
+    AnswerStreamEvent,
+    StreamControl,
+    StreamingBackendAnswerPort,
+    parse_sse_events,
+)
 from .stub_backend import STUB_ANSWER_TEXT, StubBackendAdapter, assert_no_fabricated_amount
 
 __all__ = [
     "AnswerOutcome",
     "AnswerRequest",
     "AnswerResult",
+    "AnswerStreamEvent",
     "BACKEND_NAMES",
     "BACKEND_UNAVAILABLE_REASON",
     "BackendAnswerPort",
+    "CHUNK",
     "ConversationEnvelope",
     "DEFAULT_CONFIDENCE_THRESHOLD",
     "DEGRADED_FALLBACK_TEXT",
+    "DONE",
     "EMPTY_ANSWER_REASON",
+    "ERROR",
     "EmptyTranscriptError",
     "HTTP",
     "HttpBackendAdapter",
@@ -43,8 +56,11 @@ __all__ = [
     "LOW_CONFIDENCE_REASON",
     "STUB",
     "STUB_ANSWER_TEXT",
+    "StreamControl",
+    "StreamingBackendAnswerPort",
     "StubBackendAdapter",
     "assert_no_fabricated_amount",
     "build_backend",
     "degraded_answer",
+    "parse_sse_events",
 ]

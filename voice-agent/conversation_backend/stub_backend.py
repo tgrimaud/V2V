@@ -1,5 +1,8 @@
+from collections.abc import Iterator
+
 from .models import AnswerOutcome, AnswerRequest, AnswerResult
 from .port import EmptyTranscriptError
+from .streaming import CHUNK, DONE, AnswerStreamEvent, StreamControl
 
 # Deterministic, offline answer. Intentionally free of any digit, currency symbol
 # or invoice specific so the stub can never state a fabricated amount (DEC-002).
@@ -51,6 +54,18 @@ class StubBackendAdapter:
             outcome=AnswerOutcome.SUCCESS,
             correlation_id=request.correlation_id,
         )
+
+    def answer_stream(
+        self, request: AnswerRequest, control: StreamControl | None = None
+    ) -> Iterator[AnswerStreamEvent]:
+        # Offline streaming parity (TASK-WEB-020 / lever 1): the stub has no real
+        # sentence generation, so it yields its single deterministic answer as one vetted
+        # `chunk` followed by a grounded `done`. Digit/currency-free by the import-time
+        # DEC-002 assertion above, so streaming can never voice a fabricated amount.
+        if not request.transcript or not request.transcript.strip():
+            raise EmptyTranscriptError("No transcript to answer")
+        yield AnswerStreamEvent(kind=CHUNK, text=STUB_ANSWER_TEXT)
+        yield AnswerStreamEvent(kind=DONE, text=STUB_ANSWER_TEXT, grounded=True)
 
     def warm_up(self) -> bool:
         # No cold models offline: warm-up is a symmetric no-op so the connect-time trigger

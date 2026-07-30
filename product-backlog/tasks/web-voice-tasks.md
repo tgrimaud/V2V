@@ -2032,8 +2032,35 @@ implements lever 1), ADR-0013 (backend SSE guarded-sentence streaming), DEC-002 
 **Depends on:** TASK-WEB-014 (live baseline — optimize against a real measurement), TASK-BE-017
 (backend warm-up + vetted-stream contract confirmation for voice consumption)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (Sprint 10, branch `task/TASK-WEB-020-stream-first-sentence` off
-`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 1) per user decision 2026-07-29.
+**Status:** Implemented, ready for review + live pass (Sprint 10, branch
+`task/TASK-WEB-020-first-sentence-stream` off `feat/sprint-10-pilot-latency`). Split from
+TASK-WEB-015 (lever 1) per user decision 2026-07-29.
+Runtime built 2026-07-30 behind the default-off flag `VOICE_BACKEND_STREAM` (opt-in):
+- **Backend SSE contract confirmed** = ADR-0037 point 2(a), stronger. `ConverseStreamSession`
+  emits `chunk`/`done`/`error`; `GuardedSentenceEmitter` grounds + guardrail-vets **each
+  sentence before emit** and sends the safe hand-off as a terminal `chunk` — DEC-002 holds
+  per sentence, no backend change needed.
+- **Confidence decision (Architecture + Product, ticket Open Question): option A.** The
+  terminal `done` confidence is advisory (grounded low-confidence answers stay spoken,
+  logged `voice.backend.stream.low_confidence`; `grounded=false` → `degraded` while still
+  voicing the backend hand-off). `error`/empty/mid-stream fault → same safe fallback as the
+  blocking path.
+- **Seam:** `conversation_backend/streaming.py` (`AnswerStreamEvent`, `parse_sse_events`,
+  `StreamControl`, `StreamingBackendAnswerPort`); `HttpBackendAdapter.answer_stream` (lazy
+  stdlib SSE, derives `converse-stream` sibling, never raises out / never leaks the key);
+  `voice_pipeline/streaming_answer.py` (`StreamedAnswerRunner`) pushes one `TextFrame` per
+  vetted sentence (streaming TTS synthesizes each — TASK-WEB-004, unchanged); filler settled
+  on the first sentence (no double-speak). Capability-gated: a backend without `answer_stream`
+  stays blocking.
+- **Barge-in:** `StreamControl.abort()` sets stop + closes the socket, `CancelledError`
+  re-raised, `voice.backend.stream.interrupted` emitted — no post-cancel speech, no leak.
+- **Telemetry (US-036):** `backend.first_token` = first sentence, `backend.request` = total;
+  `voice.backend.streamed` (sentences/outcome/confidence).
+- **Coverage:** `tests/test_streaming_answer.py`, extended `tests/test_http_backend.py`,
+  `features/first_sentence_streaming.feature`. Full suite green (unittest 462, behave 13·36·169).
+- **Gate to switch the flag on (pending):** warm+cold **live** before/after on the real
+  backend, per-slice + composite p50/p95/p99 vs TASK-WEB-014 baseline, ADR-0029 re-evaluated,
+  QA report go/no-go. Merge only on explicit user request.
 **Priority:** High
 
 ### Objective
