@@ -2032,10 +2032,19 @@ implements lever 1), ADR-0013 (backend SSE guarded-sentence streaming), DEC-002 
 **Depends on:** TASK-WEB-014 (live baseline — optimize against a real measurement), TASK-BE-017
 (backend warm-up + vetted-stream contract confirmation for voice consumption)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** Implemented + warm live before/after validated — GO to enable on pilot,
-code default stays OFF (Sprint 10, branch
-`task/TASK-WEB-020-first-sentence-stream` off `feat/sprint-10-pilot-latency`). Split from
-TASK-WEB-015 (lever 1) per user decision 2026-07-29.
+**Status:** ✅ Validated by user (2026-07-31) — checks re-run green (unittest **462** /
+behave **13·36·169**); **merge-ready** (merge on explicit request). Implemented + **warm &
+cold live** validated — **GO to enable `VOICE_BACKEND_STREAM=1` on pilot, code default stays
+OFF** (Sprint 10, branch `task/TASK-WEB-020-first-sentence-stream` off
+`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 1) per user decision
+2026-07-29.
+Cold + combined follow-up passes (2026-07-31, evidence in
+`docs/qa/streaming-voice-qa-report.md`): cold turn-1 penalty ≈ +1400 ms in the backend slice
+(m2e p95 3124 ms); with lever 2 warm-up ON (BE-017) the cold spike is eliminated
+(`backend_first_token` p95 2042 → 1052 ms, m2e p95 3124 → 2142 ms). **ADR-0029 gate still
+FAIL even with levers 1+2** (m2e p95 2142 > 1500) — residual ~640 ms handed to the next
+levers **TASK-STT-014** (STT finalize-tail) and **TASK-BE-020** (first-sentence backend
+generation).
 Runtime built 2026-07-30 behind the default-off flag `VOICE_BACKEND_STREAM` (opt-in):
 - **Backend SSE contract confirmed** = ADR-0037 point 2(a), stronger. `ConverseStreamSession`
   emits `chunk`/`done`/`error`; `GuardedSentenceEmitter` grounds + guardrail-vets **each

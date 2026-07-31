@@ -733,3 +733,43 @@ criterion recorded in the ADR (not a silent weakening).
   cold; first chunk after open ~350 ms). Pre-warming/reusing it → **TASK-WEB-011**,
   projected composite p95 ~763 ms (PASS). ADR-0018 evidence + streaming QA report
   updated with the post-fix baseline.
+
+## TASK-STT-014 - Reduce The Post-End-Of-Turn STT Finalize Tail On The Live Real-Backend Path
+
+**Parent:** EPIC-010
+**Related decisions:** ADR-0029 (pilot latency criterion — this lever helps close it),
+ADR-0018 (voice latency targets), TASK-STT-013 (finalize-on-`flushed`, the previous
+finalize-tail win this ticket extends)
+**Related stories:** US-036 (per-slice timing), US-019 (voice loop)
+**Depends on / follows:** TASK-WEB-020 (lever 1) + TASK-WEB-021 (lever 2) validated —
+they leave the `stt` slice as one of the two residual gate contributors.
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** To do (future improvement, out of Sprint 10 scope). Created 2026-07-31 from the
+TASK-WEB-020 cold/combined live passes.
+**Priority:** Medium
+
+### Objective
+
+Cut the STT slice measured on the **live streaming WebRTC path against the real backend**.
+After lever 1 + lever 2, the combined cold mouth-to-ear p95 is 2142 ms (ADR-0029 gate ≤ 1500 ms
+still FAIL, margin −642 ms); the `stt` slice is p95 **~535 ms (cold) / ~424 ms (warm)** and is
+one of the two residual contributors (the other is `backend_first_token`, TASK-BE-020).
+
+### Scope
+
+- Measure where the post-end-of-turn `stt` time is spent on the live path (partial→final
+  latency, Gradium `flushed` ack timing, any lookahead/`delay_in_frames` still on the critical
+  path) beyond what TASK-STT-013 already removed.
+- Explore overlapping the STT finalize with the fixed end-of-turn hold and/or committing the
+  transcript sooner **without dropping the trailing word** (commit-on-last-partial was rejected
+  in TASK-STT-013 for exactly this reason — re-evaluate with the live real-backend numbers).
+- Keep all STT safety invariants: transcript = concatenation of real partials, API key never
+  logged, drop/error still surface `StreamingSttError`.
+
+### Acceptance Criteria
+
+- A measured live before/after on the streaming WebRTC path (warm + cold, per-slice p50/p95/p99)
+  showing the `stt` slice reduction, with zero word loss (WER unchanged on the fixture set).
+- The mouth-to-ear composite re-evaluated against the ADR-0029 gate with this lever combined
+  with levers 1 + 2.
+- No regression in barge-in or the US-036 telemetry slices.
