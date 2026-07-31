@@ -31,6 +31,7 @@ public class WebSecurityMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns(
                         "/api/knowledge/**",
                         "/api/conversation/answer",
-                        "/api/conversation/retrieve");
+                        "/api/conversation/retrieve",
+                        "/api/conversation/warm-up");
     }
 }

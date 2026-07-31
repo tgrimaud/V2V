@@ -24,6 +24,13 @@ DEFAULT_FRAME_MS = 20.0
 # added latency the detector contributes once speech ends (the confirmation
 # hold), which is exactly what the end_of_turn slice measures.
 DEFAULT_SILENCE_WINDOW_MS = 500.0
+# Safe floor for a tuned-down hold (TASK-WEB-015 lever 3). Shortening the window
+# cuts latency but raises the false-endpoint (premature cut) risk: too low and a
+# natural mid-sentence pause is read as end-of-turn. The signaling env reader
+# clamps any tuning to this floor so a misconfiguration can never drop it into the
+# constant-premature-cut regime. Confirm the real false-cut rate on live audio
+# before lowering the deployed value toward it.
+MIN_SAFE_SILENCE_WINDOW_MS = 250.0
 # Peak |amplitude| above which a frame counts as speech. ~3% of int16 full scale
 # (32767); low enough to catch quiet speech, high enough to reject line noise.
 DEFAULT_AMPLITUDE_THRESHOLD = 1000
@@ -186,6 +193,17 @@ class StreamingEndOfTurnDetector:
         customer actually starts speaking, instead of streaming inter-turn silence.
         """
         return self._has_speech
+
+    @property
+    def silence_window_ms(self) -> float:
+        """The configured trailing-silence hold (TASK-WEB-015 lever 3).
+
+        Exposed so the STT processor can stamp the *configured* window on the
+        `voice.end_of_turn` telemetry: on a `client_stop` turn `slice_ms` is the real
+        (short) trailing silence, not the window, so QA needs the configured value to
+        analyse the false-cut rate against the deployed hold.
+        """
+        return self._silence_window_ms
 
     def reset(self) -> None:
         self._elapsed_ms = 0.0

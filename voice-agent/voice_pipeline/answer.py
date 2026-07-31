@@ -12,9 +12,10 @@ It imports only pipecat, the neutral `conversation_backend` contract and the sha
 
 import asyncio
 import os
+from collections.abc import Sequence
 from typing import Any
 
-from pipecat.frames.frames import Frame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import Frame, StartFrame, TextFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from conversation_backend import (
@@ -31,6 +32,16 @@ from conversation_backend import (
 )
 from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import TelemetryRecorder, Timer
+from voice_pipeline.streaming_answer import StreamedAnswerRunner
+from voice_pipeline.filler import (
+    FILLER_SPOKEN_EVENT,
+    FILLER_SPOKEN_METRIC,
+    FILLER_TRIGGER_REASON,
+    filler_enabled,
+    pick_phrase,
+    resolve_filler_phrases,
+    resolve_filler_threshold_ms,
+)
 
 # The backend latency slice (US-036, registered in voice_common/pipeline_timing.py).
 # `backend.first_token` is the time-to-first-token slice; `backend.request` is the
@@ -42,6 +53,43 @@ BACKEND_REQUEST_SPAN = "backend.request"
 # deployment can align it with the backend's own confidence policy without a code change.
 # It is a *safety net* below the backend grounding guardrail, not a replacement for it.
 CONFIDENCE_THRESHOLD_ENV_VAR = "VOICE_BACKEND_CONFIDENCE_THRESHOLD"
+
+# TASK-WEB-021 (lever 2): fire a best-effort backend warm-up (POST /warm-up) once at
+# pipeline start so the first real turn does not pay the cold LLM + embedding cost. Off
+# the critical path, non-blocking, and easily disabled per deployment via env.
+BACKEND_WARMUP_ENV_VAR = "VOICE_BACKEND_WARMUP"
+BACKEND_WARMUP_EVENT = "voice.backend.warmup"
+BACKEND_WARMUP_METRIC = "voice.backend.warmup.count"
+
+# TASK-WEB-020 (lever 1): stream the backend answer to TTS on the first vetted sentence
+# instead of waiting for the whole answer. Opt-in (default OFF) so the blocking path stays
+# the safe fallback until the live before/after pass validates the win (ADR-0037).
+BACKEND_STREAM_ENV_VAR = "VOICE_BACKEND_STREAM"
+
+
+def backend_stream_enabled() -> bool:
+    """Whether to stream the backend answer sentence-by-sentence (default OFF, opt-in).
+
+    Enabled only by an explicit truthy value (`1`/`true`/`yes`/`on`); anything else — and
+    an unset variable — keeps the safe blocking path, so the lever ships dark and is
+    switched on deliberately for the measured live pass.
+    """
+    raw = os.environ.get(BACKEND_STREAM_ENV_VAR)
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def backend_warmup_enabled() -> bool:
+    """Whether to trigger the connect-time backend warm-up (default on).
+
+    Disabled only by an explicit falsy value (`0`/`false`/`no`/`off`), so a deployment
+    can turn the trigger off without a code change while it stays on by default.
+    """
+    raw = os.environ.get(BACKEND_WARMUP_ENV_VAR)
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
 
 
 def resolve_confidence_threshold() -> float:
@@ -174,16 +222,40 @@ class AnswerProcessor(FrameProcessor):
         telemetry: Any = None,
         *,
         confidence_threshold: float | None = None,
+        filler_enabled_flag: bool | None = None,
+        filler_threshold_ms: float | None = None,
+        filler_phrases: Sequence[str] | None = None,
+        backend_warmup: bool | None = None,
+        backend_stream: bool | None = None,
     ) -> None:
         super().__init__()
         self._backend = backend
         self._envelope = envelope
         self._telemetry = telemetry
+        # TASK-WEB-020 (lever 1): resolve the streaming toggle once; an explicit override
+        # (tests) still wins over the environment. The streaming path is only taken when
+        # the backend actually exposes `answer_stream` (a fake without it stays blocking).
+        self._backend_stream = backend_stream_enabled() if backend_stream is None else backend_stream
+        # TASK-WEB-021: resolve the connect-time warm-up toggle once; an explicit override
+        # (tests) still wins over the environment. Keeps a reference to the fire-and-forget
+        # warm-up task so it is not garbage-collected before it runs. The task is
+        # intentionally NOT cancelled at teardown: it warms the *shared* backend model, so
+        # letting it finish benefits the next connect too, and it is off the critical path
+        # (bounded by the HTTP warm-up timeout). On the long-lived server loop it always
+        # completes; only a process exiting immediately after a 1-turn call could drop it,
+        # which is harmless (best-effort warm-up).
+        self._backend_warmup = backend_warmup_enabled() if backend_warmup is None else backend_warmup
+        self._warmup_task: "asyncio.Task[None] | None" = None
         # RF-022: resolve the env-tunable floor once at construction; an explicit override
         # (tests / callers) still wins over the environment.
         self._confidence_threshold = (
             confidence_threshold if confidence_threshold is not None else resolve_confidence_threshold()
         )
+        # TASK-WEB-019: spoken filler config resolved once; explicit overrides win over env.
+        self._filler_enabled = filler_enabled() if filler_enabled_flag is None else filler_enabled_flag
+        threshold_ms = filler_threshold_ms if filler_threshold_ms is not None else resolve_filler_threshold_ms()
+        self._filler_threshold_s = threshold_ms / 1000.0
+        self._filler_phrases = tuple(filler_phrases) if filler_phrases else resolve_filler_phrases()
         # Last AnswerResult, read by the pipeline / turn processor for the response.
         self.result: Any = None
 
@@ -192,24 +264,136 @@ class AnswerProcessor(FrameProcessor):
         if isinstance(frame, TranscriptionFrame):
             await self._answer(frame, direction)
         else:
+            if isinstance(frame, StartFrame) and self._backend_warmup and self._warmup_task is None:
+                # Fire once at connect, off the critical path; never blocks StartFrame.
+                self._warmup_task = asyncio.create_task(self._warm_backend())
             await self.push_frame(frame, direction)
+
+    async def _warm_backend(self) -> None:
+        """Best-effort connect-time backend warm-up (TASK-WEB-021 / lever 2).
+
+        Calls the backend's `warm_up()` in a worker thread (blocking HTTP) so the cold
+        LLM + embedding cost is paid before the first turn. Any fault is swallowed (a
+        cold backend just means "not warmed"); it never breaks the connect. Skipped when
+        the backend does not expose `warm_up` (e.g. a test fake), so no fake needs it.
+        """
+        warm = getattr(self._backend, "warm_up", None)
+        if not callable(warm):
+            return
+        try:
+            warmed = await asyncio.to_thread(warm)
+        except Exception:  # noqa: BLE001 - warm-up is best-effort; never break the connect
+            warmed = False
+        self._emit_backend_warmup(bool(warmed))
+
+    def _emit_backend_warmup(self, warmed: bool) -> None:
+        if self._telemetry is None:
+            return
+        attrs = {
+            "correlation_id": getattr(self._envelope, "correlation_id", None),
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._backend.name,
+            "outcome": "success" if warmed else "miss",
+        }
+        self._telemetry.record(BACKEND_WARMUP_EVENT, **attrs)
+        self._telemetry.metric(BACKEND_WARMUP_METRIC, 1, **attrs)
 
     async def _answer(self, frame: TranscriptionFrame, direction: FrameDirection) -> None:
         request = AnswerRequest.from_envelope(frame.text, self._envelope)
+        # Speak a holding phrase concurrently if the answer is slow (TASK-WEB-019).
+        answered = asyncio.Event()
+        filler_task = asyncio.create_task(self._run_filler(answered, request, direction))
         try:
-            # The backend does blocking work (adapter I/O later); keep it off the loop.
-            result = await asyncio.to_thread(
-                lambda: answer_with_telemetry(
-                    self._backend,
-                    request,
-                    self._telemetry,
-                    confidence_threshold=self._confidence_threshold,
-                )
-            )
+            if self._stream_this_turn():
+                # Lever 1: push each vetted sentence as it streams (first audio on
+                # sentence 1). The runner pushes the frames itself; first push settles
+                # the filler so it can never follow the reply.
+                self.result = await self._stream_backend(request, answered, direction)
+            else:
+                result = await self._call_backend(request)
+                # Settle the filler before the answer so a late filler can't follow it.
+                await self._stop_filler(answered, filler_task)
+                self.result = result
+                if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
+                    await self.push_frame(TextFrame(text=result.text), direction)
         except EmptyTranscriptError:
             # Nothing to answer: never invent a turn, so no text flows downstream.
             self.result = None
             return
-        self.result = result
-        if result.text and result.outcome is not AnswerOutcome.UNAVAILABLE:
-            await self.push_frame(TextFrame(text=result.text), direction)
+        finally:
+            # On any exit (empty transcript, barge-in cancelling this turn mid-wait, or
+            # the streamed turn settling) a still-pending filler must be dropped so it can
+            # never speak out of turn.
+            self._cancel_filler(filler_task)
+
+    def _stream_this_turn(self) -> bool:
+        # Take the streaming path only when enabled AND the backend can stream; a fake or
+        # a stub without `answer_stream` transparently keeps the blocking path.
+        return self._backend_stream and callable(getattr(self._backend, "answer_stream", None))
+
+    async def _stream_backend(
+        self, request: AnswerRequest, answered: asyncio.Event, direction: FrameDirection
+    ) -> AnswerResult:
+        async def push(text: str) -> None:
+            # First sentence is imminent: settle the filler so it cannot follow the reply.
+            answered.set()
+            await self.push_frame(TextFrame(text=text), direction)
+
+        runner = StreamedAnswerRunner(
+            self._backend, self._telemetry, confidence_threshold=self._confidence_threshold
+        )
+        return await runner.run(request, push)
+
+    async def _call_backend(self, request: AnswerRequest) -> AnswerResult:
+        # The backend does blocking work (adapter I/O later); keep it off the loop.
+        return await asyncio.to_thread(
+            lambda: answer_with_telemetry(
+                self._backend,
+                request,
+                self._telemetry,
+                confidence_threshold=self._confidence_threshold,
+            )
+        )
+
+    async def _stop_filler(self, answered: asyncio.Event, filler_task: "asyncio.Task[None]") -> None:
+        """Signal the answer is settled and let the filler task finish (fired or skipped)."""
+        answered.set()
+        try:
+            await filler_task
+        except Exception:  # noqa: BLE001 - a filler/telemetry fault must never break the turn
+            pass
+
+    def _cancel_filler(self, filler_task: "asyncio.Task[None]") -> None:
+        # Best-effort drop of a still-pending filler; never awaited here so an outer
+        # cancellation (barge-in) is not masked. A completed task is left untouched.
+        if not filler_task.done():
+            filler_task.cancel()
+
+    async def _run_filler(
+        self, answered: asyncio.Event, request: AnswerRequest, direction: FrameDirection
+    ) -> None:
+        """Speak one filler once the perceived-wait threshold elapses without an answer."""
+        if not self._filler_enabled:
+            return
+        try:
+            await asyncio.wait_for(answered.wait(), timeout=self._filler_threshold_s)
+            return  # answered before the threshold: the wait was short, no filler needed
+        except asyncio.TimeoutError:
+            pass
+        if answered.is_set():  # race guard: the answer landed exactly at the threshold
+            return
+        await self.push_frame(TextFrame(text=pick_phrase(self._filler_phrases)), direction)
+        self._emit_filler_spoken(request)
+
+    def _emit_filler_spoken(self, request: AnswerRequest) -> None:
+        if self._telemetry is None:
+            return
+        attrs = {
+            "correlation_id": request.correlation_id,
+            "channel": request.channel,
+            "provider": self._backend.name,
+            "wait_ms": round(self._filler_threshold_s * 1000.0, 3),
+            "trigger": FILLER_TRIGGER_REASON,
+        }
+        self._telemetry.record(FILLER_SPOKEN_EVENT, **attrs)
+        self._telemetry.metric(FILLER_SPOKEN_METRIC, 1, **attrs)

@@ -23,14 +23,18 @@ from uuid import uuid4
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    CancelFrame,
     EndFrame,
     Frame,
     InputAudioRawFrame,
     InterimTranscriptionFrame,
+    StartFrame,
     TextFrame,
     TranscriptionFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+from .session_warmer import ACQUIRE_HIT, SessionWarmer
 
 from conversation_backend import DEGRADED_FALLBACK_TEXT
 from stt_validation.models import SttOutcome
@@ -63,6 +67,14 @@ STT_DEGRADED_REASON = "stt_finalize_failed"
 # speaking triggers an interruption of the spoken answer.
 BARGE_IN_EVENT = "voice.barge_in.detected"
 BARGE_IN_METRIC = "voice.barge_in.count"
+# Connect-time STT pre-warm observability (TASK-WEB-021 lever 2): emitted at the first
+# turn's session open so QA can tell a pre-warm hit (spare reused, connect+setup off the
+# turn path) from a fallback (spare open failed -> fresh on-demand open) without inferring
+# it from slice timing. A spare that opened but was closed by the server while idle still
+# reports "hit" here but then fails on send/finalize -> surfaces as the existing
+# stt.failure + degraded fallback, so a stale spare is never silent.
+STT_PREWARM_EVENT = "voice.stt.prewarm"
+STT_PREWARM_METRIC = "voice.stt.prewarm.count"
 # Anti-echo barge-in gate (TASK-WEB-008). Without headphones the bot's own audio
 # re-enters the mic even with browser echo cancellation, and an energy VAD reads it as
 # speech -> the bot self-interrupts. To cut the bot only on a *real* customer barge-in,
@@ -90,9 +102,11 @@ class StreamingSttProcessor(FrameProcessor):
         detector: StreamingEndOfTurnDetector | None = None,
         provider_name: str = DEFAULT_PROVIDER_NAME,
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
+        silence_window_ms: float = DEFAULT_SILENCE_WINDOW_MS,
         final_timeout_s: float = DEFAULT_FINAL_TIMEOUT_S,
         barge_in_amplitude_threshold: int = DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD,
         barge_in_confirm_frames: int = DEFAULT_BARGE_IN_CONFIRM_FRAMES,
+        prewarm: bool = True,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -100,11 +114,21 @@ class StreamingSttProcessor(FrameProcessor):
         self._telemetry = telemetry
         self._provider_name = provider_name
         self._final_timeout_s = final_timeout_s
+        # TASK-WEB-021 lever 2: pre-open the first turn's STT session at pipeline start so
+        # its connect + setup handshake is off the per-turn critical path. Gradium's ASR
+        # socket is single-use, so we pre-open a *spare* (not reuse); the spare is handed
+        # out on the first `_open_session` and any unused spare is discarded at teardown
+        # so a pre-warmed connection is never leaked. Tests opt out to assert the raw path.
+        self._prewarm = prewarm
+        self._warmer = SessionWarmer(provider)
         self._barge_in_amplitude_threshold = barge_in_amplitude_threshold
         self._barge_in_confirm_frames = max(1, barge_in_confirm_frames)
+        # TASK-WEB-015 lever 3: the trailing-silence hold is env-tunable (via the
+        # signaling wiring) so a deployment can trade ~150 ms of latency against the
+        # premature-cut risk without a code change. An injected detector still wins.
         self._detector = detector or StreamingEndOfTurnDetector(
             sample_rate_hz=sample_rate_hz,
-            silence_window_ms=DEFAULT_SILENCE_WINDOW_MS,
+            silence_window_ms=silence_window_ms,
             amplitude_threshold=DEFAULT_AMPLITUDE_THRESHOLD,
             min_utterance_ms=DEFAULT_MIN_UTTERANCE_MS,
         )
@@ -134,8 +158,18 @@ class StreamingSttProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
             await self._on_audio(frame, direction)
+        elif isinstance(frame, StartFrame):
+            # Pre-open the first turn's STT session at pipeline start (TASK-WEB-021).
+            if self._prewarm:
+                self._warmer.start()
+            await self.push_frame(frame, direction)
         elif isinstance(frame, EndFrame):
             await self._on_end(direction)
+            await self._warmer.aclose()
+            await self.push_frame(frame, direction)
+        elif isinstance(frame, CancelFrame):
+            # Cancelled call: drop any unused spare so a pre-warmed socket is never leaked.
+            await self._warmer.aclose()
             await self.push_frame(frame, direction)
         elif isinstance(frame, (BotStartedSpeakingFrame, BotStoppedSpeakingFrame)):
             # The output transport emits these upstream as it starts / stops playing the
@@ -201,9 +235,28 @@ class StreamingSttProcessor(FrameProcessor):
             await self._discard_session()
 
     async def _open_session(self) -> None:
-        self._session = await self._provider.open()
+        # With pre-warm, hand out the spare opened at StartFrame (its connect+setup is
+        # already paid); otherwise open on demand. `acquire()` falls back to a fresh open
+        # if the spare's open failed, so a cold/failed spare never blocks the turn.
+        if self._prewarm:
+            self._session = await self._warmer.acquire()
+            self._emit_prewarm_outcome(self._warmer.last_acquire)
+        else:
+            self._session = await self._provider.open()
         self._turn_timer = Timer()
         self._first_partial_ms = None
+
+    def _emit_prewarm_outcome(self, outcome: str | None) -> None:
+        if self._telemetry is None or self._envelope is None or outcome is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "outcome": outcome,
+        }
+        self._telemetry.record(STT_PREWARM_EVENT, prewarm_hit=(outcome == ACQUIRE_HIT), **attrs)
+        self._telemetry.metric(STT_PREWARM_METRIC, 1, **attrs)
 
     async def _emit_partials(self, session: Any, direction: FrameDirection) -> None:
         for partial in session.poll_partials():
@@ -313,6 +366,10 @@ class StreamingSttProcessor(FrameProcessor):
             "provider": self._provider_name,
             "end_of_turn_signal": detection.signal,
             "trailing_silence_ms": round(detection.trailing_silence_ms, 3),
+            # Configured hold (TASK-WEB-015 lever 3): lets QA correlate the false-cut
+            # rate to the deployed window, even on client_stop turns where slice_ms is
+            # the (short) real trailing silence rather than the window.
+            "silence_window_ms": self._detector.silence_window_ms,
             "speech_end_ms": round(detection.speech_end_ms, 3)
             if detection.speech_end_ms is not None
             else None,

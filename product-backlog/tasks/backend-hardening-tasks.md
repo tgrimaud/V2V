@@ -654,3 +654,147 @@ QA (skill `qa-functional-latency`) — **GO**, functional + live smoke passed:
   ADR-0018 pipeline slice; 401s short-circuit **before** LLM/DB (faster-failing than the open path).
 - **Residual (non-blocking):** `/converse` empty-body 401 vs new-endpoints' `ErrorResponse` 401
   (cosmetic; future unification).
+
+---
+
+## TASK-BE-017 — Backend Support For Voice Latency Levers (Warm-Up Path + Vetted-Stream Contract Confirmation)
+
+**Parent:** EPIC-005 (Answer engine) — perceived-latency support for EPIC-010
+**Related decisions:** ADR-0037 (voice latency levers), ADR-0013 (guarded-sentence SSE streaming),
+DEC-002 (no invented / ungrounded amounts), ADR-0029 (pilot latency criterion)
+**Depends on:** — (backend already has `converse-stream` + grounding/guardrail pipeline)
+**Blocks:** TASK-WEB-020 (lever 1 confidence-at-open, optional), TASK-WEB-021 (lever 2 warm-up)
+**Classification:** V1 pilot gate (perceived latency — backend side)
+**Status:** ✅ **Validated by user 2026-07-31, merged into `feat/sprint-10-pilot-latency`**
+(Sprint 10, branch `task/TASK-BE-017-voice-latency-support`; created 2026-07-29 as the
+backend dependency of the TASK-WEB-020/021 voice latency levers).
+**Delivered:** (1) warm-up path — `WarmUpUseCase` (port in) + `WarmUpResult` (VO) +
+`WarmUpService` (exercises embedding via `KnowledgeRetrievalPort.retrieve` + LLM via a
+dummy converse; embedding/LLM failure non-blocking, recorded as a warm-up miss; records
+`warmup_embedding`/`warmup_llm` latency slices; no memory/history side-effect) +
+`POST /api/conversation/warm-up` (`WarmUpController`/`WarmUpResponse`, body-less, api-key
+gated), wired as a `@Bean` in `ConversationConfig`; (2) vetted-stream contract confirmation
+— investigation found `converse-stream` already emits vetted-only, locked with an
+incremental-delivery contract test in `StreamingConversationServiceTest` (first vetted
+sentence reaches the consumer before the whole answer; blocked → safe hand-off terminal
+chunk) plus `GuardedSentenceEmitterTest` cases. **Checks re-run 2026-07-31: `mvn test` 320
+green (0 fail/err), ArchUnit OK** (`WarmUpServiceTest` 5, `WarmUpControllerTest` 2).
+Mechanism proven live 2026-07-30 (`voice.backend.warmup=success` against the real backend in
+the combined lever-1+2 pass). Optional early-confidence/grounding signal **deferred**
+(levers 1 & 2 do not need it — DEC-002 already enforced per sentence).
+**Priority:** High
+
+### Objective
+
+Provide the two backend-side supports the voice latency levers need: (1) a **cheap warm-up path**
+so the runtime can pre-warm the LLM + embedding models on WebRTC connect (lever 2), and (2) a
+**confirmed, contract-tested "vetted-only" guarantee** on the streaming answer so the runtime can
+safely speak sentence-by-sentence (lever 1) — plus, if TASK-WEB-020 needs it, expose the
+grounding/confidence verdict early enough to preserve the confidence policy before the first spoken
+sentence.
+
+### Context (code reality — investigated 2026-07-29)
+
+- `POST /api/conversation/converse-stream` (SSE, ADR-0013) **already** emits `chunk` events one
+  **guardrail-vetted sentence at a time**: `GuardedSentenceEmitter` grounds first, checks the
+  output guardrail on each sentence **before** emission, and stops + emits the safe hand-off on a
+  blocked sentence. So DEC-002 is already enforced on the stream; lever 1's contract exists.
+- The **confidence** returned today arrives on the terminal `done` event; the grounded confidence
+  is a grounding-time value (`bestScore(evidence)`) known **before** the first token — so it can be
+  surfaced earlier if lever 1 needs a pre-speech confidence gate.
+- There is **no warm-up path**: the first grounded turn pays cold LLM + embedding latency (part of
+  the ≈ −450 ms turn-1 penalty the live baseline shows).
+
+### Scope
+
+- **Warm-up path (lever 2 dependency):** a lightweight, side-effect-free way to warm the LLM and
+  embedding models (e.g. a tiny warm request) that the voice runtime can trigger on connect. It
+  must not pollute conversation memory, must be cheap, and must be safe to call repeatedly.
+- **Vetted-stream contract confirmation (lever 1 dependency):** an explicit **contract test**
+  asserting no `chunk` is emitted before grounding + per-sentence guardrail vetting, and that a
+  blocked sentence stops the stream and yields the safe hand-off — locking the DEC-002 invariant the
+  voice path will now rely on for early speech.
+- **(Conditional) early confidence/grounding signal:** if TASK-WEB-020 decides it needs the
+  confidence/grounded verdict before speaking the first sentence, expose it at stream open (or on a
+  first metadata event) without changing the existing `chunk`/`done`/`error` semantics.
+- OpenTelemetry: warm-up path is observable (outcome, duration, correlation id) and clearly
+  distinguishable from real turns; no secret logged.
+
+### Out Of Scope
+
+- The voice-runtime wiring of warm-up / streaming consumption (TASK-WEB-020 / TASK-WEB-021).
+- Any change to grounding, guardrail or confidence **logic** (only exposure/warm-up, not policy).
+- Provider swaps.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The backend can be warmed without side effects
+  Given the models are cold
+  When a warm-up is requested
+  Then the LLM and embedding models are exercised so the next real answer is warm
+  And no conversation memory or user-visible state is changed by the warm-up
+```
+
+```gherkin
+Scenario: The streamed answer never emits unvetted content
+  Given a streamed answer whose second sentence would state an unsupported amount
+  When the answer is streamed
+  Then only vetted sentences are emitted before it
+  And the blocked sentence stops the stream and the safe hand-off is emitted, per DEC-002
+```
+
+### Required Evidence
+
+- Unit/integration tests (manual fakes, no Mockito): warm-up path (no memory side effect,
+  repeatable), and the vetted-stream contract test (no chunk before vetting, blocked-sentence
+  hand-off). If the early confidence signal is added: a test that it matches the `done` verdict.
+- `mvn test` green + ArchUnit OK; OpenAPI updated if a new endpoint is added.
+- Docs: `voice-runtime-http-contract.md` (contract the runtime consumes) + ADR-0037 evidence.
+- No secret / raw provider text leak in warm-up telemetry.
+
+## TASK-BE-020 — Shorten Time-To-First-Vetted-Sentence In The Backend Answer Stream (Latency Lever)
+
+**Parent:** EPIC-010 (+ EPIC-005)
+**Related decisions:** ADR-0029 (pilot latency criterion — this lever helps close it),
+ADR-0013 (backend SSE guarded-sentence streaming), ADR-0037 (first-sentence streaming to TTS),
+DEC-002 (no invented / ungrounded amounts — must stay enforced per sentence)
+**Related stories:** US-036 (per-slice timing)
+**Depends on / follows:** TASK-WEB-020 (lever 1) validated — the runtime now speaks on the
+first vetted sentence, so the backend's time-to-first-vetted-sentence is directly on the
+critical path.
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** To do (future improvement, out of Sprint 10 scope). Created 2026-07-31 from the
+TASK-WEB-020 cold/combined live passes.
+**Priority:** Medium
+
+### Objective
+
+Reduce the `backend_first_token` slice = the time for `converse-stream` to emit its **first
+vetted sentence** (`GuardedSentenceEmitter`: grounding + output guardrail before the first
+`chunk`). After levers 1 + 2 it is the dominant residual contributor to the ADR-0029 gap:
+measured live 2026-07-31 at p50 **~733 ms** / p95 **~1052 ms** (warm-steady), and it is the
+slice that spikes to ~2042 ms on a cold turn without warm-up.
+
+### Scope
+
+- Profile the first-sentence path server-side: LLM time-to-first-sentence (Mistral streaming vs
+  whole-answer), RAG/pgvector retrieval, guardrail + grounding first-hit cost, and any
+  per-request setup on the converse-stream worker.
+- Levers to evaluate (non-exhaustive): stream tokens from the LLM and vet as soon as the first
+  sentence boundary is reached; bias the answer prompt toward a short, high-value first
+  sentence; cache/prewarm the RAG + guardrail first-hit path (ties into TASK-BE-017 warm-up —
+  consider a full dummy converse at warm-up so RAG/guardrail JIT off the critical path);
+  overlap retrieval with generation where safe.
+- **DEC-002 stays enforced per sentence** — no sentence may be emitted before it is grounded +
+  guardrail-vetted; the safe hand-off terminal behaviour is unchanged.
+
+### Acceptance Criteria
+
+- A measured before/after (backend micro-benchmark on `converse-stream` first-sentence time +
+  a live streaming pass) showing the `backend_first_token` reduction, warm and cold.
+- The mouth-to-ear composite re-evaluated against ADR-0029 with this lever combined with
+  levers 1 + 2 (+ TASK-STT-014).
+- DEC-002 preserved: contract test still proves no chunk is emitted before vetting; grounded /
+  blocked-sentence behaviour unchanged. `mvn test` green + ArchUnit OK; no secret / raw
+  provider text leak in telemetry.

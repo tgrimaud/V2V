@@ -7,6 +7,7 @@ telemetry span with only lengths (never the raw transcript or answer).
 
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,10 @@ from types import SimpleNamespace
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
+import asyncio  # noqa: E402
+
 from pipecat.frames.frames import TextFrame, TranscriptionFrame  # noqa: E402
+from pipecat.processors.frame_processor import FrameDirection  # noqa: E402
 from pipecat.tests.utils import run_test  # noqa: E402
 
 from conversation_backend import (  # noqa: E402
@@ -29,11 +33,16 @@ from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_pipeline.answer import (  # noqa: E402
     BACKEND_FIRST_TOKEN_SPAN,
     BACKEND_REQUEST_SPAN,
+    BACKEND_WARMUP_ENV_VAR,
+    BACKEND_WARMUP_EVENT,
+    BACKEND_WARMUP_METRIC,
     CONFIDENCE_THRESHOLD_ENV_VAR,
     AnswerProcessor,
     answer_with_telemetry,
+    backend_warmup_enabled,
     resolve_confidence_threshold,
 )
+from voice_pipeline.filler import FILLER_SPOKEN_EVENT, FILLER_SPOKEN_METRIC  # noqa: E402
 
 
 def _envelope() -> SimpleNamespace:
@@ -54,6 +63,25 @@ class _FakeBackend:
             text=self._text,
             provider=self.name,
             outcome=self._outcome,
+            correlation_id=request.correlation_id,
+        )
+
+
+class _SlowBackend:
+    """Backend that blocks (in the worker thread) longer than the filler threshold."""
+
+    name = "fake-backend"
+
+    def __init__(self, delay_s: float = 0.05, text: str = "voici la reponse") -> None:
+        self._delay_s = delay_s
+        self._text = text
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        time.sleep(self._delay_s)
+        return AnswerResult(
+            text=self._text,
+            provider=self.name,
+            outcome=AnswerOutcome.SUCCESS,
             correlation_id=request.correlation_id,
         )
 
@@ -88,6 +116,28 @@ class _LowConfidenceBackend:
             correlation_id=request.correlation_id,
             confidence=self._confidence,
         )
+
+
+class _WarmBackend:
+    """Backend exposing the optional warm_up() (TASK-WEB-021 lever 2 trigger target)."""
+
+    name = "warm-backend"
+
+    def __init__(self, *, warmed: bool = True, raises: bool = False) -> None:
+        self._warmed = warmed
+        self._raises = raises
+        self.warm_up_calls = 0
+
+    def answer(self, request: AnswerRequest) -> AnswerResult:
+        return AnswerResult(
+            text="ok", provider=self.name, outcome=AnswerOutcome.SUCCESS, correlation_id=request.correlation_id
+        )
+
+    def warm_up(self) -> bool:
+        self.warm_up_calls += 1
+        if self._raises:
+            raise RuntimeError("warm-up boom")
+        return self._warmed
 
 
 def _request() -> AnswerRequest:
@@ -154,6 +204,203 @@ class AnswerProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(plain), 1)
         self.assertEqual(plain[0].text, DEGRADED_FALLBACK_TEXT)
         self.assertIs(processor.result.outcome, AnswerOutcome.DEGRADED)
+
+
+class BackendWarmUpTriggerTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-021 (lever 2): fire a best-effort backend warm-up once at connect."""
+
+    async def _run_start(self, processor: AnswerProcessor) -> None:
+        # run_test wraps the frames with a StartFrame (the connect trigger) + EndFrame.
+        await run_test(processor, frames_to_send=[])
+        if processor._warmup_task is not None:
+            await processor._warmup_task
+
+    async def test_start_frame_triggers_backend_warm_up_once(self) -> None:
+        # GIVEN a backend exposing warm_up() and the trigger enabled
+        backend = _WarmBackend(warmed=True)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts (StartFrame)
+        await self._run_start(processor)
+        # THEN warm_up is called exactly once, off the critical path
+        self.assertEqual(backend.warm_up_calls, 1)
+        # AND a success warm-up event + count metric are recorded with the correlation id
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "success")
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        self.assertEqual(event.attributes["provider"], "warm-backend")
+        self.assertTrue(any(m.name == BACKEND_WARMUP_METRIC for m in telemetry.metrics()))
+
+    async def test_disabled_flag_never_calls_warm_up(self) -> None:
+        # GIVEN the trigger disabled
+        backend = _WarmBackend()
+        processor = AnswerProcessor(backend, _envelope(), backend_warmup=False)
+        # WHEN the pipeline starts
+        await self._run_start(processor)
+        # THEN warm_up is never called and no task is scheduled
+        self.assertEqual(backend.warm_up_calls, 0)
+        self.assertIsNone(processor._warmup_task)
+
+    async def test_backend_without_warm_up_does_not_crash(self) -> None:
+        # GIVEN a backend that does NOT expose warm_up() (e.g. a fake) and the trigger on
+        backend = _FakeBackend()
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts -> THEN it is skipped without crashing / recording
+        await self._run_start(processor)
+        self.assertFalse(any(r.name == BACKEND_WARMUP_EVENT for r in telemetry.events()))
+
+    async def test_warm_up_failure_is_non_blocking_and_recorded_as_miss(self) -> None:
+        # GIVEN a backend whose warm_up() raises
+        backend = _WarmBackend(raises=True)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts
+        await self._run_start(processor)
+        # THEN the fault never surfaces and the outcome is recorded as a miss (not warmed)
+        self.assertEqual(backend.warm_up_calls, 1)
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "miss")
+
+    async def test_warm_up_miss_when_backend_reports_not_warmed(self) -> None:
+        # GIVEN a backend whose warm_up() returns False (cold / endpoint unavailable)
+        backend = _WarmBackend(warmed=False)
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(backend, _envelope(), telemetry, backend_warmup=True)
+        # WHEN the pipeline starts -> THEN the outcome is a miss
+        await self._run_start(processor)
+        event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
+        self.assertEqual(event.attributes["outcome"], "miss")
+
+
+class BackendWarmupEnabledTest(unittest.TestCase):
+    """`VOICE_BACKEND_WARMUP` toggle (default on; disabled only by an explicit falsy value)."""
+
+    def setUp(self) -> None:
+        self._saved = os.environ.pop(BACKEND_WARMUP_ENV_VAR, None)
+
+    def tearDown(self) -> None:
+        if self._saved is None:
+            os.environ.pop(BACKEND_WARMUP_ENV_VAR, None)
+        else:
+            os.environ[BACKEND_WARMUP_ENV_VAR] = self._saved
+
+    def test_unset_defaults_on(self) -> None:
+        self.assertTrue(backend_warmup_enabled())
+
+    def test_falsy_values_disable(self) -> None:
+        for value in ("0", "false", "no", "off", "OFF", " False "):
+            os.environ[BACKEND_WARMUP_ENV_VAR] = value
+            self.assertFalse(backend_warmup_enabled(), value)
+
+    def test_other_values_stay_on(self) -> None:
+        os.environ[BACKEND_WARMUP_ENV_VAR] = "1"
+        self.assertTrue(backend_warmup_enabled())
+
+
+class FillerPhraseTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-019: a short holding phrase is spoken when the answer is slow (US-020)."""
+
+    async def _run(self, processor: AnswerProcessor) -> list[str]:
+        down, _up = await run_test(
+            processor,
+            frames_to_send=[TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")],
+        )
+        return [f.text for f in down if isinstance(f, TextFrame) and not isinstance(f, TranscriptionFrame)]
+
+    async def test_slow_answer_speaks_the_filler_before_the_answer(self) -> None:
+        # GIVEN a backend slower than a low filler threshold
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.08, text="voici la reponse"),
+            _envelope(),
+            filler_threshold_ms=10,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through
+        texts = await self._run(processor)
+        # THEN the filler is spoken first, then the real answer (order preserved)
+        self.assertEqual(texts, ["Un instant.", "voici la reponse"])
+
+    async def test_fast_answer_skips_the_filler(self) -> None:
+        # GIVEN a fast backend and a high threshold (the wait never reaches it)
+        processor = AnswerProcessor(
+            _FakeBackend(text="voici la reponse"),
+            _envelope(),
+            filler_threshold_ms=10_000,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through
+        texts = await self._run(processor)
+        # THEN only the answer is spoken (no filler)
+        self.assertEqual(texts, ["voici la reponse"])
+
+    async def test_disabled_filler_never_speaks_even_when_slow(self) -> None:
+        # GIVEN the filler disabled with a slow backend and a tiny threshold
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.05),
+            _envelope(),
+            filler_enabled_flag=False,
+            filler_threshold_ms=1,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN a transcription flows through -> THEN only the answer is spoken
+        texts = await self._run(processor)
+        self.assertEqual(texts, ["voici la reponse"])
+
+    async def test_filler_carries_no_billing_content_dec_002(self) -> None:
+        # GIVEN the built-in phrase set (no override) with a slow backend
+        processor = AnswerProcessor(_SlowBackend(delay_s=0.06), _envelope(), filler_threshold_ms=10)
+        # WHEN the filler fires -> THEN the spoken phrase carries no digit / amount
+        texts = await self._run(processor)
+        self.assertEqual(len(texts), 2)  # filler + answer
+        self.assertFalse(any(ch.isdigit() for ch in texts[0]))
+
+    async def test_filler_is_observable_with_correlation_and_wait(self) -> None:
+        # GIVEN a recorder and a slow backend past the threshold
+        telemetry = TelemetryRecorder()
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.06),
+            _envelope(),
+            telemetry,
+            filler_threshold_ms=10,
+            filler_phrases=["Un instant."],
+        )
+        # WHEN the filler fires
+        await self._run(processor)
+        # THEN a spoken event + count metric carry the correlation id, channel and wait
+        event = next(r for r in telemetry.events() if r.name == FILLER_SPOKEN_EVENT)
+        self.assertEqual(event.attributes["correlation_id"], "corr-1")
+        self.assertEqual(event.attributes["channel"], "web_voice")
+        self.assertEqual(event.attributes["provider"], "fake-backend")
+        self.assertAlmostEqual(event.attributes["wait_ms"], 10.0)
+        metric = next(m for m in telemetry.metrics() if m.name == FILLER_SPOKEN_METRIC)
+        self.assertEqual(metric.value, 1)
+
+    async def test_cancellation_mid_wait_drops_the_pending_filler(self) -> None:
+        # GIVEN a slow turn whose filler has NOT yet fired (threshold not reached)
+        processor = AnswerProcessor(
+            _SlowBackend(delay_s=0.3),
+            _envelope(),
+            filler_threshold_ms=1000,
+            filler_phrases=["Un instant."],
+        )
+        pushed: list[str] = []
+
+        async def _record(frame, direction):  # noqa: ANN001 - test double for push_frame
+            if isinstance(frame, TextFrame):
+                pushed.append(frame.text)
+
+        processor.push_frame = _record  # type: ignore[method-assign]
+        frame = TranscriptionFrame(text="pourquoi ma facture augmente", user_id="u", timestamp="")
+        # WHEN the turn is cancelled (barge-in) while still waiting on the backend
+        task = asyncio.create_task(processor._answer(frame, FrameDirection.DOWNSTREAM))
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        # THEN the pending filler is dropped and never speaks out of turn afterwards
+        await asyncio.sleep(0.05)
+        self.assertEqual(pushed, [])
 
 
 class AnswerTelemetryTest(unittest.TestCase):

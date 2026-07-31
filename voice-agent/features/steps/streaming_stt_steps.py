@@ -144,8 +144,11 @@ def _build(context, session):
         amplitude_threshold=DEFAULT_AMPLITUDE_THRESHOLD,
         min_utterance_ms=20,
     )
+    # prewarm disabled so these detection scenarios assert the raw path (open_count
+    # reflects only *turn* opens); the connect-time STT pre-warm (TASK-WEB-021) is
+    # covered by its own unit tests, mirroring the streaming TTS processor split.
     context.processor = StreamingSttProcessor(
-        context.provider, envelope, context.telemetry, detector=detector
+        context.provider, envelope, context.telemetry, detector=detector, prewarm=False
     )
 
 

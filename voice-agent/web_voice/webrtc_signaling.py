@@ -16,10 +16,16 @@ starts flowing once the pipeline `StartFrame` triggers `connection.connect()`.
 """
 
 import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
+
+_logger = logging.getLogger(__name__)
+# Warn at most once per process when the end-of-turn hold override is clamped to the
+# safe floor, so an operator sees the effective value without per-connection spam.
+_silence_clamp_warned = False
 
 from voice_common.otel_export import export_recorder
 from voice_common.telemetry import TelemetryRecorder
@@ -38,6 +44,7 @@ from .closing_intent import (
     ClosingIntentDetector,
 )
 from .egress import WebVoiceEgress
+from .end_of_turn import MIN_SAFE_SILENCE_WINDOW_MS
 from .envelope import ChannelEnvelope
 from .ingress import WebVoiceIngress
 from .streaming_runtime import StreamingVoiceSession
@@ -113,6 +120,58 @@ def _barge_in_config() -> dict[str, int]:
         except ValueError:
             continue
     return config
+
+
+def _silence_window_config() -> dict[str, float]:
+    """Read the optional end-of-turn hold override (TASK-WEB-015 lever 3).
+
+    `VOICE_END_OF_TURN_SILENCE_MS` tunes the trailing-silence window (default 500 ms)
+    down toward `MIN_SAFE_SILENCE_WINDOW_MS` to shave latency. A value below the floor
+    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop
+    into constant premature cuts; unset or invalid -> the processor default applies.
+    """
+    raw = os.environ.get("VOICE_END_OF_TURN_SILENCE_MS")
+    if raw is None:
+        return {}
+    try:
+        value = float(raw)
+    except ValueError:
+        return {}
+    if value <= 0:
+        return {}
+    if value < MIN_SAFE_SILENCE_WINDOW_MS:
+        _warn_silence_clamp_once(value)
+        return {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS}
+    return {"silence_window_ms": value}
+
+
+def _stt_prewarm_enabled() -> bool:
+    """Whether to pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2).
+
+    OFF by default (opt-in) pending a live validation of Gradium's idle-socket behaviour:
+    if the ASR server drops a pre-opened socket while it waits for the first utterance, the
+    spare would be stale at speech time and turn 1 would degrade (worse than a cold open).
+    `acquire()` only recovers from an open *failure*, not from a stale-but-opened session,
+    so this stays opt-in (`VOICE_STT_PREWARM=1`) until the live turn-1 sample confirms it is
+    safe. The connect-time backend warm-up (the larger, side-effect-free win) stays on.
+    """
+    raw = os.environ.get("VOICE_STT_PREWARM")
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _warn_silence_clamp_once(requested: float) -> None:
+    """Warn (once per process) that a below-floor end-of-turn hold was clamped."""
+    global _silence_clamp_warned
+    if _silence_clamp_warned:
+        return
+    _silence_clamp_warned = True
+    _logger.warning(
+        "VOICE_END_OF_TURN_SILENCE_MS=%.0f is below the safe floor; clamped to %.0f ms",
+        requested,
+        MIN_SAFE_SILENCE_WINDOW_MS,
+    )
 
 
 @dataclass
@@ -294,6 +353,14 @@ class WebRtcSignalingService:
             # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset
             # count. Unset -> the processor defaults apply.
             **_barge_in_config(),
+            # End-of-turn hold, tunable without a code change (TASK-WEB-015 lever 3):
+            # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
+            # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
+            **_silence_window_config(),
+            # Pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2);
+            # opt-in via VOICE_STT_PREWARM=1 (off by default pending live idle-socket
+            # validation — see _stt_prewarm_enabled).
+            prewarm=_stt_prewarm_enabled(),
         )
         farewell = self._build_farewell_processor(envelope, telemetry)
         session = StreamingVoiceSession(

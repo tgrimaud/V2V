@@ -5,21 +5,30 @@
 - `voice-support-bot` is a **separate git repository** (default branch `main`) nested in the `BMad` workspace (which is another repository). Commit/push bot work **in this repository**, not in `BMad`.
 - **Ledgers and docs live in THIS repo.** When working on the Voice Support Bot, the `done-tasks.md` you append to is **`voice-support-bot/done-tasks.md`** — never the workspace-root `BMad/done-tasks.md` (that one logs only the `cursor-usage-dashboard` project). The same applies to `product-backlog/`, `docs/`, and any planning file: always use the copies **inside `voice-support-bot/`**. If you catch yourself editing a file above this directory for bot work, stop and move it here.
 - **This repo is self-contained for guidance.** When working here, use only this repository's `CLAUDE.md` / `AGENTS.md` and the skills under `voice-support-bot/.cursor/skills/`. Do **not** apply the workspace-root `BMad/claude.md`, `BMad/agents.md`, or root `.cursor/skills/` — those govern `cursor-usage-dashboard/`, not this project.
-- **One branch per development ticket**. Use `us/US-XXX-short-name` for user
-  stories, `fix/BUG-XXX-short-name` for bugs and `task/TASK-XXX-short-name` for
-  technical tasks. Do not commit directly on `main`.
-- The user is the final validator. Do not merge any branch unless the user
-  explicitly asks for the merge.
+- **Two-level branch model (decision 2026-07-29): sprint branch + ticket branches.**
+  Each sprint has one integration branch `feat/sprint-NN-short-theme` (e.g.
+  `feat/sprint-10-pilot-latency`) created from `feat/restart-from-scratch` at sprint start.
+  Every development ticket still gets its own branch — `us/US-XXX-short-name` (stories),
+  `fix/BUG-XXX-short-name` (bugs), `task/TASK-XXX-short-name` (tasks) — but created **off the
+  current sprint branch**, not off `feat/restart-from-scratch`. Do not commit directly on
+  `main` or on `feat/restart-from-scratch`.
+- **Ticket branch → sprint branch.** When a ticket is merge-ready (dev tests + adversarial
+  review ≥ 90% + QA GO) and the user asks to merge it, merge the ticket branch **into its
+  sprint branch** with `git merge --no-ff` (keep an explicit integration marker). The sprint
+  branch is what accumulates the sprint's work.
+- The user is the final validator. Do not merge any branch — ticket **or** sprint — unless the
+  user explicitly asks for the merge.
 - When the user validates a ticket, record the validation, rerun checks, commit
-  and push the ticket branch automatically. Merge still needs an explicit user
-  request.
-- **Closing a sprint is not just merging the branch.** When the user says a sprint
-  is closed, the merge is only step one — you MUST also update the sprint status in
-  the same session (a fast-forward merge carries no closure commit, so nothing
-  updates itself): (1) the sprint file `## Status` + roadmap row → `✅ Done (closed <date>)`,
-  (2) the `backlog-index.md` sprint registry row → `✅ Done (<date>)`, (3) a dated
-  entry in **this repo's** `voice-support-bot/done-tasks.md` summarizing the sprint.
-  Then commit + push these doc updates.
+  and push the ticket branch automatically. Merge (ticket→sprint) still needs an explicit
+  user request.
+- **Closing a sprint = merge the sprint branch into `feat/restart-from-scratch` + update status.**
+  When the user says a sprint is closed, first merge `feat/sprint-NN-…` into
+  `feat/restart-from-scratch` (only on the user's explicit request), then — the merge is only
+  step one — you MUST also update the sprint status in the same session (a fast-forward merge
+  carries no closure commit, so nothing updates itself): (1) the sprint file `## Status` +
+  roadmap row → `✅ Done (closed <date>)`, (2) the `backlog-index.md` sprint registry row →
+  `✅ Done (<date>)`, (3) a dated entry in **this repo's** `voice-support-bot/done-tasks.md`
+  summarizing the sprint. Then commit + push these doc updates.
 - **Commit after each task**; do not leave code uncommitted.
 - On `feat/restart-from-scratch`, the previous implementation directories
   (`backend/`, `frontend/`, `voice-agent/`) and `docker-compose.yml` are
@@ -30,8 +39,10 @@
 1. On the restart branch, create new implementation scaffolds only when the
    corresponding backlog story is selected.
 2. No development starts without a ticket. If the user asks for a change without
-   an existing ticket, create the ticket first, then create or switch to the
-   dedicated ticket branch.
+   an existing ticket, create the ticket first, ensure the sprint branch
+   `feat/sprint-NN-short-theme` exists (create it from `feat/restart-from-scratch`
+   at sprint start), then create or switch to the dedicated ticket branch **off the
+   sprint branch**.
 3. Java backend: follow the `java-backend-developer` skill + `code-guidelines`
    (methods <= 20 lines, classes <= 200 lines, no Javadoc on ports).
 4. Pure domain (no Spring annotations); wire services through `@Bean` in
@@ -63,7 +74,9 @@
 - Follow `docs/operations/development-workflow.md` for every V1 user story.
 - Create or confirm the ticket before implementation; no ticket means no
   development.
-- Work on a dedicated branch named after the ticket.
+- Work on a dedicated ticket branch named after the ticket, created off the current
+  sprint branch `feat/sprint-NN-short-theme`; merge it back into the sprint branch
+  (`git merge --no-ff`) when merge-ready and the user asks.
 - Assign implementation to the relevant frontend and/or backend developer skill.
 - Start QA in parallel with development; QA writes Gherkin intent, fixtures,
   Cucumber/Behave tests and latency expectations while development happens.
@@ -130,13 +143,19 @@
   outcome status and sanitized error context needed for monitoring and QA.
 - Starting development without a ticket: if the user asks for an unticketed
   change, create the user story, bug or task ticket first.
-- Merging because tests or QA passed: the user is the final validator; no branch
-  is merged unless the user explicitly requests it.
-- Treating "close the sprint" as merge-only and leaving the sprint status stale — a
-  fast-forward merge carries no closure commit, so the sprint file, `backlog-index.md`
-  registry and `done-tasks.md` stay "In progress/Planned" unless you update them in
-  the same session. On sprint closure: merge, then flip all three to `✅ Done`, then
-  commit + push the doc updates.
+- Merging because tests or QA passed: the user is the final validator; no branch —
+  ticket→sprint or sprint→`feat/restart-from-scratch` — is merged unless the user
+  explicitly requests it.
+- Branching a ticket off `feat/restart-from-scratch` instead of the current sprint branch
+  `feat/sprint-NN-short-theme` — ticket branches must fork from (and merge back into) the
+  sprint branch (decision 2026-07-29). Only the *sprint* branch forks from / merges into
+  `feat/restart-from-scratch`.
+- Treating "close the sprint" as merge-only and leaving the sprint status stale — closing a
+  sprint means (1) merge the sprint branch into `feat/restart-from-scratch` (on explicit user
+  request) and (2) update status: a fast-forward merge carries no closure commit, so the sprint
+  file, `backlog-index.md` registry and `done-tasks.md` stay "In progress/Planned" unless you
+  update them in the same session. On sprint closure: merge, then flip all three to `✅ Done`,
+  then commit + push the doc updates.
 - Patching repeated Markdown fields like `**Status:**` without the ticket header
   in context: it can update the wrong story. Reread the target block before
   committing.
@@ -167,6 +186,10 @@
 - Wrapping an interruptible async loop in `except Exception` only — `asyncio.CancelledError` is a `BaseException` and won't be caught, so cleanup (WebSocket `aclose()`) is skipped on barge-in. Add `except asyncio.CancelledError` (report + re-raise) and a `finally` best-effort close.
 - Emitting the `voice.tts.first_audio` span for a non-success turn (interrupted/failure) with total-elapsed — `pipeline_timing` groups by span name with no outcome filter, so it pollutes the `tts_first_audio` p95. Emit the span with the real time-to-first-audio and only when audio actually played; keep elapsed on the outcome event.
 - Relying on browser `echoCancellation` alone for barge-in — without headphones the bot's speaker→mic echo still leaks through and an energy VAD self-interrupts the bot. The echo is continuous (N-frame confirmation can't reject it); the real discriminator is amplitude. Gate the barge-in cut on a raised amplitude threshold + N-frame sustained-onset confirmation, keep opening the STT session on normal onset, and make both env-tunable (echo levels are per-setup) — validated live for TASK-WEB-008 (ADR-0025 point 7).
+- Assuming the backend needs a new "vetted-only" streaming contract before the runtime can speak sentence-by-sentence (latency lever 1) — `POST /api/conversation/converse-stream` already vets **each sentence** before emitting it (`GuardedSentenceEmitter`: ground → per-sentence `OutputGuardrail` → stop + hand-off on block), so DEC-002 holds backend-side. Consume the existing stream; don't design a redundant contract. Verify the property the runtime relies on with a **service-level incremental-delivery** test (first vetted sentence delivered before the full answer completes).
+- Writing a warm-up path that injects a `ConversationMemoryPort` or lets a cold-provider failure throw — a warm-up must be structurally side-effect-free (no memory dependency), discard its output, be repeatable, and **record a miss instead of throwing** (`recordLatency(slice, provider, "error", …)`), so a cold STT/LLM can never block or delay the first real turn. Expose it as an always-200 endpoint with per-model flags (`POST /api/conversation/warm-up`, api-key gated in `WebSecurityMvcConfig`).
+- Passing `-r` to ripgrep expecting "recursive" — `rg -r`/`-rl` is the **replace** flag (`-rl "x"` = replace matches with `l`), which silently rewrites the printed content and makes real strings look absent/garbled. rg recurses by default; use `-l` for files-with-matches and never `-r` unless you intend a replacement.
+- Forgetting the two-level branch model when a ticket branch is validated — ticket branches fork from the sprint branch and merge back into it with `git merge --no-ff` (explicit integration marker); the sprint branch merges to `feat/restart-from-scratch` only at sprint closure on the user's explicit request. Fork the next ticket off the **sprint** branch (not the previous ticket branch) so shared backlog/doc definitions are already present as its base.
 - Ending the call on the *first* detected closing word — abrupt and false-positive-prone. Use a confirmation turn (US-041, ADR-0035): suppress the answer, ask "Souhaitez-vous autre chose ?", and end only on a done-confirmation OR a bounded confirmation-scoped silence timeout. Keep closing detection deterministic/no-LLM (accent-insensitive word-boundary matching with negation + embedded-request guards); make phrase sets/timeouts env-tunable (`VOICE_FAREWELL_*`).
 - In the end-of-call confirmation turn, checking only `is_done_confirmation(text)` and ignoring a repeated goodbye — a customer re-saying "au revoir"/"non, au revoir" then falls into the "answer normally" branch and the call never ends. A repeated `detect_closing` match during confirmation must also count as done.
 - Writing a bespoke end-of-call close path instead of reusing the existing drain — delegate ending to an injected `end_call(signal)` callback (keeps the FrameProcessor transport-agnostic + unit-testable) and wire it in the signaling to the TASK-WEB-008 `drain()` path; record a `voice.call_end` reason (`customer_farewell` vs `client_stop`/`client_drop`).

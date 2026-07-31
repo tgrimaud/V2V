@@ -41,6 +41,14 @@ Barge-in tuning (TASK-WEB-008) is env-only: `VOICE_BARGE_IN_THRESHOLD` (amplitud
 and `VOICE_BARGE_IN_FRAMES` (sustained-onset frame count); unset → processor
 defaults apply.
 
+End-of-turn hold tuning (TASK-WEB-015 lever 3) is env-only on the WebRTC streaming
+path: `VOICE_END_OF_TURN_SILENCE_MS` shortens the trailing-silence confirmation
+window (default `500`) to shave perceived latency. Shorter holds raise the
+false-endpoint (premature-cut) risk, so the value is clamped to a safe floor
+(`250` ms); a value below the floor is clamped (never honoured), and an unset,
+invalid or non-positive value keeps the `500` ms default. Confirm the live
+false-cut rate before lowering the deployed value.
+
 End-of-call farewell (TASK-WEB-010, ADR-0035) is env-only on the WebRTC path:
 `VOICE_FAREWELL_ENABLED` (`0`/`false` disables the feature), `VOICE_FAREWELL_PROMPT`
 (confirmation question, default "Souhaitez-vous autre chose ?"),
@@ -51,6 +59,18 @@ confirmed farewell the runtime emits a `voice.call_end` event with
 `reason=customer_farewell` (vs `client_stop`/`client_drop` on a manual hangup/drop)
 under the call correlation id. Unset → detector defaults apply.
 
+Spoken filler / acknowledgement (TASK-WEB-019, US-020) is env-only and shared by
+both runtimes (it lives in the `AnswerProcessor`): `VOICE_FILLER_ENABLED`
+(`0`/`false`/`no`/`off` disables it; on by default), `VOICE_FILLER_THRESHOLD_MS`
+(perceived-wait threshold before a holding phrase is spoken, default `1200`) and
+`VOICE_FILLER_PHRASES` (`|`-separated FR phrases; any digit-bearing entry is dropped
+per DEC-002, empty override → built-in set). When the backend answer is not ready by
+the threshold the runtime speaks one short neutral holding phrase (e.g. "Un instant,
+je vérifie.") as a plain bot turn — so barge-in / interruption apply unchanged — then
+speaks the real answer, and emits a `voice.filler.spoken` event + `voice.filler.spoken.count`
+metric carrying the `correlation_id`, `channel`, `provider` and the `wait_ms` it triggered
+on. The trigger is a runtime-local timer (Flow A, no broker) per ADR-0036.
+
 `http` backend configuration (TASK-WEB-003-C):
 
 | Env | Required | Meaning |
@@ -58,6 +78,42 @@ under the call correlation id. Unset → detector defaults apply.
 | `VOICE_BACKEND_URL` | yes (for `http`) | Conversation endpoint URL |
 | `VOICE_BACKEND_API_KEY` | no | Sent as `x-api-key`; never logged or echoed |
 | `VOICE_BACKEND_TIMEOUT_S` | no (default `8.0`) | Per-request timeout |
+
+Connect-time warm-up (TASK-WEB-021, lever 2) is env-only and removes the first-turn
+cold-start penalty by warming the STT session and the backend models on WebRTC connect:
+
+- `VOICE_STT_PREWARM` (**off by default; opt-in** via `1`/`true`/`yes`/`on`) — the
+  `StreamingSttProcessor` pre-opens a spare streaming STT session at `StartFrame` and
+  hands it to the first turn (a failed spare falls back to a fresh open; any unused spare
+  is discarded on end/cancel — no leak). Opt-in until a live sample confirms the ASR
+  server does not drop the pre-opened socket while it waits for the first utterance (a
+  stale spare would degrade turn 1). On the first turn's open the processor emits a
+  `voice.stt.prewarm` event + `voice.stt.prewarm.count` metric with `outcome`
+  (`hit`/`fallback`/`cold`), so QA can confirm the spare was actually reused.
+- `VOICE_BACKEND_WARMUP` (`0`/`false`/`no`/`off` disables; on by default) — the
+  `AnswerProcessor` fires `backend.warm_up()` once at `StartFrame`, off the critical path;
+  the `http` backend POSTs to the `/warm-up` sibling of `VOICE_BACKEND_URL` (see the
+  backend `POST /api/conversation/warm-up`, TASK-BE-017). A failed warm-up never blocks the
+  first real turn. Observability: `voice.backend.warmup` event + `voice.backend.warmup.count`
+  metric with `correlation_id`, `provider` and `outcome` (`success`/`miss`).
+
+First-sentence answer streaming (TASK-WEB-020, lever 1) is env-only and starts TTS on
+the **first vetted sentence** instead of the whole answer:
+
+- `VOICE_BACKEND_STREAM` (**off by default; opt-in** via `1`/`true`/`yes`/`on`) — when on
+  and the backend can stream, the `AnswerProcessor` consumes the guarded SSE endpoint
+  (`POST /api/conversation/converse-stream`, ADR-0013 — the `converse-stream` sibling of
+  `VOICE_BACKEND_URL`) and pushes one `TextFrame` per `chunk` (each already grounded +
+  guardrail-vetted by the backend `GuardedSentenceEmitter`, so DEC-002 holds per
+  sentence). The terminal `done` confidence is **advisory** (grounded low-confidence
+  answers stay spoken, logged via `voice.backend.stream.low_confidence`; a `grounded=false`
+  `done` maps the turn to `degraded` while still voicing the backend's safe hand-off
+  chunk). A backend `error`, an empty stream or a mid-stream fault degrades to the same
+  safe fallback as the blocking path; barge-in aborts the SSE read (closes the socket)
+  and re-raises with no post-cancel speech. `backend.first_token` then stamps the first
+  sentence; `voice.backend.streamed` / `voice.backend.stream.interrupted` events carry the
+  outcome. Opt-in until a warm+cold live before/after sample confirms the win (ADR-0037).
+  The blocking `POST /api/conversation/converse` path stays the default and fallback.
 
 All endpoints are same-origin, unauthenticated on the pilot host (identity is
 gated by OQ-001 / RF-006). Requests carry an optional envelope via query params

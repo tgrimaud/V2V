@@ -160,6 +160,66 @@ class HttpBackendDegradedTest(unittest.TestCase):
         self.assertNotIn(API_KEY, json.dumps(result.to_dict()))
 
 
+class HttpBackendWarmUpTest(unittest.TestCase):
+    """TASK-BE-017 / lever 2: best-effort connect-time warm-up of the backend models."""
+
+    def test_warm_up_posts_to_the_derived_endpoint_with_the_key(self) -> None:
+        # GIVEN a converse endpoint URL and a capturing transport returning 200
+        transport = _CapturingTransport(HttpResponse(200, json.dumps({"fullyWarmed": True})))
+        adapter = HttpBackendAdapter(ENDPOINT, api_key=API_KEY, transport=transport)
+        # WHEN warm-up is triggered
+        warmed = adapter.warm_up()
+        # THEN it POSTs to the /warm-up sibling of the converse URL with the key header
+        self.assertTrue(warmed)
+        call = transport.calls[0]
+        self.assertEqual(call["url"], "https://backend.internal/api/conversation/warm-up")
+        self.assertEqual(call["headers"]["x-api-key"], API_KEY)
+        self.assertEqual(call["body"], b"")
+
+    def test_warm_up_derives_from_a_converse_stream_url(self) -> None:
+        # GIVEN a streaming converse URL
+        transport = _CapturingTransport(HttpResponse(200, "{}"))
+        adapter = HttpBackendAdapter(
+            "https://backend.internal/api/conversation/converse-stream", transport=transport
+        )
+        # WHEN warm-up is triggered -> THEN it still targets the /warm-up sibling
+        adapter.warm_up()
+        self.assertEqual(transport.calls[0]["url"], "https://backend.internal/api/conversation/warm-up")
+
+    def test_warm_up_url_handles_trailing_slash_and_query(self) -> None:
+        # GIVEN converse URLs with a trailing slash or a query string
+        for raw in (
+            "https://backend.internal/api/conversation/converse/",
+            "https://backend.internal/api/conversation/converse?trace=1",
+        ):
+            transport = _CapturingTransport(HttpResponse(200, "{}"))
+            HttpBackendAdapter(raw, transport=transport).warm_up()
+            # THEN the derived warm-up URL is clean (no trailing slash / query leak)
+            self.assertEqual(
+                transport.calls[0]["url"], "https://backend.internal/api/conversation/warm-up", raw
+            )
+
+    def test_warm_up_returns_false_on_non_2xx(self) -> None:
+        # GIVEN the warm-up endpoint returns a 503
+        adapter = HttpBackendAdapter(ENDPOINT, transport=_CapturingTransport(HttpResponse(503, "down")))
+        # WHEN triggered -> THEN it reports "not warmed" (never raises)
+        self.assertFalse(adapter.warm_up())
+
+    def test_warm_up_swallows_transport_faults(self) -> None:
+        # GIVEN a transport that raises (endpoint unreachable / timeout)
+        adapter = HttpBackendAdapter(ENDPOINT, transport=_CapturingTransport(error=TimeoutError("timed out")))
+        # WHEN triggered -> THEN it returns False and never raises (best-effort)
+        self.assertFalse(adapter.warm_up())
+
+    def test_warm_up_never_leaks_the_key_even_when_the_transport_raises(self) -> None:
+        # GIVEN a transport whose fault message carries the key
+        adapter = HttpBackendAdapter(
+            ENDPOINT, api_key=API_KEY, transport=_CapturingTransport(error=RuntimeError(f"boom {API_KEY}"))
+        )
+        # WHEN triggered -> THEN no exception surfaces (so nothing to leak) and it returns False
+        self.assertFalse(adapter.warm_up())
+
+
 class HttpBackendWithTelemetryTest(unittest.TestCase):
     def test_low_confidence_success_is_degraded_by_the_answer_step(self) -> None:
         # GIVEN an HTTP success with a low confidence, wrapped by the shared answer step
@@ -183,6 +243,107 @@ class HttpBackendWithTelemetryTest(unittest.TestCase):
         # THEN no span or event attribute leaks the key
         blob = str([s.attributes for s in telemetry.spans()]) + str([e.attributes for e in telemetry.events()])
         self.assertNotIn(API_KEY, blob)
+
+
+class _StreamTransport:
+    """Fake SSE line transport: yields canned lines (or raises), and records the URL."""
+
+    def __init__(self, lines: list[str] | None = None, error: Exception | None = None) -> None:
+        self._lines = lines or []
+        self._error = error
+        self.calls: list[dict] = []
+        self.closed = False
+
+    def __call__(self, url, headers, body, timeout, control):
+        self.calls.append({"url": url, "headers": headers, "body": body, "timeout": timeout})
+        control.bind(self._close)
+        if self._error is not None:
+            raise self._error
+        # Mirror urllib's `for raw in resp`: yield one physical line at a time (with its
+        # trailing newline), not whole SSE blocks, so the parser sees real line framing.
+        for block in self._lines:
+            for line in block.splitlines(keepends=True):
+                if control.stopped:
+                    return
+                yield line
+
+    def _close(self) -> None:
+        self.closed = True
+
+
+def _chunk(text: str) -> str:
+    return f'event:chunk\ndata:{{"text":"{text}"}}\n\n'
+
+
+class HttpBackendStreamTest(unittest.TestCase):
+    """TASK-WEB-020 / lever 1: consume the guarded SSE stream one vetted sentence at a time."""
+
+    def test_stream_url_is_derived_from_the_converse_endpoint(self) -> None:
+        # GIVEN converse endpoints (plain, trailing slash, query, already-streaming)
+        cases = {
+            "https://b.internal/api/conversation/converse": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse/": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse?x=1": "https://b.internal/api/conversation/converse-stream",
+            "https://b.internal/api/conversation/converse-stream": "https://b.internal/api/conversation/converse-stream",
+        }
+        for raw, expected in cases.items():
+            transport = _StreamTransport([_chunk("hi")])
+            list(HttpBackendAdapter(raw, stream_transport=transport).answer_stream(_request()))
+            # THEN the stream targets the converse-stream sibling
+            self.assertEqual(transport.calls[0]["url"], expected, raw)
+
+    def test_streams_chunks_then_done(self) -> None:
+        # GIVEN a stream of two chunks then a grounded done
+        lines = [
+            _chunk("Bonjour."),
+            _chunk("Votre facture a augmente."),
+            'event:done\ndata:{"text":"Bonjour. Votre facture a augmente.","confidence":0.9,"grounded":true}\n\n',
+        ]
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=_StreamTransport(lines))
+        # WHEN consumed
+        events = list(adapter.answer_stream(_request()))
+        # THEN two chunk events (in order) then a done carrying confidence/grounded
+        self.assertEqual([e.text for e in events if e.kind == "chunk"], ["Bonjour.", "Votre facture a augmente."])
+        done = next(e for e in events if e.kind == "done")
+        self.assertAlmostEqual(done.confidence, 0.9)
+        self.assertIs(done.grounded, True)
+
+    def test_connect_fault_yields_a_sanitized_error_event_not_a_raise(self) -> None:
+        # GIVEN a stream transport that fails to connect with a key-bearing message
+        transport = _StreamTransport(error=RuntimeError(f"unreachable {API_KEY}"))
+        adapter = HttpBackendAdapter(ENDPOINT, api_key=API_KEY, stream_transport=transport)
+        # WHEN consumed
+        events = list(adapter.answer_stream(_request()))
+        # THEN a single sanitized error event is produced (never raised, never leaks the key)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind, "error")
+        self.assertNotIn(API_KEY, f"{events[0].error_code} {events[0].error_reason}")
+
+    def test_empty_transcript_raises_before_opening_the_stream(self) -> None:
+        # GIVEN an empty transcript
+        transport = _StreamTransport([_chunk("x")])
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=transport)
+        # WHEN consumed -> THEN it stays UNAVAILABLE (no stream opened, never fabricates a turn)
+        with self.assertRaises(EmptyTranscriptError):
+            list(adapter.answer_stream(_request(transcript="   ")))
+        self.assertEqual(transport.calls, [])
+
+    def test_abort_stops_consuming_and_closes_the_stream(self) -> None:
+        # GIVEN a control aborted after opening the stream
+        from conversation_backend import StreamControl
+
+        transport = _StreamTransport([_chunk("one"), _chunk("two"), _chunk("three")])
+        adapter = HttpBackendAdapter(ENDPOINT, stream_transport=transport)
+        control = StreamControl()
+        gen = adapter.answer_stream(_request(), control)
+        first = next(gen)
+        # WHEN aborted (barge-in) after the first sentence
+        control.abort()
+        rest = list(gen)
+        # THEN no further event is consumed and the underlying stream is closed
+        self.assertEqual(first.text, "one")
+        self.assertEqual(rest, [])
+        self.assertTrue(transport.closed)
 
 
 if __name__ == "__main__":
