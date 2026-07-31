@@ -665,24 +665,23 @@ DEC-002 (no invented / ungrounded amounts), ADR-0029 (pilot latency criterion)
 **Depends on:** — (backend already has `converse-stream` + grounding/guardrail pipeline)
 **Blocks:** TASK-WEB-020 (lever 1 confidence-at-open, optional), TASK-WEB-021 (lever 2 warm-up)
 **Classification:** V1 pilot gate (perceived latency — backend side)
-**Status:** ✅ **Validated by user 2026-07-31** (Sprint 10, branch
-`task/TASK-BE-017-voice-latency-support` off `feat/sprint-10-pilot-latency`; created
-2026-07-29 as the backend dependency of the TASK-WEB-020/021 voice latency levers).
+**Status:** ✅ **Validated by user 2026-07-31, merged into `feat/sprint-10-pilot-latency`**
+(Sprint 10, branch `task/TASK-BE-017-voice-latency-support`; created 2026-07-29 as the
+backend dependency of the TASK-WEB-020/021 voice latency levers).
 **Delivered:** (1) warm-up path — `WarmUpUseCase` (port in) + `WarmUpResult` (VO) +
 `WarmUpService` (exercises embedding via `KnowledgeRetrievalPort.retrieve` + LLM via a
 dummy converse; embedding/LLM failure non-blocking, recorded as a warm-up miss; records
 `warmup_embedding`/`warmup_llm` latency slices; no memory/history side-effect) +
-`POST /api/conversation/warm-up` (`WarmUpController`/`WarmUpResponse`, body-less), wired as
-a `@Bean` in `ConversationConfig`; (2) vetted-stream contract confirmation — investigation
-found `converse-stream` already emits vetted-only, locked with an incremental-delivery
-contract test in `StreamingConversationServiceTest` (first vetted sentence reaches the
-consumer before the whole answer; blocked → safe hand-off terminal chunk) plus
-`GuardedSentenceEmitterTest` cases. **Checks re-run 2026-07-31: `mvn test` 320 green
-(0 fail/err), ArchUnit OK** (`WarmUpServiceTest` 5, `WarmUpControllerTest` 2). Mechanism
-proven live 2026-07-30 (`voice.backend.warmup=success` against the real backend in the
-combined lever-1+2 pass). Optional early-confidence/grounding signal **deferred** (levers 1
-& 2 do not need it — DEC-002 already enforced per sentence). **Merge-ready — merge on the
-user's explicit request.**
+`POST /api/conversation/warm-up` (`WarmUpController`/`WarmUpResponse`, body-less, api-key
+gated), wired as a `@Bean` in `ConversationConfig`; (2) vetted-stream contract confirmation
+— investigation found `converse-stream` already emits vetted-only, locked with an
+incremental-delivery contract test in `StreamingConversationServiceTest` (first vetted
+sentence reaches the consumer before the whole answer; blocked → safe hand-off terminal
+chunk) plus `GuardedSentenceEmitterTest` cases. **Checks re-run 2026-07-31: `mvn test` 320
+green (0 fail/err), ArchUnit OK** (`WarmUpServiceTest` 5, `WarmUpControllerTest` 2).
+Mechanism proven live 2026-07-30 (`voice.backend.warmup=success` against the real backend in
+the combined lever-1+2 pass). Optional early-confidence/grounding signal **deferred**
+(levers 1 & 2 do not need it — DEC-002 already enforced per sentence).
 **Priority:** High
 
 ### Objective

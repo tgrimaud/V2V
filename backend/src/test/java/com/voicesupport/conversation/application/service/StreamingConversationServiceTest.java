@@ -7,6 +7,7 @@ import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.fake.FakeGroundQueryUseCase;
@@ -173,6 +174,33 @@ class StreamingConversationServiceTest {
                 .counter()
                 .count();
         assertEquals(1.0, blocks);
+    }
+
+    @Test
+    @DisplayName("delivers the first vetted sentence incrementally, before the full answer completes "
+            + "(lever-1 streaming contract, TASK-WEB-020)")
+    void delivers_first_sentence_before_full_answer() {
+        // GIVEN grounded evidence and a generator that checks delivery between its two sentences
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("La proration explique l'écart.", "s1", "billing", 0.83))));
+        int[] deliveredAtMidStream = {-1};
+        StreamingAnswerGeneratorPort incremental = (question, evidence, history, language, onToken) -> {
+            onToken.accept("Votre facture varie. ");
+            deliveredAtMidStream[0] = chunks.size();
+            onToken.accept("Merci de patienter. ");
+        };
+        StreamingConversationService incrementalService = new StreamingConversationService(
+                grounding, incremental, new OutputGuardrail(), memory,
+                new LanguageDetector(AnswerLanguage.ENGLISH), new BackendTelemetry(meterRegistry), 3);
+
+        // WHEN the stream is consumed
+        chunks.clear();
+        incrementalService.converseStream("Pourquoi ma facture change ?", "c1").consume(chunks::add);
+
+        // THEN the first vetted sentence reached the consumer BEFORE the second was generated (a
+        // buffer-till-end implementation would leave deliveredAtMidStream at 0), and both are vetted
+        assertEquals(1, deliveredAtMidStream[0]);
+        assertEquals(List.of("Votre facture varie.", "Merci de patienter."), chunks);
     }
 
     private GeneratedAnswer consume(String transcript, String conversationId) {

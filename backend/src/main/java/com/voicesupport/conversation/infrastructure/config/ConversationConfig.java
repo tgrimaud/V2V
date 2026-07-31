@@ -4,10 +4,12 @@ import com.voicesupport.conversation.application.service.AnswerService;
 import com.voicesupport.conversation.application.service.ConversationService;
 import com.voicesupport.conversation.application.service.RetrievalGroundingService;
 import com.voicesupport.conversation.application.service.StreamingConversationService;
+import com.voicesupport.conversation.application.service.WarmUpService;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import com.voicesupport.conversation.domain.port.in.WarmUpUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
@@ -114,6 +116,20 @@ public class ConversationConfig {
             @Value("${voice-support.conversation.retrieval.top-k:8}") int topK) {
         return new StreamingConversationService(groundQueryUseCase, streamingAnswerGeneratorPort,
                 outputGuardrail, conversationMemoryPort, languageDetector, backendTelemetry, topK);
+    }
+
+    // Connect-time warm-up of the embedding + LLM (TASK-BE-017 / ADR-0037): the voice runtime calls
+    // POST /api/conversation/warm-up on WebRTC connect so the first real turn is warm (lever 2). The
+    // warm query is configurable per deployment/language; it touches no conversation memory.
+    @Bean
+    public WarmUpUseCase warmUpUseCase(
+            KnowledgeRetrievalPort knowledgeRetrievalPort,
+            AnswerGeneratorPort answerGeneratorPort,
+            BackendTelemetry backendTelemetry,
+            @Value("${voice-support.conversation.warmup.query:hello}") String warmQuery,
+            @Value("${voice-support.conversation.default-language:en}") String defaultLanguage) {
+        return new WarmUpService(knowledgeRetrievalPort, answerGeneratorPort, backendTelemetry,
+                warmQuery, AnswerLanguage.fromCode(defaultLanguage));
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a

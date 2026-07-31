@@ -28,7 +28,7 @@
 >   audience filters), input/output **guardrails** (incl. DEC-002 no-fabricated-amount),
 >   three-band retrieval **confidence**, conversation **memory**, and per-slice
 >   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
->   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve}`,
+>   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up}`,
 >   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
 > - **Infra:** `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama).
 >

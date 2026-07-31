@@ -250,3 +250,14 @@ ready to flip default-on after a larger sample.
   cold penalty bounded from +448 ms (up to multi-second) to ~300–390 ms residual;
   turn-1-only win, ADR-0029 gate still needs lever 1. Follow-up: warm the full converse
   path (RAG/guardrail/sentence-emitter), not just embedding + LLM.
+- **Backend support (TASK-BE-017, validated + merged 2026-07-31):** the backend side of
+  both levers is delivered. `POST /api/conversation/warm-up` exercises the embedding
+  (retrieval) + the LLM once, touches no conversation memory, discards the output, is
+  repeatable and non-blocking (a warm-up miss returns 200 with per-model flags false), and
+  records `warmup_embedding` / `warmup_llm` latency slices — this is the endpoint the
+  TASK-WEB-021 connect trigger consumes. For lever 1, the investigation confirmed
+  `converse-stream` (SSE, ADR-0013) **already** emits guardrail-vetted sentences one at a
+  time via `GuardedSentenceEmitter` (DEC-002 enforced backend-side, no contract change
+  needed), locked by a service-level incremental-delivery contract test in
+  `StreamingConversationServiceTest` (first vetted sentence reaches the consumer before the
+  full answer; blocked sentence → safe hand-off).

@@ -728,3 +728,40 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `voice-agent/tests/test_voice_openapi.py`, `voice-agent/features/web_voice.feature` (+ steps), `voice-agent/features/environment.py`, `voice-agent/requirements.txt`
 - `docs/architecture/voice-runtime-http-contract.md`, `docs/qa/task-web-016-voice-openapi-qa.md`
 - `product-backlog/{sprints/sprint-9-hardening.md, backlog-index.md, tasks/web-voice-tasks.md, tasks/backend-hardening-tasks.md}`
+
+## 2026-07-29 — Sprint 10: latency levers split into tickets + TASK-BE-017 backend warm-up
+
+**Summary:**
+
+- **Integrated TASK-WEB-015 into the sprint branch** (`--no-ff` merge `70743bd`): lever 3
+  (env-tunable end-of-turn hold) delivered + live-accepted, the 2026-07-29 live pilot pass
+  (real-backend mouth-to-ear p95 ≈ 4.1–4.4 s → ADR-0029 gate FAIL, dominated by STT+backend),
+  and the levers 1 & 2 ticket definitions.
+- **Created dedicated tickets** for the two decisive levers (commit `0f812c8`): **TASK-WEB-020**
+  (lever 1, stream first vetted sentence to TTS), **TASK-WEB-021** (lever 2, connect-time STT +
+  LLM/embedding warm-up), **TASK-BE-017** (backend dependency). Registered in `backlog-index.md`
+  and the sprint-10 ticket table.
+- **Key de-risking finding:** `POST /api/conversation/converse-stream` already emits
+  guardrail-vetted sentences one at a time (`GuardedSentenceEmitter`) → DEC-002 enforced
+  backend-side, so lever 1 needs **no backend contract change** for safety.
+- **Implemented TASK-BE-017** (commit `bc42bd1`): `WarmUpUseCase` + `WarmUpService` +
+  `POST /api/conversation/warm-up` (side-effect-free — no memory port, discards output,
+  repeatable, non-blocking, api-key gated, `warmup_embedding`/`warmup_llm` slices), wired as a
+  `@Bean` in `ConversationConfig`. Added a service-level **incremental-delivery** contract test
+  (first vetted sentence delivered before the full answer completes). `mvn test` **320 green**,
+  ArchUnit OK.
+- **Branch model:** ticket branches fork from the sprint branch and merge back `--no-ff`; sprint
+  → `feat/restart-from-scratch` only at closure on explicit user request. TASK-BE-017 pending
+  adversarial review + QA before merge.
+
+### Files changed
+- `backend/src/main/java/com/voicesupport/conversation/domain/port/in/WarmUpUseCase.java` (new)
+- `backend/src/main/java/com/voicesupport/conversation/domain/model/valueobject/WarmUpResult.java` (new)
+- `backend/src/main/java/com/voicesupport/conversation/application/service/WarmUpService.java` (new)
+- `backend/src/main/java/com/voicesupport/conversation/infrastructure/adapter/in/rest/WarmUpController.java` (new)
+- `backend/src/main/java/com/voicesupport/conversation/infrastructure/adapter/in/rest/WarmUpResponse.java` (new)
+- `backend/src/main/java/com/voicesupport/conversation/infrastructure/config/ConversationConfig.java` — `warmUpUseCase` bean
+- `backend/src/main/java/com/voicesupport/shared/web/security/WebSecurityMvcConfig.java` — gate `/api/conversation/warm-up`
+- `backend/src/test/java/.../WarmUpServiceTest.java`, `.../WarmUpControllerTest.java` (new); `StreamingConversationServiceTest.java` — incremental-delivery contract test
+- `docs/architecture/adrs/ADR-0037-first-sentence-backend-streaming-to-tts.md`, `docs/architecture/architecture.md`
+- `product-backlog/{tasks/web-voice-tasks.md, tasks/backend-hardening-tasks.md, backlog-index.md, sprints/sprint-10-pilot-latency.md}`
