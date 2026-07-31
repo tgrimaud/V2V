@@ -765,3 +765,47 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `backend/src/test/java/.../WarmUpServiceTest.java`, `.../WarmUpControllerTest.java` (new); `StreamingConversationServiceTest.java` — incremental-delivery contract test
 - `docs/architecture/adrs/ADR-0037-first-sentence-backend-streaming-to-tts.md`, `docs/architecture/architecture.md`
 - `product-backlog/{tasks/web-voice-tasks.md, tasks/backend-hardening-tasks.md, backlog-index.md, sprints/sprint-10-pilot-latency.md}`
+
+## 2026-07-31 — Sprint 10 closed: pilot-readiness latency & perceived latency
+
+**Summary:**
+
+- **Closed Sprint 10** (pilot-readiness latency & perceived latency). Sprint branch
+  `feat/sprint-10-pilot-latency` merged into `feat/restart-from-scratch` (`--no-ff`). All **6
+  tickets delivered + user-validated**:
+  - **TASK-WEB-019** — spoken filler / acknowledgement (US-020): adversarial 92/100, QA GO.
+  - **TASK-WEB-014** — mouth-to-ear measurement closure: warm live sample vs the real backend,
+    per-slice p50/p95 evaluated against ADR-0029. **Gate FAIL** is the honest pilot number
+    (measurement mandate met; latency gate stays open).
+  - **TASK-WEB-015** — lever 3 (env-tunable end-of-turn hold): −150 ms deterministic, 0
+    false-cut, tuned default 350 ms; live-accepted.
+  - **TASK-WEB-020** — lever 1 (stream first vetted sentence to TTS): flag `VOICE_BACKEND_STREAM`
+    default-OFF; warm live before/after **m2e p50 2696.9 → 1830.6 ms (−866)**, fillers 4→1,
+    DEC-002 held (5/5 grounded); **GO to enable on pilot**, code default OFF.
+  - **TASK-WEB-021** — lever 2 (connect-time warm-up): shared `SessionWarmer` STT pre-open
+    (opt-in `VOICE_STT_PREWARM=1`) + non-blocking `backend.warm_up()`; live warmup=success +
+    prewarm=hit; combined with lever 1 the cold turn-1 spike is removed (m2e p95 3124 → 2142).
+  - **TASK-BE-017** — backend warm-up path (`POST /api/conversation/warm-up`) + vetted-stream
+    incremental-delivery contract test; validated + merged.
+- **Closure checks green:** backend `mvn test` **320** (0 fail/err, ArchUnit OK), voice-agent
+  unittest **462**, behave **13 features · 36 scenarios · 169 steps**.
+- **ADR-0029 latency gate remains OPEN.** Combined cold mouth-to-ear p95 **2142 ms > 1500 ms**
+  (margin −642). The sprint met its **measurement + optimization-levers** mandate; the residual
+  ~640 ms is handed to two out-of-sprint follow-ups: **TASK-STT-014** (STT finalize-tail, p95
+  ~535 ms cold / ~424 ms warm) + **TASK-BE-020** (backend first-vetted-sentence, p50 ~733 /
+  p95 ~1052 ms warm). Sprint 10 is closed as **Done on scope**, not as a gate pass.
+- **Housekeeping:** merged WEB-020 (`7b436c8`), WEB-021 (`120ea12`, already integrated), BE-017
+  (`fa5e5f8`) into the sprint; corrected stale "merge-ready" markers; deleted the WEB-020/021 +
+  BE-017 ticket branches (local + remote). Sprint status flipped to ✅ Done in the sprint file,
+  the `backlog-index.md` registry row, and this ledger.
+
+### Files changed
+- `product-backlog/sprints/sprint-10-pilot-latency.md` — `## Status` + roadmap row → ✅ Done,
+  WEB-014 sign-off, WEB-019 closure-merge note, Exit-Criteria closure sign-off block
+- `product-backlog/backlog-index.md` — SPRINT-10 registry row → ✅ Done; WEB-014 sign-off;
+  WEB-015 → Done; WEB-020 stale merge-ready → merged
+- `docs/architecture/adrs/ADR-0037-first-sentence-backend-streaming-to-tts.md` — BE-017 merge
+  reconciliation
+- `product-backlog/tasks/{web-voice-tasks.md, backend-hardening-tasks.md}` — WEB-021 / BE-017
+  merged status
+- `done-tasks.md` — this entry

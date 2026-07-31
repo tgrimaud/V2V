@@ -18,8 +18,19 @@ Sprint 12**.
 
 ## Status
 
-**Status:** In progress (started 2026-07-29). Scope set by user decision 2026-07-29 (promote
-pilot-latency ahead of billing; add spoken filler phrases to the scope).
+**Status:** ✅ **Done (closed 2026-07-31)** — sprint branch merged into
+`feat/restart-from-scratch` (`--no-ff`). Started 2026-07-29; scope set by user decision
+2026-07-29 (promote pilot-latency ahead of billing; add spoken filler phrases). **All 6
+tickets delivered + user-validated:** TASK-WEB-019 (spoken filler / US-020), TASK-WEB-014
+(mouth-to-ear measurement closure), TASK-WEB-015 (lever 3 end-of-turn hold), TASK-WEB-020
+(lever 1 first-sentence stream), TASK-WEB-021 (lever 2 connect-time warm-up), TASK-BE-017
+(backend warm-up path + vetted-stream contract test). **Closure checks green:** backend
+`mvn test` **320**, voice-agent unittest **462**, behave **13 features · 36 scenarios ·
+169 steps**. **ADR-0029 latency gate remains OPEN** (combined cold mouth-to-ear p95
+**2142 ms > 1500**): the sprint met its *measurement + optimization-levers* mandate (m2e
+measured live per slice; levers 1–3 landed with before/after deltas), and the residual
+~640 ms is explicitly handed to the out-of-sprint follow-ups **TASK-STT-014** (STT
+finalize-tail) + **TASK-BE-020** (backend first-vetted-sentence).
 
 **Sprint branch:** `feat/sprint-10-pilot-latency` (off `feat/restart-from-scratch`). Adopting the
 **two-level branch model** (decision 2026-07-29): ticket branches fork from and merge back into
@@ -51,7 +62,7 @@ slowest turns without skewing `tts_first_audio`. Write-up + evidence:
 |---|---|---|
 | Sprint 8 | CSV KB ingestion | ✅ Done (2026-07-23) |
 | Sprint 9 | Hardening / assainissement | ✅ Done (2026-07-28) |
-| **Sprint 10** | **Pilot-readiness latency & perceived latency — this sprint** | In progress (started 2026-07-29) |
+| **Sprint 10** | **Pilot-readiness latency & perceived latency** | ✅ Done (closed 2026-07-31) |
 | Sprint 11 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 | Sprint 12 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
@@ -73,12 +84,12 @@ slowest turns without skewing `tts_first_audio`. Write-up + evidence:
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | **Live sample captured 2026-07-29**: mouth-to-ear p95 ≈ 4.1–4.4 s → **ADR-0029 gate FAIL** (NO-GO as-is); fix path = WEB-015 levers 1 & 2. Formal adversarial/QA sign-off pending |
+| TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | **Live sample captured 2026-07-29**: mouth-to-ear p95 ≈ 4.1–4.4 s → **ADR-0029 gate FAIL** (NO-GO as-is); fix path = WEB-015 levers 1 & 2. **✅ Sign-off 2026-07-31:** measurement mandate met (per-slice p50/p95 live vs the gate), fix path delivered as levers 1+2 (WEB-020/021) with before/after deltas; latency gate stays open → residual to TASK-STT-014 + TASK-BE-020. Evidence: `docs/qa/streaming-voice-qa-report.md` |
 | TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | **Lever 3 done + live-accepted** (−150 ms, 0 false-cut, tuned default 350 ms). Levers 1 & 2 **split out** into TASK-WEB-020 / TASK-WEB-021 (+ backend TASK-BE-017) on 2026-07-29 |
 | TASK-WEB-020 | Lever 1 — stream the backend answer to TTS on the first vetted sentence (consume `converse-stream` SSE instead of blocking `/converse`) | Optimize | **✅ Merged into `feat/sprint-10-pilot-latency` (2026-07-31, `--no-ff` `7b436c8`) after user validation; checks green (unittest 462 / behave 13·36·169). GO to enable `VOICE_BACKEND_STREAM=1` on pilot, code default OFF.** Per-sentence DEC-002 confirmed (5/5 grounded); confidence = option A; barge-in aborts + closes socket; `backend.first_token` now = first sentence. **Warm 2026-07-30:** `backend_first_token` p50 −658 ms, **m2e p50 2696.9 → 1830.6 ms (−866)** / p95 4848.7 → 2526.1; fillers 4→1. **Cold + combined 2026-07-31:** warm-up (lever 2) eliminates the cold spike (m2e p95 3124 → 2142). **ADR-0029 gate still FAIL even with levers 1+2** (m2e p95 2142 > 1500) — residual ~640 ms → next levers **TASK-STT-014** + **TASK-BE-020**. Evidence: `streaming-voice-qa-report.md` (Live Lever-1 / Cold / Combined passes) |
 | TASK-WEB-021 | Lever 2 — connect-time warm-up of the STT session + first LLM/embedding call (mirror `TtsSessionWarmer`) | Optimize | **Runtime implemented 2026-07-29, adversarial review fixes applied** — shared `SessionWarmer` pre-opens STT at connect (no leak; **opt-in `VOICE_STT_PREWARM=1`, off by default**) + non-blocking `backend.warm_up()` trigger (`POST /warm-up`, `VOICE_BACKEND_WARMUP` on); telemetry `voice.backend.warmup` + `voice.stt.prewarm`; unittest 442 / behave 33 green. **Live turn-1 sample 2026-07-30** (real backend via BE-017 worktree): warmup=success + prewarm=hit (Gradium keeps idle socket, no fallback/leak); backend cold penalty bounded +448 ms→~300 ms residual (8.5 s cold outlier avoided); m2e p95 −390 ms (noisy); **turn-1-only, ADR-0029 gate still needs lever 1**. Follow-up: warm full converse path. **Validated by user 2026-07-30, checks re-run green (unittest 442 / behave 12·33·154) → ✅ Merged into `feat/sprint-10-pilot-latency` (2026-07-31, `120ea12`, `--no-ff`); ticket branch deleted** |
 | TASK-BE-017 | Backend support for the levers — warm-up path (lever 2) + vetted-stream contract test / optional early confidence (lever 1) | Enable | **✅ Validated by user 2026-07-31** — `WarmUpUseCase`/`WarmUpService` + `POST /api/conversation/warm-up` (telemetry `warmup_embedding`/`warmup_llm`, failures non-blocking→miss) + `StreamingConversationServiceTest` vetted-stream incremental-delivery contract test. `mvn test` re-run green (**320 tests, 0 fail/err**, ArchUnit OK). Mechanism proven live 2026-07-30 (warmup=success). Optional early-confidence deferred. **✅ Merged into `feat/sprint-10-pilot-latency` (2026-07-31, `fa5e5f8`, `--no-ff`); post-merge `mvn test` 320 green; ticket branch deleted** |
-| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
+| TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); **✅ carried into `feat/restart-from-scratch` by the sprint-closure merge (2026-07-31, `--no-ff`)** |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
 
@@ -122,3 +133,24 @@ ADR-0029 gate **FAIL** (p95 ≈ 4.1–4.4 s; the measurement bar is met, the lat
 NO-GO as-is). TASK-WEB-015 **lever 3 measured before/after** (−150 ms deterministic, 0 false-cut,
 tuned default 350 ms). Still open for exit: TASK-WEB-015 levers 1 & 2 (live before/after) — the
 decisive latency work — and the formal adversarial/QA sign-off of the TASK-WEB-014 closure.
+
+**Closure sign-off (2026-07-31).** All exit criteria assessed and met **except the ADR-0029
+latency *pass*** (which the criteria do not require — they require the gate to be *evaluated*,
+not passed):
+- **TASK-WEB-014** — mouth-to-ear measured live per slice (p50/p95) vs ADR-0029; gate FAIL is
+  the honest pilot number. Measurement mandate ✅; latency gate stays open.
+- **TASK-WEB-015 levers 1 & 2** — delivered as TASK-WEB-020 (lever 1, m2e p50 −866 ms warm) +
+  TASK-WEB-021 (lever 2, cold spike removed), before/after reported per slice; lever 3 already
+  live-accepted. ✅
+- **TASK-WEB-019 / US-020** — spoken filler fires only past threshold, barge-in intact, no
+  fabricated billing content, telemetry-observable; adversarial 92/100 + QA GO. ✅
+- **Per-ticket adversarial ≥ 90% + QA, merge on explicit request** — WEB-019 92/100 + QA GO;
+  WEB-020/021 adversarial fixes applied + live QA passes + user validation; BE-017 validated
+  (`mvn test` 320 green, ArchUnit OK). All merged into the sprint on explicit user request. ✅
+- **Closure checks:** backend `mvn test` **320**, voice-agent unittest **462**, behave
+  **13·36·169** — all green.
+
+**Residual → out-of-sprint:** the ~640 ms gap to ADR-0029 (m2e p95 2142 > 1500) is handed to
+**TASK-STT-014** (STT finalize-tail) + **TASK-BE-020** (backend first-vetted-sentence), the two
+identified next levers. Sprint 10 is **closed as Done on its measurement + levers mandate**;
+the pilot latency *gate* is a tracked follow-up, not a Sprint 10 failure.
