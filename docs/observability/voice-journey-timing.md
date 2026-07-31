@@ -22,7 +22,7 @@ The journey is reported in flow order (`PIPELINE_SLICES`):
 | `channel_ingress` | `web.voice.ingress` (web) or `stt.audio.accept` (fixture) | Instrumented |
 | `end_of_turn` | `voice.end_of_turn` (batch ingress + streaming aggregator + streaming STT processor) | Instrumented (TASK-STT-009 batch, TASK-STT-012 streaming) |
 | `stt` | `stt.request` (batch: transcription call; streaming: post-end-of-turn tail = `time_to_final`) | Instrumented (TASK-STT-010 streaming) |
-| `backend_first_token` | `backend.first_token` (streaming) or `backend.request` (batch) | Instrumented (TASK-WEB-003-D/E) |
+| `backend_first_token` | `backend.first_token` (= time to the **first vetted sentence** when `VOICE_BACKEND_STREAM` is on, TASK-WEB-020) or `backend.request` (blocking) | Instrumented (TASK-WEB-003-D/E, TASK-WEB-020) |
 | `tts_first_audio` | `voice.tts.first_audio` (batch runner; streaming: time-to-first-audio) | Instrumented (TASK-WEB-002 batch, TASK-WEB-004 streaming) |
 | `channel_egress` | `web.voice.egress` (web voice runtime) | Instrumented (TASK-WEB-002) |
 
@@ -304,9 +304,14 @@ full pilot pass is written up in
 [`streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md#live-pilot-pass--real-backend-mouth-to-ear--lever-3-beforeafter-2026-07-29).
 
 The `backend_first_token` slice is measured for both the `stub` and `http`
-backends (the span comes from `voice_pipeline/answer.py`, not the adapter), and a
+backends (the span comes from `voice_pipeline/answer.py` on the blocking path and from
+`voice_pipeline/streaming_answer.py` on the streamed path, not the adapter), and a
 degraded turn still measures backend + TTS + egress because the safe fallback is
-transcribed → answered → spoken. The HTTP surface that drives these turns is
+transcribed → answered → spoken. When `VOICE_BACKEND_STREAM` is on (lever 1,
+TASK-WEB-020) `backend.first_token` stamps the **first vetted sentence** rather than the
+full answer, so the slice reflects the lever-1 win while `backend.request` still carries
+the total; the streamed turn also emits `voice.backend.streamed` (sentence count,
+outcome, confidence) and `voice.backend.stream.interrupted` on barge-in. The HTTP surface that drives these turns is
 documented in
 [`voice-runtime-http-contract.md`](../architecture/voice-runtime-http-contract.md).
 

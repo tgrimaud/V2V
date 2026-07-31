@@ -97,6 +97,24 @@ cold-start penalty by warming the STT session and the backend models on WebRTC c
   first real turn. Observability: `voice.backend.warmup` event + `voice.backend.warmup.count`
   metric with `correlation_id`, `provider` and `outcome` (`success`/`miss`).
 
+First-sentence answer streaming (TASK-WEB-020, lever 1) is env-only and starts TTS on
+the **first vetted sentence** instead of the whole answer:
+
+- `VOICE_BACKEND_STREAM` (**off by default; opt-in** via `1`/`true`/`yes`/`on`) — when on
+  and the backend can stream, the `AnswerProcessor` consumes the guarded SSE endpoint
+  (`POST /api/conversation/converse-stream`, ADR-0013 — the `converse-stream` sibling of
+  `VOICE_BACKEND_URL`) and pushes one `TextFrame` per `chunk` (each already grounded +
+  guardrail-vetted by the backend `GuardedSentenceEmitter`, so DEC-002 holds per
+  sentence). The terminal `done` confidence is **advisory** (grounded low-confidence
+  answers stay spoken, logged via `voice.backend.stream.low_confidence`; a `grounded=false`
+  `done` maps the turn to `degraded` while still voicing the backend's safe hand-off
+  chunk). A backend `error`, an empty stream or a mid-stream fault degrades to the same
+  safe fallback as the blocking path; barge-in aborts the SSE read (closes the socket)
+  and re-raises with no post-cancel speech. `backend.first_token` then stamps the first
+  sentence; `voice.backend.streamed` / `voice.backend.stream.interrupted` events carry the
+  outcome. Opt-in until a warm+cold live before/after sample confirms the win (ADR-0037).
+  The blocking `POST /api/conversation/converse` path stays the default and fallback.
+
 All endpoints are same-origin, unauthenticated on the pilot host (identity is
 gated by OQ-001 / RF-006). Requests carry an optional envelope via query params
 `conversation_id`, `session_id`, `correlation_id`; missing ids are generated.

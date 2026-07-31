@@ -738,3 +738,49 @@ Scenario: The streamed answer never emits unvetted content
 - `mvn test` green + ArchUnit OK; OpenAPI updated if a new endpoint is added.
 - Docs: `voice-runtime-http-contract.md` (contract the runtime consumes) + ADR-0037 evidence.
 - No secret / raw provider text leak in warm-up telemetry.
+
+## TASK-BE-020 — Shorten Time-To-First-Vetted-Sentence In The Backend Answer Stream (Latency Lever)
+
+**Parent:** EPIC-010 (+ EPIC-005)
+**Related decisions:** ADR-0029 (pilot latency criterion — this lever helps close it),
+ADR-0013 (backend SSE guarded-sentence streaming), ADR-0037 (first-sentence streaming to TTS),
+DEC-002 (no invented / ungrounded amounts — must stay enforced per sentence)
+**Related stories:** US-036 (per-slice timing)
+**Depends on / follows:** TASK-WEB-020 (lever 1) validated — the runtime now speaks on the
+first vetted sentence, so the backend's time-to-first-vetted-sentence is directly on the
+critical path.
+**Classification:** V1 pilot gate (perceived latency)
+**Status:** To do (future improvement, out of Sprint 10 scope). Created 2026-07-31 from the
+TASK-WEB-020 cold/combined live passes.
+**Priority:** Medium
+
+### Objective
+
+Reduce the `backend_first_token` slice = the time for `converse-stream` to emit its **first
+vetted sentence** (`GuardedSentenceEmitter`: grounding + output guardrail before the first
+`chunk`). After levers 1 + 2 it is the dominant residual contributor to the ADR-0029 gap:
+measured live 2026-07-31 at p50 **~733 ms** / p95 **~1052 ms** (warm-steady), and it is the
+slice that spikes to ~2042 ms on a cold turn without warm-up.
+
+### Scope
+
+- Profile the first-sentence path server-side: LLM time-to-first-sentence (Mistral streaming vs
+  whole-answer), RAG/pgvector retrieval, guardrail + grounding first-hit cost, and any
+  per-request setup on the converse-stream worker.
+- Levers to evaluate (non-exhaustive): stream tokens from the LLM and vet as soon as the first
+  sentence boundary is reached; bias the answer prompt toward a short, high-value first
+  sentence; cache/prewarm the RAG + guardrail first-hit path (ties into TASK-BE-017 warm-up —
+  consider a full dummy converse at warm-up so RAG/guardrail JIT off the critical path);
+  overlap retrieval with generation where safe.
+- **DEC-002 stays enforced per sentence** — no sentence may be emitted before it is grounded +
+  guardrail-vetted; the safe hand-off terminal behaviour is unchanged.
+
+### Acceptance Criteria
+
+- A measured before/after (backend micro-benchmark on `converse-stream` first-sentence time +
+  a live streaming pass) showing the `backend_first_token` reduction, warm and cold.
+- The mouth-to-ear composite re-evaluated against ADR-0029 with this lever combined with
+  levers 1 + 2 (+ TASK-STT-014).
+- DEC-002 preserved: contract test still proves no chunk is emitted before vetting; grounded /
+  blocked-sentence behaviour unchanged. `mvn test` green + ArchUnit OK; no secret / raw
+  provider text leak in telemetry.

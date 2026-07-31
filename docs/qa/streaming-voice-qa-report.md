@@ -390,6 +390,158 @@ call-1 − mean(calls 2–5)** (answer length ~constant, so this isolates the co
   (2 sessions); keep `VOICE_STT_PREWARM` opt-in for now, ready to flip default-on after a
   larger sample.
 
+## Live Lever-1 Pass — First-Sentence Streaming Before/After (2026-07-30)
+
+**Ticket:** TASK-WEB-020 (stream the first vetted sentence to TTS) consuming the backend
+`POST /converse-stream` SSE contract (ADR-0013). **Branch:**
+`task/TASK-WEB-020-first-sentence-stream`. **Config:** streaming WebRTC (`/webrtc.html`),
+`--provider gradium --backend http --stt-mode streaming --tts-mode streaming`, hold
+**350 ms**, **real backend** (Mistral chat + Ollama `nomic-embed-text` + pgvector),
+co-located dev host, headphones. Backend was **warm and identical for both runs** (a
+`/converse-stream` curl pre-warmed the LLM/RAG path); the **only** variable changed
+between runs is `VOICE_BACKEND_STREAM`: **control** (unset → blocking `/converse`, whole
+answer waited before TTS) vs **treatment** (`=1` → first vetted sentence streamed to TTS).
+5 warm turns per run, same question list, same order. Evidence:
+[`streaming-telemetry-lever1-control-2026-07-30.jsonl`](./streaming-telemetry-lever1-control-2026-07-30.jsonl),
+[`streaming-telemetry-lever1-treatment-2026-07-30.jsonl`](./streaming-telemetry-lever1-treatment-2026-07-30.jsonl).
+
+### Mechanism confirmed live (the primary acceptance signal)
+
+- **Streaming path taken:** `voice.backend.streamed = success` fired on **all 5**
+  treatment turns (`provider=http-backend`); the control run shows **5×
+  `voice.backend.answered`** and **zero** `streamed` events (blocking path, as expected).
+- **DEC-002 preserved:** every streamed turn reported **`grounded=true`**; per-sentence
+  grounding + output guardrail runs backend-side before each `chunk` (the curl warm-up
+  showed the 3-sentence `chunk`→`chunk`→`chunk`→`done{grounded:true}` shape). No invented
+  amount, no un-said sentence.
+- **`backend.first_token` now stamps the first sentence** on the streamed path (14
+  `voice.tts.first_audio` spans over 5 turns = the bot speaks sentence-by-sentence)
+  vs the whole answer on the blocking path (9 spans = 5 answers + 4 fillers).
+- **Filler coherence holds live:** fillers dropped **4 (control) → 1 (treatment)** — the
+  first vetted sentence usually arrives before the holding-phrase threshold (TASK-WEB-019),
+  so the filler rarely fires and there is no double-speak.
+- **Barge-in intact:** 4 barge-ins observed in **both** runs; no post-cancel speech, no
+  stuck stream.
+
+### Per-slice + composite before/after (ms, warm, n=5)
+
+| Metric (p50 / p95) | Control OFF | Treatment ON | Δ p50 | Δ p95 |
+|---|---:|---:|---:|---:|
+| `end_of_turn` | 350 / 350 | 350 / 350 | 0 | 0 |
+| `stt` | 450.5 / 486.9 | 374.7 / 423.9 | −76 | −63 |
+| **`backend_first_token`** | **1435.9 / 3481.5** | **777.6 / 1599.0** | **−658** | **−1883** |
+| `tts_first_audio` | 389.3 / 580.1 | 353.2 / 378.9 | −36 | −201 |
+| `time_to_first_audio` (stt+backend+tts) | 2346.8 / 4498.7 | 1480.5 / 2176.1 | −866 | −2323 |
+| **`voice_to_first_audio` (mouth-to-ear)** | **2696.9 / 4848.7** | **1830.6 / 2526.1** | **−866** | **−2323** |
+
+> **Read the backend slice as the lever, the composite as the fair comparison.**
+> `backend_first_token` semantics differ by design across runs (control = full answer;
+> treatment = first vetted sentence) — that difference *is* lever 1. `voice_to_first_audio`
+> is the apples-to-apples end-to-end measure, and it drops **−866 ms at p50**. The control
+> p95 (4849 ms) is inflated by one longer-answer turn (backend 3481 ms); even excluding it,
+> control backend p50 ≈ 1436 ms vs treatment ≈ 778 ms.
+
+### ADR-0029 gate (mouth-to-ear p95 ≤ 1500 ms)
+
+| Run | m2e p50 | m2e p95 | Gate margin @ p95 | Status |
+|---|---:|---:|---:|---|
+| Control OFF | 2696.9 | 4848.7 | −3348.7 | fail |
+| Treatment ON | 1830.6 | 2526.1 | −1026.1 | fail (much closer) |
+
+Lever 1 is the **single biggest mover** measured so far (−866 ms p50, −2323 ms p95 on the
+composite) and pulls the **median to 1831 ms**, but **does not close the gate alone**: the
+residual p95 (2526 ms) is still owned by `end_of_turn` (350, fixed) + `stt` finalize
+(~375–424) + `backend_first_token` (778/1599, the first-sentence LLM generation + RAG) +
+`tts_first_audio` (~200–379). Closing to ≤ 1500 ms needs lever 1 **combined** with the STT
+finalize-tail work and the residual backend warm-up follow-up (full dummy converse JIT).
+
+### Cold-start pass (lever 1 ON, no warm-up) — 2026-07-31
+
+To size the residual gate distance in real pilot conditions (first turn of a conversation),
+a **cold** pass with the same config but **lever 1 ON, warm-up OFF**
+(`VOICE_BACKEND_STREAM=1`, `VOICE_BACKEND_WARMUP=0`, `VOICE_STT_PREWARM=0`): backend restarted
+**cold** (fresh JVM → cold JIT) and the Ollama embedding **evicted** (`ollama stop
+nomic-embed-text`) so turn 1 pays the model reload. Same 5-question script (7 answered turns
+captured). Evidence:
+[`streaming-telemetry-lever1-cold-2026-07-31.jsonl`](./streaming-telemetry-lever1-cold-2026-07-31.jsonl).
+
+| Turn | `backend_first_token` (ms) | mouth-to-ear (ms) |
+|---|---:|---:|
+| **1 (cold)** | **2042.0** | **3124.4** |
+| steady (turns 2+) p50 | ~636 | ~1623 |
+
+- **The cold first turn is the p95 driver:** cold-inclusive `voice_to_first_audio` p95 =
+  **3124 ms** (= turn 1), ADR-0029 margin **−1624 ms**; the steady turns settle to ~1623 ms
+  p50 (matching the warm treatment run).
+- **The cold overhead lives in the backend slice:** turn-1 `backend_first_token` **2042 ms**
+  vs steady ~640 ms → **≈ +1400 ms** cold penalty (JVM JIT of the converse path + Ollama
+  embedding reload + first Mistral call), i.e. **≈ +1500 ms on mouth-to-ear**.
+- **Lever 1 does not reduce this penalty** — it is a per-sentence effect, and the first
+  sentence itself is delayed by the cold backend. **The turn-1 cold spike is lever 2's job**
+  (connect-time warm-up pre-pays JIT/embedding/first-LLM off the critical path). Barge-in
+  held (5 detected, 2 `tts.interrupted` mid-stream, no stuck stream).
+- **Consequence for the gate:** closing ADR-0029 (≤ 1500 ms p95) needs **lever 1 + lever 2
+  together** (lever 2 to pull the turn-1 spike from ~3.1 s toward the ~1.6–1.8 s steady band),
+  **plus** STT finalize-tail reduction to bring even the steady p95 (~1.85 s warm) under
+  1500 ms. Lever 1 alone caps the steady turns; it cannot cap the cold worst case.
+- **Combined cold pass (lever 1 + lever 2) is worthwhile but needs the TASK-BE-017 backend**
+  (`POST /warm-up`), which is not on this branch — run it from a BE-017 `git worktree` as the
+  lever-2 pass did, lever 1 ON in both arms, comparing turn-1 cold with warm-up OFF vs ON.
+
+### Combined cold pass (lever 1 + lever 2 warm-up) — 2026-07-31
+
+Run against the **TASK-BE-017 backend** (`POST /warm-up` + `converse-stream`) from a
+`git worktree`, **lever 1 ON in both arms**, cold backend (fresh JVM) + Ollama embedding
+evicted before each. **Treatment** = warm-up ON (`VOICE_BACKEND_WARMUP=1`,
+`VOICE_STT_PREWARM=1`); **control** = the warm-up-OFF cold pass above (converse path is the
+same code; the BE-017 addition is the `/warm-up` endpoint, inert when OFF — stated caveat).
+Evidence:
+[`streaming-telemetry-lever1plus2-cold-warmup-2026-07-31.jsonl`](./streaming-telemetry-lever1plus2-cold-warmup-2026-07-31.jsonl).
+
+**Mechanism confirmed live against the real backend:** `voice.backend.warmup=success`
+(provider `http-backend`) fired once at connect → BE-017 `/warm-up` hit; `voice.stt.prewarm
+= hit` (`prewarm_hit=True`) on the first STT open → the pre-opened idle socket was reused on
+the first utterance (subsequent opens `cold` by design; the warmer pre-opens exactly one
+spare). No leak, no fallback.
+
+| Cold, lever 1 ON (p50 / p95, ms) | warm-up OFF | warm-up ON | Δ p95 |
+|---|---:|---:|---:|
+| `backend_first_token` | 670.3 / **2042.0** | 733.4 / **1052.2** | **−990** |
+| `stt` | 382.7 / 721.1 | 394.8 / 534.8 | −186 |
+| `tts_first_audio` | 357.0 / 381.2 | 348.7 / 362.8 | −18 |
+| **mouth-to-ear** (`voice_to_first_audio`) | 1623.2 / **3124.4** | 1676.2 / **2142.0** | **−982** |
+| turn-1 cold backend spike | 2042 ms | **eliminated** (max 1052) | — |
+| ADR-0029 margin @ p95 | −1624.4 | **−642.0** | +982 |
+
+- **Warm-up kills the cold-start spike:** with it ON, the first *answered* turn is already in
+  the warm band (backend 877 ms / m2e 1979 ms) and the whole sample's backend max is
+  **1052 ms** vs **2042 ms** without it — mouth-to-ear p95 **3124 → 2142 ms (−982 ms)**.
+- **p50 is flat** (both arms are warm steady-state); the win is entirely on **p95** (the cold
+  worst case), exactly as lever 2 is designed — matching the earlier warm lever-2 finding
+  (turn-1-only effect).
+- **Still FAIL on ADR-0029:** combined cold m2e p95 **2142 ms > 1500 ms** (margin −642 ms).
+  Levers 1 + 2 remove the cold spike and cap steady turns, but the residual ~640 ms lives in
+  `end_of_turn` (350, fixed) + `stt` finalize (395/535) + `backend_first_token` first-sentence
+  generation (733/1052). **Closing the gate now needs the STT finalize-tail reduction**
+  (partial-final overlap) **and/or shortening the first-sentence backend generation** — those
+  are the last levers, not warm-up.
+- **Caveat:** turns 1–2 of the treatment were silences (`stt.unavailable`), so the literal
+  "turn 1" answered figure is the 3rd interaction; the warm-up had already fired at connect,
+  so every answered turn benefits and none shows a cold spike — the mechanism proof holds.
+
+### Verdict — GO to enable the flag on the pilot channel
+
+- **TASK-WEB-020 accepted, deployable:** the streaming path fires on every turn, delivers a
+  measured **−658 ms median** on its target slice and **−866 ms median mouth-to-ear**
+  (within/above the −700–900 ms expectation), preserves DEC-002 (5/5 grounded), keeps
+  filler coherence (no double-speak) and barge-in, with correct US-036 telemetry.
+- **Enable `VOICE_BACKEND_STREAM=1` in the pilot deployment** — it is a strict improvement
+  with no observed regression and no DEC-002 risk. Keep the **code default OFF** until a
+  larger warm+cold sample confirms stability (this pass is n=5 warm on a co-located host).
+- **Gate status unchanged:** ADR-0029 (≤ 1500 ms p95) is **not yet met**; lever 1 is
+  necessary but not sufficient. Combine with STT finalize-tail reduction + the lever-2
+  full-converse warm-up follow-up to attempt closure.
+
 ## Component Findings
 | Brick | Status | Findings | Next action |
 |---|---|---|---|

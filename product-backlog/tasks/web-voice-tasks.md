@@ -2032,8 +2032,55 @@ implements lever 1), ADR-0013 (backend SSE guarded-sentence streaming), DEC-002 
 **Depends on:** TASK-WEB-014 (live baseline — optimize against a real measurement), TASK-BE-017
 (backend warm-up + vetted-stream contract confirmation for voice consumption)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (Sprint 10, branch `task/TASK-WEB-020-stream-first-sentence` off
-`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 1) per user decision 2026-07-29.
+**Status:** ✅ Validated by user (2026-07-31) — checks re-run green (unittest **462** /
+behave **13·36·169**); **merge-ready** (merge on explicit request). Implemented + **warm &
+cold live** validated — **GO to enable `VOICE_BACKEND_STREAM=1` on pilot, code default stays
+OFF** (Sprint 10, branch `task/TASK-WEB-020-first-sentence-stream` off
+`feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 1) per user decision
+2026-07-29.
+Cold + combined follow-up passes (2026-07-31, evidence in
+`docs/qa/streaming-voice-qa-report.md`): cold turn-1 penalty ≈ +1400 ms in the backend slice
+(m2e p95 3124 ms); with lever 2 warm-up ON (BE-017) the cold spike is eliminated
+(`backend_first_token` p95 2042 → 1052 ms, m2e p95 3124 → 2142 ms). **ADR-0029 gate still
+FAIL even with levers 1+2** (m2e p95 2142 > 1500) — residual ~640 ms handed to the next
+levers **TASK-STT-014** (STT finalize-tail) and **TASK-BE-020** (first-sentence backend
+generation).
+Runtime built 2026-07-30 behind the default-off flag `VOICE_BACKEND_STREAM` (opt-in):
+- **Backend SSE contract confirmed** = ADR-0037 point 2(a), stronger. `ConverseStreamSession`
+  emits `chunk`/`done`/`error`; `GuardedSentenceEmitter` grounds + guardrail-vets **each
+  sentence before emit** and sends the safe hand-off as a terminal `chunk` — DEC-002 holds
+  per sentence, no backend change needed.
+- **Confidence decision (Architecture + Product, ticket Open Question): option A.** The
+  terminal `done` confidence is advisory (grounded low-confidence answers stay spoken,
+  logged `voice.backend.stream.low_confidence`; `grounded=false` → `degraded` while still
+  voicing the backend hand-off). `error`/empty/mid-stream fault → same safe fallback as the
+  blocking path.
+- **Seam:** `conversation_backend/streaming.py` (`AnswerStreamEvent`, `parse_sse_events`,
+  `StreamControl`, `StreamingBackendAnswerPort`); `HttpBackendAdapter.answer_stream` (lazy
+  stdlib SSE, derives `converse-stream` sibling, never raises out / never leaks the key);
+  `voice_pipeline/streaming_answer.py` (`StreamedAnswerRunner`) pushes one `TextFrame` per
+  vetted sentence (streaming TTS synthesizes each — TASK-WEB-004, unchanged); filler settled
+  on the first sentence (no double-speak). Capability-gated: a backend without `answer_stream`
+  stays blocking.
+- **Barge-in:** `StreamControl.abort()` sets stop + closes the socket, `CancelledError`
+  re-raised, `voice.backend.stream.interrupted` emitted — no post-cancel speech, no leak.
+- **Telemetry (US-036):** `backend.first_token` = first sentence, `backend.request` = total;
+  `voice.backend.streamed` (sentences/outcome/confidence).
+- **Coverage:** `tests/test_streaming_answer.py`, extended `tests/test_http_backend.py`,
+  `features/first_sentence_streaming.feature`. Full suite green (unittest 462, behave 13·36·169).
+- **Live before/after (warm, 2026-07-30, real backend, same warm backend both runs, only
+  `VOICE_BACKEND_STREAM` toggled, n=5):** `voice.backend.streamed=success` 5/5 (all
+  `grounded=true`, DEC-002 held), `backend_first_token` p50 **1435.9 → 777.6 ms (−658)** /
+  p95 3481.5 → 1599.0, **mouth-to-ear p50 2696.9 → 1830.6 ms (−866)** / p95 4848.7 → 2526.1.
+  Fillers 4 → 1 (no double-speak), barge-in 4/4 OK. Within/above the −700–900 ms expectation.
+  Evidence: `docs/qa/streaming-voice-qa-report.md` "Live Lever-1 Pass" +
+  `docs/qa/streaming-telemetry-lever1-{control,treatment}-2026-07-30.jsonl`.
+- **ADR-0029 gate:** still **FAIL** (treatment m2e p95 2526 ms > 1500) but median pulled to
+  1831 ms — lever 1 is the biggest single mover, necessary but not sufficient alone; combine
+  with STT finalize-tail + lever-2 full-converse warm-up to attempt closure.
+- **Verdict — GO to enable `VOICE_BACKEND_STREAM=1` on the pilot channel** (strict
+  improvement, no regression, no DEC-002 risk); keep the **code default OFF** until a larger
+  warm+cold sample. Merge only on explicit user request.
 **Priority:** High
 
 ### Objective

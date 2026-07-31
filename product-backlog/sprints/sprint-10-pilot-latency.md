@@ -75,12 +75,27 @@ slowest turns without skewing `tts_first_audio`. Write-up + evidence:
 |---|---|---|---|
 | TASK-WEB-014 | True mouth-to-ear latency instrumentation (already merged) — **closure**: warm live sample vs real backend + adversarial/QA against the ADR-0029 gate | Measure | **Live sample captured 2026-07-29**: mouth-to-ear p95 ≈ 4.1–4.4 s → **ADR-0029 gate FAIL** (NO-GO as-is); fix path = WEB-015 levers 1 & 2. Formal adversarial/QA sign-off pending |
 | TASK-WEB-015 | Perceived-latency optimization levers — backend-stream-to-TTS (first sentence), connect-time STT/LLM warm-up, end-of-turn hold tuning | Optimize | **Lever 3 done + live-accepted** (−150 ms, 0 false-cut, tuned default 350 ms). Levers 1 & 2 **split out** into TASK-WEB-020 / TASK-WEB-021 (+ backend TASK-BE-017) on 2026-07-29 |
-| TASK-WEB-020 | Lever 1 — stream the backend answer to TTS on the first vetted sentence (consume `converse-stream` SSE instead of blocking `/converse`) | Optimize | To do — backend stream already DEC-002-safe per sentence; feature-flagged; depends on TASK-BE-017 + live baseline |
+| TASK-WEB-020 | Lever 1 — stream the backend answer to TTS on the first vetted sentence (consume `converse-stream` SSE instead of blocking `/converse`) | Optimize | **✅ Validated by user 2026-07-31, checks re-run green (unittest 462 / behave 13·36·169) → merge-ready (merge on explicit request). GO to enable `VOICE_BACKEND_STREAM=1` on pilot, code default OFF.** Per-sentence DEC-002 confirmed (5/5 grounded); confidence = option A; barge-in aborts + closes socket; `backend.first_token` now = first sentence. **Warm 2026-07-30:** `backend_first_token` p50 −658 ms, **m2e p50 2696.9 → 1830.6 ms (−866)** / p95 4848.7 → 2526.1; fillers 4→1. **Cold + combined 2026-07-31:** warm-up (lever 2) eliminates the cold spike (m2e p95 3124 → 2142). **ADR-0029 gate still FAIL even with levers 1+2** (m2e p95 2142 > 1500) — residual ~640 ms → next levers **TASK-STT-014** + **TASK-BE-020**. Evidence: `streaming-voice-qa-report.md` (Live Lever-1 / Cold / Combined passes) |
 | TASK-WEB-021 | Lever 2 — connect-time warm-up of the STT session + first LLM/embedding call (mirror `TtsSessionWarmer`) | Optimize | **Runtime implemented 2026-07-29, adversarial review fixes applied** — shared `SessionWarmer` pre-opens STT at connect (no leak; **opt-in `VOICE_STT_PREWARM=1`, off by default**) + non-blocking `backend.warm_up()` trigger (`POST /warm-up`, `VOICE_BACKEND_WARMUP` on); telemetry `voice.backend.warmup` + `voice.stt.prewarm`; unittest 442 / behave 33 green. **Live turn-1 sample 2026-07-30** (real backend via BE-017 worktree): warmup=success + prewarm=hit (Gradium keeps idle socket, no fallback/leak); backend cold penalty bounded +448 ms→~300 ms residual (8.5 s cold outlier avoided); m2e p95 −390 ms (noisy); **turn-1-only, ADR-0029 gate still needs lever 1**. Follow-up: warm full converse path. **Validated by user 2026-07-30, checks re-run green (unittest 442 / behave 12·33·154) → merge-ready (merge on explicit request)** |
 | TASK-BE-017 | Backend support for the levers — warm-up path (lever 2) + vetted-stream contract test / optional early confidence (lever 1) | Enable | To do — backend dependency of TASK-WEB-020/021 |
 | TASK-WEB-019 | Spoken filler / acknowledgement while the answer is being prepared (delivers US-020) | Perceived latency | Integrated into `feat/sprint-10-pilot-latency` (2026-07-29): adversarial review 92/100, QA GO (`docs/qa/task-web-019-filler-qa-report.md`); sprint→delivery merge at sprint closure on user request |
 
 Full ticket details live in `tasks/web-voice-tasks.md`.
+
+## Next Levers (future improvement — post levers 1+2)
+
+Levers 1 (TASK-WEB-020) + 2 (TASK-WEB-021) are validated but **do not close ADR-0029**: the
+combined cold m2e p95 is **2142 ms > 1500 ms** (margin −642 ms). The residual is no longer in
+warm-up; it lives in two slices, each getting its own future-improvement ticket:
+
+| Ticket | Residual slice it targets | Measured residual (2026-07-31) | Lever |
+|---|---|---|---|
+| **TASK-STT-014** | `stt` finalize tail (post-end-of-turn) | p95 ~535 ms (cold) / ~424 ms (warm) | Overlap partial→final / tune the Gradium flush so the transcript is committed sooner without dropping the trailing word |
+| **TASK-BE-020** | `backend_first_token` (first vetted sentence generation) | p50 ~733 ms / p95 ~1052 ms | Shorten time-to-first-vetted-sentence backend-side (shorter/streamed first sentence, prompt/generation tuning, RAG/guardrail first-hit cost) |
+
+Both are **out of Sprint 10 scope** (this sprint delivered levers 1–3 + filler); they are the
+identified path to attempt the ADR-0029 gate closure in a later latency pass. Details:
+`tasks/stt-followup-tasks.md` (TASK-STT-014), `tasks/backend-hardening-tasks.md` (TASK-BE-020).
 
 ## Out Of Scope
 
