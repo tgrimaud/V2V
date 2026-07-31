@@ -488,6 +488,47 @@ captured). Evidence:
   (`POST /warm-up`), which is not on this branch — run it from a BE-017 `git worktree` as the
   lever-2 pass did, lever 1 ON in both arms, comparing turn-1 cold with warm-up OFF vs ON.
 
+### Combined cold pass (lever 1 + lever 2 warm-up) — 2026-07-31
+
+Run against the **TASK-BE-017 backend** (`POST /warm-up` + `converse-stream`) from a
+`git worktree`, **lever 1 ON in both arms**, cold backend (fresh JVM) + Ollama embedding
+evicted before each. **Treatment** = warm-up ON (`VOICE_BACKEND_WARMUP=1`,
+`VOICE_STT_PREWARM=1`); **control** = the warm-up-OFF cold pass above (converse path is the
+same code; the BE-017 addition is the `/warm-up` endpoint, inert when OFF — stated caveat).
+Evidence:
+[`streaming-telemetry-lever1plus2-cold-warmup-2026-07-31.jsonl`](./streaming-telemetry-lever1plus2-cold-warmup-2026-07-31.jsonl).
+
+**Mechanism confirmed live against the real backend:** `voice.backend.warmup=success`
+(provider `http-backend`) fired once at connect → BE-017 `/warm-up` hit; `voice.stt.prewarm
+= hit` (`prewarm_hit=True`) on the first STT open → the pre-opened idle socket was reused on
+the first utterance (subsequent opens `cold` by design; the warmer pre-opens exactly one
+spare). No leak, no fallback.
+
+| Cold, lever 1 ON (p50 / p95, ms) | warm-up OFF | warm-up ON | Δ p95 |
+|---|---:|---:|---:|
+| `backend_first_token` | 670.3 / **2042.0** | 733.4 / **1052.2** | **−990** |
+| `stt` | 382.7 / 721.1 | 394.8 / 534.8 | −186 |
+| `tts_first_audio` | 357.0 / 381.2 | 348.7 / 362.8 | −18 |
+| **mouth-to-ear** (`voice_to_first_audio`) | 1623.2 / **3124.4** | 1676.2 / **2142.0** | **−982** |
+| turn-1 cold backend spike | 2042 ms | **eliminated** (max 1052) | — |
+| ADR-0029 margin @ p95 | −1624.4 | **−642.0** | +982 |
+
+- **Warm-up kills the cold-start spike:** with it ON, the first *answered* turn is already in
+  the warm band (backend 877 ms / m2e 1979 ms) and the whole sample's backend max is
+  **1052 ms** vs **2042 ms** without it — mouth-to-ear p95 **3124 → 2142 ms (−982 ms)**.
+- **p50 is flat** (both arms are warm steady-state); the win is entirely on **p95** (the cold
+  worst case), exactly as lever 2 is designed — matching the earlier warm lever-2 finding
+  (turn-1-only effect).
+- **Still FAIL on ADR-0029:** combined cold m2e p95 **2142 ms > 1500 ms** (margin −642 ms).
+  Levers 1 + 2 remove the cold spike and cap steady turns, but the residual ~640 ms lives in
+  `end_of_turn` (350, fixed) + `stt` finalize (395/535) + `backend_first_token` first-sentence
+  generation (733/1052). **Closing the gate now needs the STT finalize-tail reduction**
+  (partial-final overlap) **and/or shortening the first-sentence backend generation** — those
+  are the last levers, not warm-up.
+- **Caveat:** turns 1–2 of the treatment were silences (`stt.unavailable`), so the literal
+  "turn 1" answered figure is the 3rd interaction; the warm-up had already fired at connect,
+  so every answered turn benefits and none shows a cold spike — the mechanism proof holds.
+
 ### Verdict — GO to enable the flag on the pilot channel
 
 - **TASK-WEB-020 accepted, deployable:** the streaming path fires on every turn, delivers a
