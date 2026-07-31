@@ -455,6 +455,39 @@ residual p95 (2526 ms) is still owned by `end_of_turn` (350, fixed) + `stt` fina
 `tts_first_audio` (~200–379). Closing to ≤ 1500 ms needs lever 1 **combined** with the STT
 finalize-tail work and the residual backend warm-up follow-up (full dummy converse JIT).
 
+### Cold-start pass (lever 1 ON, no warm-up) — 2026-07-31
+
+To size the residual gate distance in real pilot conditions (first turn of a conversation),
+a **cold** pass with the same config but **lever 1 ON, warm-up OFF**
+(`VOICE_BACKEND_STREAM=1`, `VOICE_BACKEND_WARMUP=0`, `VOICE_STT_PREWARM=0`): backend restarted
+**cold** (fresh JVM → cold JIT) and the Ollama embedding **evicted** (`ollama stop
+nomic-embed-text`) so turn 1 pays the model reload. Same 5-question script (7 answered turns
+captured). Evidence:
+[`streaming-telemetry-lever1-cold-2026-07-31.jsonl`](./streaming-telemetry-lever1-cold-2026-07-31.jsonl).
+
+| Turn | `backend_first_token` (ms) | mouth-to-ear (ms) |
+|---|---:|---:|
+| **1 (cold)** | **2042.0** | **3124.4** |
+| steady (turns 2+) p50 | ~636 | ~1623 |
+
+- **The cold first turn is the p95 driver:** cold-inclusive `voice_to_first_audio` p95 =
+  **3124 ms** (= turn 1), ADR-0029 margin **−1624 ms**; the steady turns settle to ~1623 ms
+  p50 (matching the warm treatment run).
+- **The cold overhead lives in the backend slice:** turn-1 `backend_first_token` **2042 ms**
+  vs steady ~640 ms → **≈ +1400 ms** cold penalty (JVM JIT of the converse path + Ollama
+  embedding reload + first Mistral call), i.e. **≈ +1500 ms on mouth-to-ear**.
+- **Lever 1 does not reduce this penalty** — it is a per-sentence effect, and the first
+  sentence itself is delayed by the cold backend. **The turn-1 cold spike is lever 2's job**
+  (connect-time warm-up pre-pays JIT/embedding/first-LLM off the critical path). Barge-in
+  held (5 detected, 2 `tts.interrupted` mid-stream, no stuck stream).
+- **Consequence for the gate:** closing ADR-0029 (≤ 1500 ms p95) needs **lever 1 + lever 2
+  together** (lever 2 to pull the turn-1 spike from ~3.1 s toward the ~1.6–1.8 s steady band),
+  **plus** STT finalize-tail reduction to bring even the steady p95 (~1.85 s warm) under
+  1500 ms. Lever 1 alone caps the steady turns; it cannot cap the cold worst case.
+- **Combined cold pass (lever 1 + lever 2) is worthwhile but needs the TASK-BE-017 backend**
+  (`POST /warm-up`), which is not on this branch — run it from a BE-017 `git worktree` as the
+  lever-2 pass did, lever 1 ON in both arms, comparing turn-1 cold with warm-up OFF vs ON.
+
 ### Verdict — GO to enable the flag on the pilot channel
 
 - **TASK-WEB-020 accepted, deployable:** the streaming path fires on every turn, delivers a
