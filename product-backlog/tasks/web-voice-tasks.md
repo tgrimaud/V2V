@@ -2227,8 +2227,9 @@ dummy converse to warm those too. Lever 2 is a **turn-1-only** win and does **no
 ADR-0029 gate alone — **lever 1 (TASK-WEB-020) remains decisive**. STT pre-warm kept **opt-in**
 (positive but small live sample, n=2), ready to flip default-on after a larger sample.
 **Validated by the user 2026-07-30**; checks re-run green (unittest **442** / behave
-**12 features · 33 scenarios · 154 steps**). **Status: merge-ready** — merge into
-`feat/sprint-10-pilot-latency` only on the user's explicit request.
+**12 features · 33 scenarios · 154 steps**). **Status: ✅ Merged into
+`feat/sprint-10-pilot-latency`** (2026-07-31, merge commit `120ea12`, `--no-ff`); ticket
+branch deleted after merge.
 **Priority:** High
 
 ### Objective
