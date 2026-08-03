@@ -23,7 +23,7 @@ deferred: per the 2026-08-03 decision, **billing/identity → Sprint 12** and
 
 ## Status
 
-**Status:** 🚧 **Planned / not started** (defined 2026-08-03). Scope locked with
+**Status:** 🚧 **In progress** (started 2026-08-03; defined 2026-08-03). Scope locked with
 the user: **Docker images + docker-compose on the app VMs**, **GitHub Actions
 build/test/image + Ansible/SSH deploy**, **Redis-backed conversation memory**.
 Several infrastructure inputs are still open (egress, embeddings placement, TLS,
@@ -74,7 +74,7 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 | Ticket | Title | Role | Status |
 |---|---|---|---|
 | TASK-DEPLOY-001 | Backend Java Docker image (multi-stage JDK17→JRE17, non-root, `HEALTHCHECK /actuator/health`, env-driven) | Package | To do |
-| TASK-DEPLOY-002 | Voice bridge Python Docker image (heavy deps `pipecat`/`aiortc`/`opencv`, `--host 0.0.0.0`, healthcheck `/`, non-root) | Package | To do |
+| TASK-DEPLOY-002 | Voice bridge Python Docker image (heavy deps `pipecat`/`aiortc`/`opencv`, `--host 0.0.0.0`, healthcheck `/`, non-root) | Package | 🚧 Implemented (2026-08-03) — image build + runtime smoke validated (binds `0.0.0.0:8090`, `GET /` 200, non-root); pending adversarial review + QA |
 | TASK-BE-021 | Redis-backed conversation memory (`RedisConversationMemoryAdapter`, `CONVERSATION_STORE=redis`) so the 2 backends behind VIP `.11` share session state — activates ADR-0008 | Enable (backend) | To do |
 | TASK-INFRA-001 | docker-compose deploy stacks + `.env` templates per tier (backend→Postgres `.102`/Redis `.107`/embeddings/Mistral; voice→backend VIP `.11`/Gradium; Redis stack) | Wire | To do |
 | TASK-INFRA-002 | HAProxy + Keepalived config for the two VIPs (voice `.10`→t01/t02 TLS edge, backend `.11`→t03/t04), health checks, finalized ports, VRRP failover — coordinated with the platform team | Wire (infra) | To do |
