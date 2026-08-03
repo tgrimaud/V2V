@@ -127,8 +127,10 @@ docker-compose consumes. Defaults below are the code defaults - override on tst.
 | `OLLAMA_BASE_URL` | embeddings host (TBD) | default `http://localhost:11434` |
 | `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) |
 | `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only) |
-| `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default in-memory |
-| Redis connection | `192.168.0.107:6379` | new for TASK-BE-021 |
+| `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default `memory` (in-process) |
+| `REDIS_HOST` / `REDIS_PORT` | `192.168.0.107` / `6379` | Redis for shared memory (TASK-BE-021) |
+| `REDIS_PASSWORD` / `REDIS_TIMEOUT` | from secrets / `2s` | Redis auth (if enabled) + command timeout |
+| `CONVERSATION_MEMORY_TTL_SECONDS` | `3600` | sliding idle TTL of a conversation's Redis history |
 | `OTEL_*` | unset (opt-in) | OTLP off by default (ADR-0028) |
 
 Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).

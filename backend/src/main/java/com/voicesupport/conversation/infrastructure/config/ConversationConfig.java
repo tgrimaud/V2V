@@ -19,12 +19,19 @@ import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
+import com.voicesupport.conversation.infrastructure.adapter.out.memory.ConversationTurnStore;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
+import com.voicesupport.conversation.infrastructure.adapter.out.memory.RedisConversationMemoryAdapter;
+import com.voicesupport.conversation.infrastructure.adapter.out.memory.RedisConversationTurnStoreAdapter;
 import com.voicesupport.shared.observability.BackendTelemetry;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -90,10 +97,25 @@ public class ConversationConfig {
                 groundQueryUseCase, answerGeneratorPort, outputGuardrail, languageDetector, backendTelemetry);
     }
 
+    // Conversation memory backend (TASK-BE-021, ADR-0008). Default `memory` = process-local
+    // (single-node dev/tests); `redis` = shared across the backend instances behind the pilot VIP
+    // so a conversation keeps context when turns land on different instances. StringRedisTemplate is
+    // resolved lazily (ObjectProvider) so `memory` mode never requires a Redis bean. Selected via
+    // CONVERSATION_STORE.
     @Bean
     public ConversationMemoryPort conversationMemoryPort(
+            @Value("${voice-support.conversation.memory.store:memory}") String store,
             @Value("${voice-support.conversation.memory.max-turns:6}") int maxTurns,
-            @Value("${voice-support.conversation.memory.max-conversations:10000}") int maxConversations) {
+            @Value("${voice-support.conversation.memory.max-conversations:10000}") int maxConversations,
+            @Value("${voice-support.conversation.memory.ttl-seconds:3600}") long ttlSeconds,
+            ObjectProvider<StringRedisTemplate> redisTemplateProvider,
+            ObjectMapper objectMapper) {
+        if ("redis".equalsIgnoreCase(store)) {
+            ConversationTurnStore turnStore =
+                    new RedisConversationTurnStoreAdapter(redisTemplateProvider.getObject());
+            return new RedisConversationMemoryAdapter(
+                    turnStore, objectMapper, maxTurns, Duration.ofSeconds(ttlSeconds));
+        }
         return new InMemoryConversationMemoryAdapter(maxTurns, maxConversations);
     }
 

@@ -7,6 +7,16 @@ spring:
     username: ${DB_USERNAME:voicesupport}
     password: ${DB_PASSWORD:voicesupport}
 
+  # Redis connection for the shared conversation memory (TASK-BE-021, ADR-0008). Only used when
+  # voice-support.conversation.memory.store=redis (CONVERSATION_STORE=redis); the connection factory
+  # is created lazily and never contacted in the default in-memory mode, so offline runs are unchanged.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -164,10 +174,18 @@ voice-support:
     api-key: ${CONVERSATION_API_KEY:}
     memory:
       # Short conversation memory (TASK-BE-006): prior turns per conversation placed in the
-      # LLM system message (current turn excluded). Process-local; a shared store is a later
-      # concern. max-turns = retained exchanges/conversation; max-conversations = LRU cap.
+      # LLM system message (current turn excluded). max-turns = retained exchanges/conversation;
+      # max-conversations = LRU cap (in-memory store only).
       max-turns: ${CONVERSATION_MEMORY_MAX_TURNS:6}
       max-conversations: ${CONVERSATION_MEMORY_MAX_CONVERSATIONS:10000}
+      # Memory backend (TASK-BE-021, ADR-0008): `memory` (default, process-local, single-node) or
+      # `redis` (shared across the backend instances behind the pilot VIP). Redis MUST be selected
+      # for a multi-instance deployment, otherwise consecutive turns routed to different instances
+      # lose conversation context.
+      store: ${CONVERSATION_STORE:memory}
+      # Sliding idle TTL (seconds) for a conversation's Redis history; refreshed on every append.
+      # Ignored by the in-memory store.
+      ttl-seconds: ${CONVERSATION_MEMORY_TTL_SECONDS:3600}
   llm:
     # LLM wording provider (DEC-011), selectable without any domain change:
     #   mistral-api = development default (mistral-small-latest)
