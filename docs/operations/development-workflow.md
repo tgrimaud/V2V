@@ -256,6 +256,11 @@ Check, at minimum:
 - the repo-root `.env` documentation when a new configuration variable was
   introduced (no `.env.example` is committed on this branch — document the
   variable in `voice-agent/README.md` / development guide instead).
+- **deployment/release docs** when packaging, environment topology, ports or
+  release steps change: the pilot environment inventory is
+  `docs/operations/deployment-eir-ai4cc-tst.md`, the deploy/rollback runbook is
+  `docs/operations/release-process.md` (authored in Sprint 11, TASK-OPS-002), and
+  the deployment decision is `docs/architecture/adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md`.
 - **Cross-doc sweep:** a ticket that changes a *fact* (e.g. "placeholder audio" →
   "real audio", "no provider" → "Gradium connected") must `rg` the ticket id and
   the changed fact across `docs/` + `product-backlog/` and fix every doc that

@@ -5,6 +5,16 @@
 > which only contains the Python STT-validation slice. The WebSocket bridge listed
 > as "legacy/fallback" was removed on this branch (preserved on `main`).
 
+> **Concrete realization (2026-08-03):** the first remote environment,
+> **eir-ai4cc-tst**, realizes this generic target on **bare Rocky EL9 VMs with
+> HAProxy/Keepalived** (not Kubernetes). See
+> [`../operations/deployment-eir-ai4cc-tst.md`](../operations/deployment-eir-ai4cc-tst.md)
+> for the environment inventory and
+> [`adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md`](adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md)
+> for the deployment decision (Docker + docker-compose, Redis-backed shared
+> memory, GitHub Actions + Ansible release). Kubernetes stays the longer-term
+> evolution, not the pilot deployment.
+
 ## Objective
 
 This document describes a V1 infrastructure target for running the Voice Support
