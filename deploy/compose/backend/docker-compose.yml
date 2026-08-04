@@ -39,9 +39,12 @@ services:
       # Only safe where Redis is actually reachable; leaving it true in memory mode
       # flips /actuator/health to DOWN (TASK-BE-021 review).
       REDIS_HEALTH_ENABLED: "${REDIS_HEALTH_ENABLED:-true}"
-      # --- Knowledge base sources (bundled in the image working dir) ---
-      KB_MARKDOWN_PATH: "${KB_MARKDOWN_PATH:-/app/knowledge-base}"
-      KB_CSV_PATH: "${KB_CSV_PATH:-/app/articles.csv}"
+      # --- Knowledge base sources (mounted read-only, see volumes below) ---
+      # The image ships only the jar, so the KB assets are provided at deploy time
+      # under KB_HOST_PATH and synced into pgvector on first run (POST /api/knowledge/sync
+      # or the scheduler). Paths point inside the mounted directory.
+      KB_MARKDOWN_PATH: "${KB_MARKDOWN_PATH:-/app/kb-assets/knowledge-base}"
+      KB_CSV_PATH: "${KB_CSV_PATH:-/app/kb-assets/articles.csv}"
       # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
       OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}"
@@ -67,3 +70,8 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    # KB assets provided at deploy time (Ansible drops knowledge-base/ + articles.csv
+    # under KB_HOST_PATH). Read-only, directory bind mount (safe if absent: Docker
+    # creates an empty dir and the KB sync simply finds nothing until populated).
+    volumes:
+      - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro"

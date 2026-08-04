@@ -216,7 +216,11 @@ image ref (`${*_IMAGE}:${IMAGE_TAG}`), healthchecks mirroring the image `HEALTHC
 `restart: unless-stopped`, per-flavor resource limits, json-file log rotation. All three
 validated with `docker compose config` (v29.1.3). Open inputs (registry, embeddings host,
 egress, STUN/TLS, DB/Redis creds) surfaced as documented `.env.example` placeholders rather
-than guessed. Pending adversarial review ≥90% + QA.
+than guessed. **Adversarial review 93/100 (Pass, 2026-08-04)** — blocking fix applied: the
+backend image ships only the jar, so the KB is now mounted read-only from `KB_HOST_PATH`
+(`/app/kb-assets`, directory bind) and synced into pgvector on first run, instead of pointing
+at non-existent image paths. Residual (accepted, pilot): secrets via `docker inspect`,
+`0.0.0.0` publish gated by INFRA-002, `REDIS_HEALTH_ENABLED=true` tier-scoped. Pending QA.
 **Priority:** High
 **Branch:** `task/TASK-INFRA-001-compose-stacks`
 

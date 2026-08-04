@@ -46,6 +46,10 @@ Rollback = set `IMAGE_TAG` to the previous version and `docker compose up -d`
   logs use `json-file` with rotation (10 MB × 5).
 - **API key parity:** the voice `VOICE_BACKEND_API_KEY` MUST equal the backend
   `CONVERSATION_API_KEY`; the backend and Redis `REDIS_PASSWORD` MUST match.
+- **Knowledge base:** the backend image ships only the jar, so the KB assets are
+  mounted read-only from `KB_HOST_PATH` (must contain `knowledge-base/` + `articles.csv`)
+  and synced into pgvector on first run (`POST /api/knowledge/sync` or the scheduler).
+  Alternative for full reproducibility: bundle the KB in the image (DEPLOY-001 follow-up).
 
 ## Depends on open inputs
 
