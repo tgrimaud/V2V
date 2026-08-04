@@ -171,19 +171,27 @@ Full runbook: `docs/operations/release-process.md` (TASK-OPS-002).
 
 ## PostgreSQL bootstrap
 
-On `vlb-ai4cc-t01` (`.102`), Postgres runs as a podman pod:
+Confirmed 2026-08-04: **PostgreSQL 18.4, single instance** on `vlb-ai4cc-t01`
+(`.102`), root access via `podpg`; the `vector` extension is available to install.
+DB name / app user are `voicesupport` (matches the backend defaults and the Ansible
+`db_url`/`db_username`); the app-user password is `vault_db_password` (ansible-vault).
+Run once as superuser:
 
-```
+```sql
 podpg
 psql
->> create database voicesupport;
+>> CREATE DATABASE voicesupport;
 >> \c voicesupport
->> CREATE EXTENSION vector;
+>> CREATE EXTENSION vector;                                   -- superuser
+>> CREATE USER voicesupport WITH PASSWORD '<vault_db_password>';
+>> GRANT ALL PRIVILEGES ON DATABASE voicesupport TO voicesupport;
+>> GRANT ALL ON SCHEMA public TO voicesupport;                -- PG15+ locks public
 ```
 
 The backend runs with `ddl-auto: update` and `initialize-schema: true`, so the
-`vector_store` (768 dim) and JPA tables are created on first start. Confirm the
-DB name / user / password to standardize with the secrets.
+`vector_store` (768 dim) and JPA tables are created on first start by the app user
+(hence the `SCHEMA public` grant). Reveal the real password with
+`ansible-vault view group_vars/all/vault.yml` in `deploy/ansible/`.
 
 ## Open inputs needed
 
@@ -205,11 +213,14 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
    the voice VIP (`.prod.lan` / `10.195.59.39`).
 5. **Container registry** reachable from the VMs: GHCR (GitHub) vs an internal
    Nexus/Artifactory, and its credentials.
-6. **Secrets store and delivery.** Where `MISTRAL_API_KEY`, `GRADIUM_API_KEY`,
-   `CONVERSATION_API_KEY`, DB and Redis credentials live, and how they reach the
-   VMs (GitHub Actions secrets -> Ansible vault -> `.env`).
-7. **PostgreSQL** database name / user / password to create on `.102`, and
-   confirmation the `vector` extension install is permitted.
+6. ~~**Secrets store and delivery**~~ ✅ **Resolved (2026-08-04):** local
+   **ansible-vault** at `deploy/ansible/group_vars/all/vault.yml` (encrypted, master
+   password in git-ignored `.vault_pass`, auto-loaded via `ansible.cfg`). Mistral +
+   Gradium keys sourced from the local `.env`; `CONVERSATION_API_KEY` and the DB
+   password generated. Ansible renders each tier's `.env` from it at deploy.
+7. ~~**PostgreSQL**~~ ✅ **Resolved (2026-08-04):** PostgreSQL **18.4**, single
+   instance on `.102`; DB + app user `voicesupport` (password = `vault_db_password`);
+   `CREATE EXTENSION vector` available. Bootstrap SQL in the PostgreSQL section above.
 8. **Redis** run mode on `.107` (Docker container vs native), auth, and whether
    TLS is required on the internal link.
 9. **Frontend.** Is the voice bridge's built-in mic UI (`index.html`) sufficient
