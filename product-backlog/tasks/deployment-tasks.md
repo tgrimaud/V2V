@@ -19,7 +19,14 @@ Prefixes: **TASK-DEPLOY** (packaging/images), **TASK-INFRA** (infra config),
 **Related decisions:** ADR-0038, ADR-0028 (observability)
 **Depends on:** -
 **Classification:** V1 pilot deployment
-**Status:** To do (Sprint 11, branch `task/TASK-DEPLOY-001-backend-image`)
+**Status:** 🚧 Implemented (2026-08-03) on `task/TASK-DEPLOY-001-backend-image` —
+multi-stage `backend/Dockerfile` (Maven 3.9 / JDK 17 build → `eclipse-temurin:17-jre`
+runtime) + `.dockerignore`. **Image build-validated locally** (`docker build`, ~110 s):
+runs as non-root `uid=1001(app)`, fat jar 77 MB, Java 17.0.19, `EXPOSE 8080`,
+`HEALTHCHECK` on `/actuator/health` (curl installed in the runtime layer), and Spring
+Boot v3.4.1 boots from the image (Tomcat on 8080; fails only on the absent DB, proving
+env-driven `DB_URL`). No secret baked in. Pending adversarial review ≥ 90% + QA before
+merge-ready; merge on explicit user request.
 **Priority:** High
 **Branch:** `task/TASK-DEPLOY-001-backend-image`
 

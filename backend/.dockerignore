@@ -1,0 +1,17 @@
+# Keep the build context small and reproducible (TASK-DEPLOY-001).
+target/
+*.log
+
+# IDE / local tooling
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# VCS (context is the backend/ folder; git metadata is not needed in the image)
+.git/
+.gitignore
+
+# Docker artifacts themselves
+Dockerfile
+.dockerignore
