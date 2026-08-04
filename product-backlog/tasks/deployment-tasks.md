@@ -366,7 +366,15 @@ Self-hosted LLM/STT/TTS (infra-v1 GPU option) - not a pilot prerequisite.
 **Related decisions:** ADR-0038
 **Depends on:** TASK-DEPLOY-001, TASK-DEPLOY-002; registry access (open input)
 **Classification:** V1 pilot deployment (CI)
-**Status:** To do (Sprint 11, branch `task/TASK-OPS-001-github-actions-ci`)
+**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-OPS-001-github-actions-ci` — two
+workflows under `.github/workflows/`: `ci.yml` (test gate on PR + mainline/sprint/ticket
+pushes: backend `mvn test` on Temurin 17 with Maven cache; voice-agent `unittest` + `behave`
+on Python 3.12, installing `libgl1`/`libglib2.0-0` for the cv2 import like the Dockerfile)
+and `images.yml` (build + push both images to **GHCR** with `GITHUB_TOKEN` on `v*.*.*` tags,
+`latest` on the default branch, `sha-<short>` always; buildx + gha cache). Registry = GHCR by
+default (native, no extra secret); override path for an internal Nexus/Artifactory documented
+in the workflow header (open input #5). Validated with `actionlint` (clean) + YAML parse.
+Pending adversarial review ≥90% + QA.
 **Priority:** High
 **Branch:** `task/TASK-OPS-001-github-actions-ci`
 

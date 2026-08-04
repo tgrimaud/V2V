@@ -1,0 +1,63 @@
+# Test gate (TASK-OPS-001, ADR-0038). Runs the backend and voice-agent test suites
+# on every PR and on pushes to the mainline / sprint / ticket branches. Both jobs
+# must pass before a change is considered mergeable. No secrets are used here.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/restart-from-scratch
+      - "feat/**"
+      - "task/**"
+      - "fix/**"
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend (mvn test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      # Domain unit tests with manual fakes + ArchUnit; no DB / Ollama / Mistral needed.
+      - name: mvn test
+        working-directory: backend
+        run: mvn -B -ntp test
+
+  voice-tests:
+    name: Voice agent (unittest + behave)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: voice-agent/requirements.txt
+      # cv2 (opencv-python, pulled via the SmallWebRTCTransport import) needs these
+      # shared libs at import time - same packages as voice-agent/Dockerfile.
+      - name: Install cv2 system libs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+      - name: Install Python deps
+        working-directory: voice-agent
+        run: pip install -r requirements.txt
+      - name: unittest
+        working-directory: voice-agent
+        run: python -m unittest discover tests
+      - name: behave
+        working-directory: voice-agent
+        run: behave
