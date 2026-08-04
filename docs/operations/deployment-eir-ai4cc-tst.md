@@ -200,13 +200,13 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
 1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),
    and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
-2. **Internet egress from tst.** Confirm the outbound allowlist (direct or via a
-   proxy) for the destinations the pilot needs (ADR-0039): `api.mistral.ai:443`
-   (chat, runtime), the Gradium API `:443` (STT/TTS, runtime), **GHCR**
-   `ghcr.io:443` + `pkg-containers.githubusercontent.com:443` (image pulls, deploy -
-   #5), and `registry.ollama.ai:443` (one-time `nomic-embed-text` model pull at
-   deploy - or pre-seed the model to avoid it). Embedding inference needs no egress
-   (local sidecar).
+2. ~~**Internet egress from tst**~~ ✅ **Resolved (2026-08-04): DIRECT `:443`
+   egress** (no proxy) to the destinations the pilot needs (ADR-0039):
+   `api.mistral.ai` (chat, runtime), the Gradium API (STT/TTS, runtime), **GHCR**
+   `ghcr.io` + `pkg-containers.githubusercontent.com` (image pulls, deploy - #5), and
+   `registry.ollama.ai` (one-time `nomic-embed-text` model pull at deploy). No Docker
+   daemon / container proxy configuration required. Embedding inference needs no
+   egress (local sidecar).
 3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
    `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
    `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.

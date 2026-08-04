@@ -70,8 +70,8 @@ cloud round-trip. The outbound the pilot needs:
 | Backend + voice VMs | container registry (`ghcr.io` or internal) | 443 | deploy | image pulls |
 | Backend (`.105/.106`) | `registry.ollama.ai` (+ CDN) | 443 | deploy | one-time `nomic-embed-text` model pull |
 
-Egress may be **direct or via the tenant proxy**; the confirmed allowlist (and
-proxy host, if any) is the required platform input, tracked in the deployment doc.
+**Confirmed 2026-08-04: direct `:443` egress** (no proxy) to all four destinations
+on tst - no Docker/container proxy configuration required.
 
 **If Ollama-registry egress is not allowed**, pre-seed the model instead of pulling
 it: either bake `nomic-embed-text` into a custom Ollama image, or have Ansible copy
