@@ -100,6 +100,15 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!-- Redis-backed shared conversation memory (TASK-BE-021, ADR-0008): lets the pilot's two
+             backend instances behind the VIP share short conversation history (RedisConversationMemoryAdapter,
+             CONVERSATION_STORE=redis). Lettuce connection factory is created lazily and never contacted
+             in the default `memory` mode, so `mvn test` and offline startup are unchanged. BOM-managed. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Spring AI: Ollama embeddings (nomic-embed-text, 768d) + pgvector store.
              Unused auto-configurations (chat/mistral) are excluded on the main class. -->
         <dependency>
