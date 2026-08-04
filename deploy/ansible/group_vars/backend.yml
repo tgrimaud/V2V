@@ -14,9 +14,13 @@ backend_port: 8080
 db_url: "jdbc:postgresql://192.168.0.102:5432/voicesupport"
 db_username: "voicesupport"
 
-# Embeddings host (open input, TASK-INFRA-003). Point at wherever Ollama runs.
-ollama_base_url: "http://192.168.0.102:11434"
+# Embeddings (ADR-0039): Ollama nomic-embed-text CPU sidecar co-located on each
+# backend VM, reached over the compose network. The model is pulled at deploy time.
+ollama_base_url: "http://ollama:11434"
 ollama_embedding_model: "nomic-embed-text"
+ollama_image_tag: "0.5.4"
+ollama_cpus: "1.0"
+ollama_memory: "2g"
 
 # Chat LLM (Mistral cloud).
 llm_provider: "mistral-api"
@@ -33,7 +37,7 @@ redis_health_enabled: true
 # Knowledge base assets mounted read-only into the container.
 kb_host_path: "{{ compose_root }}/backend/kb-assets"
 
-# JVM / resource sizing (4 vCPU / 8 GB VM).
+# JVM / resource sizing (4 vCPU / 8 GB VM, shared with the ollama sidecar).
 java_opts: "-XX:MaxRAMPercentage=75.0"
-backend_cpus: "3.5"
-backend_memory: "6g"
+backend_cpus: "3.0"
+backend_memory: "5g"

@@ -29,9 +29,10 @@ flowchart TB
     V1["vla-t01 .103 : web_voice.server :8090"]
     V2["vla-t02 .104 : web_voice.server :8090"]
   end
-  subgraph bepool ["Backend Java - Docker"]
+  subgraph bepool ["Backend Java - Docker (+ ollama sidecar per VM)"]
     B1["vla-t03 .105 : backend :8080"]
     B2["vla-t04 .106 : backend :8080"]
+    OL["ollama nomic-embed-text (CPU sidecar, ADR-0039)"]
   end
   subgraph data [Data tier]
     PG["vlb-t01 .102 : Postgres 18 + pgvector (podman pod)"]
@@ -40,7 +41,6 @@ flowchart TB
   subgraph cloud ["Cloud APIs (egress to confirm)"]
     Mistral["Mistral (chat)"]
     Gradium["Gradium (STT/TTS)"]
-    Embed["Embeddings nomic-embed-text (placement open)"]
   end
   Browser -->|"HTTPS / WSS"| VIPvoice
   VIPvoice --> V1 & V2
@@ -50,7 +50,7 @@ flowchart TB
   B1 & B2 -->|"pgvector"| PG
   B1 & B2 -->|"shared memory"| RD
   B1 & B2 -.->|"chat"| Mistral
-  B1 & B2 -.->|"embeddings"| Embed
+  B1 & B2 -->|"embeddings (local sidecar)"| OL
 ```
 
 ## Network
@@ -99,7 +99,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Backend Java (`backend/`) | `vla-t03`/`t04` (`.105`/`.106`) | Docker + compose | Spring Boot `:8080`; RAG, guardrails, memory |
 | PostgreSQL 18 + pgvector | `vlb-t01` (`.102`) | podman pod (`podpg`) | `CREATE EXTENSION vector`; `vector_store` 768 dim |
 | Redis | `vlb-t02` (`.107`) | Docker (planned) | Shared conversation memory (ADR-0008, TASK-BE-021) |
-| Embeddings (`nomic-embed-text`) | TBD | TBD | No dedicated host provisioned - see open inputs |
+| Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | Docker (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
 | Mistral (chat), Gradium (STT/TTS) | cloud | managed | Require controlled internet egress |
 
 ## Port matrix
@@ -114,7 +114,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Backend VIP `.11` | backends `.105`/`.106` | 8080 | HTTP | LB to backend |
 | Backend | Postgres `.102` | 5432 | TCP | pgvector + JPA |
 | Backend | Redis `.107` | 6379 (confirm) | TCP | Shared session memory |
-| Backend | embeddings host | 11434 (if Ollama) | HTTP | Embeddings |
+| Backend | ollama sidecar (same VM) | 11434 | HTTP | Embeddings (compose network, not published) |
 | Backend | Mistral (cloud) | 443 | HTTPS | Chat LLM |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
 
@@ -129,7 +129,7 @@ docker-compose consumes. Defaults below are the code defaults - override on tst.
 |----------|-----------|-----------------|
 | `DB_URL` | `jdbc:postgresql://192.168.0.102:5432/<db>` | default `...localhost:5433/voicesupport` |
 | DB user / password | from secrets | default `voicesupport`/`voicesupport` |
-| `OLLAMA_BASE_URL` | embeddings host (TBD) | default `http://localhost:11434` |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` (co-located CPU sidecar, ADR-0039) | model `nomic-embed-text` (768 dim) pulled at deploy; no cloud egress for embeddings |
 | `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) |
 | `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only) |
 | `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default `memory` (in-process) |
@@ -192,11 +192,13 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
 1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),
    and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
-2. **Internet egress from tst.** Is outbound allowed to `api.mistral.ai`, the
-   Gradium API, and the container registry (for image pulls)? Via a proxy?
-3. **Embeddings placement** (drives TASK-INFRA-003): run Ollama on CPU
-   (co-located on the backend VMs or the DB VM) vs switch to Mistral embeddings
-   (1024 dim -> `vector_store` recreation + re-sync + cloud egress).
+2. **Internet egress from tst.** Confirm the outbound allowlist (direct or via a
+   proxy) for the three destinations the pilot needs (ADR-0039): `api.mistral.ai:443`
+   (chat), the Gradium API `:443` (STT/TTS), the container registry `:443` (image
+   pulls). Embeddings need no egress (local sidecar).
+3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
+   `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
+   `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
 4. **TLS at the voice edge.** Certificate provisioning and the public FQDN for
    the voice VIP (`.prod.lan` / `10.195.59.39`).
 5. **Container registry** reachable from the VMs: GHCR (GitHub) vs an internal

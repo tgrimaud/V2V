@@ -82,8 +82,10 @@ verifies health. Re-running the same tag is idempotent.
 
 ### First deploy — populate the RAG index
 
-The image does not bundle the knowledge base; after the first backend deploy,
-trigger the sync so pgvector is populated:
+Embeddings run on a co-located Ollama sidecar per backend VM (ADR-0039); the
+`nomic-embed-text` model is pulled automatically during the backend deploy, so no
+manual model step is needed. The image does not bundle the knowledge base, so
+after the first backend deploy trigger the sync to populate pgvector:
 
 ```bash
 curl -fsS -X POST http://192.168.0.11:8080/api/knowledge/sync
