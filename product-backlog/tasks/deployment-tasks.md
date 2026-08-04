@@ -366,7 +366,24 @@ Self-hosted LLM/STT/TTS (infra-v1 GPU option) - not a pilot prerequisite.
 **Related decisions:** ADR-0038
 **Depends on:** TASK-DEPLOY-001, TASK-DEPLOY-002; registry access (open input)
 **Classification:** V1 pilot deployment (CI)
-**Status:** To do (Sprint 11, branch `task/TASK-OPS-001-github-actions-ci`)
+**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-OPS-001-github-actions-ci` — two
+workflows under `.github/workflows/`: `ci.yml` (test gate on PR + mainline/sprint/ticket
+pushes: backend `mvn test` on Temurin 17 with Maven cache; voice-agent `unittest` + `behave`
+on Python 3.12, installing `libgl1`/`libglib2.0-0` for the cv2 import like the Dockerfile)
+and `images.yml` (build + push both images to **GHCR** with `GITHUB_TOKEN` on `v*.*.*` tags,
+`latest` on the default branch, `sha-<short>` always; buildx + gha cache). Registry = GHCR by
+default (native, no extra secret); override path for an internal Nexus/Artifactory documented
+in the workflow header (open input #5). Validated with `actionlint` (clean) + YAML parse.
+**Adversarial review 93/100 (Pass, 2026-08-04)** — blocking fix applied: extracted a reusable
+`tests.yml` (`workflow_call`) consumed by both `ci.yml` and `images.yml` with
+`build-push: needs: tests`, so a release tag can no longer publish an untested image; `ci.yml`
+push scoped to the mainline (no duplicate PR+push runs). Residual (accepted): `latest` tracks
+the integration branch; image build re-runs the app build (buildx/gha cache mitigates).
+**QA GO (2026-08-04)** — `.github/qa-validate-workflows.sh` 22/22 deterministic checks green
+(lint, reusable-gate wiring, publish scheme, fork-safe triggers, least-privilege, secret
+hygiene); [QA report](../../docs/qa/task-ops-001-github-actions-ci-qa-report.md). Live GitHub
+Actions run (PR gate + tag publish) verified on the first PR/tag post-merge. ✅ **Merge-ready**
+(merge on the user's explicit request).
 **Priority:** High
 **Branch:** `task/TASK-OPS-001-github-actions-ci`
 
