@@ -29,8 +29,14 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # Gate: never publish an image from an untested ref (e.g. a release tag that does
+  # not trigger ci.yml). Reuses the exact same suite as the PR gate.
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   build-push:
     name: ${{ matrix.name }} image
+    needs: tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

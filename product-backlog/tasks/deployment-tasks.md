@@ -374,7 +374,12 @@ and `images.yml` (build + push both images to **GHCR** with `GITHUB_TOKEN` on `v
 `latest` on the default branch, `sha-<short>` always; buildx + gha cache). Registry = GHCR by
 default (native, no extra secret); override path for an internal Nexus/Artifactory documented
 in the workflow header (open input #5). Validated with `actionlint` (clean) + YAML parse.
-Pending adversarial review ≥90% + QA.
+**Adversarial review 93/100 (Pass, 2026-08-04)** — blocking fix applied: extracted a reusable
+`tests.yml` (`workflow_call`) consumed by both `ci.yml` and `images.yml` with
+`build-push: needs: tests`, so a release tag can no longer publish an untested image; `ci.yml`
+push scoped to the mainline (no duplicate PR+push runs). Residual (accepted): `latest` tracks
+the integration branch; image build re-runs the app build (buildx/gha cache mitigates).
+Pending QA.
 **Priority:** High
 **Branch:** `task/TASK-OPS-001-github-actions-ci`
 
