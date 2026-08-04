@@ -12,11 +12,13 @@
   delay: 5
   when: health_url | length > 0
 
+# Pass the password via REDISCLI_AUTH (env) rather than `-a` so it never appears
+# in the container's process argv (visible to `ps` on the host).
 - name: "Ping Redis via the container CLI"
   ansible.builtin.command:
     cmd: >-
-      docker exec {{ redis_container_name }}
-      redis-cli -a {{ vault_redis_password }} ping
+      docker exec -e REDISCLI_AUTH={{ vault_redis_password }}
+      {{ redis_container_name }} redis-cli ping
   register: redis_ping
   until: "'PONG' in redis_ping.stdout"
   retries: 12

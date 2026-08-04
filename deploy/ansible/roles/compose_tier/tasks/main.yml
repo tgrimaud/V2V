@@ -35,6 +35,12 @@
   no_log: true
   changed_when: false
 
+# Backend tier only: drop the KB assets the container mounts read-only, so the
+# first sync can populate pgvector (the image does not bundle the KB).
+- name: "Provision the knowledge base assets"
+  ansible.builtin.include_tasks: kb_assets.yml
+  when: tier == 'backend'
+
 # Voice tier only: stop new calls + let in-flight calls wind down before recreate.
 - name: "Drain the voice bridge before recreate"
   ansible.builtin.include_tasks: drain.yml

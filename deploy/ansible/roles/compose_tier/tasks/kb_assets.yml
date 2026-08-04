@@ -1,0 +1,29 @@
+---
+# Provision the knowledge base assets the backend mounts read-only (TASK-OPS-002).
+# The image does not bundle the KB (DEPLOY-001); Ansible drops the repo's
+# knowledge-base/*.md + articles.csv under KB_HOST_PATH so the first
+# POST /api/knowledge/sync can populate pgvector. Without this the RAG stays empty.
+
+- name: "Ensure the KB directory exists"
+  ansible.builtin.file:
+    path: "{{ kb_host_path }}/knowledge-base"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Copy the knowledge-base markdown sources"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../knowledge-base/"
+    dest: "{{ kb_host_path }}/knowledge-base/"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "Copy articles.csv"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../articles.csv"
+    dest: "{{ kb_host_path }}/articles.csv"
+    owner: root
+    group: root
+    mode: "0644"

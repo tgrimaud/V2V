@@ -104,6 +104,14 @@ grep -q "voice_lb_drain_cmd" roles/compose_tier/tasks/drain.yml && ok "LB node-d
 # --- 8. Health verification ----------------------------------------------------
 grep -q "ansible.builtin.uri" roles/compose_tier/tasks/health.yml && ok "HTTP health probe present" || bad "no HTTP health probe"
 grep -q "redis-cli" roles/compose_tier/tasks/health.yml && ok "Redis ping health present" || bad "no Redis ping health"
+grep -q 'REDISCLI_AUTH=' roles/compose_tier/tasks/health.yml && ! grep -q 'redis-cli -a ' roles/compose_tier/tasks/health.yml \
+  && ok "Redis password via REDISCLI_AUTH (not argv)" || bad "Redis password exposed in argv (-a)"
+
+# --- 9. KB provisioning (self-contained deploy) -------------------------------
+grep -q "include_tasks: kb_assets.yml" roles/compose_tier/tasks/main.yml && ok "KB provisioning wired into the role" || bad "KB provisioning not wired"
+grep -q "tier == 'backend'" roles/compose_tier/tasks/main.yml && ok "KB provisioning gated to the backend tier" || bad "KB provisioning not gated to backend"
+grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "articles.csv" roles/compose_tier/tasks/kb_assets.yml \
+  && ok "KB task copies knowledge-base/ + articles.csv" || bad "KB task missing sources"
 
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
