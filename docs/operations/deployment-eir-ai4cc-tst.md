@@ -65,11 +65,15 @@ flowchart TB
 
 | VIP | Private IP | Prod IP | Exposure | Usage | Target port |
 |-----|-----------|---------|----------|-------|-------------|
-| `vip-ai4cc-voice-t01` | `192.168.0.10` | `10.195.59.39` | Prodpriv | Voice bridge LB (t01/t02), TLS edge | bridge `:8090` (confirm) |
-| `vip-ai4cc-backend-t01` | `192.168.0.11` | - | Internal only | Backend Java LB (t03/t04) | backend `:8080` (confirm) |
+| `vip-ai4cc-voice-t01` | `192.168.0.10` | `10.195.59.39` | Prodpriv | Voice bridge LB (t01/t02), TLS edge | `:443` (TLS) → bridge `:8090` |
+| `vip-ai4cc-backend-t01` | `192.168.0.11` | - | Internal only | Backend Java LB (t03/t04) | `:8080` → backend `:8080` |
 
-> The platform-side VIP port placeholder is `8080`; the real target ports are
-> finalized in TASK-INFRA-002.
+> Ports finalized in TASK-INFRA-002: voice VIP terminates TLS on `:443` and
+> proxies to the bridges on `:8090`; backend VIP proxies `:8080` → `:8080`.
+> HAProxy/Keepalived config: [`deploy/haproxy/`](../../deploy/haproxy/). Note:
+> HAProxy carries only the WebRTC **signaling** (HTTPS) + UI; the RTP/SRTP
+> **media** is UDP and peer-to-peer to the answering bridge (needs STUN/TURN,
+> open input), not proxied.
 
 ## VM inventory
 
@@ -102,11 +106,12 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 
 | From | To | Port | Protocol | Purpose |
 |------|----|------|----------|---------|
-| Client (Prodpriv) | voice VIP `.10` | 443 (confirm) | HTTPS/WSS | WebRTC signaling + UI |
-| Voice VIP `.10` | bridges `.103`/`.104` | 8090 (confirm) | HTTP | LB to voice bridge |
+| Client (Prodpriv) | voice VIP `.10` | 443 | HTTPS/WSS | WebRTC signaling + UI (TLS edge) |
+| Client (Prodpriv) | answering bridge | UDP (STUN/TURN) | SRTP | WebRTC **media** — P2P, not via HAProxy (needs TURN) |
+| Voice VIP `.10` | bridges `.103`/`.104` | 8090 | HTTP | LB to voice bridge |
 | Voice bridge | backend VIP `.11` | 8080 (confirm) | HTTP | Conversation API |
 | Voice bridge | Gradium (cloud) | 443 | HTTPS/WSS | STT/TTS |
-| Backend VIP `.11` | backends `.105`/`.106` | 8080 (confirm) | HTTP | LB to backend |
+| Backend VIP `.11` | backends `.105`/`.106` | 8080 | HTTP | LB to backend |
 | Backend | Postgres `.102` | 5432 | TCP | pgvector + JPA |
 | Backend | Redis `.107` | 6379 (confirm) | TCP | Shared session memory |
 | Backend | embeddings host | 11434 (if Ollama) | HTTP | Embeddings |
