@@ -3,6 +3,7 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
+import com.voicesupport.shared.web.security.ApiKeyGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -38,7 +39,7 @@ public class ConverseStreamController {
     private final ConverseStreamUseCase converseStreamUseCase;
     private final BackendTelemetry telemetry;
     private final ExecutorService streamExecutor;
-    private final String apiKey;
+    private final ApiKeyGuard apiKeyGuard;
 
     public ConverseStreamController(
             ConverseStreamUseCase converseStreamUseCase,
@@ -48,7 +49,7 @@ public class ConverseStreamController {
         this.converseStreamUseCase = converseStreamUseCase;
         this.telemetry = telemetry;
         this.streamExecutor = sseStreamExecutor;
-        this.apiKey = apiKey;
+        this.apiKeyGuard = new ApiKeyGuard(apiKey);
     }
 
     @PostMapping(value = "/converse-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -67,7 +68,7 @@ public class ConverseStreamController {
             @Parameter(description = "Optional shared secret; required only when the backend api-key is set.")
             @RequestHeader(value = "x-api-key", required = false) String providedKey,
             HttpServletResponse httpResponse) {
-        if (!authorized(providedKey)) {
+        if (!apiKeyGuard.authorized(providedKey)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         // Resolve the authoritative correlation id on the request thread (body value wins over the
@@ -86,12 +87,10 @@ public class ConverseStreamController {
         return ResponseEntity.ok(emitter);
     }
 
-    private boolean authorized(String providedKey) {
-        return apiKey == null || apiKey.isBlank() || apiKey.equals(providedKey);
-    }
-
     private String resolveCorrelationId(ConverseRequest request) {
-        String fromBody = request.correlationId();
+        // Sanitize the body-supplied id before it is echoed on the response header / re-established
+        // in the worker MDC, closing CR/LF header-splitting + log injection (TASK-BE-022 review #3).
+        String fromBody = CorrelationId.sanitize(request.correlationId());
         return fromBody != null && !fromBody.isBlank() ? fromBody : CorrelationId.current();
     }
 }
