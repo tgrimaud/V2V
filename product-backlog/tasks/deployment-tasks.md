@@ -379,7 +379,11 @@ in the workflow header (open input #5). Validated with `actionlint` (clean) + YA
 `build-push: needs: tests`, so a release tag can no longer publish an untested image; `ci.yml`
 push scoped to the mainline (no duplicate PR+push runs). Residual (accepted): `latest` tracks
 the integration branch; image build re-runs the app build (buildx/gha cache mitigates).
-Pending QA.
+**QA GO (2026-08-04)** — `.github/qa-validate-workflows.sh` 22/22 deterministic checks green
+(lint, reusable-gate wiring, publish scheme, fork-safe triggers, least-privilege, secret
+hygiene); [QA report](../../docs/qa/task-ops-001-github-actions-ci-qa-report.md). Live GitHub
+Actions run (PR gate + tag publish) verified on the first PR/tag post-merge. ✅ **Merge-ready**
+(merge on the user's explicit request).
 **Priority:** High
 **Branch:** `task/TASK-OPS-001-github-actions-ci`
 
