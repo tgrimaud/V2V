@@ -209,7 +209,14 @@ draining (TASK-OPS-002).
 **Related decisions:** ADR-0038
 **Depends on:** TASK-DEPLOY-001, TASK-DEPLOY-002
 **Classification:** V1 pilot deployment
-**Status:** To do (Sprint 11, branch `task/TASK-INFRA-001-compose-stacks`)
+**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-INFRA-001-compose-stacks` — per-tier
+stacks `deploy/compose/{backend,voice,redis}/docker-compose.yml` + `.env.example`, a
+`deploy/compose/README.md` and a `.gitignore` that versions only the templates. Env-driven
+image ref (`${*_IMAGE}:${IMAGE_TAG}`), healthchecks mirroring the image `HEALTHCHECK`s,
+`restart: unless-stopped`, per-flavor resource limits, json-file log rotation. All three
+validated with `docker compose config` (v29.1.3). Open inputs (registry, embeddings host,
+egress, STUN/TLS, DB/Redis creds) surfaced as documented `.env.example` placeholders rather
+than guessed. Pending adversarial review ≥90% + QA.
 **Priority:** High
 **Branch:** `task/TASK-INFRA-001-compose-stacks`
 
