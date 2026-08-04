@@ -1,0 +1,30 @@
+# Keep the build context small and reproducible (TASK-DEPLOY-002).
+# Local virtualenv and Python caches (never ship these).
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Non-runtime: tests and BDD features are not imported by the server.
+tests/
+features/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# VCS (context is the voice-agent/ folder)
+.git/
+.gitignore
+
+# Docker artifacts themselves
+Dockerfile
+.dockerignore

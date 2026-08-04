@@ -73,7 +73,16 @@ Compose wiring (TASK-INFRA-001), CI build/push (TASK-OPS-001).
 **Related decisions:** ADR-0038, ADR-0033 (WebRTC live transport)
 **Depends on:** -
 **Classification:** V1 pilot deployment
-**Status:** To do (Sprint 11, branch `task/TASK-DEPLOY-002-voice-image`)
+**Status:** 🚧 Implemented (2026-08-03) on `task/TASK-DEPLOY-002-voice-image` —
+`voice-agent/Dockerfile` (`python:3.12-slim` + `libgl1`/`libglib2.0-0` for cv2) +
+`.dockerignore`. **Image build-validated locally** (`docker build`, ~76 s): heavy deps
+import (pipecat 1.7.0, cv2 4.14.0, aiortc 1.15.0), runs as non-root `uid=1001`,
+`EXPOSE 8090`, python-based `HEALTHCHECK` on `GET /`. **Runtime smoke** (with a dummy
+`GRADIUM_API_KEY`): server binds `0.0.0.0:8090` (webrtc=on), `GET /` → 200 and
+`GET /api/voice/openapi.yaml` → 200. Confirmed the provider requires `GRADIUM_API_KEY`
+at startup (a required secret, already in the env doc). Image ~1.82 GB (opencv/av);
+`opencv-python-headless` is a later size lever (ADR-0022). Pending adversarial review
+≥ 90% + QA before merge-ready; merge on explicit user request.
 **Priority:** High
 **Branch:** `task/TASK-DEPLOY-002-voice-image`
 
