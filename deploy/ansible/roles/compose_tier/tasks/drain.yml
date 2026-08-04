@@ -1,0 +1,21 @@
+---
+# Best-effort voice session draining (TASK-OPS-002). See group_vars/voice.yml and
+# docs/operations/release-process.md for the limitation and the two completion paths.
+
+- name: "Stop new calls: mark {{ inventory_hostname }} down at the load balancer"
+  ansible.builtin.command:
+    cmd: "{{ voice_lb_drain_cmd }}"
+  when: voice_lb_drain_cmd | length > 0
+  changed_when: true
+
+- name: "Warn when no LB drain hook is wired (calls not stopped, grace only)"
+  ansible.builtin.debug:
+    msg: >-
+      voice_lb_drain_cmd is empty: new calls are NOT stopped during recreate.
+      Relying on serial:1 rolling + a {{ voice_drain_grace_seconds }}s grace window.
+      Wire the HAProxy node-down hook (TASK-INFRA-002) for a true drain.
+  when: voice_lb_drain_cmd | length == 0
+
+- name: "Grace window for in-flight calls to wind down"
+  ansible.builtin.pause:
+    seconds: "{{ voice_drain_grace_seconds | int }}"

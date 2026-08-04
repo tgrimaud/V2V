@@ -1,0 +1,58 @@
+---
+# Deploy a released image set to the eir-ai4cc-tst tiers (TASK-OPS-002, ADR-0038).
+#
+#   ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass
+#
+# Deploy order (backend must be up before voice, which depends on the backend VIP):
+#   1) redis   - shared conversation memory
+#   2) backend - rolling (serial:1), each node health-checked before the next
+#   3) voice   - rolling (serial:1), drained before recreate
+
+- name: "Guard: require an explicit, immutable image tag"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Assert image_tag is set to an immutable release tag"
+      ansible.builtin.assert:
+        that:
+          - image_tag is defined
+          - image_tag | length > 0
+          - image_tag != 'latest'
+        fail_msg: >-
+          Pass the immutable tag published by CI (TASK-OPS-001):
+          -e image_tag=vX.Y.Z  (or -e image_tag=sha-xxxxxxx). Refusing 'latest'
+          so a deploy is always reproducible and rollback-addressable.
+
+    - name: "Assert the vault is populated (not the CHANGE_ME placeholders)"
+      ansible.builtin.assert:
+        that:
+          - vault_db_password | default('CHANGE_ME') != 'CHANGE_ME'
+          - vault_mistral_api_key | default('CHANGE_ME') != 'CHANGE_ME'
+          - vault_conversation_api_key | default('CHANGE_ME') != 'CHANGE_ME'
+          - vault_gradium_api_key | default('CHANGE_ME') != 'CHANGE_ME'
+          - vault_redis_password | default('CHANGE_ME') != 'CHANGE_ME'
+        fail_msg: >-
+          Secrets are still the vault.example.yml placeholders. Create
+          group_vars/all/vault.yml (ansible-vault) with real values before deploying.
+
+- name: "Deploy Redis tier"
+  hosts: redis
+  become: true
+  roles:
+    - compose_tier
+
+- name: "Deploy backend tier (rolling)"
+  hosts: backend
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+  roles:
+    - compose_tier
+
+- name: "Deploy voice tier (rolling, drained)"
+  hosts: voice
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+  roles:
+    - compose_tier

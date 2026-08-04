@@ -1,0 +1,48 @@
+---
+# Voice bridge tier (vla-t01/t02, behind VIP .10). Mirrors
+# deploy/compose/voice/.env.example.
+tier: "voice"
+compose_src: "voice"
+
+# HTTP health probed after `up -d` (GET / serves the SPA, returns 200).
+health_url: "http://127.0.0.1:8090/"
+
+voice_bind: "0.0.0.0"
+voice_port: 8090
+
+# Conversation backend (backend VIP .11).
+voice_backend: "http"
+voice_backend_url: "http://192.168.0.11:8080"
+voice_backend_timeout_s: 30
+
+# Latency levers (pilot GO defaults, TASK-WEB-020/021).
+voice_backend_stream: "1"
+voice_backend_warmup: "1"
+voice_stt_prewarm: "0"
+
+# Gradium STT/TTS.
+voice_stt_mode: "streaming"
+voice_tts_mode: "streaming"
+gradium_voice_id_en: ""
+
+# WebRTC NAT traversal (confirm STUN/TURN, open input #1/#4).
+voice_stun: ""
+
+# Resource sizing (2 vCPU / 4 GB VM).
+voice_cpus: "1.5"
+voice_memory: "3g"
+
+# ---- Session draining (see docs/operations/release-process.md) -------------
+# The bridge has no active-session endpoint yet, so draining is best-effort:
+#  1) plays run serial:1 so only one bridge recreates at a time (the VIP peer
+#     keeps serving);
+#  2) an optional LB node-down/up hook stops NEW calls hitting this node while it
+#     recreates (wired once HAProxy is configured, TASK-INFRA-002);
+#  3) a bounded grace window lets an in-flight call wind down before recreate.
+# A hard "wait until 0 active calls" needs the LB node-down (INFRA-002) or a
+# bridge /drain endpoint (follow-up). Documented limitation, not a silent gap.
+voice_drain_grace_seconds: 60
+# Shell commands run on the LB (or locally) to drain/enable this node. Empty =
+# skipped. Example once HAProxy is up: set via -e or here, using {{ inventory_hostname }}.
+voice_lb_drain_cmd: ""
+voice_lb_enable_cmd: ""
