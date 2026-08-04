@@ -23,7 +23,11 @@ deferred: per the 2026-08-03 decision, **billing/identity → Sprint 12** and
 
 ## Status
 
-**Status:** 🚧 **In progress** (started 2026-08-03; defined 2026-08-03). Scope locked with
+**Status:** 🚧 **In progress** (started 2026-08-03; defined 2026-08-03). Merged into the sprint
+branch so far (2026-08-04): **TASK-DEPLOY-001**, **TASK-DEPLOY-002**, **TASK-BE-021** (all
+adversarial + QA passed) and **TASK-BE-022** (auth/log hardening, adversarial 95/100 + QA GO);
+integrated `mvn test` **336** green, ArchUnit OK. Remaining: TASK-INFRA-001/002/003,
+TASK-OPS-001/002, TASK-DOC-003. Scope locked with
 the user: **Docker images + docker-compose on the app VMs**, **GitHub Actions
 build/test/image + Ansible/SSH deploy**, **Redis-backed conversation memory**.
 Several infrastructure inputs are still open (egress, embeddings placement, TLS,
@@ -73,9 +77,10 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-DEPLOY-001 | Backend Java Docker image (multi-stage JDK17→JRE17, non-root, `HEALTHCHECK /actuator/health`, env-driven) | Package | 🚧 Implemented (2026-08-03) — image build-validated (non-root, Java 17, boots Spring Boot); pending adversarial review + QA |
-| TASK-DEPLOY-002 | Voice bridge Python Docker image (heavy deps `pipecat`/`aiortc`/`opencv`, `--host 0.0.0.0`, healthcheck `/`, non-root) | Package | 🚧 Implemented (2026-08-03) — image build + runtime smoke validated (binds `0.0.0.0:8090`, `GET /` 200, non-root); pending adversarial review + QA |
-| TASK-BE-021 | Redis-backed conversation memory (`RedisConversationMemoryAdapter`, `CONVERSATION_STORE=redis`) so the 2 backends behind VIP `.11` share session state — activates ADR-0008 | Enable (backend) | ✅ Merge-ready (2026-08-03, adversarial 92/100 → QA GO) — `mvn test` 330 green (+10, ArchUnit OK); default `memory` unchanged; blocking fix: Actuator Redis health indicator gated `REDIS_HEALTH_ENABLED` (default off) so `/actuator/health` stays UP in memory mode (live-verified); [QA report](../../docs/qa/sprint-11-deployment-qa-report.md) |
+| TASK-DEPLOY-001 | Backend Java Docker image (multi-stage JDK17→JRE17, non-root, `HEALTHCHECK /actuator/health`, env-driven) | Package | ✅ **Merged into sprint-11** (2026-08-04, `--no-ff` `ee42541`) — image build-validated (non-root, Java 17, boots Spring Boot) |
+| TASK-DEPLOY-002 | Voice bridge Python Docker image (heavy deps `pipecat`/`aiortc`/`opencv`, `--host 0.0.0.0`, healthcheck `/`, non-root) | Package | ✅ **Merged into sprint-11** (2026-08-04, `--no-ff` `579fcc9`) — image build + runtime smoke validated (binds `0.0.0.0:8090`, `GET /` 200, non-root) |
+| TASK-BE-021 | Redis-backed conversation memory (`RedisConversationMemoryAdapter`, `CONVERSATION_STORE=redis`) so the 2 backends behind VIP `.11` share session state — activates ADR-0008 | Enable (backend) | ✅ **Merged into sprint-11** (2026-08-04, `--no-ff` `daa2102`; adversarial 92/100 → QA GO) — integrated `mvn test` **336** green, ArchUnit OK; default `memory` unchanged; blocking fix: Actuator Redis health indicator gated `REDIS_HEALTH_ENABLED` (default off) so `/actuator/health` stays UP in memory mode (live-verified); [QA report](../../docs/qa/sprint-11-deployment-qa-report.md) |
+| TASK-BE-022 | Constant-time api-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) — 2026-08-04 backend adversarial-review findings #1 & #3 | Enable (backend, hardening) | ✅ **Merged into sprint-11** (2026-08-04, `--no-ff` `3dafffd`; adversarial 95/100 → QA GO) — `/converse`+`/converse-stream` delegate to constant-time `ApiKeyGuard`; `CorrelationId.sanitize` strips control chars + caps 200 on every client id/channel before MDC/log/header; [QA report](../../docs/qa/task-be-022-auth-log-hardening-qa-report.md). Spawned TASK-BE-023 (ops-surface gating, deferred) |
 | TASK-INFRA-001 | docker-compose deploy stacks + `.env` templates per tier (backend→Postgres `.102`/Redis `.107`/embeddings/Mistral; voice→backend VIP `.11`/Gradium; Redis stack) | Wire | To do |
 | TASK-INFRA-002 | HAProxy + Keepalived config for the two VIPs (voice `.10`→t01/t02 TLS edge, backend `.11`→t03/t04), health checks, finalized ports, VRRP failover — coordinated with the platform team | Wire (infra) | To do |
 | TASK-INFRA-003 | Decision + spike: embeddings placement (Ollama CPU co-located vs Mistral embeddings → 1024-dim recreation) and provider egress (Mistral/Gradium/registry) → ADR addendum | Decide | To do (gated by open inputs) |

@@ -19,7 +19,9 @@ Prefixes: **TASK-DEPLOY** (packaging/images), **TASK-INFRA** (infra config),
 **Related decisions:** ADR-0038, ADR-0028 (observability)
 **Depends on:** -
 **Classification:** V1 pilot deployment
-**Status:** 🚧 Implemented (2026-08-03) on `task/TASK-DEPLOY-001-backend-image` —
+**Status:** ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `ee42541`)
+— built on `task/TASK-DEPLOY-001-backend-image` (rides to `feat/restart-from-scratch` at sprint
+closure).
 multi-stage `backend/Dockerfile` (Maven 3.9 / JDK 17 build → `eclipse-temurin:17-jre`
 runtime) + `.dockerignore`. **Image build-validated locally** (`docker build`, ~110 s):
 runs as non-root `uid=1001(app)`, fat jar 77 MB, Java 17.0.19, `EXPOSE 8080`,
@@ -73,7 +75,9 @@ Compose wiring (TASK-INFRA-001), CI build/push (TASK-OPS-001).
 **Related decisions:** ADR-0038, ADR-0033 (WebRTC live transport)
 **Depends on:** -
 **Classification:** V1 pilot deployment
-**Status:** 🚧 Implemented (2026-08-03) on `task/TASK-DEPLOY-002-voice-image` —
+**Status:** ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `579fcc9`)
+— built on `task/TASK-DEPLOY-002-voice-image` (rides to `feat/restart-from-scratch` at sprint
+closure).
 `voice-agent/Dockerfile` (`python:3.12-slim` + `libgl1`/`libglib2.0-0` for cv2) +
 `.dockerignore`. **Image build-validated locally** (`docker build`, ~76 s): heavy deps
 import (pipecat 1.7.0, cv2 4.14.0, aiortc 1.15.0), runs as non-root `uid=1001`,
@@ -130,8 +134,10 @@ Compose wiring (TASK-INFRA-001), TLS/STUN provisioning (TASK-INFRA-002).
 **Related decisions:** ADR-0008 (Redis active sessions), ADR-0038
 **Depends on:** Redis VM `.107` reachable
 **Classification:** V1 pilot deployment (backend code)
-**Status:** ✅ Merge-ready (2026-08-03, adversarial 92/100 → QA GO) on
-`task/TASK-BE-021-redis-conversation-memory` — `RedisConversationMemoryAdapter` (bounded Redis
+**Status:** ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `daa2102`;
+adversarial 92/100 → QA GO) — built on
+`task/TASK-BE-021-redis-conversation-memory` (rides to `feat/restart-from-scratch` at sprint
+closure). Post-merge integrated `mvn test` **336** green, ArchUnit OK. — `RedisConversationMemoryAdapter` (bounded Redis
 list per conversation, sliding idle TTL, JSON turns) behind a `ConversationTurnStore` seam with a
 `RedisConversationTurnStoreAdapter` (StringRedisTemplate: RPUSH + LTRIM + EXPIRE). Selected by
 `CONVERSATION_STORE=redis` (default `memory`), wired in `ConversationConfig` via
