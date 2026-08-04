@@ -382,8 +382,9 @@ the integration branch; image build re-runs the app build (buildx/gha cache miti
 **QA GO (2026-08-04)** — `.github/qa-validate-workflows.sh` 22/22 deterministic checks green
 (lint, reusable-gate wiring, publish scheme, fork-safe triggers, least-privilege, secret
 hygiene); [QA report](../../docs/qa/task-ops-001-github-actions-ci-qa-report.md). Live GitHub
-Actions run (PR gate + tag publish) verified on the first PR/tag post-merge. ✅ **Merge-ready**
-(merge on the user's explicit request).
+Actions run (PR gate + tag publish) verified on the first PR/tag post-merge. ✅ **Merged into
+`feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `1e431f2`; rides to
+`feat/restart-from-scratch` at sprint closure).
 **Priority:** High
 **Branch:** `task/TASK-OPS-001-github-actions-ci`
 
