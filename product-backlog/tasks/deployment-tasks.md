@@ -431,8 +431,9 @@ Deployment to the VMs (TASK-OPS-002); Bugbot/Cloud-Agents GitHub App (optional, 
 **Status:** ✅ Implemented — adversarial 93/100 (Pass; KB provisioning + Redis auth
 fixes applied); QA GO (`deploy/ansible/qa-validate-ansible.sh` 33/33,
 [report](../../docs/qa/task-ops-002-ansible-release-qa-report.md)); live tst
-deploy/rollback/drain deferred to first deploy. ✅ **Merge-ready** (merge on the
-user's explicit request). Branch `task/TASK-OPS-002-ansible-release`
+deploy/rollback/drain deferred to first deploy. ✅ **Merged into
+`feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `20f1770`; rides to
+`feat/restart-from-scratch` at sprint closure).
 **Priority:** High
 **Branch:** `task/TASK-OPS-002-ansible-release`
 
