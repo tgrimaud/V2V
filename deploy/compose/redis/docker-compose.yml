@@ -1,0 +1,52 @@
+# Redis - shared conversation memory (TASK-INFRA-001, ADR-0008 / TASK-BE-021).
+# Runs on vlb-ai4cc-t02 (.107) unless the platform provides Redis natively. The two
+# backend instances (t03/t04) share session state here so multi-turn context
+# survives being load-balanced across instances behind the backend VIP .11.
+#
+# Values come from a sibling ".env" - never commit a real .env. See .env.example.
+
+services:
+  redis:
+    image: "redis:${REDIS_IMAGE_TAG:-7-alpine}"
+    container_name: voice-support-redis
+    restart: unless-stopped
+    # Reachable from the backend tier over the tenant subnet.
+    ports:
+      - "${REDIS_BIND:-0.0.0.0}:${REDIS_PORT:-6379}:6379"
+    # requirepass = auth; appendonly = survive restarts; noeviction so active
+    # sessions are never silently dropped (writes fail closed when full, and the
+    # backend degrades gracefully - TASK-BE-021). Size maxmemory to the 4 GB flavor.
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?set REDIS_PASSWORD}"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "${REDIS_MAXMEMORY:-2gb}"
+      - "--maxmemory-policy"
+      - "noeviction"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    environment:
+      # Exposed to the container only so the healthcheck can authenticate.
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    deploy:
+      resources:
+        limits:
+          cpus: "${REDIS_CPUS:-1.5}"
+          memory: "${REDIS_MEMORY:-3g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  redis-data:

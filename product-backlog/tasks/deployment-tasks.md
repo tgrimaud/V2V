@@ -209,7 +209,23 @@ draining (TASK-OPS-002).
 **Related decisions:** ADR-0038
 **Depends on:** TASK-DEPLOY-001, TASK-DEPLOY-002
 **Classification:** V1 pilot deployment
-**Status:** To do (Sprint 11, branch `task/TASK-INFRA-001-compose-stacks`)
+**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-INFRA-001-compose-stacks` — per-tier
+stacks `deploy/compose/{backend,voice,redis}/docker-compose.yml` + `.env.example`, a
+`deploy/compose/README.md` and a `.gitignore` that versions only the templates. Env-driven
+image ref (`${*_IMAGE}:${IMAGE_TAG}`), healthchecks mirroring the image `HEALTHCHECK`s,
+`restart: unless-stopped`, per-flavor resource limits, json-file log rotation. All three
+validated with `docker compose config` (v29.1.3). Open inputs (registry, embeddings host,
+egress, STUN/TLS, DB/Redis creds) surfaced as documented `.env.example` placeholders rather
+than guessed. **Adversarial review 93/100 (Pass, 2026-08-04)** — blocking fix applied: the
+backend image ships only the jar, so the KB is now mounted read-only from `KB_HOST_PATH`
+(`/app/kb-assets`, directory bind) and synced into pgvector on first run, instead of pointing
+at non-existent image paths. Residual (accepted, pilot): secrets via `docker inspect`,
+`0.0.0.0` publish gated by INFRA-002, `REDIS_HEALTH_ENABLED=true` tier-scoped.
+**QA GO (2026-08-04)** — `deploy/compose/qa-validate.sh` 22/22 deterministic checks green
+(renders + healthchecks + KB read-only mount + secret hygiene + key parity);
+[QA report](../../docs/qa/task-infra-001-compose-stacks-qa-report.md). Live "reaches
+Postgres/Redis/VIP" smoke deferred to tst (open inputs). ✅ **Merge-ready** (merge on the
+user's explicit request).
 **Priority:** High
 **Branch:** `task/TASK-INFRA-001-compose-stacks`
 

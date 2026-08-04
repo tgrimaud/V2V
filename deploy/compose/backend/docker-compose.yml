@@ -1,0 +1,77 @@
+# Backend Java conversation service - tst deploy stack (TASK-INFRA-001, ADR-0038).
+# Runs the TASK-DEPLOY-001 image on vla-ai4cc-t03/t04 (.105/.106), one instance per
+# VM, behind the internal backend VIP .11 (HAProxy - TASK-INFRA-002).
+#
+# All values come from a sibling ".env" rendered by Ansible from secrets
+# (TASK-OPS-002) - never commit a real .env. See .env.example for the contract.
+# External dependencies (Postgres .102, Redis .107) live on other tiers, so this
+# stack has no depends_on: it only points at them via env.
+
+services:
+  backend:
+    image: "${BACKEND_IMAGE:?set BACKEND_IMAGE to the registry path}:${IMAGE_TAG:-latest}"
+    container_name: voice-support-backend
+    restart: unless-stopped
+    # Published on the host so the backend VIP (.11) can load-balance t03/t04.
+    ports:
+      - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8080}:8080"
+    environment:
+      # --- Persistence (Postgres .102 + pgvector, 768 dim) ---
+      DB_URL: "${DB_URL}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      # --- Embeddings (Ollama nomic-embed-text, 768 dim) - placement per TASK-INFRA-003 ---
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL}"
+      OLLAMA_EMBEDDING_MODEL: "${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
+      # --- Chat LLM (Mistral cloud) ---
+      LLM_PROVIDER: "${LLM_PROVIDER:-mistral-api}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY}"
+      MISTRAL_CHAT_MODEL: "${MISTRAL_CHAT_MODEL:-mistral-small-latest}"
+      # --- API gate (must be non-empty in tst; matches the voice bridge key) ---
+      CONVERSATION_API_KEY: "${CONVERSATION_API_KEY}"
+      # --- Shared conversation memory (Redis .107 - ADR-0008 / TASK-BE-021) ---
+      CONVERSATION_STORE: "${CONVERSATION_STORE:-redis}"
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_TIMEOUT: "${REDIS_TIMEOUT:-2s}"
+      CONVERSATION_MEMORY_TTL_SECONDS: "${CONVERSATION_MEMORY_TTL_SECONDS:-3600}"
+      # Only safe where Redis is actually reachable; leaving it true in memory mode
+      # flips /actuator/health to DOWN (TASK-BE-021 review).
+      REDIS_HEALTH_ENABLED: "${REDIS_HEALTH_ENABLED:-true}"
+      # --- Knowledge base sources (mounted read-only, see volumes below) ---
+      # The image ships only the jar, so the KB assets are provided at deploy time
+      # under KB_HOST_PATH and synced into pgvector on first run (POST /api/knowledge/sync
+      # or the scheduler). Paths point inside the mounted directory.
+      KB_MARKDOWN_PATH: "${KB_MARKDOWN_PATH:-/app/kb-assets/knowledge-base}"
+      KB_CSV_PATH: "${KB_CSV_PATH:-/app/kb-assets/articles.csv}"
+      # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
+      OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}"
+      OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
+      # --- JVM tuning without a rebuild (sized to the 8 GB flavor by default) ---
+      JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
+    # Mirror the image HEALTHCHECK so compose surfaces readiness (curl ships in the image).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    # Sized to the vla-t03/t04 flavor (4 vCPU / 8 GB), leaving host headroom.
+    deploy:
+      resources:
+        limits:
+          cpus: "${BACKEND_CPUS:-3.5}"
+          memory: "${BACKEND_MEMORY:-6g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # KB assets provided at deploy time (Ansible drops knowledge-base/ + articles.csv
+    # under KB_HOST_PATH). Read-only, directory bind mount (safe if absent: Docker
+    # creates an empty dir and the KB sync simply finds nothing until populated).
+    volumes:
+      - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro"
