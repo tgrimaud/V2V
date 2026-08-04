@@ -98,7 +98,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Voice bridge (`voice-agent/`) | `vla-t01`/`t02` (`.103`/`.104`) | Docker + compose | `python -m web_voice.server --host 0.0.0.0 --port 8090`; WebRTC live path |
 | Backend Java (`backend/`) | `vla-t03`/`t04` (`.105`/`.106`) | Docker + compose | Spring Boot `:8080`; RAG, guardrails, memory |
 | PostgreSQL 18 + pgvector | `vlb-t01` (`.102`) | podman pod (`podpg`) | `CREATE EXTENSION vector`; `vector_store` 768 dim |
-| Redis | `vlb-t02` (`.107`) | Docker (planned) | Shared conversation memory (ADR-0008, TASK-BE-021) |
+| Redis | `vlb-t02` (`.107`) | Docker (`redis:7-alpine`, auth, AOF, no internal TLS) | Shared conversation memory (ADR-0008, TASK-BE-021) |
 | Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | Docker (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
 | Mistral (chat), Gradium (STT/TTS) | cloud | managed | Require controlled internet egress |
 
@@ -113,7 +113,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Voice bridge | Gradium (cloud) | 443 | HTTPS/WSS | STT/TTS |
 | Backend VIP `.11` | backends `.105`/`.106` | 8080 | HTTP | LB to backend |
 | Backend | Postgres `.102` | 5432 | TCP | pgvector + JPA |
-| Backend | Redis `.107` | 6379 (confirm) | TCP | Shared session memory |
+| Backend | Redis `.107` | 6379 | TCP | Shared session memory (auth, no TLS) |
 | Backend | ollama sidecar (same VM) | 11434 | HTTP | Embeddings (compose network, not published) |
 | Backend | Mistral (cloud) | 443 | HTTPS | Chat LLM |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
@@ -221,7 +221,11 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
 7. ~~**PostgreSQL**~~ ✅ **Resolved (2026-08-04):** PostgreSQL **18.4**, single
    instance on `.102`; DB + app user `voicesupport` (password = `vault_db_password`);
    `CREATE EXTENSION vector` available. Bootstrap SQL in the PostgreSQL section above.
-8. **Redis** run mode on `.107` (Docker container vs native), auth, and whether
-   TLS is required on the internal link.
+8. ~~**Redis**~~ ✅ **Resolved (2026-08-04):** we run Redis ourselves as a
+   **Docker** container on `.107` (`redis:7-alpine`, already wired in
+   `deploy/compose/redis/`): **auth ON** (`requirepass` = `vault_redis_password`,
+   shared with the backend), **AOF persistence**, `noeviction` (active sessions never
+   silently dropped), `maxmemory 2gb`. **No TLS on the internal link** (tenant-internal
+   `.107:6379`); revisit if the security policy requires encrypting the internal hop.
 9. **Frontend.** Is the voice bridge's built-in mic UI (`index.html`) sufficient
    for the pilot, or is a separate static host expected?
