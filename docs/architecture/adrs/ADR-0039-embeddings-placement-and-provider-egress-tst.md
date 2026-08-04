@@ -60,23 +60,31 @@ Backend and sidecar co-exist on the 8 GB VM: **backend 5 GB / 3.0 CPU**, **ollam
 
 ### 4. Provider egress required by the pilot
 
-Embeddings need **no** egress. The only outbound the pilot needs:
+Embedding **inference** needs no egress (local sidecar); there is no per-query
+cloud round-trip. The outbound the pilot needs:
 
-| From tier | Destination | Port | Purpose |
-|-----------|-------------|------|---------|
-| Backend (`.105/.106`) | `api.mistral.ai` | 443 | Chat LLM (Mistral) |
-| Voice bridge (`.103/.104`) | Gradium API | 443 | STT/TTS |
-| Backend + voice VMs | container registry (`ghcr.io` or internal) | 443 | image pulls |
+| From tier | Destination | Port | When | Purpose |
+|-----------|-------------|------|------|---------|
+| Backend (`.105/.106`) | `api.mistral.ai` | 443 | runtime | Chat LLM (Mistral) |
+| Voice bridge (`.103/.104`) | Gradium API | 443 | runtime | STT/TTS |
+| Backend + voice VMs | container registry (`ghcr.io` or internal) | 443 | deploy | image pulls |
+| Backend (`.105/.106`) | `registry.ollama.ai` (+ CDN) | 443 | deploy | one-time `nomic-embed-text` model pull |
 
 Egress may be **direct or via the tenant proxy**; the confirmed allowlist (and
 proxy host, if any) is the required platform input, tracked in the deployment doc.
-This is the only remaining external dependency for a functional backend on tst.
+
+**If Ollama-registry egress is not allowed**, pre-seed the model instead of pulling
+it: either bake `nomic-embed-text` into a custom Ollama image, or have Ansible copy
+a pre-downloaded model blob into the `ollama-models` volume. Either removes the
+deploy-time `registry.ollama.ai` dependency; runtime embedding stays fully local
+in all cases.
 
 ## Consequences
 
 - The backend stack now runs **two containers** (backend + ollama); deploy pulls
-  the model (~275 MB) once into `ollama-models`, then the first `POST
-  /api/knowledge/sync` populates pgvector.
+  the model (~275 MB) once into `ollama-models` (needs one-time `registry.ollama.ai`
+  egress, or pre-seed the volume/image if that egress is denied), then the first
+  `POST /api/knowledge/sync` populates pgvector.
 - No vector dimension change; retrieval works with no dimension mismatch (the AC).
 - ADR-0038 §6 is resolved; the pilot backend is functional without a GPU host and
   without embedding egress.

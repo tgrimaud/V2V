@@ -193,9 +193,11 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),
    and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
 2. **Internet egress from tst.** Confirm the outbound allowlist (direct or via a
-   proxy) for the three destinations the pilot needs (ADR-0039): `api.mistral.ai:443`
-   (chat), the Gradium API `:443` (STT/TTS), the container registry `:443` (image
-   pulls). Embeddings need no egress (local sidecar).
+   proxy) for the destinations the pilot needs (ADR-0039): `api.mistral.ai:443`
+   (chat, runtime), the Gradium API `:443` (STT/TTS, runtime), the container
+   registry `:443` (image pulls, deploy), and `registry.ollama.ai:443` (one-time
+   `nomic-embed-text` model pull at deploy - or pre-seed the model to avoid it).
+   Embedding inference needs no egress (local sidecar).
 3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
    `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
    `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
