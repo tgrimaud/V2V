@@ -220,7 +220,12 @@ than guessed. **Adversarial review 93/100 (Pass, 2026-08-04)** — blocking fix 
 backend image ships only the jar, so the KB is now mounted read-only from `KB_HOST_PATH`
 (`/app/kb-assets`, directory bind) and synced into pgvector on first run, instead of pointing
 at non-existent image paths. Residual (accepted, pilot): secrets via `docker inspect`,
-`0.0.0.0` publish gated by INFRA-002, `REDIS_HEALTH_ENABLED=true` tier-scoped. Pending QA.
+`0.0.0.0` publish gated by INFRA-002, `REDIS_HEALTH_ENABLED=true` tier-scoped.
+**QA GO (2026-08-04)** — `deploy/compose/qa-validate.sh` 22/22 deterministic checks green
+(renders + healthchecks + KB read-only mount + secret hygiene + key parity);
+[QA report](../../docs/qa/task-infra-001-compose-stacks-qa-report.md). Live "reaches
+Postgres/Redis/VIP" smoke deferred to tst (open inputs). ✅ **Merge-ready** (merge on the
+user's explicit request).
 **Priority:** High
 **Branch:** `task/TASK-INFRA-001-compose-stacks`
 
