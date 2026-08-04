@@ -131,9 +131,11 @@ docker-compose consumes. Defaults below are the code defaults - override on tst.
 | `REDIS_HOST` / `REDIS_PORT` | `192.168.0.107` / `6379` | Redis for shared memory (TASK-BE-021) |
 | `REDIS_PASSWORD` / `REDIS_TIMEOUT` | from secrets / `2s` | Redis auth (if enabled) + command timeout |
 | `CONVERSATION_MEMORY_TTL_SECONDS` | `3600` | sliding idle TTL of a conversation's Redis history |
+| `REDIS_HEALTH_ENABLED` | `true` (redis tier only) | enable the Actuator Redis health indicator; MUST stay `false` (default) in `memory` mode or `/actuator/health` flips DOWN (TASK-BE-021 review) |
 | `OTEL_*` | unset (opt-in) | OTLP off by default (ADR-0028) |
 
 Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
+`REDIS_HEALTH_ENABLED=true` is only safe where Redis is actually deployed; otherwise leave it unset/`false`.
 
 ### Voice bridge (`vla-t01`/`t02`)
 

@@ -25,6 +25,8 @@ import com.voicesupport.conversation.infrastructure.adapter.out.memory.RedisConv
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.RedisConversationTurnStoreAdapter;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -41,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class ConversationConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(ConversationConfig.class);
 
     // ADR-0034: the vague-turn markers (contentless continuers like "vas-y", "ok") that trigger a
     // clarify instead of retrieving a weak, possibly wrong-audience match (BUG-005). Configurable so
@@ -111,11 +115,15 @@ public class ConversationConfig {
             ObjectProvider<StringRedisTemplate> redisTemplateProvider,
             ObjectMapper objectMapper) {
         if ("redis".equalsIgnoreCase(store)) {
+            log.info("[CONVERSATION-MEMORY] store=redis max-turns={} ttl-seconds={} — shared across backend instances",
+                    maxTurns, ttlSeconds);
             ConversationTurnStore turnStore =
                     new RedisConversationTurnStoreAdapter(redisTemplateProvider.getObject());
             return new RedisConversationMemoryAdapter(
                     turnStore, objectMapper, maxTurns, Duration.ofSeconds(ttlSeconds));
         }
+        log.info("[CONVERSATION-MEMORY] store=memory max-turns={} max-conversations={} — process-local (single node)",
+                maxTurns, maxConversations);
         return new InMemoryConversationMemoryAdapter(maxTurns, maxConversations);
     }
 

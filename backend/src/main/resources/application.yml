@@ -84,6 +84,15 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    redis:
+      # TASK-BE-021 review (blocking): spring-boot-starter-data-redis auto-registers a Redis health
+      # indicator that is aggregated into /actuator/health. In the default `memory` store mode Redis
+      # is NOT deployed, so the indicator would ping REDIS_HOST:REDIS_PORT (localhost:6379) and flip
+      # /actuator/health to DOWN — marking the container unhealthy (image HEALTHCHECK + HAProxy) even
+      # though the backend is fully functional. Gate it OFF by default and set REDIS_HEALTH_ENABLED=true
+      # ONLY in the redis-store deployment (.env), where Redis is present and worth monitoring.
+      enabled: ${REDIS_HEALTH_ENABLED:false}
   metrics:
     distribution:
       percentiles:

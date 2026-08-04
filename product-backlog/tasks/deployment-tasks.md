@@ -114,18 +114,25 @@ Compose wiring (TASK-INFRA-001), TLS/STUN provisioning (TASK-INFRA-002).
 **Related decisions:** ADR-0008 (Redis active sessions), ADR-0038
 **Depends on:** Redis VM `.107` reachable
 **Classification:** V1 pilot deployment (backend code)
-**Status:** 🚧 Implemented (2026-08-03) on `task/TASK-BE-021-redis-conversation-memory` —
-`RedisConversationMemoryAdapter` (bounded Redis list per conversation, sliding idle TTL,
-JSON turns) behind a `ConversationTurnStore` seam with a `RedisConversationTurnStoreAdapter`
-(StringRedisTemplate: RPUSH + LTRIM + EXPIRE). Selected by `CONVERSATION_STORE=redis`
-(default `memory`), wired in `ConversationConfig` via `ObjectProvider<StringRedisTemplate>`
-so `memory` mode never needs a Redis bean. Added `spring-boot-starter-data-redis` (BOM) +
-`spring.data.redis.*` (`REDIS_HOST`/`PORT`/`PASSWORD`/`TIMEOUT`). A Redis outage degrades to
-empty history (logged `[CONVERSATION-MEMORY]`) instead of failing the turn. **`mvn test` 327
-green (+7, ArchUnit OK)**; new `RedisConversationMemoryAdapterTest` (manual fake, no Mockito):
-round-trip, max-turns bound, isolation, blank id, special chars, TTL, outage-degrade. Live
-multi-instance shared-context + offline-startup checks are QA/INFRA-001. Pending adversarial
-review ≥ 90% + QA before merge-ready; merge on explicit user request.
+**Status:** ✅ Merge-ready (2026-08-03, adversarial 92/100 → QA GO) on
+`task/TASK-BE-021-redis-conversation-memory` — `RedisConversationMemoryAdapter` (bounded Redis
+list per conversation, sliding idle TTL, JSON turns) behind a `ConversationTurnStore` seam with a
+`RedisConversationTurnStoreAdapter` (StringRedisTemplate: RPUSH + LTRIM + EXPIRE). Selected by
+`CONVERSATION_STORE=redis` (default `memory`), wired in `ConversationConfig` via
+`ObjectProvider<StringRedisTemplate>` so `memory` mode never needs a Redis bean. Added
+`spring-boot-starter-data-redis` (BOM) + `spring.data.redis.*`
+(`REDIS_HOST`/`PORT`/`PASSWORD`/`TIMEOUT`). A Redis outage degrades to empty history (logged
+`[CONVERSATION-MEMORY]`, `voice_support.conversation_memory.degraded` counter) instead of failing
+the turn; a corrupt/legacy entry is skipped, not fatal; active store logged at startup.
+**Adversarial-review blocking fix applied:** the Redis health indicator (auto-registered by the new
+starter) is gated `management.health.redis.enabled=${REDIS_HEALTH_ENABLED:false}` so `/actuator/health`
+stays UP in the default `memory` mode (else it would ping localhost:6379 → DOWN → HAProxy/HEALTHCHECK
+drops the instance). **`mvn test` 330 green (+10, ArchUnit OK)**;
+`RedisConversationMemoryAdapterTest` (fake, no Mockito: round-trip, bound, isolation, blank id,
+special chars, TTL, corrupt-entry skip, outage-degrade) + `RedisHealthIndicatorGateTest`
+(gate off → no `redisHealthContributor`; on → present). **Live smoke (Postgres+Ollama up):** memory
+mode → `/actuator/health` UP, no `redis` component; `REDIS_HEALTH_ENABLED=true` → `redis` component
+participates. Live multi-instance shared-context is INFRA-001 integration. Merge on explicit user request.
 **Priority:** High
 **Branch:** `task/TASK-BE-021-redis-conversation-memory`
 

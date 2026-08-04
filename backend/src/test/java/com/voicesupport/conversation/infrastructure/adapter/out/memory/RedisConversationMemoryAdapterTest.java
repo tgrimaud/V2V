@@ -97,6 +97,21 @@ class RedisConversationMemoryAdapterTest {
     }
 
     @Test
+    @DisplayName("a corrupt stored entry is skipped, surrounding valid turns still returned in order")
+    void corruptEntryIsSkipped() {
+        FakeConversationTurnStore store = new FakeConversationTurnStore();
+        RedisConversationMemoryAdapter memory = adapter(store, 6);
+
+        memory.append("c1", new ConversationTurn("q1", "a1"));
+        // a corrupt/legacy raw entry written straight into the list (schema drift, other writer)
+        store.appendTrimExpire("conversation:memory:c1", "not-json{", 6, TTL);
+        memory.append("c1", new ConversationTurn("q2", "a2"));
+
+        assertEquals(List.of(new ConversationTurn("q1", "a1"), new ConversationTurn("q2", "a2")),
+                memory.recentTurns("c1"));
+    }
+
+    @Test
     @DisplayName("a Redis outage degrades to empty history without failing the turn")
     void redisOutageDegradesSafely() {
         FakeConversationTurnStore store = new FakeConversationTurnStore();

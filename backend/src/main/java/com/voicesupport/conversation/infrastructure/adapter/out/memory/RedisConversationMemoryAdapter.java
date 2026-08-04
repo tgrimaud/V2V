@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
+import io.micrometer.core.instrument.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -45,12 +46,16 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
         try {
             List<ConversationTurn> turns = new ArrayList<>();
             for (String value : store.range(key(conversationId))) {
-                turns.add(deserialize(value));
+                ConversationTurn turn = tryDeserialize(value, conversationId);
+                if (turn != null) {
+                    turns.add(turn);
+                }
             }
             return List.copyOf(turns);
         } catch (DataAccessException e) {
-            log.warn("[CONVERSATION-MEMORY] redis read failed for conversation {} — degrading to empty history",
+            log.warn("[CONVERSATION-MEMORY] op=read outcome=degraded conversation={} — redis read failed, empty history",
                     conversationId, e);
+            Metrics.counter("voice_support.conversation_memory.degraded", "op", "read", "reason", "redis").increment();
             return List.of();
         }
     }
@@ -63,8 +68,9 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
         try {
             store.appendTrimExpire(key(conversationId), serialize(turn), maxTurns, ttl);
         } catch (DataAccessException e) {
-            log.warn("[CONVERSATION-MEMORY] redis write failed for conversation {} — turn not persisted",
+            log.warn("[CONVERSATION-MEMORY] op=write outcome=degraded conversation={} — redis write failed, turn not persisted",
                     conversationId, e);
+            Metrics.counter("voice_support.conversation_memory.degraded", "op", "write", "reason", "redis").increment();
         }
     }
 
@@ -80,11 +86,16 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
         }
     }
 
-    private ConversationTurn deserialize(String value) {
+    // Tolerate a single corrupt/legacy entry (e.g. a schema drift or a value written by another
+    // process): drop it and keep the rest of the history rather than failing the whole turn.
+    private ConversationTurn tryDeserialize(String value, String conversationId) {
         try {
             return objectMapper.readValue(value, ConversationTurn.class);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("cannot deserialize conversation turn", e);
+            log.warn("[CONVERSATION-MEMORY] op=read outcome=skip conversation={} — dropping corrupt turn entry",
+                    conversationId, e);
+            Metrics.counter("voice_support.conversation_memory.degraded", "op", "read", "reason", "corrupt").increment();
+            return null;
         }
     }
 
