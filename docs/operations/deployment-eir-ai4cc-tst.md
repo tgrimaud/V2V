@@ -202,17 +202,24 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
    and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
 2. **Internet egress from tst.** Confirm the outbound allowlist (direct or via a
    proxy) for the destinations the pilot needs (ADR-0039): `api.mistral.ai:443`
-   (chat, runtime), the Gradium API `:443` (STT/TTS, runtime), the container
-   registry `:443` (image pulls, deploy), and `registry.ollama.ai:443` (one-time
-   `nomic-embed-text` model pull at deploy - or pre-seed the model to avoid it).
-   Embedding inference needs no egress (local sidecar).
+   (chat, runtime), the Gradium API `:443` (STT/TTS, runtime), **GHCR**
+   `ghcr.io:443` + `pkg-containers.githubusercontent.com:443` (image pulls, deploy -
+   #5), and `registry.ollama.ai:443` (one-time `nomic-embed-text` model pull at
+   deploy - or pre-seed the model to avoid it). Embedding inference needs no egress
+   (local sidecar).
 3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
    `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
    `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
 4. **TLS at the voice edge.** Certificate provisioning and the public FQDN for
    the voice VIP (`.prod.lan` / `10.195.59.39`).
-5. **Container registry** reachable from the VMs: GHCR (GitHub) vs an internal
-   Nexus/Artifactory, and its credentials.
+5. ~~**Container registry**~~ ✅ **Resolved (2026-08-04):** **GHCR, public packages**
+   `ghcr.io/tgrimaud/voice-support-backend` and `ghcr.io/tgrimaud/voice-support-voice`
+   (pushed by TASK-OPS-001 with immutable tags `vX.Y.Z` / `sha-<short>`). Public → **no
+   pull credentials on the VMs** (`registry_login_required: false`, unchanged).
+   **One-time GitHub step:** after the first CI publish, set each package's visibility
+   to **Public** (GitHub → Packages → package → Package settings → Change visibility).
+   Egress dependency: the VMs need `:443` to `ghcr.io` **and** `pkg-containers.githubusercontent.com`
+   (GHCR blob CDN) - see #2.
 6. ~~**Secrets store and delivery**~~ ✅ **Resolved (2026-08-04):** local
    **ansible-vault** at `deploy/ansible/group_vars/all/vault.yml` (encrypted, master
    password in git-ignored `.vault_pass`, auto-loaded via `ansible.cfg`). Mistral +
