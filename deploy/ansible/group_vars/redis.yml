@@ -1,0 +1,19 @@
+---
+# Redis tier (vlb-t02). Mirrors deploy/compose/redis/.env.example.
+# Skip this group entirely if the platform provides Redis natively (open input #8).
+tier: "redis"
+compose_src: "redis"
+
+# No HTTP health; the container healthcheck runs `redis-cli ping`. The role
+# verifies via `docker exec ... redis-cli ping` after `up -d`.
+health_url: ""
+redis_container_name: "voice-support-redis"
+
+redis_image_tag: "7-alpine"
+redis_bind: "0.0.0.0"
+redis_port: 6379
+
+# maxmemory < container memory limit; noeviction keeps active sessions.
+redis_maxmemory: "2gb"
+redis_cpus: "1.5"
+redis_memory: "3g"

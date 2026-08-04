@@ -1,0 +1,26 @@
+---
+# Roll back to a previously-published image tag (TASK-OPS-002).
+#
+#   ansible-playbook rollback.yml -e image_tag=v1.1.0 --ask-vault-pass
+#
+# Rollback is a redeploy pinned to the previous good immutable tag: it reuses the
+# exact same deploy path (same order, same rolling drain, same health gates), so
+# there is no divergent "rollback-only" code to rot. Choose the previous tag from
+# the CI-published images (GHCR); see docs/operations/release-process.md.
+
+- name: "Guard: require the previous immutable tag to roll back to"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: "Assert a concrete rollback tag was provided"
+      ansible.builtin.assert:
+        that:
+          - image_tag is defined
+          - image_tag | length > 0
+          - image_tag != 'latest'
+        fail_msg: >-
+          Pass the previous good immutable tag: -e image_tag=vX.Y.Z
+          (or -e image_tag=sha-xxxxxxx). 'latest' is not rollback-addressable.
+
+- name: "Redeploy the previous version across all tiers"
+  ansible.builtin.import_playbook: deploy.yml

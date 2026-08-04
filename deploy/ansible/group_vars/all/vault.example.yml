@@ -1,0 +1,20 @@
+---
+# SECRETS TEMPLATE - do NOT fill this file in place and do NOT commit real values.
+#
+# Setup:
+#   cp group_vars/all/vault.example.yml group_vars/all/vault.yml
+#   # fill real values, then encrypt:
+#   ansible-vault encrypt group_vars/all/vault.yml
+# vault.yml is git-ignored (see deploy/ansible/.gitignore). Run playbooks with
+#   ansible-playbook deploy.yml --ask-vault-pass   (or --vault-password-file)
+
+vault_db_password: "CHANGE_ME"
+vault_mistral_api_key: "CHANGE_ME"
+# The single shared API key: backend CONVERSATION_API_KEY == voice VOICE_BACKEND_API_KEY.
+vault_conversation_api_key: "CHANGE_ME"
+vault_gradium_api_key: "CHANGE_ME"
+vault_redis_password: "CHANGE_ME"
+
+# Private registry pull credentials (only used when registry_login_required=true).
+vault_registry_username: ""
+vault_registry_token: ""

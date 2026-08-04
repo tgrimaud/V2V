@@ -1,0 +1,22 @@
+---
+# Global, non-secret deploy variables (TASK-OPS-002, ADR-0038).
+# Secrets live in group_vars/all/vault.yml (ansible-vault, git-ignored).
+
+# ---- Image registry (open input #5: GHCR default vs internal Nexus) --------
+registry: "ghcr.io"
+registry_namespace: "tgrimaud"
+
+# Image version to deploy. Override on the CLI with the immutable tag produced by
+# TASK-OPS-001 (e.g. -e image_tag=v1.2.0 or -e image_tag=sha-abc1234).
+image_tag: "latest"
+
+# Set true and provide vault_registry_username / vault_registry_token for a
+# private registry pull (GHCR public packages need no login).
+registry_login_required: false
+
+# ---- Target layout ---------------------------------------------------------
+# Per-tier stack directory on each VM (compose file + rendered .env live here).
+compose_root: "/opt/voice-support"
+
+# Compose command on the target (docker compose v2 plugin).
+compose_cmd: "docker compose"

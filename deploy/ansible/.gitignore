@@ -1,0 +1,7 @@
+# Never commit real secrets or vault material.
+group_vars/all/vault.yml
+*.vault
+.vault_pass
+.vault-password
+# Ansible run artifacts.
+*.retry

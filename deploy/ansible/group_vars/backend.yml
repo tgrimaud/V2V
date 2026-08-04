@@ -1,0 +1,39 @@
+---
+# Backend Java tier (vla-t03/t04, behind VIP .11). Non-secret config; secrets
+# come from group_vars/all/vault.yml. Mirrors deploy/compose/backend/.env.example.
+tier: "backend"
+compose_src: "backend"
+
+# HTTP health probed after `up -d` (ungated, see deployment doc).
+health_url: "http://127.0.0.1:8080/actuator/health"
+
+backend_bind: "0.0.0.0"
+backend_port: 8080
+
+# Postgres .102 (pgvector 768 dim).
+db_url: "jdbc:postgresql://192.168.0.102:5432/voicesupport"
+db_username: "voicesupport"
+
+# Embeddings host (open input, TASK-INFRA-003). Point at wherever Ollama runs.
+ollama_base_url: "http://192.168.0.102:11434"
+ollama_embedding_model: "nomic-embed-text"
+
+# Chat LLM (Mistral cloud).
+llm_provider: "mistral-api"
+mistral_chat_model: "mistral-small-latest"
+
+# Shared conversation memory (Redis .107, ADR-0008 / TASK-BE-021).
+conversation_store: "redis"
+redis_host: "192.168.0.107"
+redis_port: 6379
+redis_timeout: "2s"
+conversation_memory_ttl_seconds: 3600
+redis_health_enabled: true
+
+# Knowledge base assets mounted read-only into the container.
+kb_host_path: "{{ compose_root }}/backend/kb-assets"
+
+# JVM / resource sizing (4 vCPU / 8 GB VM).
+java_opts: "-XX:MaxRAMPercentage=75.0"
+backend_cpus: "3.5"
+backend_memory: "6g"
