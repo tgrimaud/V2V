@@ -12,7 +12,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
 | TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) |
-| TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | 🚧 Implemented (2026-08-04) on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **335** green (+5 `CorrelationIdTest`), ArchUnit OK |
+| TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | ✅ **Merge-ready** (2026-08-04, adversarial **95/100** + QA **GO**) on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **336** green (+5 `CorrelationIdTest`, +1 MVC CR/LF-echo regression), ArchUnit OK. `docs/qa/task-be-022-auth-log-hardening-qa-report.md`. Merge on explicit user request only |
 | TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
 
 ---
@@ -807,9 +807,9 @@ slice that spikes to ~2042 ms on a cold turn without warm-up.
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-BE-022-auth-log-hardening` (branched from
-`feat/restart-from-scratch`). Pending adversarial review + QA acceptance before merge-ready;
-merge on explicit user request only.
+**Status:** ✅ **Merge-ready** (2026-08-04) on `task/TASK-BE-022-auth-log-hardening` (branched from
+`feat/restart-from-scratch`) — adversarial review **95/100** (Pass, no blocking) + QA **GO**
+(`docs/qa/task-be-022-auth-log-hardening-qa-report.md`). Merge on explicit user request only.
 **Priority:** Medium
 **Branch:** `task/TASK-BE-022-auth-log-hardening`
 **Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100) — non-blocking
@@ -886,10 +886,23 @@ Delivered on `task/TASK-BE-022-auth-log-hardening`:
   `CorrelationIdFilterTest`, `ConverseControllerApiKeyTest`, `ConverseStreamControllerAuthTest`
   and the full slice/BDD suites stay green (behaviour-preserving for normal ids), ArchUnit OK.
 
-### Review & QA
+### Review & QA (2026-08-04)
 
-- Adversarial review + QA (functional; the change is a transport-layer hardening, not a measured
-  ADR-0018 pipeline slice) — **pending** before merge-ready.
+- **Adversarial code review: 95/100 — QA gate Pass, no blocking findings.** Non-blocking notes:
+  (1) `ApiKeyAuthInterceptor` (BE-019) logs `request.getRequestURI()` unsanitized — quasi-nil
+  (percent-encoded URI, container-rejected control chars), out of BE-022 scope; (2) the response
+  -header echo sanitization was proven by unit reasoning but not yet by an HTTP-level test → closed
+  in QA (see below).
+- **QA functional: GO** (`docs/qa/task-be-022-auth-log-hardening-qa-report.md`). Added
+  `ConverseControllerTest.sanitizesMaliciousCorrelationIdHeader` — an end-to-end `@WebMvcTest`
+  posting `correlation_id="corr\r\nInjected: 1"` and asserting the echoed `X-Correlation-Id`
+  response header is the single clean value `corrInjected: 1` (drives the real servlet filter chain
+  + controller). Auth accept/reject non-regression via `ConverseControllerApiKeyTest` /
+  `ConverseStreamControllerAuthTest`; sanitize contract via `CorrelationIdTest`.
+- **Latency: N/A** — transport-layer hardening, not a measured ADR-0018 slice; the compare +
+  sanitize are sub-ms and a rejected request short-circuits before the use case.
+- **Live smoke deferred** (deterministic hardening independent of DB/LLM; the header echo is
+  already exercised through the real MVC stack). `mvn test` **336** green, ArchUnit OK.
 
 ---
 

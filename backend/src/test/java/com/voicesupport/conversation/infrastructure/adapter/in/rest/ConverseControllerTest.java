@@ -68,6 +68,21 @@ class ConverseControllerTest {
     }
 
     @Test
+    @DisplayName("sanitizes a CR/LF-laced correlation id before echoing it (no header splitting / log injection) — TASK-BE-022 #3")
+    void sanitizesMaliciousCorrelationIdHeader() throws Exception {
+        // GIVEN a body-supplied correlation id carrying a forged extra header/log line via CR/LF
+        // WHEN the turn is served
+        // THEN the echoed response header is a single clean value (control chars stripped)
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transcript\":\"Pourquoi ma facture change ?\","
+                                + "\"conversation_id\":\"c1\",\"correlation_id\":\"corr\\r\\nInjected: 1\","
+                                + "\"channel\":\"web\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(CorrelationId.HEADER, "corrInjected: 1"));
+    }
+
+    @Test
     @DisplayName("a request without a conversation id is answered (stateless), not rejected")
     void missingConversationIdIsAccepted() throws Exception {
         mockMvc.perform(post("/api/conversation/converse")
