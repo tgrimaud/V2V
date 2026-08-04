@@ -37,6 +37,20 @@ media will not establish for remote clients even though signaling succeeds.
 open input (out of scope). Install it with `0600`, HAProxy user readable. Reload
 HAProxy after rotation (`systemctl reload haproxy`).
 
+## Host prerequisites
+
+- **`net.ipv4.ip_nonlocal_bind=1`** on both LB nodes. HAProxy binds the VIP
+  addresses (`.10:443`, `.11:8080`) but the backup node does not hold the VIP, so
+  without non-local bind HAProxy fails to start there. Set it persistently:
+  ```bash
+  echo 'net.ipv4.ip_nonlocal_bind=1' | sudo tee /etc/sysctl.d/90-haproxy.conf
+  sudo sysctl --system
+  ```
+- **VRRP unicast** is configured (peer = the other LB node) because the two nodes
+  are in different AZs; confirm the segment/routing allows VRRP unicast between
+  `.100` and `.101`.
+- `killall` available (`psmisc`) for the `chk_haproxy` track script.
+
 ## Health checks and failover
 
 - Each backend server has `check`; HAProxy removes an instance after `fall 3`

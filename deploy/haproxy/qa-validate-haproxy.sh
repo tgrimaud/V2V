@@ -69,7 +69,12 @@ grep -q 'state MASTER' "$T01" && grep -q 'priority 150' "$T01" && ok "t01 is MAS
 grep -q 'state BACKUP' "$T02" && grep -q 'priority 100' "$T02" && ok "t02 is BACKUP (priority 100)" || bad "t02 not BACKUP/100"
 ! grep -q 'state MASTER' "$T02" && ok "t02 declares no MASTER instance" || bad "t02 wrongly MASTER"
 
-# --- 4. Drain hook documented -------------------------------------------------
+# --- 4. VRRP unicast across AZs -----------------------------------------------
+grep -q 'unicast_src_ip 192.168.0.100' "$T01" && grep -q 'unicast_peer' "$T01" && ok "t01 uses VRRP unicast (peer .101)" || bad "t01 missing VRRP unicast"
+grep -q 'unicast_src_ip 192.168.0.101' "$T02" && grep -q 'unicast_peer' "$T02" && ok "t02 uses VRRP unicast (peer .100)" || bad "t02 missing VRRP unicast"
+
+# --- 5. Operational prerequisites documented ----------------------------------
+grep -q 'ip_nonlocal_bind=1' README.md && ok "ip_nonlocal_bind prerequisite documented (backup-node bind)" || bad "ip_nonlocal_bind not documented"
 grep -q 'state drain' README.md && grep -q 'state ready' README.md && ok "drain/enable socket commands documented" || bad "drain hook not documented"
 
 echo
