@@ -12,6 +12,8 @@ pilot, unless pulled in earlier.
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
 | TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) |
+| TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | 🚧 Implemented (2026-08-04) on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **335** green (+5 `CorrelationIdTest`), ArchUnit OK |
+| TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
 
 ---
 
@@ -798,3 +800,152 @@ slice that spikes to ~2042 ms on a cold turn without warm-up.
 - DEC-002 preserved: contract test still proves no chunk is emitted before vetting; grounded /
   blocked-sentence behaviour unchanged. `mvn test` green + ArchUnit OK; no secret / raw
   provider text leak in telemetry.
+
+---
+
+## TASK-BE-022 — Constant-Time API-Key Gate Unification + Client-Field Log/Header Sanitization
+
+**Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
+**Classification:** V1 security hardening
+**Status:** 🚧 Implemented (2026-08-04) on `task/TASK-BE-022-auth-log-hardening` (branched from
+`feat/restart-from-scratch`). Pending adversarial review + QA acceptance before merge-ready;
+merge on explicit user request only.
+**Priority:** Medium
+**Branch:** `task/TASK-BE-022-auth-log-hardening`
+**Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100) — non-blocking
+findings **#1** (timing side-channel / auth-gate inconsistency) and **#3** (log injection via
+client-controlled fields).
+**Relates to:** TASK-BE-019 (introduced `ApiKeyGuard` with the constant-time compare and the
+central interceptor), TASK-BE-009 (`CorrelationId` / MDC observability), ADR-0021 (the
+`/converse` shared-secret gate).
+
+### Context
+
+The 2026-08-04 review found two residual low/medium issues left over from the BE-019 hardening:
+
+- **#1 — timing side-channel + gate triplication.** BE-019 fixed the compare inside
+  `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, constant-time) and routed the four
+  knowledge/read endpoints through it via `ApiKeyAuthInterceptor`. But `ConverseController` and
+  `ConverseStreamController` kept their **own inline** `authorized()` using
+  `apiKey.equals(providedKey)` — a `String.equals` that short-circuits on the first differing
+  byte, re-introducing the exact byte-by-byte timing leak on the two highest-traffic endpoints,
+  and leaving **three** copies of the shared-secret rule.
+- **#3 — log injection via client-controlled fields.** `correlation_id` and `channel` arrive in
+  the `/converse` request body (and `X-Correlation-Id` in the header) and were placed into the
+  MDC, echoed on the response header, and logged verbatim. A crafted CR/LF value could forge
+  extra log lines (`[CONVERSE] channel=admin grounded=true …`) or split the response header
+  (HTTP response splitting).
+
+### Objective
+
+One definition of "authorized" (constant-time) across every gated endpoint, and a single
+choke-point that neutralizes any client-controlled correlation id / channel before it reaches a
+log, the MDC, or a response header — without changing the pilot's open-when-no-key semantics.
+
+### Scope
+
+- Route `/converse` and `/converse-stream` through `ApiKeyGuard.authorized` (delete both inline
+  `authorized()` methods); keep the existing empty-body 401 behaviour.
+- Add `CorrelationId.sanitize(String)` (strip `Character.isISOControl` chars, cap length) and
+  apply it wherever a client value enters the MDC / a log / a response header:
+  `CorrelationId.set` / `setChannel`, `CorrelationIdFilter.resolve` (inbound header),
+  `ConverseStreamController.resolveCorrelationId` (echoed header + worker MDC), and the
+  `[CONVERSE]` / `[CONVERSE-STREAM]` turn logs.
+
+### Acceptance
+
+- No endpoint uses `String.equals` for the api-key compare; all delegate to the constant-time
+  `ApiKeyGuard`. Pilot semantics unchanged (empty key = open, configured key enforced).
+- A `correlation_id` / `channel` / `X-Correlation-Id` carrying CR/LF cannot inject a second log
+  line nor a second response-header value; an oversized value is bounded.
+- `mvn test` + ArchUnit green, with a focused test pinning the sanitization contract.
+
+### Implementation notes (2026-08-04)
+
+Delivered on `task/TASK-BE-022-auth-log-hardening`:
+
+- **#1 — constant-time unification.** `ConverseController` and `ConverseStreamController` now
+  hold an `ApiKeyGuard` (built from `voice-support.conversation.api-key`) and call
+  `apiKeyGuard.authorized(providedKey)`; the inline `authorized()` methods (`apiKey.equals(...)`)
+  are removed. `ApiKeyGuard` (constant-time `MessageDigest.isEqual`, from BE-019) is now the
+  **single** shared-secret rule across `/converse`, `/converse-stream` and the interceptor-gated
+  knowledge/read endpoints.
+- **#3 — sanitization choke-point.** New `CorrelationId.sanitize(String)` strips every
+  `Character.isISOControl` char (CR/LF/TAB/…) and caps the result at **200** chars (returns
+  `null` for `null` so callers keep their blank handling). Applied in `CorrelationId.set` /
+  `setChannel` (before `MDC.put`), `CorrelationIdFilter.resolve` (inbound `X-Correlation-Id`),
+  `ConverseStreamController.resolveCorrelationId` (value echoed on the response header +
+  re-established in the worker MDC), and the `nullSafe(...)` used by both `[CONVERSE]` and
+  `[CONVERSE-STREAM]` turn logs. All existing MDC-derived structured logs
+  (`[TELEMETRY]`/`[PROMPT]`/`[GUARDRAIL]`/`[LANGUAGE]`) inherit the sanitized value for free.
+- **Not runtime-behaviour-changing beyond hardening:** no functional/latency change (auth outcome
+  and correlation-id continuity are preserved for well-formed inputs); the constant-time compare
+  is sub-ms, no new pipeline slice. Existing BE-009 telemetry unchanged.
+- **Tests (`mvn test` 335 green, +5):** new `CorrelationIdTest` pins CR/LF stripping, the 200-char
+  cap, null/blank handling, and `set`/`setChannel` sanitizing into the MDC. Existing
+  `CorrelationIdFilterTest`, `ConverseControllerApiKeyTest`, `ConverseStreamControllerAuthTest`
+  and the full slice/BDD suites stay green (behaviour-preserving for normal ids), ArchUnit OK.
+
+### Review & QA
+
+- Adversarial review + QA (functional; the change is a transport-layer hardening, not a measured
+  ADR-0018 pipeline slice) — **pending** before merge-ready.
+
+---
+
+## TASK-BE-023 — Restrict The Unauthenticated Ops Surface Before Non-Localhost Exposure
+
+**Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
+**Classification:** V1 security hardening
+**Status:** Proposed (2026-08-04) — **ticket only, deferred**. Created from finding **#4** of the
+2026-08-04 backend adversarial review.
+**Priority:** Medium
+**Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100), non-blocking
+finding #4.
+**Relates to:** TASK-BE-016 (springdoc / Swagger UI + `/v3/api-docs`), TASK-BE-019 (the
+`x-api-key` gate + `ApiKeyGuard`/interceptor to reuse), TASK-BE-021 (the `REDIS_HEALTH_ENABLED`
+actuator gating precedent), ADR-0010 (contracts + security before real channels).
+
+### Context
+
+BE-019 deliberately kept the operational/documentation surface open so the localhost pilot and
+QA smoke tests keep working: `/swagger-ui**`, `/v3/api-docs` (+ `.yaml`), and the Actuator
+endpoints exposed in `application.yml` (`health,info,metrics`) answer **without** any
+`x-api-key`. The BE-019 live smoke explicitly confirmed `v3/api-docs` → 200 and `actuator/health`
+→ 200 as *intended* non-over-gating. This is fine on a strictly localhost pilot, but the moment
+the backend is reachable off-box (the Sprint 11 remote-deployment direction), an anonymous caller
+can enumerate the full API contract (`/v3/api-docs`) and read operational metrics
+(`/actuator/metrics`), which is an information-disclosure + recon surface.
+
+### Objective
+
+Ensure the API-documentation and operational endpoints are **not anonymously reachable** on any
+non-localhost deployment, while keeping the localhost pilot + QA flow frictionless.
+
+### Scope (to design, not yet decided)
+
+- Decide the mechanism (record a short ADR note): options include
+  - gating `/swagger-ui**` + `/v3/api-docs**` behind the same `x-api-key`
+    (`ApiKeyAuthInterceptor` extension) when a key is configured;
+  - restricting Actuator to `health,info` publicly and gating `metrics` (and any future
+    `prometheus`) — or binding the Actuator to a separate management port / localhost;
+  - environment-driven exposure (open on the localhost pilot profile, closed by default
+    otherwise), consistent with the BE-021 `REDIS_HEALTH_ENABLED` precedent.
+- Keep `/actuator/health` reachable for container/orchestrator liveness (do not break the deploy
+  probe).
+- Preserve the pilot: with no key / localhost, the docs + metrics stay reachable for QA.
+
+### Acceptance
+
+- With a key configured (non-localhost posture), anonymous `GET /v3/api-docs`,
+  `/swagger-ui/index.html` and `/actuator/metrics` are rejected (sanitized 401/403 or not
+  exposed), while `/actuator/health` stays reachable for probes.
+- The localhost pilot + QA smoke path is documented and still works.
+- `@WebMvcTest` / integration tests cover the gated vs open matrix; `mvn test` + ArchUnit green;
+  the decision is recorded (ADR note or in this ticket).
+
+### Notes
+
+- Pure transport / configuration hardening — no domain, RAG or LLM change.
+- Coordinate with the remote-deployment work (Sprint 11): this is the natural gate to close
+  *before* the backend answers on a non-loopback interface.
