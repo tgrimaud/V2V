@@ -272,7 +272,11 @@ LB/VIP config (TASK-INFRA-002), CI (TASK-OPS-001), Ansible orchestration (TASK-O
 **Related decisions:** ADR-0038, ADR-0033 (WebRTC/TLS)
 **Depends on:** TASK-INFRA-001 (running backends), platform team coordination
 **Classification:** V1 pilot deployment
-**Status:** To do (Sprint 11, branch `task/TASK-INFRA-002-haproxy-vips`)
+**Status:** ✅ Implemented — adversarial 92/100 (Pass; VRRP unicast + ip_nonlocal_bind
+fixes); QA GO (`deploy/haproxy/qa-validate-haproxy.sh` 25/25 incl. real `haproxy -c`,
+[report](../../docs/qa/task-infra-002-haproxy-vips-qa-report.md)); live VIP/TLS/failover
+deferred to the LB hosts (platform open inputs). ✅ **Merge-ready** (merge on the
+user's explicit request). Branch `task/TASK-INFRA-002-haproxy-vips`
 **Priority:** High
 **Branch:** `task/TASK-INFRA-002-haproxy-vips`
 
