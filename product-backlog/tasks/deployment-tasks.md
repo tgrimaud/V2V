@@ -428,7 +428,11 @@ Deployment to the VMs (TASK-OPS-002); Bugbot/Cloud-Agents GitHub App (optional, 
 **Related decisions:** ADR-0038, ADR-0010 (industrialization gate)
 **Depends on:** TASK-INFRA-001, TASK-OPS-001; secrets store (open input)
 **Classification:** V1 pilot deployment (release)
-**Status:** To do (Sprint 11, branch `task/TASK-OPS-002-ansible-release`)
+**Status:** ✅ Implemented — adversarial 93/100 (Pass; KB provisioning + Redis auth
+fixes applied); QA GO (`deploy/ansible/qa-validate-ansible.sh` 33/33,
+[report](../../docs/qa/task-ops-002-ansible-release-qa-report.md)); live tst
+deploy/rollback/drain deferred to first deploy. ✅ **Merge-ready** (merge on the
+user's explicit request). Branch `task/TASK-OPS-002-ansible-release`
 **Priority:** High
 **Branch:** `task/TASK-OPS-002-ansible-release`
 
