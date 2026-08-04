@@ -224,8 +224,9 @@ at non-existent image paths. Residual (accepted, pilot): secrets via `docker ins
 **QA GO (2026-08-04)** — `deploy/compose/qa-validate.sh` 22/22 deterministic checks green
 (renders + healthchecks + KB read-only mount + secret hygiene + key parity);
 [QA report](../../docs/qa/task-infra-001-compose-stacks-qa-report.md). Live "reaches
-Postgres/Redis/VIP" smoke deferred to tst (open inputs). ✅ **Merge-ready** (merge on the
-user's explicit request).
+Postgres/Redis/VIP" smoke deferred to tst (open inputs). ✅ **Merged into
+`feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `9fef902`; rides to
+`feat/restart-from-scratch` at sprint closure).
 **Priority:** High
 **Branch:** `task/TASK-INFRA-001-compose-stacks`
 
