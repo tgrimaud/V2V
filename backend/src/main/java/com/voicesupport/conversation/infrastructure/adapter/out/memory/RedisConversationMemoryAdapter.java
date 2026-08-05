@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
+import com.voicesupport.shared.observability.CorrelationId;
 import io.micrometer.core.instrument.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +55,7 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
             return List.copyOf(turns);
         } catch (DataAccessException e) {
             log.warn("[CONVERSATION-MEMORY] op=read outcome=degraded conversation={} — redis read failed, empty history",
-                    conversationId, e);
+                    forLog(conversationId), e);
             Metrics.counter("voice_support.conversation_memory.degraded", "op", "read", "reason", "redis").increment();
             return List.of();
         }
@@ -69,7 +70,7 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
             store.appendTrimExpire(key(conversationId), serialize(turn), maxTurns, ttl);
         } catch (DataAccessException e) {
             log.warn("[CONVERSATION-MEMORY] op=write outcome=degraded conversation={} — redis write failed, turn not persisted",
-                    conversationId, e);
+                    forLog(conversationId), e);
             Metrics.counter("voice_support.conversation_memory.degraded", "op", "write", "reason", "redis").increment();
         }
     }
@@ -93,10 +94,18 @@ public class RedisConversationMemoryAdapter implements ConversationMemoryPort {
             return objectMapper.readValue(value, ConversationTurn.class);
         } catch (JsonProcessingException e) {
             log.warn("[CONVERSATION-MEMORY] op=read outcome=skip conversation={} — dropping corrupt turn entry",
-                    conversationId, e);
+                    forLog(conversationId), e);
             Metrics.counter("voice_support.conversation_memory.degraded", "op", "read", "reason", "corrupt").increment();
             return null;
         }
+    }
+
+    // The conversation id is client-controlled (it arrives in the /converse request body), so a
+    // crafted CR/LF value could forge a second log line on these degraded/skip paths. Route it
+    // through the same sanitizer used for correlation_id/channel (TASK-BE-022) before logging:
+    // strips ISO control chars and caps the length, closing the log-injection vector.
+    private static String forLog(String conversationId) {
+        return CorrelationId.sanitize(conversationId);
     }
 
     private static boolean isBlank(String value) {

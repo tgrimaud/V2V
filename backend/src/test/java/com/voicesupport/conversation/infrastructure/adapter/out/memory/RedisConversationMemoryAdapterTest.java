@@ -1,9 +1,13 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.memory;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.conversation.domain.model.valueobject.ConversationTurn;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.Duration;
@@ -13,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("RedisConversationMemoryAdapter (shared, bounded, JSON round-trip, degrades on outage)")
@@ -122,6 +127,33 @@ class RedisConversationMemoryAdapterTest {
         memory.append("c1", new ConversationTurn("q", "a"));
         // read must degrade to empty rather than propagate the DataAccessException
         assertTrue(memory.recentTurns("c1").isEmpty());
+    }
+
+    @Test
+    @DisplayName("a CR/LF-laced conversation id cannot forge a second log line on the degraded path")
+    void degradedReadLogSanitizesConversationId() {
+        FakeConversationTurnStore store = new FakeConversationTurnStore();
+        store.failing = true;
+        RedisConversationMemoryAdapter memory = adapter(store, 6);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(RedisConversationMemoryAdapter.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            // the id arrives from the client; a naive log would inject a forged second line
+            memory.recentTurns("c1\r\n[CONVERSATION-MEMORY] op=read outcome=ok forged=true");
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertEquals(1, appender.list.size());
+        String logged = appender.list.get(0).getFormattedMessage();
+        assertFalse(logged.contains("\n"), "no injected newline in the log line");
+        assertFalse(logged.contains("\r"), "no injected carriage return in the log line");
+        // control chars stripped, the raw id text is preserved on the SAME single line
+        assertTrue(logged.contains("conversation=c1[CONVERSATION-MEMORY] op=read outcome=ok forged=true"),
+                "sanitized id kept on one line: " + logged);
     }
 
     // Manual fake (no Mockito): in-memory list per key with LTRIM-style trimming; can simulate a
