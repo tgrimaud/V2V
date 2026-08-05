@@ -24,7 +24,9 @@ companion to the topology reference
 1. **CI is green** on the mainline and images are published (see "Promote a version").
 2. **Control node** has `ansible-core >= 2.15` (`pip install ansible-core`).
 3. **SSH + sudo** for `grimaud` on every target VM (`ssh grimaud@<host>.mt.lan`, then sudo).
-4. **Targets** have Docker Engine + the `docker compose` v2 plugin.
+4. **Targets** have Docker Engine + the `docker compose` v2 plugin — provision bare
+   Rocky EL9 VMs once with `ansible-playbook prereqs.yml` (TASK-OPS-003; idempotent,
+   installs Docker + compose v2 + opens each tier's firewalld port).
 5. **Vault** is populated:
    ```bash
    cd deploy/ansible

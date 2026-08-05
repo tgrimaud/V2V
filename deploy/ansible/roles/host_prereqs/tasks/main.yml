@@ -1,0 +1,80 @@
+---
+# Provision the container runtime on a bare Rocky Linux EL9 VM (TASK-OPS-003).
+# The compose_tier role (TASK-OPS-002) assumes docker + the compose v2 plugin exist;
+# this role installs them. Idempotent: dnf/systemd report changed only on first apply.
+#
+# SELinux note (EL9 enforcing): the backend KB `:ro` bind mount may need `:Z`
+# relabeling. If the first deploy hits an AVC denial reading /app/kb-assets, add `:Z`
+# to that volume in deploy/compose/backend/docker-compose.yml (tracked follow-up).
+
+- name: "Install dnf plugins core (repo management)"
+  ansible.builtin.dnf:
+    name: dnf-plugins-core
+    state: present
+
+- name: "Add the Docker CE repository (Rocky/RHEL EL9)"
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/centos/docker-ce.repo"
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
+
+- name: "Install Docker Engine + compose v2 plugin"
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    # Rocky EL9 ships container-tools (podman/runc); containerd.io conflicts with
+    # runc. allowerasing lets dnf remove the conflicting packages on the app VMs
+    # (the DB VM's podman pod is on .102, which is NOT a prereqs target).
+    allowerasing: true
+
+- name: "Enable and start the Docker service"
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: "Add the deploy user to the docker group"
+  ansible.builtin.user:
+    name: "{{ ansible_user | default('grimaud') }}"
+    groups: docker
+    append: true
+
+# Tier-aware firewalld: open the published port so cross-VM traffic works
+# (backend<->redis, VIP<->tier). Uses firewall-cmd directly to avoid a collection
+# dependency; no-op when firewalld is not running.
+- name: "Check whether firewalld is active"
+  ansible.builtin.command: systemctl is-active firewalld
+  register: firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: "Open the {{ tier }} port {{ firewall_port | default('') }}/tcp in firewalld"
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --add-port={{ firewall_port }}/tcp"
+  register: fw_add
+  changed_when: "'ALREADY_ENABLED' not in fw_add.stderr and 'ALREADY_ENABLED' not in fw_add.stdout"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+
+- name: "Reload firewalld to apply the permanent rule"
+  ansible.builtin.command:
+    cmd: "firewall-cmd --reload"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+    - fw_add is changed
+  changed_when: true
+
+- name: "Confirm docker + compose v2 are available"
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - "docker --version"
+    - "docker compose version"
+  changed_when: false

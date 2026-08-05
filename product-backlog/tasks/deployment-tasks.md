@@ -371,6 +371,65 @@ Self-hosted LLM/STT/TTS (infra-v1 GPU option) - not a pilot prerequisite.
 
 ---
 
+## TASK-OPS-003 - Host prerequisites (Docker Engine + compose plugin) via Ansible
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038 (Docker + compose on the app VMs)
+**Depends on:** SSH access to the VMs (open input #1)
+**Classification:** V1 pilot deployment (host provisioning)
+**Status:** ✅ Implemented — `host_prereqs` role + `prereqs.yml` (Docker Engine +
+compose v2 + buildx, service enable, docker group, tier-aware firewalld). Adversarial
+92/100 (Pass; Rocky EL9 podman/runc conflict fixed via `allowerasing`); QA GO 21/21 +
+OPS-002 33/33 no regression ([report](../../docs/qa/task-ops-003-docker-host-prereqs-qa-report.md));
+live run deferred (VM network access, #1). ✅ **Merge-ready** (merge on explicit user request).
+**Priority:** High (blocks the first deploy - the compose_tier role assumes Docker exists)
+**Branch:** `task/TASK-OPS-003-docker-host-prereqs`
+
+### Objective
+
+The `compose_tier` role (TASK-OPS-002) runs `docker compose pull/up` but **assumes
+Docker is already installed**. The tst VMs are bare Rocky Linux EL9, so a first
+deploy fails with "docker: command not found". Add an idempotent Ansible play that
+provisions the container runtime on the redis/backend/voice VMs before deployment.
+
+### Scope
+
+- New `host_prereqs` role: install **Docker Engine** (docker-ce, cli, containerd) +
+  **compose v2 plugin** + buildx from the official Docker CE repo on Rocky EL9
+  (dnf), enable/start the service, add the deploy user to the `docker` group.
+- Tier-aware **firewalld** opening of the published port (redis 6379, backend 8080,
+  voice 8090) when firewalld is active, so cross-VM traffic (backend↔redis, VIP↔tier)
+  works - guarded, no-op when firewalld is inactive.
+- Standalone `prereqs.yml` playbook (run once per fresh host); documented in the
+  Ansible README + release runbook. Not folded into `deploy.yml` to keep deploys fast.
+- Note SELinux: the KB `:ro` bind mount may need `:Z` relabeling on enforcing hosts
+  (documented; compose change tracked as a follow-up if the first deploy hits AVC denials).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A bare Rocky EL9 VM is ready to run compose stacks
+  Given a fresh redis/backend/voice VM with SSH access
+  When prereqs.yml runs against it
+  Then docker + the compose v2 plugin are installed and the service is enabled
+  And re-running prereqs.yml reports no changes (idempotent)
+```
+
+### Out Of Scope
+
+Kubernetes/podman; Docker install on the DB VM (`.102`, platform-managed Postgres pod)
+and the LB VMs (HAProxy, native). Image publication (TASK-OPS-001) and the deploy
+itself (TASK-OPS-002).
+
+### Residual (accepted for the pilot)
+
+- The tier port is opened in the **default firewalld zone** (Redis 6379 with auth on).
+  Restricting the source to the backend subnet (rich rule) is a hardening follow-up.
+- SELinux `:Z` relabel of the KB `:ro` mount is documented, applied only if the first
+  deploy hits an AVC denial.
+
+---
+
 ## TASK-OPS-001 - GitHub Actions CI (test + build/push images)
 
 **Parent:** EPIC-012

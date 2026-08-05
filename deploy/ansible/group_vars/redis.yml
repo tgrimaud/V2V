@@ -13,6 +13,9 @@ redis_image_tag: "7-alpine"
 redis_bind: "0.0.0.0"
 redis_port: 6379
 
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 6379
+
 # maxmemory < container memory limit; noeviction keeps active sessions.
 redis_maxmemory: "2gb"
 redis_cpus: "1.5"

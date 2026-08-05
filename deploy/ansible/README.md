@@ -20,9 +20,12 @@ deploy/ansible/
 │   ├── backend.yml             # backend tier config (mirrors compose/backend/.env.example)
 │   ├── voice.yml               # voice tier config + draining knobs
 │   └── redis.yml               # redis tier config
-├── roles/compose_tier/         # generic: dir + compose copy + .env render + pull + up + health
-│   ├── tasks/{main,drain,health}.yml
-│   └── templates/{backend,voice,redis}.env.j2
+├── roles/
+│   ├── host_prereqs/tasks/main.yml   # install Docker Engine + compose v2 + firewalld (Rocky EL9)
+│   └── compose_tier/                 # generic: dir + compose copy + .env render + pull + up + health
+│       ├── tasks/{main,drain,health,kb_assets,ollama_model}.yml
+│       └── templates/{backend,voice,redis}.env.j2
+├── prereqs.yml                 # one-time host provisioning (Docker) on redis/backend/voice
 ├── deploy.yml                  # redis -> backend (rolling) -> voice (rolling, drained)
 └── rollback.yml                # redeploy a pinned previous tag (imports deploy.yml)
 ```
@@ -30,8 +33,8 @@ deploy/ansible/
 ## Prerequisites
 
 - Control node: `ansible-core` >= 2.15 (`pip install ansible-core`).
-- Targets: Docker Engine + `docker compose` v2 plugin, SSH key access for `grimaud`
-  with `sudo`.
+- Targets: SSH key access for `grimaud` with `sudo`. The Docker Engine + `docker
+  compose` v2 plugin are installed by `prereqs.yml` (run once per fresh host, below).
 - Secrets: `cp group_vars/all/vault.example.yml group_vars/all/vault.yml`, fill it,
   then `ansible-vault encrypt group_vars/all/vault.yml` (the real file is git-ignored).
 - A published, immutable image tag (`vX.Y.Z` or `sha-xxxxxxx`) — never `latest`.
@@ -40,6 +43,10 @@ deploy/ansible/
 
 ```bash
 cd deploy/ansible
+
+# One-time: provision the container runtime on bare VMs (idempotent, safe to re-run):
+ansible-playbook prereqs.yml                       # all deploy tiers
+ansible-playbook prereqs.yml --limit redis         # a single tier
 
 # Dry-run first (no changes):
 ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass --check --diff
