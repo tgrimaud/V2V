@@ -411,6 +411,13 @@ Kubernetes/podman; Docker install on the DB VM (`.102`, platform-managed Postgre
 and the LB VMs (HAProxy, native). Image publication (TASK-OPS-001) and the deploy
 itself (TASK-OPS-002).
 
+### Residual (accepted for the pilot)
+
+- The tier port is opened in the **default firewalld zone** (Redis 6379 with auth on).
+  Restricting the source to the backend subnet (rich rule) is a hardening follow-up.
+- SELinux `:Z` relabel of the KB `:ro` mount is documented, applied only if the first
+  deploy hits an AVC denial.
+
 ---
 
 ## TASK-OPS-001 - GitHub Actions CI (test + build/push images)

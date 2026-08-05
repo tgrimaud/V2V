@@ -27,6 +27,9 @@ for pkg in docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-com
   has "$pkg" "$ROLE" && ok "installs $pkg" || ko "installs $pkg"
 done
 
+# 3b) Conflict handling for Rocky EL9 container-tools (podman/runc vs containerd.io).
+has "allowerasing: true" "$ROLE" && ok "handles podman/runc conflict (allowerasing)" || ko "handles podman/runc conflict (allowerasing)"
+
 # 4) Service enabled/started + user in docker group.
 has "name: docker" "$ROLE" && has "enabled: true" "$ROLE" && ok "enables/starts docker service" || ko "enables/starts docker service"
 has "groups: docker" "$ROLE" && ok "adds deploy user to docker group" || ko "adds deploy user to docker group"

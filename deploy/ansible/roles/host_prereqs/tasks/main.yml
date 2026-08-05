@@ -27,6 +27,10 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
+    # Rocky EL9 ships container-tools (podman/runc); containerd.io conflicts with
+    # runc. allowerasing lets dnf remove the conflicting packages on the app VMs
+    # (the DB VM's podman pod is on .102, which is NOT a prereqs target).
+    allowerasing: true
 
 - name: "Enable and start the Docker service"
   ansible.builtin.systemd:
