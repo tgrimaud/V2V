@@ -41,6 +41,16 @@ registry, secrets store, SSH ranges) — captured in
 `docs/operations/deployment-eir-ai4cc-tst.md` (Open inputs) and gated behind
 TASK-INFRA-003 / TASK-INFRA-002 rather than guessed.
 
+**Scope extended (2026-08-05):** after the original tickets landed, a **full
+adversarial review of the whole application** (code + docs) was run and persisted
+(`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`, verdict *proceed
+with conditions*, overall ≈2.6/5). Its follow-up tickets are folded into this sprint
+(see **Full adversarial review follow-ups** below). This includes the hardening
+tickets already merged during the review loop (**BUG-006**, **TASK-BE-024**,
+**TASK-OPS-004**, **TASK-INFRA-004**) plus the newly-opened must/should-fix set;
+the deferred tickets are tracked but out of this sprint's execution. **TASK-DOC-004**
+(truth-in-labeling of unimplemented V1 scope) is the first to be started.
+
 **Sprint branch:** `feat/sprint-11-remote-deployment` (off `feat/restart-from-scratch`).
 Two-level branch model (as in Sprint 10): ticket branches fork from and merge
 back into this sprint branch (`git merge --no-ff`); the sprint branch merges into
@@ -97,6 +107,52 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 
 Full ticket details live in `tasks/deployment-tasks.md`.
 
+## Full adversarial review follow-ups (added 2026-08-05)
+
+Surfaced by the whole-application adversarial review
+(`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`). Already-merged
+hardening tickets are listed for accuracy; the must/should-fix set is **in this
+sprint's scope**; the deferred set is tracked but **out of execution** this sprint.
+
+### Already merged during the review loop
+
+| Ticket | Title | Status |
+|---|---|---|
+| BUG-006 | VRRP fails over on HAProxy death (keepalived weight -60) | ✅ Merged (`7b1ba56`) — live retest pending |
+| TASK-BE-024 | Sanitize `conversation_id` in memory logs + pipeline Redis append | ✅ Merged (`174af74`) |
+| TASK-OPS-004 | Source-scoped firewalld, provisioning egress docs, registry logout | ✅ Merged (`5a3da58`) |
+| TASK-INFRA-004 | Per-IP rate limiting at the voice TLS edge | ✅ Merged (`fb25f2c`) |
+
+### In scope — must fix
+
+| Ticket | Title | Status |
+|---|---|---|
+| TASK-DOC-004 | Truth-in-labeling: mark billing/routing/escalation/Genesys as NOT IMPLEMENTED | 🚧 Started (2026-08-05) |
+| TASK-INFRA-006 | Close/track the live-deploy open inputs (TLS, TURN, LB apply, SSH CIDR) | 📋 Open |
+| TASK-OPS-007 | Centralized observability (OTLP collector + enable export) | 📋 Open |
+| TASK-WEB-022 | Latency gate remediation (meet ADR-0029 or revise it) | 📋 Open |
+| TASK-BE-025 | Streaming LLM + embedding/pgvector timeouts | 📋 Open |
+
+### In scope — should fix
+
+| Ticket | Title | Status |
+|---|---|---|
+| TASK-INFRA-007 | Deep backend health check + wired voice drain | 📋 Open |
+| TASK-OPS-008 | Redis + Postgres backup/restore | 📋 Open |
+| TASK-DOC-005 | Doc freshness + backlog-index integrity | 📋 Open |
+| BUG-007 | `/converse` ignores the KB domain filter | 📋 New (P2) |
+| BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | 📋 New (P2) |
+
+### Tracked but out of this sprint's execution (deferred)
+
+| Ticket | Title |
+|---|---|
+| TASK-BE-026 | Retries on idempotent reads + LLM circuit breaker |
+| TASK-WEB-023 | Streaming provider protocols (Gradium unlock) |
+| TASK-WEB-024 | WebRTC concurrency ceiling + drop per-turn loop |
+| TASK-OPS-006 | SHA-pin GitHub Actions + Dependabot (already ticketed) |
+| TASK-INFRA-005 | Validate WebRTC signaling stickiness at the voice LB |
+
 ## Open inputs (collected incrementally)
 
 Blocking or shaping the tickets — full list in
@@ -115,9 +171,10 @@ Blocking or shaping the tickets — full list in
 - Billing/identity, BSS/PDF evidence and deterministic comparison (Sprint 12,
   gated by OQ-001/003/004).
 - Telephony and Genesys handoff (Sprint 13, gated by OQ-006).
-- A full OTLP observability stack: the inventory has **no collector host**, so
-  OTLP export stays opt-in and off by default (ADR-0028/ADR-0038); keep structured
-  logs + `/actuator/metrics`. A collector deployment is a later observability ticket.
+- A full OTLP observability stack: originally deferred (the inventory had **no
+  collector host**). The review's **TASK-OPS-007** now brings a *minimal* collector +
+  enabling OTLP export into scope so pilot p95/p99 can be aggregated; a full-blown
+  observability platform remains out of scope.
 - Kubernetes: `infra-v1.md` is the long-term operator target; this pilot is bare
   VMs + HAProxy (ADR-0038).
 - Any change to what the bot *says* — this sprint changes *where* it runs, not the
