@@ -113,6 +113,16 @@ grep -q "tier == 'backend'" roles/compose_tier/tasks/main.yml && ok "KB provisio
 grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "articles.csv" roles/compose_tier/tasks/kb_assets.yml \
   && ok "KB task copies knowledge-base/ + articles.csv" || bad "KB task missing sources"
 
+# --- 10. Registry credential hygiene (TASK-OPS-004) ---------------------------
+# The role logs in before the pull; it must also log out afterwards so the token
+# does not linger in ~/.docker/config.json, and both must be gated + no_log.
+ROLE_MAIN="roles/compose_tier/tasks/main.yml"
+awk '/docker login/{login=NR} /docker logout/{logout=NR} END{exit !(login && logout && logout>login)}' "$ROLE_MAIN" \
+  && ok "registry logout runs after login (drops cached credentials)" || bad "no docker logout after the pull"
+grep -q "docker logout {{ registry }}" "$ROLE_MAIN" \
+  && grep -A4 "docker logout" "$ROLE_MAIN" | grep -q "registry_login_required | bool" \
+  && ok "logout gated on registry_login_required" || bad "logout not gated on registry_login_required"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

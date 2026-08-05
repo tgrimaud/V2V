@@ -16,6 +16,13 @@ redis_port: 6379
 # Published port opened in firewalld by host_prereqs (TASK-OPS-003).
 firewall_port: 6379
 
+# Least privilege (TASK-OPS-004): 6379 is reached ONLY by the backend VMs that use
+# the shared conversation memory. host_prereqs opens the port via source-scoped
+# firewalld rich rules; empty list = fall back to opening to everyone.
+firewall_allowed_sources:
+  - "192.168.0.105/32"   # vla-t03 backend
+  - "192.168.0.106/32"   # vla-t04 backend
+
 # maxmemory < container memory limit; noeviction keeps active sessions.
 redis_maxmemory: "2gb"
 redis_cpus: "1.5"

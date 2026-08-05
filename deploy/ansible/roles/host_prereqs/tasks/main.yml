@@ -46,14 +46,35 @@
 
 # Tier-aware firewalld: open the published port so cross-VM traffic works
 # (backend<->redis, VIP<->tier). Uses firewall-cmd directly to avoid a collection
-# dependency; no-op when firewalld is not running.
+# dependency; no-op when firewalld is not running. When firewall_allowed_sources is
+# set (the default in group_vars, TASK-OPS-004), the port is opened ONLY to those
+# source IPs via rich rules (least privilege — e.g. Redis 6379 only to the backend
+# VMs, backend/voice ports only to the HAProxy LB nodes); an empty list falls back
+# to opening the port to everyone (previous behaviour).
 - name: "Check whether firewalld is active"
   ansible.builtin.command: systemctl is-active firewalld
   register: firewalld_state
   changed_when: false
   failed_when: false
 
-- name: "Open the {{ tier }} port {{ firewall_port | default('') }}/tcp in firewalld"
+# Preferred: source-scoped rich rules (only the tier's real clients reach the port).
+# argv keeps the whole rich-rule string as one argument (spaces + quotes intact).
+- name: "Open {{ tier }} port {{ firewall_port | default('') }}/tcp only to allowed sources"
+  ansible.builtin.command:
+    argv:
+      - firewall-cmd
+      - --permanent
+      - '--add-rich-rule=rule family="ipv4" source address="{{ item }}" port port="{{ firewall_port }}" protocol="tcp" accept'
+  register: fw_rich
+  changed_when: "'ALREADY_ENABLED' not in fw_rich.stderr and 'ALREADY_ENABLED' not in fw_rich.stdout"
+  loop: "{{ firewall_allowed_sources | default([]) }}"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+    - (firewall_allowed_sources | default([])) | length > 0
+
+# Fallback only: no source list configured -> open the port to everyone.
+- name: "Open the {{ tier }} port {{ firewall_port | default('') }}/tcp in firewalld (unscoped fallback)"
   ansible.builtin.command:
     cmd: "firewall-cmd --permanent --add-port={{ firewall_port }}/tcp"
   register: fw_add
@@ -61,6 +82,7 @@
   when:
     - firewalld_state.stdout == 'active'
     - firewall_port is defined
+    - (firewall_allowed_sources | default([])) | length == 0
 
 - name: "Reload firewalld to apply the permanent rule"
   ansible.builtin.command:
@@ -68,7 +90,7 @@
   when:
     - firewalld_state.stdout == 'active'
     - firewall_port is defined
-    - fw_add is changed
+    - (fw_rich is defined and fw_rich is changed) or (fw_add is defined and fw_add is changed)
   changed_when: true
 
 - name: "Confirm docker + compose v2 are available"

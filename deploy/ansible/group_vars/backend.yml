@@ -13,6 +13,13 @@ backend_port: 8080
 # Published port opened in firewalld by host_prereqs (TASK-OPS-003).
 firewall_port: 8080
 
+# Least privilege (TASK-OPS-004): 8080 is reached ONLY by the HAProxy LB nodes
+# (backend VIP .11 -> t03/t04); the voice tier always goes through the VIP, so the
+# proxied source is an LB node. Source-scoped firewalld rich rules; empty = open to all.
+firewall_allowed_sources:
+  - "192.168.0.100/32"   # vlp-t01 HAProxy
+  - "192.168.0.101/32"   # vlp-t02 HAProxy
+
 # Postgres .102 (pgvector 768 dim).
 db_url: "jdbc:postgresql://192.168.0.102:5432/voicesupport"
 db_username: "voicesupport"
