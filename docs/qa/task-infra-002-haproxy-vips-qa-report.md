@@ -7,6 +7,13 @@
   review. **25/25 deterministic checks pass** via `deploy/haproxy/qa-validate-haproxy.sh`,
   including a real `haproxy -c` config parse (run in the `haproxy:2.8` Docker image
   with a throwaway self-signed cert) plus HAProxy and VRRP structural invariants.
+- **Post-merge correction ([BUG-006](../../product-backlog/bugs/BUG-006-vrrp-failover-weight-insufficient.md), 2026-08-05):** the Sprint 11 full adversarial
+  review found the `chk_haproxy` penalty (`weight -40`) too small to fail the VIP
+  over on an HAProxy **process** death (master `150-40=110` > backup `100` →
+  blackhole). Fixed on `fix/BUG-006-vrrp-failover-weight` (`weight -60` → `90 < 100`)
+  with two new regression checks; the QA suite is now **27/27**. See
+  `product-backlog/bugs/BUG-006-vrrp-failover-weight-insufficient.md`. Live
+  `systemctl stop haproxy` failover still deferred to LB-host access.
 - **Main blockers:** none.
 - **Residual risks:**
   1. **WebRTC media is not proxied.** HAProxy is the TLS edge for the WebRTC
