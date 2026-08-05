@@ -6,9 +6,16 @@ architecture and class diagram of the project. Open them at
 extension in VS Code / Cursor.
 
 > **Branch note:** these diagrams depict the **target** V1 architecture (Java
-> backend, Pipecat agent, React, bridge). They do **not** represent the code
-> runnable on `feat/restart-from-scratch`, where only the Python STT-validation
-> slice exists. `target-v1-solution.drawio` is explicitly the target solution.
+> backend, Pipecat agent, React, and the old custom bridge). They still show
+> target-only elements — notably the removed custom WebSocket bridge
+> (`bridge_server.py`/`agent/bot.py`) and legacy `/api/conversation/ask*` routes —
+> so they do **not** all match the code runnable on `feat/restart-from-scratch`,
+> which now carries the full web Voice2Voice loop (Pipecat + WebRTC under
+> `voice-agent/web_voice`, backend `POST /converse` + `POST /converse-stream`) plus
+> the Sprint 11 deployment packaging. For the runnable contract see
+> [`../voice-runtime-http-contract.md`](../voice-runtime-http-contract.md) and
+> `product-backlog/backlog-index.md`; `target-v1-solution.drawio` is explicitly the
+> target solution.
 
 | File | Type | Source diagram |
 |------|------|----------------|

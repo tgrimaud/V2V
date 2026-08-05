@@ -24,6 +24,8 @@ Voice2Voice access, Genesys advisor handoff, and measurable pilot latency.
 | EPIC-008 Web synthesis and evidence view | V1 enabler | Draft | ADR-0003, ADR-0017 |
 | EPIC-009 Trust, security and auditability | V1 enabler | Draft | ADR-0003, ADR-0008, OQ-001 |
 | EPIC-010 Observability, latency and pilot validation | V1 pilot gate | Draft | ADR-0010, ADR-0018, OQ-005, OQ-006 |
+| EPIC-011 Multi-agent orchestration / domain routing | V1 core | Draft | ADR-0015, OQ-008, Sprint 8 domain tags (TASK-BE-013) |
+| EPIC-012 Pilot deployment, release & operations | V1 pilot deployment | In progress (Sprint 11) | ADR-0038, ADR-0008, ADR-0039, `docs/operations/deployment-eir-ai4cc-tst.md` |
 
 ---
 
@@ -440,3 +442,52 @@ Sprint 8** (TASK-BE-013 `DomainClassifier`).
 
 - Confidence threshold and tie-breaking policy for routing.
 - Whether classification is embedding-only or hybrid (keywords + embedding).
+
+---
+
+## EPIC-012 - Pilot Deployment, Release And Operations
+
+**Status:** In progress (Sprint 11, defined 2026-08-03)
+**Priority:** High
+**Classification:** V1 pilot deployment
+
+### Goal
+
+Take the two-service web Voice2Voice stack from "runs on a laptop" to "runs on the
+**eir-ai4cc-tst** pilot environment with a repeatable release", without changing what the
+bot says (DEC-002 stays in force).
+
+### Context
+
+The platform team provisioned the first remote environment (Rocky EL9 bare VMs,
+HAProxy/Keepalived VIPs, a Postgres pod, a Redis VM). Before this EPIC the stack had no
+Docker image, no CI, and bound `127.0.0.1`. This EPIC packages both services, wires them
+to that topology, makes the backend safe behind a VIP (Redis-backed shared memory), and
+stands up the build/deploy pipeline. See ADR-0038 (remote topology) and
+`docs/operations/deployment-eir-ai4cc-tst.md`.
+
+### Scope
+
+- Deployable artifacts: Docker images (backend + voice bridge), `deploy/compose/` stacks
+  per tier, HAProxy/Keepalived VIP configuration.
+- Release readiness: Redis-backed shared conversation memory (ADR-0008), GitHub Actions CI
+  (test + build/push images), Ansible/SSH deploy with a release/rollback runbook.
+- Release safety + resilience follow-ups: deep health checks + voice drain (TASK-INFRA-007),
+  data backup/restore (TASK-OPS-008), centralized observability (TASK-OPS-007).
+
+### Business Rules
+
+| ID | Rule |
+|----|------|
+| BR-012-1 | A deploy is always reproducible: immutable image tags only, never `latest`. |
+| BR-012-2 | Secrets come from the vault, are rendered to `0600` files and never logged. |
+| BR-012-3 | The bot's answer content is unchanged by deployment (DEC-002 preserved). |
+
+### Dependencies
+
+- ADR-0038 (pilot topology), ADR-0039 (embeddings placement), ADR-0008 (Redis memory).
+- Live go-live gated by network-access open inputs (TASK-INFRA-006).
+
+### Open Questions
+
+- Egress/TLS/TURN/SSH-CIDR closure for a live tst run (tracked in TASK-INFRA-006).

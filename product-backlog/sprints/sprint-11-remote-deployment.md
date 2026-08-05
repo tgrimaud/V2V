@@ -75,6 +75,12 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 
 ## Why now (state that justifies the sprint)
 
+> **Note (2026-08-05):** this block describes the **pre-sprint** state that justified
+> Sprint 11. Most gaps below are now closed — Docker images, CI, `deploy/compose/`
+> stacks, HAProxy/Keepalived, Ansible deploy and Redis-backed memory are delivered on
+> the sprint branch; live go-live remains gated by network-access open inputs
+> (TASK-INFRA-006). Read the **Status** block above for current state.
+
 - The pilot needs a **real environment**. The platform team has provisioned
   eir-ai4cc-tst; the stack currently has **no Dockerfile, no CI, and binds
   `127.0.0.1`** — none of it deploys as-is.
@@ -139,7 +145,7 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 |---|---|---|
 | TASK-INFRA-007 | Deep backend health check + wired voice drain | 📋 Open |
 | TASK-OPS-008 | Redis + Postgres backup/restore | 📋 Open |
-| TASK-DOC-005 | Doc freshness + backlog-index integrity | 📋 Open |
+| TASK-DOC-005 | Doc freshness + backlog-index integrity | ✅ Implemented on `task/TASK-DOC-005-freshness-backlog-integrity` (refreshed banners + sprint-11 "Why now"; ADR-0037 endpoint + ADR-0036/0037→Accepted; reconciled US-041/042, OQ-008, BUG-001, EPIC-011/012; French pass; `git diff --check` clean) — awaiting review/QA/merge |
 | BUG-007 | `/converse` ignores the KB domain filter | 📋 New (P2) |
 | BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | 📋 New (P2) |
 

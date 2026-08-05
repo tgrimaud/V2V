@@ -27,7 +27,7 @@ the largest slice of time-to-first-audio (~1.1–1.2 s, warm): the voice runtime
 calls the **blocking** `POST /api/conversation/converse` through
 `HttpBackendAdapter.answer()` and waits for the **complete** LLM answer before any
 audio is synthesized (`backend.first_token == backend.request`). The backend already
-exposes an **SSE streaming** endpoint (`GET /api/conversation/ask-stream`) that the
+exposes an **SSE streaming** endpoint (`POST /api/conversation/converse-stream`) that the
 voice path does not use.
 
 Lever 1 of TASK-WEB-015 proposes to consume that stream and hand the **first
@@ -59,7 +59,7 @@ decision is recorded before the implementation and the implementation is gated.
 
 1. **Adopt first-sentence streaming as the target for lever 1**, on the **existing
    Flow A synchronous-per-turn path** (ADR-0036, no broker): the voice runtime
-   consumes `GET /api/conversation/ask-stream` (SSE) and forwards the first
+   consumes `POST /api/conversation/converse-stream` (SSE) and forwards the first
    **guardrail-passing, sentence-sized** chunk to the streaming TTS as a plain
    `TextFrame`, then continues with subsequent sentences. Valid for V1 because
    ADR-0012 reaffirms the modular cascade (OQ-005: V1 "OpenAI" = cascade chat

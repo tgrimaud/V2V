@@ -7,8 +7,8 @@
 > refers to design intent and to the `main` reference implementation. Read the
 > "What is actually built on this branch today" block below for the current state.
 >
-> **What is actually built on this branch today (through Sprint 9)** is a full
-> **web Voice2Voice loop** across two rebuilt services:
+> **What is actually built on this branch today (through Sprint 11)** is a full
+> **web Voice2Voice loop** across two rebuilt services, now packaged for deployment:
 >
 > - **Python voice runtime** (`voice-agent/`, port `8090`): **STT**
 >   (`stt_validation/` — fixture + real Gradium, batch REST **and** streaming
@@ -30,16 +30,21 @@
 >   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
 >   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up}`,
 >   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
-> - **Infra:** `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama).
+> - **Infra:** local `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama) for
+>   dev, **plus the Sprint 11 deployment packaging**: Docker images for both services,
+>   `deploy/compose/` stacks per tier, HAProxy/Keepalived VIPs, GitHub Actions CI, and
+>   an Ansible deploy (packaged/deployable, not yet live on tst — network-access open
+>   inputs). **Redis-backed shared conversation memory** is built (`CONVERSATION_STORE=redis`,
+>   TASK-BE-021) so two backends behind a VIP keep multi-turn context.
 >
-> **Not built yet** (target only, Sprints 10–11): customer identity, read-only BSS
-> access, invoice PDF extraction + deterministic comparison, escalation contract +
-> Genesys handoff, phone (Twilio) Voice2Voice, Redis session store, and the
-> standalone React frontend (the web client is the `web_voice/` static page).
-> Route/port tables further down this document may still show the legacy
-> `main` contract (`/api/conversation/ask`, `ask-stream`, `:8081`, `agent/bot.py`,
-> `:7860` Pipecat UI, `:5173` React); the authoritative current contract is the one
-> in this block. See `voice-agent/README.md` and `product-backlog/backlog-index.md`.
+> **Not built yet** (target only): customer identity, read-only BSS access, invoice
+> PDF extraction + deterministic comparison, escalation contract + Genesys handoff,
+> phone (Twilio) Voice2Voice, and the standalone React frontend (the web client is the
+> `web_voice/` static page). Route/port tables further down this document may still
+> show the legacy `main` contract (`/api/conversation/ask`, `ask-stream`, `:8081`,
+> `agent/bot.py`, `:7860` Pipecat UI, `:5173` React); the authoritative current
+> contract is the one in this block. See `voice-agent/README.md` and
+> `product-backlog/backlog-index.md`.
 
 ## Overview
 
