@@ -133,7 +133,7 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 
 | Ticket | Title | Status |
 |---|---|---|
-| TASK-DOC-004 | Truth-in-labeling: mark billing/routing/escalation/Genesys as NOT IMPLEMENTED | 🚧 Started (2026-08-05) |
+| TASK-DOC-004 | Truth-in-labeling: mark billing/routing/escalation/Genesys as NOT IMPLEMENTED | ✅ Merged into sprint-11 (2026-08-05): NOT IMPLEMENTED/target markers on `v1-scope.md` + cahier (5.3/5.4/F3/F6/F6bis/F8/F10) and ADR-0003/0004/0005/0015/0019/0020 headers; ADR README built-vs-target refreshed; `git diff --check` clean |
 | TASK-INFRA-006 | Close/track the live-deploy open inputs (TLS, TURN, LB apply, SSH CIDR) | 📋 Open |
 | TASK-OPS-007 | Centralized observability (OTLP collector + enable export) | 📋 Open |
 | TASK-WEB-022 | Latency gate remediation (meet ADR-0029 or revise it) | 📋 Open |
