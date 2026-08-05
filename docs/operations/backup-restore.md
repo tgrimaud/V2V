@@ -36,6 +36,12 @@ Both jobs write to a local directory and — only if configured — copy off-hos
 > **Set the `*_remote` targets.** An on-host-only backup does **not** survive losing the
 > VM — which is the SPOF this ticket addresses. Point them at a host outside the DB/Redis
 > VM (e.g. the reference `vlb-ai4cc-t01` or a platform backup share) with key-based SSH.
+>
+> **Treat backups as sensitive data.** The Postgres dump carries conversation events and
+> the Redis snapshot carries live session memory — both may contain customer utterances /
+> PII (ADR-0008). On-host dirs are `0750 root`; the **off-host** target must also be
+> access-restricted and **encrypted at rest** (or the artifacts encrypted before transfer,
+> e.g. `age`/`gpg`). Do not copy backups to a shared/world-readable location.
 
 ## Redis
 
@@ -50,7 +56,8 @@ Run on demand:
 
 ```bash
 cd /opt/voice-support/redis/backup
-. ./redis-backup.env && BACKUP_DIR=/var/backups/voice-support/redis ./redis-backup.sh
+# set -a exports REDISCLI_AUTH so the exec'd script inherits it (a bare `. env` would not).
+set -a; . ./redis-backup.env; set +a; BACKUP_DIR=/var/backups/voice-support/redis ./redis-backup.sh
 ```
 
 ### Restore (destructive)
@@ -73,6 +80,11 @@ The role installs `pg-backup.sh` + a daily cron on **one** backend node (it dump
 shared `.102`, so one node is enough). It runs `pg_dump -Fc` inside a throwaway
 `postgres:16-alpine` container (no client install), prunes to `pg_backup_keep`, and copies
 off-host when `pg_backup_remote` is set. `PGPASSWORD` comes from a `0600` env file.
+
+> **Match `pg_client_image` to the server major version.** `pg_dump`/`pg_restore` refuse a
+> server newer than the client (e.g. a `16` client against a `17` server errors out). The
+> platform Postgres (`.102`) is externally managed, so confirm its version and override
+> `pg_client_image` in `group_vars/backend.yml` accordingly before relying on the schedule.
 
 Run on demand:
 
@@ -119,6 +131,20 @@ checks by **TASK-INFRA-006**):
 
 Until that window, the tooling + schedule are validated offline
 (`deploy/ansible/qa-validate-ansible.sh`, `bash -n` on the scripts).
+
+## Monitoring backup freshness
+
+Each run appends to `backup.log` in the snapshot dir, but a cron failure is otherwise
+silent — a job that stops producing artifacts leaves a *false* sense of durability. Until a
+metric/alert is wired (tracked with the live checks under **TASK-INFRA-006**), check
+freshness manually / from a monitoring probe: alert when the newest artifact is older than
+the expected interval.
+
+```bash
+# Redis: newest snapshot should be < ~2 h old; Postgres: < ~48 h.
+find /var/backups/voice-support/redis    -name 'redis-*.tar.gz'      -mmin -120 | grep -q . || echo "STALE redis backup"
+find /var/backups/voice-support/postgres -name 'voicesupport-*.dump' -mmin -2880 | grep -q . || echo "STALE postgres backup"
+```
 
 ## Related
 

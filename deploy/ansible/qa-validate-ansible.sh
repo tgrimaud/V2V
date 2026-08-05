@@ -149,6 +149,21 @@ grep -q 'redis-backup.env' roles/compose_tier/tasks/backup.yml && grep -q 'pg-ba
 grep -q 'ansible.builtin.cron' roles/compose_tier/tasks/backup.yml && ok "backup schedule uses cron" || bad "no backup cron scheduled"
 grep -q "inventory_hostname == groups\['backend'\]\[0\]" roles/compose_tier/tasks/backup.yml && ok "pg backup runs on a single backend node" || bad "pg backup not pinned to one node"
 grep -q 'vault_redis_password' roles/compose_tier/tasks/backup.yml && grep -q 'vault_db_password' roles/compose_tier/tasks/backup.yml && ok "backup passwords sourced from vault_* vars" || bad "backup passwords not from vault"
+# Behavioral regression (BUG found in adversarial review 2026-08-05): a cron that sources an
+# env file then EXEC's the backup script must `set -a` so the secret is exported to the child
+# process. A bare `. env && ... script.sh` leaves the var non-exported -> the script never sees
+# REDISCLI_AUTH -> silent backup failure. Both jobs must export.
+env_src=$(grep -cE '(^|;|\s)\.\s+\{\{ compose_root \}\}.*backup\.env' roles/compose_tier/tasks/backup.yml)
+set_a=$(grep -c 'set -a; \. {{ compose_root }}' roles/compose_tier/tasks/backup.yml)
+[ "$env_src" -ge 2 ] && [ "$set_a" -ge 2 ] && ok "both backup crons export sourced secrets (set -a before sourcing)" \
+  || bad "a backup cron sources its env file without 'set -a' -> secret not exported to the script (silent failure)"
+# Prove the shell semantics the check relies on (documents WHY the bare pattern is a bug).
+_qa_env="$(mktemp)"; printf 'QA_SECRET=xyz\n' > "$_qa_env"
+_exported=$( set -a; . "$_qa_env"; set +a; sh -c 'printf %s "$QA_SECRET"' )
+_bare=$( . "$_qa_env"; sh -c 'printf %s "$QA_SECRET"' )
+rm -f "$_qa_env"
+[ "$_exported" = "xyz" ] && [ -z "$_bare" ] && ok "verified: 'set -a' exports to exec'd child, bare source does not" \
+  || bad "shell export semantics unexpected on this host"
 
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"

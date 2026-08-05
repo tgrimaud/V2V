@@ -48,8 +48,10 @@
         name: "voice-support redis backup"
         minute: "{{ redis_backup_cron_minute }}"
         hour: "{{ redis_backup_cron_hour }}"
+        # set -a exports the sourced vars so the child script inherits REDISCLI_AUTH;
+        # a bare `. env` leaves it as a non-exported shell var the exec'd script never sees.
         job: >-
-          . {{ compose_root }}/redis/backup/redis-backup.env &&
+          set -a; . {{ compose_root }}/redis/backup/redis-backup.env; set +a;
           BACKUP_DIR={{ redis_backup_dir }} BACKUP_KEEP={{ redis_backup_keep }}
           BACKUP_REMOTE='{{ redis_backup_remote }}'
           {{ compose_root }}/redis/backup/redis-backup.sh
