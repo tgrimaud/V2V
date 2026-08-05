@@ -250,6 +250,7 @@ stays reproducible and rollback-addressable.
 ## Related
 
 - Repeatable release/rollback: [`release-process.md`](release-process.md)
+- Backup & restore (Redis + Postgres): [`backup-restore.md`](backup-restore.md)
 - Topology / ports / env: [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md)
 - Ansible deploy: [`../../deploy/ansible/README.md`](../../deploy/ansible/README.md)
 - Compose stacks: [`../../deploy/compose/README.md`](../../deploy/compose/README.md)

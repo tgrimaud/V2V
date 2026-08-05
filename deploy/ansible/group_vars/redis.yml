@@ -27,3 +27,15 @@ firewall_allowed_sources:
 redis_maxmemory: "2gb"
 redis_cpus: "1.5"
 redis_memory: "3g"
+
+# ---- Backup schedule (TASK-OPS-008) -----------------------------------------
+# AOF (--appendonly yes in the compose) is the continuous layer (~1s RPO). This cron
+# is the off-host, restorable snapshot (BGSAVE + AOF tar). Set redis_backup_remote to a
+# reachable rsync/scp target to protect against losing the Redis VM (the SPOF concern).
+# See deploy/backup/ + docs/operations/backup-restore.md.
+redis_backup_enabled: true
+redis_backup_dir: "/var/backups/voice-support/redis"
+redis_backup_cron_minute: "17"
+redis_backup_cron_hour: "*"      # hourly at :17
+redis_backup_keep: 168            # ~7 days of hourly snapshots
+redis_backup_remote: ""           # e.g. "backup@vlb-ai4cc-t01.mt.lan:/srv/backups/redis"

@@ -1,0 +1,113 @@
+---
+# Scheduled data backups (TASK-OPS-008): install the backup scripts + a cron job on
+# the tier that owns the data. Redis on the redis tier; Postgres pg_dump on ONE backend
+# node (it dumps the shared .102, so running it on every node would just duplicate).
+# Secrets go into a 0600 env file the cron sources — never into the crontab line.
+# Disable per tier with redis_backup_enabled/pg_backup_enabled=false. See
+# docs/operations/backup-restore.md.
+
+# ---- Redis tier -------------------------------------------------------------
+- name: "Redis backup: install scripts + hourly cron"
+  when:
+    - tier == 'redis'
+    - redis_backup_enabled | bool
+  block:
+    - name: "Redis backup: ensure script + snapshot dirs"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ compose_root }}/redis/backup"
+        - "{{ redis_backup_dir }}"
+
+    - name: "Redis backup: copy backup + restore scripts"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../backup/{{ item }}"
+        dest: "{{ compose_root }}/redis/backup/{{ item }}"
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - redis-backup.sh
+        - redis-restore.sh
+
+    - name: "Redis backup: render 0600 env file (REDISCLI_AUTH from vault)"
+      ansible.builtin.copy:
+        content: "REDISCLI_AUTH={{ vault_redis_password }}\n"
+        dest: "{{ compose_root }}/redis/backup/redis-backup.env"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: "Redis backup: schedule cron"
+      ansible.builtin.cron:
+        name: "voice-support redis backup"
+        minute: "{{ redis_backup_cron_minute }}"
+        hour: "{{ redis_backup_cron_hour }}"
+        # set -a exports the sourced vars so the child script inherits REDISCLI_AUTH;
+        # a bare `. env` leaves it as a non-exported shell var the exec'd script never sees.
+        job: >-
+          set -a; . {{ compose_root }}/redis/backup/redis-backup.env; set +a;
+          BACKUP_DIR={{ redis_backup_dir }} BACKUP_KEEP={{ redis_backup_keep }}
+          BACKUP_REMOTE='{{ redis_backup_remote }}'
+          {{ compose_root }}/redis/backup/redis-backup.sh
+          >> {{ redis_backup_dir }}/backup.log 2>&1
+
+# ---- Backend tier (Postgres, one node) --------------------------------------
+- name: "Postgres backup: install scripts + daily cron on one backend node"
+  when:
+    - tier == 'backend'
+    - pg_backup_enabled | bool
+    - inventory_hostname == groups['backend'][0]
+  block:
+    - name: "Postgres backup: ensure script + dump dirs"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ compose_root }}/backend/backup"
+        - "{{ pg_backup_dir }}"
+
+    - name: "Postgres backup: copy backup + restore scripts"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../backup/{{ item }}"
+        dest: "{{ compose_root }}/backend/backup/{{ item }}"
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - pg-backup.sh
+        - pg-restore.sh
+
+    - name: "Postgres backup: render 0600 env file (PGPASSWORD from vault)"
+      ansible.builtin.copy:
+        content: |
+          PGPASSWORD={{ vault_db_password }}
+          PGHOST={{ pg_backup_host }}
+          PGPORT={{ pg_backup_port }}
+          PGUSER={{ db_username }}
+          PGDATABASE={{ pg_backup_database }}
+        dest: "{{ compose_root }}/backend/backup/pg-backup.env"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: "Postgres backup: schedule cron"
+      ansible.builtin.cron:
+        name: "voice-support postgres backup"
+        minute: "{{ pg_backup_cron_minute }}"
+        hour: "{{ pg_backup_cron_hour }}"
+        job: >-
+          set -a; . {{ compose_root }}/backend/backup/pg-backup.env; set +a;
+          BACKUP_DIR={{ pg_backup_dir }} BACKUP_KEEP={{ pg_backup_keep }}
+          BACKUP_REMOTE='{{ pg_backup_remote }}' PG_CLIENT_IMAGE={{ pg_client_image }}
+          {{ compose_root }}/backend/backup/pg-backup.sh
+          >> {{ pg_backup_dir }}/backup.log 2>&1

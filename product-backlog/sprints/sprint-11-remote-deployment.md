@@ -137,8 +137,8 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 
 | Ticket | Title | Status |
 |---|---|---|
-| TASK-INFRA-007 | Deep backend health check + wired voice drain | ✅ Implemented on `task/TASK-INFRA-007-deploy-release-safety` (haproxy `/actuator/health` + admin-socket drain delegated to LB; QA haproxy 33/33 + ansible 41/41; live deferred to INFRA-006) — awaiting review/QA/merge |
-| TASK-OPS-008 | Redis + Postgres backup/restore | 📋 Open |
+| TASK-INFRA-007 | Deep backend health check + wired voice drain | ✅ Implemented on `task/TASK-INFRA-007-deploy-release-safety` (haproxy `/actuator/health` + admin-socket drain delegated to LB, opt-in + non-fatal; QA haproxy 33/33 + ansible 44/44; live deferred to INFRA-006) — awaiting review/QA/merge |
+| TASK-OPS-008 | Redis + Postgres backup/restore | ✅ Implemented on `task/TASK-OPS-008-data-resilience` (backup+restore scripts `deploy/backup/`, Ansible cron + 0600 vault env files, runbook `backup-restore.md` w/ RPO/RTO; QA ansible 49/49; live restore drill deferred to INFRA-006) — awaiting review/QA/merge |
 | TASK-DOC-005 | Doc freshness + backlog-index integrity | 📋 Open |
 | BUG-007 | `/converse` ignores the KB domain filter | 📋 New (P2) |
 | BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | 📋 New (P2) |

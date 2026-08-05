@@ -81,6 +81,12 @@
 - name: "Verify the {{ tier }} stack is healthy"
   ansible.builtin.include_tasks: health.yml
 
+# Redis + Postgres backup schedule (TASK-OPS-008): no-op on the voice tier and when
+# the per-tier backup flag is false.
+- name: "Install scheduled data backups"
+  ansible.builtin.include_tasks: backup.yml
+  when: tier in ['redis', 'backend']
+
 # Voice tier only: put the node back in rotation on each LB once healthy
 # (TASK-INFRA-007, delegated to the admin socket on every LB node).
 # Non-fatal like the drain: re-enabling is best-effort. If it can't reach an LB the
