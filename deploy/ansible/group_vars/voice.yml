@@ -34,8 +34,16 @@ voice_stt_mode: "streaming"
 voice_tts_mode: "streaming"
 gradium_voice_id_en: ""
 
-# WebRTC NAT traversal (confirm STUN/TURN, open input #1/#4).
+# WebRTC NAT traversal (open input #1/#4). Comma-separated URLs.
+# STUN lets a client discover its public address; it is enough only when the client
+# can then reach the bridge's host ICE candidate directly. Prodpriv clients behind a
+# symmetric NAT/firewall need a TURN *relay* (media is UDP + peer-to-peer, NOT proxied
+# by HAProxy - see deploy/haproxy/README.md). TURN URLs + username are config; the
+# credential is a secret rendered from vault_turn_credential (never committed).
+# Empty (default) = STUN/host-candidate only; fill once the platform confirms a relay.
 voice_stun: ""
+voice_turn: ""
+voice_turn_username: ""
 
 # Resource sizing (2 vCPU / 4 GB VM).
 voice_cpus: "1.5"

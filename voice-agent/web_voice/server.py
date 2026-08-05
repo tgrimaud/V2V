@@ -312,6 +312,43 @@ def _log_turn(telemetry: TelemetryRecorder) -> None:
     export_recorder(telemetry)
 
 
+def build_ice_servers(
+    stun: str = "",
+    turn: str = "",
+    turn_username: str = "",
+    turn_credential: str = "",
+) -> list:
+    """Build the WebRTC ICE server list from env-provided STUN/TURN config.
+
+    STUN needs only URLs; TURN additionally needs credentials for relayed media.
+    `SmallWebRTCConnection` requires a *homogeneous* list (all `str` OR all
+    `IceServer`), so when any TURN server is configured every entry — STUN
+    included — is promoted to an `IceServer`; with STUN only we keep the plain
+    `list[str]` form (unchanged behaviour). A TURN URL without credentials is a
+    misconfiguration (a relay won't authenticate), so it is dropped with no
+    silent fallback that would look like it works.
+    """
+    stun_urls = [s.strip() for s in stun.split(",") if s.strip()]
+    turn_urls = [t.strip() for t in turn.split(",") if t.strip()]
+    if not turn_urls:
+        return stun_urls
+    from pipecat.transports.smallwebrtc.connection import IceServer
+
+    servers: list = [IceServer(urls=url) for url in stun_urls]
+    if turn_username and turn_credential:
+        servers.extend(
+            IceServer(urls=url, username=turn_username, credential=turn_credential)
+            for url in turn_urls
+        )
+    else:
+        print(
+            "[voice] VOICE_TURN set without VOICE_TURN_USERNAME/CREDENTIAL; "
+            "TURN relays ignored (a relay cannot authenticate without credentials)",
+            file=sys.stderr,
+        )
+    return servers
+
+
 def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     """Build the WebRTC signaling service + its background loop, or (None, None).
 
@@ -331,7 +368,12 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
 
     loop = BackgroundEventLoop()
     loop.start()
-    ice = [s for s in (args.stun or "").split(",") if s]
+    ice = build_ice_servers(
+        stun=args.stun or "",
+        turn=getattr(args, "turn", "") or "",
+        turn_username=getattr(args, "turn_username", "") or "",
+        turn_credential=getattr(args, "turn_credential", "") or "",
+    )
     signaling = WebRtcSignalingService(
         ingress=ingress,
         egress=egress,
@@ -472,7 +514,24 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stun",
         default=os.environ.get("VOICE_STUN", ""),
-        help="comma-separated STUN/TURN URLs for the WebRTC ICE servers (optional)",
+        help="comma-separated STUN URLs for the WebRTC ICE servers (optional)",
+    )
+    parser.add_argument(
+        "--turn",
+        default=os.environ.get("VOICE_TURN", ""),
+        help="comma-separated TURN URLs for relayed WebRTC media (needs "
+        "--turn-username/--turn-credential); required when clients cannot reach the "
+        "bridge's host candidates directly (e.g. Prodpriv NAT)",
+    )
+    parser.add_argument(
+        "--turn-username",
+        default=os.environ.get("VOICE_TURN_USERNAME", ""),
+        help="username for the TURN relays in --turn",
+    )
+    parser.add_argument(
+        "--turn-credential",
+        default=os.environ.get("VOICE_TURN_CREDENTIAL", ""),
+        help="credential/password for the TURN relays in --turn",
     )
     parser.add_argument(
         "--stt-mode",

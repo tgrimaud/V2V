@@ -51,6 +51,62 @@ HAProxy after rotation (`systemctl reload haproxy`).
   `.100` and `.101`.
 - `killall` available (`psmisc`) for the `chk_haproxy` track script.
 
+## Applying the config on the LB nodes (manual apply path — TASK-INFRA-006)
+
+The `[lb]` pair is **platform-managed** (HAProxy/Keepalived run natively, not in
+Docker) and is intentionally *not* driven by the app deploy playbooks
+(`inventory/hosts.ini` lists it "reference only"). So the pilot apply path is the
+documented manual sequence below; an Ansible `lb.yml` playbook is a later option
+(the hosts already exist in inventory) once the platform team confirms we own
+package/service management on those nodes. Run everything as root on **each** LB
+node unless a step says otherwise.
+
+```bash
+# 1. Packages (Rocky EL9): LB, VRRP, killall for chk_haproxy, socat for the drain hook.
+sudo dnf install -y haproxy keepalived psmisc socat
+
+# 2. Non-local bind so the backup node (which does not hold the VIP) can start HAProxy.
+echo 'net.ipv4.ip_nonlocal_bind=1' | sudo tee /etc/sysctl.d/90-haproxy.conf
+sudo sysctl --system
+
+# 3. HAProxy config (identical on t01 and t02).
+sudo install -m 0644 haproxy.cfg /etc/haproxy/haproxy.cfg
+
+# 4. Keepalived config — the MASTER file on t01, the BACKUP file on t02.
+sudo install -m 0644 keepalived-vlp-t01.conf /etc/keepalived/keepalived.conf   # on t01
+sudo install -m 0644 keepalived-vlp-t02.conf /etc/keepalived/keepalived.conf   # on t02
+
+# 5. Substitute the three platform-confirmed placeholders IN PLACE (see Open inputs):
+#    - interface name (eth0 -> the real NIC, `ip -br link`)
+#    - VRRP secret (CHANGE_ME_VRRP -> the shared secret, from ansible-vault; see below)
+#    - virtual_router_id (51/52 -> values with no VRRP clash on the segment)
+IFACE=eth0
+VRRP_SECRET='<from vault_vrrp_auth_pass>'   # do NOT paste a real secret into shell history
+sudo sed -i "s/\beth0\b/${IFACE}/g; s/CHANGE_ME_VRRP/${VRRP_SECRET}/g" /etc/keepalived/keepalived.conf
+
+# 6. TLS cert for the voice edge (t01/t02): combined cert+key PEM, 0600.
+sudo install -m 0600 -D voice-vip.pem /etc/haproxy/certs/voice-vip.pem   # cert issuance = open input
+
+# 7. Validate config BEFORE enabling.
+haproxy -c -f /etc/haproxy/haproxy.cfg
+keepalived -t -f /etc/keepalived/keepalived.conf
+
+# 8. Enable + start (keepalived last so the VIP only floats once HAProxy answers).
+sudo systemctl enable --now haproxy keepalived
+
+# 9. Failover smoke test (on the MASTER, t01): killing HAProxy must move the VIP to t02.
+sudo systemctl stop haproxy   # watch `ip -br addr | grep -E '\.10/|\.11/'` move to t02; then start again
+sudo systemctl start haproxy
+```
+
+**VRRP secret handling.** The committed configs carry the literal `CHANGE_ME_VRRP`
+placeholder on purpose — the real secret is a credential and must **never** be
+committed. Store it in the ansible-vault (`vault_vrrp_auth_pass`, alongside the other
+pilot secrets) and inject it at apply time (step 5). Keepalived's `auth_pass` is
+truncated to **8 characters**, so pick an 8-char secret to avoid a silent mismatch
+between the nodes (a mismatch makes both nodes claim MASTER → duplicate VIP). The
+same secret must be set on both LB nodes and per `vrrp_instance`.
+
 ## Health checks and failover
 
 - Each backend server has `check`; HAProxy removes an instance after `fall 3`

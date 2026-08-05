@@ -845,7 +845,22 @@ action immutable; the risk is low on a private repo but is a standard supply-cha
 **Related decisions:** ADR-0038, ADR-0033
 **Depends on:** platform team (external inputs), TASK-INFRA-002
 **Classification:** V1 pilot deployment (go-live blocker)
-**Status:** 📋 Open — ready to start (tracking + the parts we own)
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-INFRA-006-close-deploy-open-inputs`) —
+closed every self-owned input and named the residual platform-owned gates. Own-able parts
+delivered: (1) an **owner + status + gate tracker** for all 12 open inputs in
+`deployment-eir-ai4cc-tst.md`, mirrored in `first-deploy-runbook.md` (step 0 + step 8);
+(2) the **HAProxy/Keepalived manual apply path** in `deploy/haproxy/README.md` (packages →
+`ip_nonlocal_bind` → configs → substitute NIC/VRID/VRRP-secret → cert → validate → enable →
+failover test) + explicit VRRP-secret-from-vault handling (8-char truncation caveat);
+(3) **STUN/TURN wiring**: runtime `build_ice_servers()` promotes TURN to credentialed
+`IceServer`s (`VOICE_TURN`/`VOICE_TURN_USERNAME`/`VOICE_TURN_CREDENTIAL`, credential from
+`vault_turn_credential`), wired group_vars → template → compose → container; also fixed a
+stale "space-separated" STUN comment (code splits on commas). QA: voice-agent 468 unittest
+(+4 `build_ice_servers`) + 169 behave, `qa-validate-ansible.sh` 62/62 (+4 TURN wiring),
+`qa-validate-haproxy.sh` 33/33, `git diff --check` clean. Residual gates are platform-owned
+(TLS cert+FQDN #4, SSH/ingress CIDR #1a, Prod→VIP NAT #11, TURN relay+creds #12, LB
+apply/NIC/VRID/secret #10) and explicitly named — the stack is code-complete for a live
+smoke test. Runtime-affecting: adds ICE-server env parsing (no new latency slice).
 **Priority:** High
 **Branch:** `task/TASK-INFRA-006-close-deploy-open-inputs`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,

@@ -31,6 +31,9 @@ services:
       GRADIUM_VOICE_ID_EN: "${GRADIUM_VOICE_ID_EN:-}"
       # --- WebRTC NAT traversal for Prodpriv clients (open input #1/#4) ---
       VOICE_STUN: "${VOICE_STUN:-}"
+      VOICE_TURN: "${VOICE_TURN:-}"
+      VOICE_TURN_USERNAME: "${VOICE_TURN_USERNAME:-}"
+      VOICE_TURN_CREDENTIAL: "${VOICE_TURN_CREDENTIAL:-}"
       # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
       OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
