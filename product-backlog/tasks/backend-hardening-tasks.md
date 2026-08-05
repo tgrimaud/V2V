@@ -14,6 +14,7 @@ pilot, unless pulled in earlier.
 | TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) |
 | TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `3dafffd`; adversarial **95/100** + QA **GO**) — built on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **336** green (+5 `CorrelationIdTest`, +1 MVC CR/LF-echo regression), ArchUnit OK. `docs/qa/task-be-022-auth-log-hardening-qa-report.md`. Merge on explicit user request only |
 | TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
+| TASK-BE-024 | Conversation-memory adapter hardening: sanitize the client-controlled `conversation_id` in degraded-path logs + pipeline the Redis append (RPUSH/LTRIM/PEXPIRE) into one round-trip | V1 security + latency hardening | TASK-BE-021, TASK-BE-022 | 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (2026-08-05) — low-severity findings of the Sprint 11 full adversarial review. `RedisConversationMemoryAdapter` now routes `conversationId` through `CorrelationId.sanitize` on all three degraded/skip log lines (log-injection close-out); `RedisConversationTurnStoreAdapter.appendTrimExpire` pipelines the three Redis ops into a single round-trip (hot turn path). `mvn test` **337** green (+1 CR/LF log-forge regression), ArchUnit OK. Merge on explicit user request only |
 
 ---
 
@@ -964,3 +965,78 @@ non-localhost deployment, while keeping the localhost pilot + QA flow frictionle
 - Pure transport / configuration hardening — no domain, RAG or LLM change.
 - Coordinate with the remote-deployment work (Sprint 11): this is the natural gate to close
   *before* the backend answers on a non-loopback interface.
+
+---
+
+## TASK-BE-024 — Conversation-Memory Adapter Hardening (Log Sanitization + Pipelined Append)
+
+**Parent:** EPIC-009 (Trust, security and auditability) + EPIC-010 (pilot latency) — cross-cutting
+hardening of the Redis-backed conversation memory.
+**Classification:** V1 security + latency hardening
+**Status:** 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (branched from
+`feat/sprint-11-remote-deployment`, 2026-08-05). `mvn test` **337** green (+1), ArchUnit OK.
+Merge on explicit user request only.
+**Priority:** Low
+**Branch:** `task/TASK-BE-024-conversation-memory-hardening`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — two low-severity,
+non-blocking findings on the `TASK-BE-021` Redis memory adapter.
+**Relates to:** TASK-BE-021 (Redis-backed conversation memory / ADR-0008), TASK-BE-022
+(`CorrelationId.sanitize` choke-point, the same log-injection defense reused here).
+
+### Context
+
+The Sprint 11 review flagged two residual issues on the Redis conversation-memory adapter:
+
+- **Log injection (low).** `RedisConversationMemoryAdapter` logs the **client-controlled**
+  `conversationId` verbatim on its three degraded/skip paths (`op=read`/`op=write` on a Redis
+  outage, and `op=read outcome=skip` on a corrupt entry). A crafted CR/LF value in the
+  `/converse` body could forge a second, attacker-authored log line — the exact vector
+  TASK-BE-022 closed for `correlation_id`/`channel`, but this field was not routed through the
+  same sanitizer.
+- **Three round-trips on the hot path (low).** `RedisConversationTurnStoreAdapter.appendTrimExpire`
+  issued RPUSH, LTRIM and EXPIRE as **three separate** Redis calls, i.e. three network
+  round-trips on every persisted turn — avoidable latency on the conversation hot path.
+
+### Objective
+
+Neutralize the client-controlled id before it reaches a log line, and cut the per-turn Redis
+cost to a single round-trip, without changing the memory semantics (bounded history + sliding
+idle TTL, graceful degradation to empty history on outage).
+
+### Scope
+
+- Route `conversationId` through `CorrelationId.sanitize(...)` on the three degraded/skip log
+  statements in `RedisConversationMemoryAdapter` (strip ISO control chars, cap length).
+- Pipeline RPUSH → LTRIM → PEXPIRE in `RedisConversationTurnStoreAdapter.appendTrimExpire`
+  (`StringRedisTemplate.executePipelined`) so the append pays one round-trip; preserve command
+  order (bound to `maxItems`, refresh the idle TTL) and full TTL precision (PEXPIRE, millis).
+
+### Acceptance
+
+- A `conversation_id` carrying CR/LF cannot inject a second log line on any degraded/skip path;
+  the raw id text is preserved on a single sanitized line (regression test).
+- The append still bounds the list to `maxItems` and refreshes the sliding TTL, now in one
+  Redis round-trip.
+- `mvn test` + ArchUnit green.
+
+### Implementation notes (2026-08-05)
+
+- **Log sanitization.** `RedisConversationMemoryAdapter` imports
+  `com.voicesupport.shared.observability.CorrelationId` (allowed cross-cutting shared util per
+  `ContextBoundaryTest`) and adds a private `forLog(conversationId)` = `CorrelationId.sanitize`.
+  All three `log.warn(...)` calls now pass `forLog(conversationId)`; the throwable arg is
+  unchanged so the stack is still logged server-side.
+- **Pipelined append.** `RedisConversationTurnStoreAdapter.appendTrimExpire` now runs
+  `executePipelined((RedisCallback) connection -> { listCommands().rPush; listCommands().lTrim;
+  keyCommands().pExpire; return null; })`. Key/value are UTF-8 bytes (matching the
+  `StringRedisTemplate` UTF-8 serializers); PEXPIRE(millis) preserves the exact `Duration`
+  precision the previous `expire(ttl)` used. `range()` is unchanged.
+- **Tests (`mvn test` 337 green, +1):** `RedisConversationMemoryAdapterTest`
+  `degradedReadLogSanitizesConversationId` attaches a Logback `ListAppender` and asserts a
+  CR/LF-laced id produces no injected newline/CR in the formatted log line while the id text is
+  preserved on one line. The pipelined store keeps all existing memory-adapter behaviour tests
+  green (the manual `FakeConversationTurnStore` implements the port directly, unaffected by the
+  real pipelining); `RedisConversationTurnStoreAdapter` stays live-Redis-only, as before.
+- **Runtime-affecting:** the sanitized log preserves the existing structured fields; no new
+  metric/slice (the append is faster, same observable outcome). Live smoke deferred (needs a real
+  Redis; the behaviour is deterministic and unit-covered for the log path).
