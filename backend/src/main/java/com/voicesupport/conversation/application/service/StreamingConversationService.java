@@ -70,6 +70,10 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
         List<String> history = ConversationHistoryFormatter.format(prior);
         AnswerLanguage language = languageDetector.resolve(transcript, history, forcedLanguage);
+        // BUG-007: null domain = search ALL domains ON PURPOSE. There is no runtime domain
+        // classifier on the voice path (ADR-0015 not implemented), so no reliable domain can be
+        // supplied; forcing one could drop relevant chunks. Audience fail-closed (ADR-0034) +
+        // per-sentence guardrails still keep the streamed answer DEC-002-safe. See ConversationService.
         GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty(), language);
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, history, language, onChunk)

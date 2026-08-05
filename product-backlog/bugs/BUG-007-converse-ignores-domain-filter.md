@@ -4,7 +4,9 @@
 
 - **Bug ID:** BUG-007
 - **Title:** Primary voice endpoints retrieve across all domains (domain filter not applied)
-- **Status:** New
+- **Status:** 🚧 Resolved by documentation — cross-domain retrieval confirmed **intentional** on
+  `fix/BUG-007-converse-domain-filter` (2026-08-05). `mvn test` **342** green (+2 regression tests).
+  Merge on explicit user request only.
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** Adversarial review
@@ -74,13 +76,42 @@ no domain scoping is applied on the primary voice/text path.
 - [ ] QA retest passes.
 - [ ] Related documentation or backlog notes are updated if behavior changed.
 
+## Resolution decision (2026-08-05)
+
+**Cross-domain retrieval on the voice/text path is intentional and correct for the current
+product — documented, not "filtered".** Rationale:
+
+- There is **no runtime domain classifier / router** on this branch (ADR-0015 multi-agent routing
+  is NOT implemented — grep-verified: no `IntentClassifier`/`AgentProfile` in `backend/src/main`).
+  The voice path therefore has **no reliable domain to supply**. Forcing a single domain would
+  require a classifier and, on a misclassification, would **drop relevant chunks** — a correctness
+  **regression**, the opposite of the intent.
+- Per-domain scoping (`domain == X OR general`) stays available on `/answer` and `/retrieve`, where
+  the **caller** provides the domain (`PgVectorStoreAdapter.domainOp`).
+- The answer is still safe without a domain filter: the **audience fail-closed filter** (ADR-0034,
+  customer-only) is always AND-combined, and the input/confidence/output guardrails keep the turn
+  grounded and DEC-002-safe.
+- This matches the acceptance option "the cross-domain choice is explicitly documented as intended,
+  with rationale". Revisit only if/when a runtime domain classifier is introduced (then pass the
+  classified domain on the voice path too).
+
 ## Developer Notes
 
-- root cause:
-- files changed:
-- tests added/updated:
-- OpenTelemetry added/updated:
-- residual risk:
+- root cause: by design — no runtime domain classifier exists on the voice path, so
+  `ConversationService`/`StreamingConversationService` pass `domain=null` (all-domain search).
+  The review flagged it as a latent risk for when the KB grows multi-domain; the fix is to lock
+  the intent, not to add an unsound single-domain filter.
+- files changed: `ConversationService.java` (comment: cite BUG-007 + rationale),
+  `StreamingConversationService.java` (comment at the `ground(..., null, ...)` call). **No behaviour
+  change.**
+- tests added/updated: `ConversationServiceTest.retrieves_across_all_domains_by_design`,
+  `StreamingConversationServiceTest.retrieves_across_all_domains_by_design` — both pin the
+  intentional `domain == null` (all-domain) contract so the voice path cannot be silently narrowed
+  without introducing routing. `mvn test` **342** green (+2), ArchUnit OK.
+- OpenTelemetry added/updated: N/A — no runtime behaviour change (retrieval scope is unchanged;
+  existing per-slice telemetry + audience/guardrail observability already cover the path).
+- residual risk: when a runtime domain classifier lands, the voice path should pass the classified
+  domain; until then, cross-domain + audience/guardrails is the correct, grounded behaviour.
 
 ## QA Retest
 
@@ -92,6 +123,8 @@ no domain scoping is applied on the primary voice/text path.
 
 ## Closure
 
-- **Closed by:**
+- **Closed by:** (pending user validation / merge)
 - **Closed date:**
-- **Closure reason:**
+- **Closure reason:** Resolved by documentation — cross-domain retrieval on the voice path is
+  intentional (no runtime domain classifier; forcing a domain would regress correctness). Intent
+  locked by two regression tests + code comments citing BUG-007. No behaviour change.
