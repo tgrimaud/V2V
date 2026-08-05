@@ -41,11 +41,14 @@ or drop it into the git-ignored `deploy/ansible/.vault_pass` (auto-loaded via
   `192.168.0.0/24`; from outside you need the VPN/bastion route to that subnet
   (**open input #1** — ingress/SSH source range). Deployment cannot start until
   this route is up.
-- Review the still-open inputs in
-  [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#open-inputs-needed):
-  **#1** ingress/SSH range, **#4** TLS edge cert + FQDN, **#1/STUN-TURN** for
-  WebRTC media, **#9** frontend. Steps 3–7 and the backend/text smoke (step 9,
-  tier A) do not need them; the **full browser voice turn** (step 9, tier B) does.
+- Review the tracked open inputs in
+  [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#open-inputs-needed)
+  (owner + status + gate, TASK-INFRA-006). All self-owned items are closed; the
+  residual **platform-owned** gates are **#1a** SSH/ingress CIDR, **#4** TLS cert +
+  FQDN, **#11** Prod→VIP NAT mapping, **#12** STUN/TURN relay + credentials, and the
+  platform side of **#10** LB apply (NIC/VRID/secret). Steps 3–7 and the backend/text
+  smoke (step 9, tier A) need none of these; the **full browser voice turn** (step 9,
+  tier B) needs #4 + #11 + #12.
 
 ## Step 1 — Publish the release images
 
@@ -193,11 +196,16 @@ curl -fsS http://192.168.0.104:8090/    # t02 -> 200
 ## Step 8 — Load balancer and TLS edge
 
 HAProxy + Keepalived (two VIPs) are configured in
-[`deploy/haproxy/`](../../deploy/haproxy/) (TASK-INFRA-002) and applied on the LB
-hosts `vlp-t01`/`t02` by the platform team. The public FQDN and the TLS
-certificate at the voice edge are **open input #4**; WebRTC **media** is UDP,
-peer-to-peer to the answering bridge and needs STUN/TURN (**open input #1**), it is
-not proxied by HAProxy.
+[`deploy/haproxy/`](../../deploy/haproxy/) (TASK-INFRA-002). Apply them on the LB
+hosts `vlp-t01`/`t02` with the ordered **manual apply path** in
+[`deploy/haproxy/README.md`](../../deploy/haproxy/README.md) (packages →
+`ip_nonlocal_bind` → configs → substitute NIC/VRID/VRRP-secret → cert → validate →
+enable → failover test). The platform team confirms the NIC name, `virtual_router_id`
+uniqueness and the VRRP secret (**#10**). The public FQDN + TLS cert at the voice edge
+are **open input #4**; WebRTC **media** is UDP, peer-to-peer to the answering bridge
+and needs a STUN/TURN relay (**#12**) — the runtime is already wired for it
+(`VOICE_TURN`/`VOICE_TURN_USERNAME`/`VOICE_TURN_CREDENTIAL`), pending a relay endpoint
++ credentials. Media is never proxied by HAProxy.
 
 ## Step 9 — Smoke test
 

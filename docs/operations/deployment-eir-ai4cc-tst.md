@@ -9,8 +9,9 @@ rationale lives in
 the generic target topology lives in
 [`../architecture/infra-v1.md`](../architecture/infra-v1.md).
 
-> Status: environment provisioned (2026-08-03). Several inputs are still open -
-> see [Open inputs needed](#open-inputs-needed). Sprint 11
+> Status: environment provisioned (2026-08-03). Remaining inputs are tracked with
+> owner + status + gate in [Open inputs needed](#open-inputs-needed) (TASK-INFRA-006):
+> all self-owned items are closed; the residual gates are platform-owned. Sprint 11
 > (`product-backlog/sprints/sprint-11-remote-deployment.md`) delivers the images,
 > compose stacks, HAProxy config, Redis-backed memory, CI and release process.
 
@@ -155,7 +156,10 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `VOICE_BACKEND_URL` | `http://192.168.0.11:8080` (backend VIP) | required for `http` backend |
 | `VOICE_BACKEND_API_KEY` | from secrets | matches backend `CONVERSATION_API_KEY` |
 | `GRADIUM_API_KEY` | from secrets | STT/TTS (cloud) |
-| `VOICE_STUN` | STUN/TURN URLs (confirm) | WebRTC NAT traversal for Prodpriv clients |
+| `VOICE_STUN` | STUN URLs (confirm) | Comma-separated; NAT discovery for Prodpriv clients |
+| `VOICE_TURN` | TURN URLs (confirm) | Comma-separated; relayed media when host candidates are unreachable |
+| `VOICE_TURN_USERNAME` | from platform | TURN relay username (config) |
+| `VOICE_TURN_CREDENTIAL` | from secrets (`vault_turn_credential`) | TURN relay credential (never committed) |
 | `VOICE_BACKEND_STREAM` | `1` (pilot GO) | lever 1; code default OFF (TASK-WEB-020) |
 | `VOICE_BACKEND_WARMUP` | on | connect-time warm-up (TASK-WEB-021) |
 | `VOICE_STT_PREWARM` | evaluate | opt-in; validate idle-socket behaviour live |
@@ -201,6 +205,40 @@ The backend runs with `ddl-auto: update` and `initialize-schema: true`, so the
 ## Open inputs needed
 
 These block or shape the Sprint 11 tickets; provide them incrementally.
+
+### Tracker (owner + status + gate — TASK-INFRA-006)
+
+Status legend: 🟢 Resolved · 🟡 Self-owned / decision pending · 🔴 Blocked on the
+platform team. "Owner" is who must act next; "Gate" is the milestone it blocks.
+Calendar due dates are set with the platform team at hand-off — the Gate column is
+the hard sequencing constraint. Detail + resolution evidence per item below.
+
+| # | Input | Owner | Status | Gate (must close before) |
+|---|-------|-------|--------|--------------------------|
+| 1a | SSH source CIDR allowlist (`:22` ingress) | Platform (netsec) | 🔴 Blocked | any Ansible deploy over SSH |
+| 1b | Voice-VIP client reachability + confirmed VIP ports (backend `:8080` is a placeholder) | Platform | 🟡 Partial | live smoke test |
+| 2 | Internet egress (Mistral/Gradium/GHCR/Ollama) | VSB + Platform | 🟢 Resolved (2026-08-04) | — |
+| 3 | Embeddings placement (local Ollama sidecar) | VSB / Arch | 🟢 Resolved (ADR-0039) | — |
+| 4 | TLS certificate + public FQDN for the voice VIP | Platform (PKI) | 🔴 Blocked | live HTTPS at `.10:443` |
+| 5 | Container registry (private GHCR + read-only token) | VSB | 🟢 Resolved (2026-08-05) | — |
+| 6 | Secrets store + delivery (ansible-vault) | VSB | 🟢 Resolved (2026-08-04) | — |
+| 7 | PostgreSQL 18 + `vector` extension | Platform + VSB | 🟢 Resolved (2026-08-04) | — |
+| 8 | Redis (Docker, auth, AOF) | VSB | 🟢 Resolved (2026-08-04) | — |
+| 9 | Frontend: built-in mic UI vs separate static host | Product | 🟡 Decision | UAT |
+| 10 | LB apply: NIC name, `virtual_router_id` uniqueness, VRRP secret, run/access on `[lb]` | Platform (config + apply path owned by VSB) | 🟡 Partial | HA failover test |
+| 11 | Prod IP `10.195.59.39` → private VIP `.10` NAT mapping | Platform | 🔴 Blocked | external client reachability |
+| 12 | STUN/TURN relay endpoint(s) + credentials for WebRTC media | Platform (wiring owned by VSB) | 🔴 Blocked | remote-client media (audio) |
+
+**Readiness (2026-08-05).** Every **VSB-owned** input is closed: registry (#5),
+secrets (#6), Redis (#8), egress/embeddings (#2/#3), the HAProxy/Keepalived config +
+a documented manual **apply path** ([`deploy/haproxy/README.md`](../../deploy/haproxy/README.md),
+#10), and the **STUN/TURN env wiring** (`VOICE_TURN`/`VOICE_TURN_USERNAME`/
+`VOICE_TURN_CREDENTIAL` → runtime `build_ice_servers`, #12). The stack is code-complete
+for a live smoke test; the **only remaining gates are platform-owned**: TLS cert + FQDN
+(#4), SSH/ingress CIDR (#1a), the Prod→VIP NAT mapping (#11), a TURN relay endpoint +
+credentials (#12), and the platform-side LB apply/NIC/VRID/secret confirmation (#10).
+The frontend-host decision (#9) is a Product call, not a live-deploy blocker. No further
+self-owned code is required to attempt the first live smoke test.
 
 1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),

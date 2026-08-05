@@ -184,6 +184,31 @@ rm -f "$_qa_env"
 [ "$_exported" = "xyz" ] && [ -z "$_bare" ] && ok "verified: 'set -a' exports to exec'd child, bare source does not" \
   || bad "shell export semantics unexpected on this host"
 
+# --- 12. WebRTC STUN/TURN wiring (TASK-INFRA-006) -----------------------------
+# The runtime consumes STUN as plain URLs and TURN as credentialed ICE servers
+# (build_ice_servers). The env must flow group_vars -> template -> compose -> container.
+VOICE_TPL="roles/compose_tier/templates/voice.env.j2"
+turn_ok=1
+for k in VOICE_TURN VOICE_TURN_USERNAME VOICE_TURN_CREDENTIAL; do
+  grep -q "^${k}=" "$VOICE_TPL" || { turn_ok=0; echo "    template missing ${k}"; }
+done
+[ "$turn_ok" -eq 1 ] && ok "voice template wires VOICE_TURN/USERNAME/CREDENTIAL" || bad "voice template missing a TURN var"
+# The TURN credential is a secret -> must come from the vault, never a literal.
+grep -q "VOICE_TURN_CREDENTIAL={{ vault_turn_credential | default('') }}" "$VOICE_TPL" \
+  && ok "TURN credential sourced from vault_turn_credential (never committed)" || bad "TURN credential not sourced from a vault_* var"
+# group_vars declares the non-secret TURN config (URLs + username), opt-in empty by default.
+grep -Eq '^voice_turn: ""' "$VOICE_VARS" && grep -Eq '^voice_turn_username: ""' "$VOICE_VARS" \
+  && ok "group_vars declares voice_turn + voice_turn_username (opt-in empty)" || bad "group_vars missing voice_turn/username defaults"
+# The compose contract forwards the TURN vars into the container + the .env.example lists them.
+VOICE_COMPOSE="${COMPOSE_DIR}/voice/docker-compose.yml"
+VOICE_EXAMPLE="${COMPOSE_DIR}/voice/.env.example"
+compose_ok=1
+for k in VOICE_TURN VOICE_TURN_USERNAME VOICE_TURN_CREDENTIAL; do
+  grep -q "${k}:" "$VOICE_COMPOSE" || { compose_ok=0; echo "    compose missing ${k}"; }
+  grep -q "^${k}=" "$VOICE_EXAMPLE" || { compose_ok=0; echo "    .env.example missing ${k}"; }
+done
+[ "$compose_ok" -eq 1 ] && ok "compose + .env.example expose the TURN vars" || bad "compose/.env.example missing a TURN var"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
