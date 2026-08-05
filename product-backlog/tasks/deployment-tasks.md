@@ -945,7 +945,25 @@ bridge being recreated is not drained — only a 60s grace pause protects in-fli
 **Related decisions:** ADR-0028, ADR-0038, ADR-0039
 **Depends on:** TASK-OPS-002 (env templates), TASK-OBS-001 (OTLP exporters)
 **Classification:** V1 pilot deployment (observability / SLO substantiation)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-OPS-007-centralized-observability`) —
+Centralized pilot pipeline + W3C `traceparent` end to end, additive over the default-off
+posture. (1) `deploy/observability/docker-compose.otel.yml` now also runs **Prometheus**
+(scrapes the collector's `:8889` exporter, 15d retention) with `prometheus.yml`, so slice
+percentiles (`voice_support_slice_*` p50/p95/p99 by slice/channel/provider/outcome) aggregate
+in one queryable place. (2) One Ansible variable `otel_collector_endpoint` (empty ⇒ OFF)
+drives both `backend.env.j2` + `voice.env.j2`: backend derives `/v1/metrics` + `/v1/traces`
+and flips `OTEL_METRICS_EXPORT_ENABLED`/`OTEL_TRACES_SAMPLER_ARG` (`otel_traces_sampler_arg`,
+default `1.0`); voice sets `OTEL_EXPORTER_OTLP_ENDPOINT`. (3) `voice_common/trace_context.py`
+derives a deterministic W3C `traceparent` (BLAKE2b) from the turn's `correlation_id`;
+`http_backend` injects it (`00-<trace>-<span>-01`, sampled), the backend continues the same
+trace id (default W3C propagation + ParentBased sampler), and `otel_export` opens the
+`voice.turn` root span under the same derived context → a voice turn and its backend spans
+are one trace. Export stays async/best-effort (a down collector never blocks a turn). ADR-0028
+addendum added. QA: voice-agent 476 unittest (+8: `test_trace_context.py`, export trace-id,
+http_backend traceparent) + 169 behave; `qa-validate-ansible.sh` 69/69 (+7: OTEL OFF/ON render
++ collector/Prometheus wiring); `qa-validate-haproxy.sh` 33/33; `git diff --check` clean. Live
+capture on the tst collector deferred to the access window (collector host = open input #13).
+Runtime-affecting: voice HTTP header + export path (instrumentation only, additive).
 **Priority:** High
 **Branch:** `task/TASK-OPS-007-centralized-observability`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the instrumentation

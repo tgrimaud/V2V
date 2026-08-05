@@ -141,7 +141,7 @@ docker-compose consumes. Defaults below are the code defaults - override on tst.
 | `REDIS_PASSWORD` / `REDIS_TIMEOUT` | from secrets / `2s` | Redis auth (if enabled) + command timeout |
 | `CONVERSATION_MEMORY_TTL_SECONDS` | `3600` | sliding idle TTL of a conversation's Redis history |
 | `REDIS_HEALTH_ENABLED` | `true` (redis tier only) | enable the Actuator Redis health indicator; MUST stay `false` (default) in `memory` mode or `/actuator/health` flips DOWN (TASK-BE-021 review) |
-| `OTEL_*` | unset (opt-in) | OTLP off by default (ADR-0028) |
+| `OTEL_*` | unset ⇒ OFF; set `otel_collector_endpoint` to enable | Ansible derives `OTEL_METRICS_EXPORT_ENABLED`, `OTEL_EXPORTER_OTLP_{METRICS,TRACES}_ENDPOINT` and `OTEL_TRACES_SAMPLER_ARG` from `otel_collector_endpoint` (base URL) + `otel_traces_sampler_arg` (default `1.0`). Centralized pilot collector, ADR-0028 addendum / TASK-OPS-007 |
 
 Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 `REDIS_HEALTH_ENABLED=true` is only safe where Redis is actually deployed; otherwise leave it unset/`false`.
@@ -163,6 +163,7 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `VOICE_BACKEND_STREAM` | `1` (pilot GO) | lever 1; code default OFF (TASK-WEB-020) |
 | `VOICE_BACKEND_WARMUP` | on | connect-time warm-up (TASK-WEB-021) |
 | `VOICE_STT_PREWARM` | evaluate | opt-in; validate idle-socket behaviour live |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset ⇒ OFF; set `otel_collector_endpoint` to enable | per-turn spans → centralized collector; `voice.turn` trace stitches to backend via derived `traceparent` (TASK-OPS-007) |
 
 ## Release and deploy (summary)
 
@@ -228,17 +229,21 @@ the hard sequencing constraint. Detail + resolution evidence per item below.
 | 10 | LB apply: NIC name, `virtual_router_id` uniqueness, VRRP secret, run/access on `[lb]` | Platform (config + apply path owned by VSB) | 🟡 Partial | HA failover test |
 | 11 | Prod IP `10.195.59.39` → private VIP `.10` NAT mapping | Platform | 🔴 Blocked | external client reachability |
 | 12 | STUN/TURN relay endpoint(s) + credentials for WebRTC media | Platform (wiring owned by VSB) | 🔴 Blocked | remote-client media (audio) |
+| 13 | Observability collector host placement (which VM runs `deploy/observability/` + set `otel_collector_endpoint`) | VSB (host = platform decision) | 🟡 Decision | centralized p50/p95/p99 + cross-tier traces on tst |
 
 **Readiness (2026-08-05).** Every **VSB-owned** input is closed: registry (#5),
 secrets (#6), Redis (#8), egress/embeddings (#2/#3), the HAProxy/Keepalived config +
 a documented manual **apply path** ([`deploy/haproxy/README.md`](../../deploy/haproxy/README.md),
-#10), and the **STUN/TURN env wiring** (`VOICE_TURN`/`VOICE_TURN_USERNAME`/
-`VOICE_TURN_CREDENTIAL` → runtime `build_ice_servers`, #12). The stack is code-complete
-for a live smoke test; the **only remaining gates are platform-owned**: TLS cert + FQDN
-(#4), SSH/ingress CIDR (#1a), the Prod→VIP NAT mapping (#11), a TURN relay endpoint +
-credentials (#12), and the platform-side LB apply/NIC/VRID/secret confirmation (#10).
-The frontend-host decision (#9) is a Product call, not a live-deploy blocker. No further
-self-owned code is required to attempt the first live smoke test.
+#10), the **STUN/TURN env wiring** (`VOICE_TURN`/`VOICE_TURN_USERNAME`/
+`VOICE_TURN_CREDENTIAL` → runtime `build_ice_servers`, #12), and the **centralized
+observability pipeline** (collector + Prometheus stack, W3C `traceparent` voice→backend,
+one-variable `otel_collector_endpoint` enablement — TASK-OPS-007, #13). The stack is
+code-complete for a live smoke test; the **only remaining gates are platform-owned**: TLS
+cert + FQDN (#4), SSH/ingress CIDR (#1a), the Prod→VIP NAT mapping (#11), a TURN relay
+endpoint + credentials (#12), and the platform-side LB apply/NIC/VRID/secret confirmation
+(#10). The frontend-host decision (#9) and the observability collector host (#13) are
+VSB/Product decisions, not code blockers. No further self-owned code is required to
+attempt the first live smoke test.
 
 1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),

@@ -1,12 +1,22 @@
-# Opt-in OpenTelemetry Collector for local OTLP validation (TASK-OBS-001, ADR-0028 addendum).
-# NOT part of any default run. Bring it up only when validating OTLP export:
+# Centralized OpenTelemetry pilot collector (TASK-OBS-001 + TASK-OPS-007, ADR-0028 addendum).
 #
-#   docker compose -f deploy/observability/docker-compose.otel.yml up
+# This is the ONE place where the backend (Java) and the voice runtime (Python) ship their
+# traces + metrics so a call can be followed across tiers and p50/p95/p99 by slice are
+# aggregated in a single store. It is opt-in and NOT part of any default app run.
 #
-# Then enable export on each service (see deploy/observability/README.md):
+# Pilot usage (run on the chosen observability host, e.g. one app VM):
+#   docker compose -f deploy/observability/docker-compose.otel.yml up -d
+#
+# Then point each service at this host and flip export on (Ansible does this for the tst
+# deploy via otel_collector_endpoint; see deploy/observability/README.md):
 #   backend:  OTEL_METRICS_EXPORT_ENABLED=true OTEL_TRACES_SAMPLER_ARG=1.0 \
-#             OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ... mvn spring-boot:run
-#   voice:    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ... <run the voice runtime>
+#             OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://<obs-host>:4318/v1/metrics \
+#             OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://<obs-host>:4318/v1/traces
+#   voice:    OTEL_EXPORTER_OTLP_ENDPOINT=http://<obs-host>:4318
+#
+# Where to look:
+#   - Prometheus UI ....... http://<obs-host>:9090  (query voice_support_slice_* percentiles)
+#   - Collector debug ..... container logs (received spans/metrics, human-readable)
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.115.1
@@ -17,3 +27,23 @@ services:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
       - "8889:8889"   # Prometheus scrape (collector-exported metrics)
+    restart: unless-stopped
+
+  # Stores + makes queryable the metrics the collector re-exports, so slice percentiles
+  # (p50/p95/p99) are visible in one place across both tiers.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"   # Prometheus UI / query API
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+
+volumes:
+  prometheus-data: {}

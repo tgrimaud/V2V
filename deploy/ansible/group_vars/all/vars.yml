@@ -23,3 +23,23 @@ compose_root: "/opt/voice-support"
 
 # Compose command on the target (docker compose v2 plugin).
 compose_cmd: "docker compose"
+
+# ---- Centralized observability (TASK-OPS-007, ADR-0028 addendum) -----------
+# ONE OTLP endpoint where the backend + voice tiers ship traces/metrics so a call is one
+# cross-tier trace and p50/p95/p99 by slice aggregate in one place (Prometheus). Bring the
+# collector up on the chosen observability host with deploy/observability/docker-compose.otel.yml.
+#
+# Default EMPTY = export stays OFF everywhere (safe: nothing is shipped, no dangling
+# endpoint, offline/normal startup unchanged). Set it to the collector's OTLP-HTTP base
+# URL to enable export on the next deploy, e.g.:
+#   -e otel_collector_endpoint=http://obs.tst.internal:4318
+# The backend derives /v1/metrics + /v1/traces from this base; the voice runtime uses it
+# as-is (OTEL_EXPORTER_OTLP_ENDPOINT). Both are additive and never block a turn if the
+# collector is down (OTLP export is async/best-effort).
+otel_collector_endpoint: ""
+
+# Trace sampling ratio applied ONLY when export is enabled (endpoint set). 1.0 = keep every
+# trace, sane for a low-volume pilot so cross-tier traces are complete; lower it if volume
+# grows. A voice-initiated call carries a sampled traceparent, so the backend keeps it
+# regardless (ParentBased sampler) — this ratio governs backend-originated (root) traces.
+otel_traces_sampler_arg: "1.0"

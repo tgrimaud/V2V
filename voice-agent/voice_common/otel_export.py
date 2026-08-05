@@ -97,7 +97,12 @@ def _do_export(recorder: Any, *, service_name: str, span_exporter: Any) -> bool:
     total_ms = sum(getattr(s, "duration_ms", 0.0) for s in spans)
     root_start_ns = end_ns - int(max(total_ms, 0.0) * 1_000_000)
 
-    root = tracer.start_span("voice.turn", start_time=root_start_ns, kind=SpanKind.SERVER)
+    # TASK-OPS-007: anchor the turn under the trace id derived from the correlation id, so
+    # it shares one trace with the backend spans (which continue the same traceparent).
+    parent_ctx = _parent_context(root_attrs.get("correlation_id"))
+    root = tracer.start_span(
+        "voice.turn", start_time=root_start_ns, kind=SpanKind.SERVER, context=parent_ctx
+    )
     for key, value in root_attrs.items():
         root.set_attribute(key, value)
     for event in events:
@@ -105,10 +110,14 @@ def _do_export(recorder: Any, *, service_name: str, span_exporter: Any) -> bool:
     for metric in metrics:
         root.set_attribute(f"metric.{metric.name}", _coerce_attr(metric.value))
 
+    from opentelemetry.trace import set_span_in_context
+
+    root_ctx = set_span_in_context(root)
     cursor_ns = root_start_ns
     for span in spans:
         span_end_ns = cursor_ns + int(max(getattr(span, "duration_ms", 0.0), 0.0) * 1_000_000)
-        child = tracer.start_span(span.name, start_time=cursor_ns)
+        # Parent every slice span to the root so the whole turn is one trace tree.
+        child = tracer.start_span(span.name, start_time=cursor_ns, context=root_ctx)
         for key, value in _attributes(span.attributes).items():
             child.set_attribute(key, value)
         child.end(end_time=span_end_ns)
@@ -130,6 +139,35 @@ def _root_attributes(spans: list[Any], events: list[Any], metrics: list[Any]) ->
             if key not in merged and attrs.get(key) is not None:
                 merged[key] = _coerce_attr(attrs[key])
     return merged
+
+
+def _parent_context(correlation_id: Any) -> Any:
+    """A remote parent Context carrying the trace/span ids derived from the correlation id.
+
+    Returns ``None`` when there is no correlation id, so the root span opens a fresh trace
+    (unchanged behaviour). When present, the ids match what ``http_backend`` injects as the
+    ``traceparent`` header, so the exported voice trace and the backend spans share a trace.
+    """
+    from .trace_context import derive_trace_ids
+
+    ids = derive_trace_ids(correlation_id if isinstance(correlation_id, str) else None)
+    if ids is None:
+        return None
+    trace_id, span_id = ids
+    from opentelemetry.trace import (
+        NonRecordingSpan,
+        SpanContext,
+        TraceFlags,
+        set_span_in_context,
+    )
+
+    span_context = SpanContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        is_remote=True,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+    )
+    return set_span_in_context(NonRecordingSpan(span_context))
 
 
 def _build_otlp_exporter() -> Any:

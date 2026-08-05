@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from voice_common.sanitization import sanitize_error
+from voice_common.trace_context import derive_traceparent
 
 from .degraded import BACKEND_UNAVAILABLE_REASON, degraded_answer
 from .models import AnswerOutcome, AnswerRequest, AnswerResult
@@ -173,6 +174,13 @@ class HttpBackendAdapter:
         # before the controller reads it from the body (the body value stays authoritative).
         if request.correlation_id:
             headers["X-Correlation-Id"] = request.correlation_id
+            # W3C trace context (TASK-OPS-007): a deterministic traceparent derived from the
+            # correlation id so the backend continues the SAME trace id — a voice turn and its
+            # backend spans land in one trace in the collector. Sampled flag = 01 so a
+            # voice-initiated call is kept even under a low backend sampling probability.
+            traceparent = derive_traceparent(request.correlation_id)
+            if traceparent:
+                headers["traceparent"] = traceparent
         return headers
 
     def _payload(self, request: AnswerRequest) -> bytes:

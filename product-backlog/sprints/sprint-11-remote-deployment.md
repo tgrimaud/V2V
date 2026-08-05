@@ -135,7 +135,7 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 |---|---|---|
 | TASK-DOC-004 | Truth-in-labeling: mark billing/routing/escalation/Genesys as NOT IMPLEMENTED | ✅ Merged into sprint-11 (2026-08-05): NOT IMPLEMENTED/target markers on `v1-scope.md` + cahier (5.3/5.4/F3/F6/F6bis/F8/F10) and ADR-0003/0004/0005/0015/0019/0020 headers; ADR README built-vs-target refreshed; `git diff --check` clean |
 | TASK-INFRA-006 | Close/track the live-deploy open inputs (TLS, TURN, LB apply, SSH CIDR) | ✅ Merged into sprint-11 (2026-08-05): open-inputs tracker (owner/status/gate) + HAProxy/Keepalived manual apply path (VRRP-secret-from-vault) + STUN/TURN runtime wiring (`build_ice_servers`, `VOICE_TURN*`); self-owned inputs closed, platform gates named; QA voice-agent 468 + ansible 62/62 + haproxy 33/33 |
-| TASK-OPS-007 | Centralized observability (OTLP collector + enable export) | 📋 Open |
+| TASK-OPS-007 | Centralized observability (OTLP collector + enable export) | ✅ Implemented (2026-08-05) |
 | TASK-WEB-022 | Latency gate remediation (meet ADR-0029 or revise it) | 📋 Open |
 | TASK-BE-025 | Streaming LLM + embedding/pgvector timeouts | ✅ Merged into sprint-11 (2026-08-05): Flux inter-signal timeout on stream + bounded-executor timeouts on embedding & pgvector query, distinct `outcome=timeout`; `mvn test` 342 green; DB-side cancel tracked as BE-026 |
 

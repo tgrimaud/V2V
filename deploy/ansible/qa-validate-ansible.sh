@@ -209,6 +209,36 @@ for k in VOICE_TURN VOICE_TURN_USERNAME VOICE_TURN_CREDENTIAL; do
 done
 [ "$compose_ok" -eq 1 ] && ok "compose + .env.example expose the TURN vars" || bad "compose/.env.example missing a TURN var"
 
+# --- 13. Centralized OTLP observability wiring (TASK-OPS-007) ------------------
+# One variable (otel_collector_endpoint) drives export on both tiers; empty => OFF.
+ALL_VARS="group_vars/all/vars.yml"
+grep -Eq '^otel_collector_endpoint: ""' "$ALL_VARS" && ok "otel_collector_endpoint declared, empty by default (export OFF)" \
+  || bad "otel_collector_endpoint missing or not empty-by-default"
+grep -Eq '^otel_traces_sampler_arg:' "$ALL_VARS" && ok "otel_traces_sampler_arg declared (pilot sampling)" || bad "otel_traces_sampler_arg missing"
+# The pilot collector stack ships a store so slice percentiles aggregate in one place.
+OTEL_DIR="../observability"
+grep -q 'prometheus:' "${OTEL_DIR}/docker-compose.otel.yml" && ok "pilot collector stack adds Prometheus (metric aggregation)" || bad "collector stack missing Prometheus"
+grep -q 'otel-collector:8889' "${OTEL_DIR}/prometheus.yml" && ok "Prometheus scrapes the collector's exporter" || bad "prometheus.yml missing collector scrape target"
+# OFF path: default render keeps export disabled on both tiers (sampler 0.0, no endpoints).
+ansible localhost -c local -m ansible.builtin.template \
+  -a "src=roles/compose_tier/templates/backend.env.j2 dest=${TMP}/be_off.env mode=0600" \
+  -e "@group_vars/backend.yml" -e ansible_become=false >/dev/null 2>&1
+grep -q '^OTEL_METRICS_EXPORT_ENABLED=false' "${TMP}/be_off.env" && grep -q '^OTEL_TRACES_SAMPLER_ARG=0.0' "${TMP}/be_off.env" \
+  && ok "backend export OFF by default (no collector endpoint)" || bad "backend default render is not export-OFF"
+# ON path: setting the endpoint enables export and derives /v1/metrics + /v1/traces.
+ansible localhost -c local -m ansible.builtin.template \
+  -a "src=roles/compose_tier/templates/backend.env.j2 dest=${TMP}/be_on.env mode=0600" \
+  -e "@group_vars/backend.yml" -e otel_collector_endpoint=http://obs.tst:4318 -e ansible_become=false >/dev/null 2>&1
+grep -q '^OTEL_METRICS_EXPORT_ENABLED=true' "${TMP}/be_on.env" \
+  && grep -q '^OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://obs.tst:4318/v1/metrics' "${TMP}/be_on.env" \
+  && grep -q '^OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://obs.tst:4318/v1/traces' "${TMP}/be_on.env" \
+  && ok "backend export ON derives metrics+traces endpoints from the base URL" || bad "backend export-ON render wrong"
+ansible localhost -c local -m ansible.builtin.template \
+  -a "src=roles/compose_tier/templates/voice.env.j2 dest=${TMP}/v_on.env mode=0600" \
+  -e "@group_vars/voice.yml" -e otel_collector_endpoint=http://obs.tst:4318 -e ansible_become=false >/dev/null 2>&1
+grep -q '^OTEL_EXPORTER_OTLP_ENDPOINT=http://obs.tst:4318$' "${TMP}/v_on.env" \
+  && ok "voice export ON points OTEL_EXPORTER_OTLP_ENDPOINT at the collector" || bad "voice export-ON render wrong"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
