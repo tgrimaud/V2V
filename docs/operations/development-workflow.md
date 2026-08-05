@@ -328,6 +328,14 @@ Sprint close
   -> Flip sprint file + backlog-index registry + done-tasks.md to Done, commit + push
 ```
 
+## Deploying a Merged Version
+
+Once a version is merged and released, bringing it live on the pilot follows the
+operations runbooks: the [first-deploy runbook](first-deploy-runbook.md) for a
+fresh environment (host provisioning, Postgres bootstrap, initial RAG sync), then
+the [release process](release-process.md) for every repeatable per-version deploy
+and rollback.
+
 ## Open Process Questions
 
 - Where should adversarial review scores be stored per story: commit comment,

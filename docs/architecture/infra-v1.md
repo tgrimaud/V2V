@@ -12,8 +12,10 @@
 > for the environment inventory and
 > [`adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md`](adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md)
 > for the deployment decision (Docker + docker-compose, Redis-backed shared
-> memory, GitHub Actions + Ansible release). Kubernetes stays the longer-term
-> evolution, not the pilot deployment.
+> memory, GitHub Actions + Ansible release), and the
+> [`first-deploy runbook`](../operations/first-deploy-runbook.md) for the
+> zero-to-running bring-up. Kubernetes stays the longer-term evolution, not the
+> pilot deployment.
 
 ## Objective
 
