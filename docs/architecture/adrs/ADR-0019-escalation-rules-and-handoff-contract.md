@@ -5,6 +5,13 @@
 Accepted; specialized by ADR-0020 for Genesys as the V1 contact-center handoff
 target.
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
+> proactive escalation detector or structured handoff contract exists in
+> `backend/src/main` yet (grep-verified: no `Escalation*`/`Genesys*`). Escalation
+> wording today is only a **reactive** guardrail fallback (low confidence /
+> ungrounded amount), not the intent-driven, context-carrying handoff described
+> here. Deferred (Sprint 13, gated by OQ-006).
+
 ## Context
 
 The bot must escalate consistently across voice, text, telephony, and future

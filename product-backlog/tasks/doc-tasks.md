@@ -95,7 +95,14 @@ impact).
 ADR-0017 (billing on support foundation), ADR-0019/0020 (escalation/Genesys)
 **Depends on:** —
 **Classification:** Documentation integrity (product scope honesty)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-DOC-004-scope-truth-in-labeling`) —
+added NOT IMPLEMENTED/target markers to `v1-scope.md` (§V1 Functional Scope, §Access to BSS,
+§Invoice Comparison, §User Interaction) and the cahier (5.3 phone, 5.4 escalation, F3 routing,
+F6 telephony, F6bis messaging, F8 admin, F10 Genesys), plus an "Implementation status" banner on
+both; added implementation-status notes to ADR-0003/0004/0005/0015/0019/0020 headers and refreshed
+the ADR README built-vs-target Note (ADR-0036 built, ADR-0037 accepted-but-flag-off, ADR-0032
+proposed). Requirements left intact (roadmap), only current state labeled; `git diff --check`
+clean; docs in English. Docs-only, not runtime-affecting. Awaiting review/QA/merge.
 **Priority:** High
 **Branch:** `task/TASK-DOC-004-scope-truth-in-labeling`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,

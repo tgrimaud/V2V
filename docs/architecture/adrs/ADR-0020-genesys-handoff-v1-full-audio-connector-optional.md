@@ -4,6 +4,10 @@
 
 Accepted
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
+> Genesys adapter, handoff payload, or Audio Connector integration exists in
+> `backend/src/main` yet (grep-verified). Deferred (Sprint 13, gated by OQ-006).
+
 ## Context
 
 V1 requires a credible human escalation path for billing explanations. The target

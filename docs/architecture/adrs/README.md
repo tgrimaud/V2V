@@ -6,15 +6,26 @@ ADRs capture structural decisions that should remain visible beyond code, chats,
 diagrams, and planning notes. When a decision changes, create a new ADR and mark
 the previous one as superseded instead of rewriting history.
 
-> **Note:** an ADR status of `Accepted` records an accepted **target decision**,
-> not necessarily that it is implemented. On `feat/restart-from-scratch` (through
-> Sprint 9) the built decisions include the two-service voice loop (ADR-0021/0022/
-> 0023/0024/0025/0033/0035), the backend conversation engine, RAG and observability
-> (ADR-0001/0006/0007/0014/0026/0027/0028/0030/0031/0034), and the pilot latency
-> taxonomy (ADR-0018/0029). Decisions still **target-only** include billing/BSS
-> (ADR-0003/0004/0005/0017), Genesys/escalation handoff (ADR-0019/0020), omnichannel
-> contracts (ADR-0009/0010/0011), and Redis sessions (ADR-0008). Implementation
-> status is tracked in `product-backlog/` and `docs/operations/backlog.md`.
+> **Note (built vs target, refreshed 2026-08-05):** an ADR status of `Accepted`
+> records an accepted **target decision**, not necessarily that it is implemented.
+> As of the Sprint 11 branch (`feat/sprint-11-remote-deployment`):
+>
+> - **Built:** the two-service voice loop (ADR-0021/0022/0023/0024/0025/0033/0035),
+>   the backend conversation engine, RAG and observability
+>   (ADR-0001/0006/0007/0014/0026/0027/0028/0030/0031/0034), the pilot latency
+>   taxonomy (ADR-0018/0029), **Redis-backed sessions** (ADR-0008, Sprint 11
+>   TASK-BE-021), the **backend↔runtime Flow A SSE style** (ADR-0036), and the
+>   **pilot deployment** stack (ADR-0038/0039).
+> - **Target-only — NOT implemented in code yet:** billing/BSS
+>   (ADR-0003/0004/0005/0017), **multi-agent routing** (ADR-0015 — no
+>   `IntentClassifier`/`AgentProfile` on this branch), Genesys/escalation handoff
+>   (ADR-0019/0020), omnichannel contracts (ADR-0009/0010/0011), and
+>   **first-sentence streaming** (ADR-0037 — Accepted but shipped behind a
+>   default-off flag, not yet enabled).
+> - **Proposed (not decided/built):** ADR-0032.
+>
+> Implementation status is tracked in `product-backlog/backlog-index.md` and the
+> full adversarial review `docs/architecture/reviews/full-adversarial-review-2026-08-05.md`.
 
 ## Index
 

@@ -1,16 +1,24 @@
 # V1 Scope - Operator Invoice Explanation Assistant
 
-> **Current delivery (`feat/restart-from-scratch`, 2026-07-28, Sprint 9):** this
-> document defines the **target** V1. What is **built** on this branch is the full
-> **web Voice2Voice loop** with a **RAG-grounded answer engine**: web mic → Gradium
-> STT (batch + streaming) → Java backend (RAG over pgvector, guardrails, three-band
-> confidence, memory) → Gradium TTS (batch + streaming) → playback, over batch
-> `POST /api/voice/turn` and streaming WebRTC with barge-in. The full
-> `time_to_first_audio` / mouth-to-ear latency slices are now instrumented
-> end-to-end (ADR-0029 pilot gate). **Not built yet:** Billing/BSS access, invoice
-> PDF extraction + deterministic comparison, customer identity, phone (Twilio)
-> Voice2Voice, and Genesys handoff (Sprints 10–11). See
-> `docs/observability/voice-journey-timing.md` and
+> **Current delivery (refreshed 2026-08-05, `feat/sprint-11-remote-deployment`):**
+> this document defines the **target** V1. What is **built** is the full **web
+> Voice2Voice loop** with a **RAG-grounded answer engine**: web mic → Gradium STT
+> (batch + streaming) → Java backend (RAG over pgvector, guardrails, three-band
+> confidence, Redis-backed memory) → Gradium TTS (batch + streaming) → playback,
+> over batch `POST /api/voice/turn` and streaming WebRTC with barge-in, plus the
+> pilot deployment packaging (Docker/compose, HAProxy VIPs, CI, Ansible). The
+> `time_to_first_audio` / mouth-to-ear latency slices are instrumented end-to-end
+> (ADR-0029 pilot gate — currently **not met**, p95 ≈ 2142 ms).
+>
+> **NOT built yet (this whole "V1 Functional Scope" section is a target):**
+> Billing/BSS access, invoice PDF extraction + deterministic comparison, customer
+> identity, phone (Twilio) Voice2Voice, and Genesys/escalation handoff. Billing +
+> identity are deferred to **Sprint 12+** (gated by OQ-001/003/004); telephony +
+> Genesys to **Sprint 13** (gated by OQ-006). The runnable product is a
+> **general-support RAG voice assistant on the web channel**, not yet the
+> billing/invoice-explanation product described below. See
+> `docs/architecture/reviews/full-adversarial-review-2026-08-05.md`,
+> `docs/observability/voice-journey-timing.md`, and
 > `product-backlog/backlog-index.md`.
 
 ## Product Hierarchy
@@ -85,6 +93,13 @@ used to invent amounts or compensate for missing BSS data.
 
 ## V1 Functional Scope
 
+> **Target — NOT IMPLEMENTED (2026-08-05).** Everything in this section (BSS
+> access, invoice comparison, discrepancy explanation, phone journey, Genesys
+> escalation) is the **target** V1 and is **not built** on the current stack
+> (grep-verified: no billing/BSS/PDF/comparison/Genesys code in `backend/`). The
+> shipped product answers from the knowledge base via RAG. Treat the "must"
+> statements below as requirements for a future sprint, not delivered behavior.
+
 ### Access to BSS Data
 
 For a given customer, the application must be able to retrieve:
@@ -145,6 +160,12 @@ The explanation must:
 - avoid any conclusion not justified by the available data.
 
 ### User Interaction
+
+> **Partial (2026-08-05).** Built today: **web voice chat** oral Q&A (ask by voice,
+> hear an oral answer) grounded in the knowledge base. NOT built: the **phone**
+> channel, the invoice/discrepancy **summary + line-by-line + BSS-evidence** views
+> (these depend on the unbuilt billing core), and writing-as-complementary-channel
+> parity across all surfaces.
 
 In V1, the end user must be able to:
 
