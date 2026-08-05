@@ -43,6 +43,19 @@ class ConversationServiceTest {
     }
 
     @Test
+    @DisplayName("retrieval spans all domains by design on the voice path (null domain, BUG-007)")
+    void retrieves_across_all_domains_by_design() {
+        // WHEN a turn is answered on the voice/text path
+        service.converse("Pourquoi ma facture change ?", "c1");
+
+        // THEN the answer pipeline is asked with a null domain (all-domain search). There is no
+        // runtime domain classifier here (ADR-0015 not implemented), so scoping to one domain would
+        // need a classifier and could drop relevant chunks; per-domain scoping stays on /answer +
+        // /retrieve. Pins the documented BUG-007 choice against a silent narrowing of the voice path.
+        assertNull(answerUseCase.lastDomain);
+    }
+
+    @Test
     @DisplayName("second turn passes the prior turn as history (current turn excluded) and marks greeted")
     void second_turn_uses_prior_context() {
         // GIVEN a first completed turn

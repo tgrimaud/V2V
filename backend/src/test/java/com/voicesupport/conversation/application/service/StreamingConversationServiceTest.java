@@ -24,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("StreamingConversationService (guarded streaming: ground -> stream -> guardrail -> memory)")
@@ -59,6 +60,24 @@ class StreamingConversationServiceTest {
 
         // THEN grounding was asked with the configured top-K, not a hardcoded default
         assertEquals(3, grounding.lastTopK);
+    }
+
+    @Test
+    @DisplayName("retrieval spans all domains by design on the voice path (null domain, BUG-007)")
+    void retrieves_across_all_domains_by_design() {
+        // GIVEN an answerable grounding result
+        grounding.setNextResult(GroundingResult.answerable(List.of(
+                new RetrievedEvidence("ctx", "s1", "billing", 0.8))));
+        generator.setNextTokens(List.of("Réponse. "));
+
+        // WHEN the stream is consumed
+        consume("Pourquoi ma facture change ?", "c1");
+
+        // THEN grounding is called with a null domain (all-domain search) — there is no runtime
+        // domain classifier on the voice path (ADR-0015 not implemented), so scoping to one domain
+        // would need a classifier and could drop relevant chunks. Pins the documented BUG-007 choice
+        // so a future change cannot silently narrow the voice path without introducing routing.
+        assertNull(grounding.lastDomain);
     }
 
     @Test
