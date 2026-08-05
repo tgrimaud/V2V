@@ -371,7 +371,11 @@ Self-hosted LLM/STT/TTS (infra-v1 GPU option) - not a pilot prerequisite.
 **Related decisions:** ADR-0038 (Docker + compose on the app VMs)
 **Depends on:** SSH access to the VMs (open input #1)
 **Classification:** V1 pilot deployment (host provisioning)
-**Status:** To do (Sprint 11, branch `task/TASK-OPS-003-docker-host-prereqs`)
+**Status:** ✅ Implemented — `host_prereqs` role + `prereqs.yml` (Docker Engine +
+compose v2 + buildx, service enable, docker group, tier-aware firewalld). Adversarial
+92/100 (Pass; Rocky EL9 podman/runc conflict fixed via `allowerasing`); QA GO 21/21 +
+OPS-002 33/33 no regression ([report](../../docs/qa/task-ops-003-docker-host-prereqs-qa-report.md));
+live run deferred (VM network access, #1). ✅ **Merge-ready** (merge on explicit user request).
 **Priority:** High (blocks the first deploy - the compose_tier role assumes Docker exists)
 **Branch:** `task/TASK-OPS-003-docker-host-prereqs`
 
