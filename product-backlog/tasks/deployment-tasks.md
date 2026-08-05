@@ -744,3 +744,95 @@ The generic operator target (infra-v1.md) - only cross-linked, not rewritten.
   `development-workflow.md`.
 - **QA:** `docs/qa/task-doc-003-deployment-docs-qa-report.md` (link + accuracy
   checks). Live tst run of the runbook deferred to network access (open input #1).
+
+---
+
+## TASK-INFRA-005 - Validate WebRTC signaling stickiness at the voice LB (or add it)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0033 (WebRTC single live transport), ADR-0038
+**Depends on:** TASK-INFRA-002 (voice VIP), live bridge access (open input #1/#4)
+**Classification:** V1 pilot deployment (correctness validation)
+**Status:** Proposed (2026-08-05) — **ticket only, deferred** (needs a live two-bridge run;
+cannot be settled by static analysis).
+**Priority:** Medium
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the voice
+`backend voice_bridges` uses **roundrobin with no stickiness**, resting on the assumption
+(comment in `haproxy.cfg`) that WebRTC signaling is a *single* HTTP request so subsequent
+media pins peer-to-peer to the answering bridge.
+
+### Context
+
+`deploy/haproxy/haproxy.cfg` load-balances the two bridges roundrobin and states "No
+stickiness needed: the SDP offer POST establishes the session on the bridge that answers,
+and media pins to that bridge's ICE candidate." If the browser only ever makes **one**
+signaling call (the SDP offer) and everything else is UDP P2P, that holds. But if the
+signaling flow is **multi-request** — e.g. trickle-ICE candidate POSTs, a separate GET for
+the SDP answer, or a renegotiation — a second request can roundrobin to the **other**
+bridge, which holds no `RTCPeerConnection` for that session, and the call fails to
+establish. This is a correctness risk that only shows up live.
+
+### Objective
+
+Confirm the signaling is genuinely single-shot on the real bridge, or make the LB pin all
+of a session's signaling to the bridge that answered the offer.
+
+### Scope
+
+- Inspect `web_voice` signaling: is the WebRTC offer/answer a single HTTP round-trip, or
+  are there follow-up signaling requests (trickle ICE, answer polling, renegotiation)?
+- Live test through the VIP with both bridges up: establish several calls and confirm each
+  session's signaling + media reach one bridge (no cross-bridge failure).
+- **If** multi-request: add stickiness on `voice_bridges` (e.g. `cookie`/`stick on src` or a
+  session-scoped key) so all signaling of one session pins to the answering bridge; re-run.
+
+### Acceptance
+
+- Evidence (live) that N concurrent calls each establish correctly through the VIP, or a
+  stickiness rule added + re-validated. Update the `haproxy.cfg` comment to match reality.
+
+### Notes
+
+- Do not add stickiness blindly: if signaling really is single-shot, roundrobin is correct
+  and stickiness would only reduce spread. The point is to *verify*, then decide.
+
+---
+
+## TASK-OPS-006 - Pin GitHub Actions to commit SHAs (supply-chain hardening)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038
+**Depends on:** TASK-OPS-001 (the workflows)
+**Classification:** V1 pilot deployment (CI supply-chain hardening)
+**Status:** Proposed (2026-08-05) — **ticket only, deferred** (low risk for a private-repo
+pilot; recommended before wider exposure).
+**Priority:** Low
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the CI workflows
+reference third-party actions by **mutable major-version tags**, not immutable commit SHAs.
+
+### Context
+
+`.github/workflows/*.yml` pin actions to floating tags: `actions/checkout@v4`,
+`actions/setup-java@v4`, `actions/setup-python@v5`, `docker/metadata-action@v5`,
+`docker/setup-buildx-action@v3`, `docker/login-action@v3`, `docker/build-push-action@v6`.
+A moved tag (compromise or a breaking republish) would run unreviewed third-party code in a
+workflow that holds `GITHUB_TOKEN` / GHCR push. Pinning to a **commit SHA** makes each
+action immutable; the risk is low on a private repo but is a standard supply-chain hardening.
+
+### Scope
+
+- Repin each third-party `uses:` to a full commit SHA (keep a `# vX.Y.Z` trailing comment
+  for readability). The local reusable `./.github/workflows/tests.yml` is not affected.
+- Add **Dependabot** (`.github/dependabot.yml`, `package-ecosystem: github-actions`) so the
+  SHAs are bumped by reviewed PRs rather than drifting silently.
+- Re-run `actionlint` + `.github/qa-validate-workflows.sh`; keep the reusable-gate wiring.
+
+### Acceptance
+
+- Every third-party action is pinned to a commit SHA; Dependabot tracks updates;
+  `actionlint` + the workflow QA stay green.
+
+### Notes
+
+- Deferred, not blocking: acceptable on the current private-repo pilot. Do it before the
+  repo/CI surface widens or the images gain external consumers.
