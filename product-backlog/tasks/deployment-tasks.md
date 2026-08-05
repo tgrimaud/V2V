@@ -423,10 +423,91 @@ itself (TASK-OPS-002).
 
 ### Residual (accepted for the pilot)
 
-- The tier port is opened in the **default firewalld zone** (Redis 6379 with auth on).
-  Restricting the source to the backend subnet (rich rule) is a hardening follow-up.
+- ~~The tier port is opened in the **default firewalld zone** (Redis 6379 with auth on).
+  Restricting the source to the backend subnet (rich rule) is a hardening follow-up.~~
+  ✅ **Closed by TASK-OPS-004** (2026-08-05): the port is now opened with **source-scoped
+  firewalld rich rules** (Redis 6379 only to the backend VMs; backend/voice ports only to
+  the LB nodes), with the unscoped `--add-port` kept only as an empty-list fallback.
 - SELinux `:Z` relabel of the KB `:ro` mount is documented, applied only if the first
   deploy hits an AVC denial.
+
+---
+
+## TASK-OPS-004 - Deploy hardening: source-scoped firewalld, provisioning egress, registry logout
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038, ADR-0039 (egress)
+**Depends on:** TASK-OPS-002 (compose_tier role), TASK-OPS-003 (host_prereqs firewalld)
+**Classification:** V1 pilot deployment (security + docs hardening)
+**Status:** 🚧 Implemented on `task/TASK-OPS-004-deploy-egress-firewall-hardening`
+(from `feat/sprint-11-remote-deployment`, 2026-08-05). QA green: `qa-validate-prereqs.sh`
+**28/28** (+7), `qa-validate-ansible.sh` **35/35** (+2), both playbooks `--syntax-check`
+clean. Live run deferred (VM network access, open input #1). Merge on explicit user request.
+**Priority:** Medium
+**Branch:** `task/TASK-OPS-004-deploy-egress-firewall-hardening`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — three non-blocking
+findings (one medium: undocumented provisioning egress; two low/medium: permissive firewalld
+default-zone scope + registry credential left cached after pull).
+
+### Context
+
+The Sprint 11 review confirmed the deployment stack is sound but flagged three hardening
+gaps before an off-box posture:
+
+- **Firewalld default-zone scope (medium).** `host_prereqs` opened each tier's port to
+  **everyone** in the default zone (Redis 6379, backend 8080, voice 8090). Even with Redis
+  auth on, the ports should only accept their real clients. (OPS-003 tracked this as a
+  residual.)
+- **Undocumented provisioning egress (medium).** The runtime egress allowlist (ADR-0039:
+  Mistral, Gradium, GHCR, `registry.ollama.ai`) omitted the **one-time host bootstrap**
+  egress `prereqs.yml` needs: `download.docker.com` (Docker CE repo + packages) and the
+  Rocky EL9 OS mirrors. On a locked-down tenant the first `prereqs.yml` would fail silently.
+- **Registry credential at rest (low).** `compose_tier` ran `docker login` before the pull
+  but never logged out, leaving the read-only PAT cached in `~/.docker/config.json`.
+
+### Scope
+
+- **Source-scoped firewalld** in `host_prereqs`: open the port via `--add-rich-rule` limited
+  to a per-tier `firewall_allowed_sources` list (Redis → backend VMs `.105/.106`;
+  backend/voice → LB nodes `.100/.101`), keeping the unscoped `--add-port` only as an
+  empty-list fallback. Idempotent (`ALREADY_ENABLED`), guarded on firewalld active, no
+  external collection.
+- **Registry logout** in `compose_tier` after `up -d` (gated on `registry_login_required`,
+  `no_log`), so the token does not linger; the next deploy logs in again.
+- **Provisioning egress** documented in the deployment doc (open input #2 + port matrix):
+  `download.docker.com` + Rocky EL9 mirrors, clearly marked bootstrap-only.
+
+### Acceptance
+
+- Each tier port is opened only to its documented source IPs (rich rules); the unscoped
+  fallback fires only when the source list is empty.
+- The registry credential is dropped after the pull.
+- The provisioning-time egress is documented alongside the runtime egress.
+- Both Ansible QA suites stay green (deterministic); playbooks `--syntax-check` clean.
+
+### Implementation notes (2026-08-05)
+
+- `roles/host_prereqs/tasks/main.yml`: split the firewalld open into a **rich-rule loop**
+  over `firewall_allowed_sources` (argv form keeps the rule string intact) and an
+  empty-list **fallback** `--add-port`; the reload fires when either path changed.
+- `group_vars/{redis,backend,voice}.yml`: added `firewall_allowed_sources` (Redis → the two
+  backend VMs; backend + voice → the two LB nodes, since both app tiers are reached only
+  through their VIP on an LB node).
+- `roles/compose_tier/tasks/main.yml`: added a `docker logout {{ registry }}` step after
+  `up -d`, gated + `no_log`.
+- `docs/operations/deployment-eir-ai4cc-tst.md`: open input #2 now lists the provisioning
+  egress; the port matrix gained the `download.docker.com`/mirrors, GHCR and
+  `registry.ollama.ai` rows.
+- QA: `qa-validate-prereqs.sh` +7 checks (rich-rule scoping, per-tier source IPs, fallback
+  gating, egress doc) → **28/28**; `qa-validate-ansible.sh` +2 (logout after login, gated) →
+  **35/35**.
+
+### Residual (accepted / deferred)
+
+- **Live verification** (rich rules actually applied, ports reachable only from the listed
+  sources) needs VM access (open input #1) — the checks here are deterministic/offline.
+- SSH (22) is untouched (its own firewalld service); the SSH source range is still open
+  input #1.
 
 ---
 

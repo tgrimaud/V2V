@@ -42,10 +42,29 @@ if grep -q "ansible.posix.firewalld" "$ROLE"; then ko "avoid ansible.posix colle
 # 6) Idempotency intent on the firewalld add (ALREADY_ENABLED not treated as change).
 has "ALREADY_ENABLED" "$ROLE" && ok "firewalld add is idempotent (ALREADY_ENABLED)" || ko "firewalld add is idempotent"
 
+# 6b) Source scoping (TASK-OPS-004): least-privilege rich rules + guarded fallback.
+grep -qe '--add-rich-rule=rule' "$ROLE" && has "source address" "$ROLE" && ok "opens port via source-scoped rich rule" || ko "no source-scoped rich rule"
+has "firewall_allowed_sources | default(\[\])" "$ROLE" && has "length > 0" "$ROLE" && ok "rich-rule path gated on a non-empty source list" || ko "rich-rule path not gated on source list"
+has "length == 0" "$ROLE" && ok "unscoped add-port kept only as empty-list fallback" || ko "unscoped fallback not gated on empty source list"
+
 # 7) Per-tier firewall_port matches each service port.
 grep -q "firewall_port: 6379" group_vars/redis.yml   && ok "redis firewall_port=6379"   || ko "redis firewall_port=6379"
 grep -q "firewall_port: 8080" group_vars/backend.yml  && ok "backend firewall_port=8080" || ko "backend firewall_port=8080"
 grep -q "firewall_port: 8090" group_vars/voice.yml    && ok "voice firewall_port=8090"   || ko "voice firewall_port=8090"
+
+# 7b) Per-tier allowed sources (least privilege): backend VMs reach Redis; LB nodes
+# reach the app ports. A drift here would silently widen or break the firewall scope.
+grep -q "192.168.0.105/32" group_vars/redis.yml && grep -q "192.168.0.106/32" group_vars/redis.yml \
+  && ok "redis 6379 scoped to the backend VMs (.105/.106)" || ko "redis source scope wrong"
+grep -q "192.168.0.100/32" group_vars/backend.yml && grep -q "192.168.0.101/32" group_vars/backend.yml \
+  && ok "backend 8080 scoped to the LB nodes (.100/.101)" || ko "backend source scope wrong"
+grep -q "192.168.0.100/32" group_vars/voice.yml && grep -q "192.168.0.101/32" group_vars/voice.yml \
+  && ok "voice 8090 scoped to the LB nodes (.100/.101)" || ko "voice source scope wrong"
+
+# 7c) Provisioning-time egress is documented (download.docker.com + OS mirrors).
+DOC="../../docs/operations/deployment-eir-ai4cc-tst.md"
+grep -q "download.docker.com" "$DOC" && grep -qi "provisioning" "$DOC" \
+  && ok "provisioning-time egress documented (download.docker.com + mirrors)" || ko "provisioning egress not documented"
 
 # 8) Post-install verification present.
 has "docker compose version" "$ROLE" && ok "verifies docker compose availability" || ko "verifies docker compose availability"

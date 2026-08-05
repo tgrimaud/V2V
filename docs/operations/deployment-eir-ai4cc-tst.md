@@ -116,6 +116,9 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Backend | Redis `.107` | 6379 | TCP | Shared session memory (auth, no TLS) |
 | Backend | ollama sidecar (same VM) | 11434 | HTTP | Embeddings (compose network, not published) |
 | Backend | Mistral (cloud) | 443 | HTTPS | Chat LLM |
+| Backend / voice VMs | `download.docker.com` + Rocky EL9 mirrors | 443 | HTTPS | **Provisioning only** — Docker CE repo + OS packages (`prereqs.yml`, TASK-OPS-003/004) |
+| Backend / voice VMs | `ghcr.io` + `pkg-containers.githubusercontent.com` | 443 | HTTPS | Deploy — image pulls (private GHCR, read-only token) |
+| Backend VMs | `registry.ollama.ai` | 443 | HTTPS | Deploy — one-time `nomic-embed-text` model pull (ADR-0039) |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
 
 ## Configuration per tier (environment variables)
@@ -209,6 +212,15 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
    `registry.ollama.ai` (one-time `nomic-embed-text` model pull at deploy). No Docker
    daemon / container proxy configuration required. Embedding inference needs no
    egress (local sidecar).
+   **Provisioning-time egress (one-time host bootstrap, `prereqs.yml` / TASK-OPS-003
+   + OPS-004):** installing the container runtime on the bare app VMs (`backend` +
+   `voice` tiers) additionally needs `:443` to `download.docker.com` (the Docker CE
+   `dnf` repo definition + `docker-ce`/`containerd.io`/compose packages) and to the
+   **Rocky Linux EL9 OS mirrors** used by `dnf` (`dl.rockylinux.org` / the configured
+   mirrorlist, plus EPEL if enabled). This is a bootstrap-only dependency: once Docker
+   is installed the app tiers no longer need it, and the Redis/DB/LB hosts are not
+   `prereqs` targets. If a package proxy/mirror is mandated, point the VMs' `dnf` +
+   the Docker CE repo at it instead of the public hosts.
 3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
    `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
    `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
