@@ -1,0 +1,15 @@
+---
+# Provision the container runtime on the deploy VMs before the first deploy (TASK-OPS-003).
+# The tst VMs are bare Rocky Linux EL9; the compose_tier role assumes docker exists.
+#
+#   ansible-playbook prereqs.yml                 # all deploy tiers (redis + backend + voice)
+#   ansible-playbook prereqs.yml --limit redis   # a single tier
+#
+# Run once per fresh host; idempotent, so it is safe to re-run. Kept separate from
+# deploy.yml so routine deploys stay fast (docker is only installed once).
+
+- name: "Install the container runtime prerequisites"
+  hosts: redis:backend:voice
+  become: true
+  roles:
+    - host_prereqs

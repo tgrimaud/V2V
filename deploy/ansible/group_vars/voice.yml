@@ -10,6 +10,9 @@ health_url: "http://127.0.0.1:8090/"
 voice_bind: "0.0.0.0"
 voice_port: 8090
 
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 8090
+
 # Conversation backend (backend VIP .11).
 voice_backend: "http"
 voice_backend_url: "http://192.168.0.11:8080"

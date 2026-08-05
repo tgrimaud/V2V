@@ -10,6 +10,9 @@ health_url: "http://127.0.0.1:8080/actuator/health"
 backend_bind: "0.0.0.0"
 backend_port: 8080
 
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 8080
+
 # Postgres .102 (pgvector 768 dim).
 db_url: "jdbc:postgresql://192.168.0.102:5432/voicesupport"
 db_username: "voicesupport"
