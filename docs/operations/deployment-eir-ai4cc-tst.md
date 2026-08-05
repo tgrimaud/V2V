@@ -159,7 +159,9 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 
 ## Release and deploy (summary)
 
-Full runbook: `docs/operations/release-process.md` (TASK-OPS-002).
+First-time bring-up (host provisioning, Postgres bootstrap, initial RAG sync):
+[`first-deploy-runbook.md`](first-deploy-runbook.md). Repeatable per-version
+promote/deploy/rollback: [`release-process.md`](release-process.md) (TASK-OPS-002).
 
 1. **GitHub Actions** runs the gates (`mvn test`; voice-agent `unittest` +
    `behave`), builds both images, and pushes them to the registry with an
@@ -214,7 +216,8 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
    the voice VIP (`.prod.lan` / `10.195.59.39`).
 5. ~~**Container registry**~~ ✅ **Resolved (2026-08-05): GHCR, PRIVATE packages**
    `ghcr.io/tgrimaud/voice-support-backend` and `ghcr.io/tgrimaud/voice-support-voice`
-   (pushed by TASK-OPS-001 with immutable tags `vX.Y.Z` / `sha-<short>`). Private → the
+   (pushed by TASK-OPS-001 with immutable tags `X.Y.Z` — no `v`; git tag `vX.Y.Z` →
+   image tag `X.Y.Z` — plus `sha-<short>`; `latest` on the mainline only). Private → the
    VMs authenticate with a **read-only token**: `registry_login_required: true` +
    `vault_registry_username` (GitHub user `tgrimaud`) / `vault_registry_token` (PAT with
    `read:packages`) in the ansible-vault; the `compose_tier` role runs `docker login`

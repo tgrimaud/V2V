@@ -5,6 +5,11 @@ How to promote, deploy, verify and roll back a version of the two-service stack
 companion to the topology reference
 [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md).
 
+> **First time on a fresh environment?** Follow the
+> [first-deploy runbook](first-deploy-runbook.md) first — it adds the one-time
+> steps this document assumes are already done (host provisioning, Postgres
+> bootstrap, initial RAG sync). This page is the repeatable per-version flow.
+
 - **Build/publish**: GitHub Actions (`TASK-OPS-001`) — `.github/workflows/`.
 - **Deploy/rollback**: Ansible (`TASK-OPS-002`) — [`deploy/ansible/`](../../deploy/ansible/).
 - **Per-tier stacks**: docker-compose (`TASK-INFRA-001`) — [`deploy/compose/`](../../deploy/compose/).
@@ -14,7 +19,7 @@ companion to the topology reference
 | Concern | Owner | Where |
 |---------|-------|-------|
 | Run tests, build + push images | CI (GitHub Actions) | `.github/workflows/{tests,ci,images}.yml` |
-| Immutable image tags (`vX.Y.Z`, `sha-xxxxxxx`) | CI | GHCR (`ghcr.io/<owner>/voice-support-{backend,voice}`) |
+| Immutable image tags (`X.Y.Z` — no `v` —, `sha-xxxxxxx`) | CI | GHCR (`ghcr.io/<owner>/voice-support-{backend,voice}`) |
 | Deploy a tag to the VMs | Ansible over SSH | `deploy/ansible/deploy.yml` |
 | Roll back to a previous tag | Ansible over SSH | `deploy/ansible/rollback.yml` |
 | Secrets | Ansible Vault (rendered to `.env` per host) | `group_vars/all/vault.yml` |
@@ -51,12 +56,19 @@ Versions are produced by CI, never by hand.
    git tag v1.2.0
    git push origin v1.2.0
    ```
-3. GitHub Actions builds and pushes both images with immutable tags
-   (`v1.2.0` and `sha-<commit>`). Confirm both packages exist in GHCR before deploying.
+3. GitHub Actions builds and pushes both images. **The image tag drops the leading
+   `v`** (`docker/metadata-action` `type=semver,pattern={{version}}`): git tag
+   `v1.2.0` → image tag **`1.2.0`** (plus `sha-<commit>`). Confirm both packages
+   exist at that tag in GHCR before deploying:
+   ```bash
+   docker buildx imagetools inspect ghcr.io/<owner>/voice-support-backend:1.2.0
+   docker buildx imagetools inspect ghcr.io/<owner>/voice-support-voice:1.2.0
+   ```
 
 `latest` is published on the mainline for convenience but MUST NOT be used to
 deploy — the playbooks refuse it so every deploy is reproducible and
-rollback-addressable.
+rollback-addressable. Use the **image** tag (`1.2.0`), not the git tag (`v1.2.0`),
+for `image_tag` below.
 
 ## Deploy a version to tst
 
@@ -64,10 +76,10 @@ rollback-addressable.
 cd deploy/ansible
 
 # 1) Dry-run (no changes) to review what would happen:
-ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass --check --diff
+ansible-playbook deploy.yml -e image_tag=1.2.0 --ask-vault-pass --check --diff
 
 # 2) Deploy:
-ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass
+ansible-playbook deploy.yml -e image_tag=1.2.0 --ask-vault-pass
 ```
 
 Deploy order (enforced by the playbook):
@@ -111,10 +123,10 @@ gates, no divergent rollback code:
 
 ```bash
 cd deploy/ansible
-ansible-playbook rollback.yml -e image_tag=v1.1.0 --ask-vault-pass
+ansible-playbook rollback.yml -e image_tag=1.1.0 --ask-vault-pass
 ```
 
-Pick the previous tag from the GHCR packages. To roll back a single tier, add
+Pick the previous tag from the GHCR packages (image tags have no `v`). To roll back a single tier, add
 `--limit backend` (or `voice`). Verify health as above.
 
 ## Voice session draining (best-effort — known limitation)

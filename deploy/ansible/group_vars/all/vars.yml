@@ -7,7 +7,8 @@ registry: "ghcr.io"
 registry_namespace: "tgrimaud"
 
 # Image version to deploy. Override on the CLI with the immutable tag produced by
-# TASK-OPS-001 (e.g. -e image_tag=v1.2.0 or -e image_tag=sha-abc1234).
+# TASK-OPS-001. The image tag has NO leading v (git tag vX.Y.Z -> image tag X.Y.Z,
+# metadata-action {{version}}): e.g. -e image_tag=0.4.0 or -e image_tag=sha-abc1234.
 image_tag: "latest"
 
 # GHCR packages are PRIVATE (user decision 2026-08-05): the VMs authenticate with a

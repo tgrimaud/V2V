@@ -37,7 +37,9 @@ deploy/ansible/
   compose` v2 plugin are installed by `prereqs.yml` (run once per fresh host, below).
 - Secrets: `cp group_vars/all/vault.example.yml group_vars/all/vault.yml`, fill it,
   then `ansible-vault encrypt group_vars/all/vault.yml` (the real file is git-ignored).
-- A published, immutable image tag (`vX.Y.Z` or `sha-xxxxxxx`) — never `latest`.
+- A published, immutable **image** tag — never `latest`. Note the image tag has
+  **no `v`** (git tag `vX.Y.Z` → image tag `X.Y.Z`, e.g. `0.4.0`), plus
+  `sha-xxxxxxx`. See `docs/operations/release-process.md`.
 
 ## Usage
 
@@ -48,17 +50,17 @@ cd deploy/ansible
 ansible-playbook prereqs.yml                       # all deploy tiers
 ansible-playbook prereqs.yml --limit redis         # a single tier
 
-# Dry-run first (no changes):
-ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass --check --diff
+# Dry-run first (no changes). image_tag is the IMAGE tag (no leading v):
+ansible-playbook deploy.yml -e image_tag=1.2.0 --ask-vault-pass --check --diff
 
 # Deploy a version to tst:
-ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass
+ansible-playbook deploy.yml -e image_tag=1.2.0 --ask-vault-pass
 
 # Deploy a single tier:
-ansible-playbook deploy.yml -e image_tag=v1.2.0 --ask-vault-pass --limit voice
+ansible-playbook deploy.yml -e image_tag=1.2.0 --ask-vault-pass --limit voice
 
 # Roll back to the previous good version:
-ansible-playbook rollback.yml -e image_tag=v1.1.0 --ask-vault-pass
+ansible-playbook rollback.yml -e image_tag=1.1.0 --ask-vault-pass
 ```
 
 `image_tag` is mandatory and `latest` is refused, so every deploy is reproducible

@@ -551,7 +551,7 @@ CI image build (TASK-OPS-001); HAProxy config (TASK-INFRA-002).
 **Related decisions:** ADR-0038
 **Depends on:** the other Sprint 11 tickets (kept in sync as they land)
 **Classification:** V1 pilot deployment (docs)
-**Status:** To do (Sprint 11, branch `task/TASK-DOC-003-deployment-docs`)
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-DOC-003-deployment-docs`) — first-deploy runbook authored + docs synced (incl. the image-tag `X.Y.Z` no-`v` correction found when publishing `0.4.0`). Not runtime-affecting (docs + one Ansible comment).
 **Priority:** Medium
 **Branch:** `task/TASK-DOC-003-deployment-docs`
 
@@ -582,3 +582,23 @@ Scenario: Runbook is executable
 ### Out Of Scope
 
 The generic operator target (infra-v1.md) - only cross-linked, not rewritten.
+
+### Implementation notes (2026-08-05)
+
+- **New:** `docs/operations/first-deploy-runbook.md` — chronological zero-to-running
+  runbook (access + open inputs, publish images, vault, `prereqs.yml`, Postgres
+  bootstrap + `CREATE EXTENSION vector`, deploy Redis → backend + first RAG sync →
+  voice, LB/TLS edge, two-tier smoke test, known-good rollback, first-deploy
+  troubleshooting table). Grounded on the real backend endpoints (`/api/health`,
+  `POST /api/conversation/converse` with snake_case body + `x-api-key`,
+  `POST /api/knowledge/sync`).
+- **Accuracy fix (image tag has no `v`):** `docker/metadata-action`
+  `type=semver,pattern={{version}}` strips the leading `v`, so git tag `vX.Y.Z`
+  publishes image tag `X.Y.Z`. Corrected `release-process.md`,
+  `deploy/ansible/README.md`, `group_vars/all/vars.yml` (comment) and open input #5
+  in `deployment-eir-ai4cc-tst.md`; deploy uses `-e image_tag=0.4.0`, not `v0.4.0`.
+- **Cross-links:** runbook linked from `docs/README.md`,
+  `deployment-eir-ai4cc-tst.md`, `release-process.md`, `infra-v1.md` and
+  `development-workflow.md`.
+- **QA:** `docs/qa/task-doc-003-deployment-docs-qa-report.md` (link + accuracy
+  checks). Live tst run of the runbook deferred to network access (open input #1).
