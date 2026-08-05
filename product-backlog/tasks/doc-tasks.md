@@ -95,7 +95,7 @@ impact).
 ADR-0017 (billing on support foundation), ADR-0019/0020 (escalation/Genesys)
 **Depends on:** —
 **Classification:** Documentation integrity (product scope honesty)
-**Status:** 📋 Open — ready to start
+**Status:** 🚧 In progress (started 2026-08-05, branched from `feat/sprint-11-remote-deployment`)
 **Priority:** High
 **Branch:** `task/TASK-DOC-004-scope-truth-in-labeling`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,

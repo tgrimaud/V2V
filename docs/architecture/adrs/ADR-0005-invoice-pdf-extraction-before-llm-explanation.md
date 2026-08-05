@@ -4,6 +4,11 @@
 
 Accepted
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
+> `InvoicePdfExtractor` or extraction-status handling exists in `backend/src/main`
+> yet (grep-verified). Deferred with billing V1 (Sprint 12+, gated by OQ-004 for
+> PDF fixtures).
+
 ## Context
 
 The identified Galaxion billing path provides invoice documents through

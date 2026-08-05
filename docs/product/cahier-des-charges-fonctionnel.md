@@ -31,6 +31,25 @@ with:
   PDF extraction before LLM explanation when needed;
 - [Galaxion BSS integration plan](../integrations/galaxion/bss-integration-plan.md).
 
+### Implementation status (refreshed 2026-08-05)
+
+This is a **broad functional target**. Much of it is **not implemented** on the
+current stack (`feat/sprint-11-remote-deployment`). Read each requirement's status
+marker below; a requirement with no marker is at least partially built.
+
+- **Built:** web voice conversation (5.1), text conversation (5.2), knowledge-based
+  answer (F2), voice interaction incl. barge-in (F4), streaming/responsiveness (F5),
+  guardrails (F7), conversational persistence via Redis (F9), KB management (5.6).
+- **NOT implemented (target for a later sprint):** multi-agent routing (F3), phone
+  telephony (5.3 / F6), the billing-evidence escalation triggers and structured
+  human/Genesys handoff (5.4 / F10), WhatsApp & messaging (5.5 / F6bis), and the
+  admin/monitoring dashboard (F8). Billing/BSS itself (the V1 value slice in
+  `v1-scope.md`) is also **not built** — see that document's status banner.
+
+Verified against `backend/src/main` by grep (no `IntentClassifier`/`AgentProfile`,
+no `Escalation*`/`Genesys*`, no billing/BSS/PDF code). Full detail:
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`.
+
 ## 1. Context and Objectives
 
 Voice Support Bot is a voice-to-voice conversational assistant for the customer support of a Telecom/ISP operator. It allows a customer to ask a question orally or in writing, receive an answer guided by an internal knowledge base, and be routed to a human advisor when the request exceeds the automatable scope.
@@ -115,6 +134,9 @@ The business contributor must be able to enrich or correct the bot's answers thr
 
 ### 5.3 Phone Call
 
+> **NOT IMPLEMENTED (target).** No Twilio/telephony ingress on the current stack;
+> the only live channel is web WebRTC. Deferred to Sprint 13.
+
 1. The customer calls a number configured through Twilio.
 2. The bot answers and greets the customer.
 3. The call audio is transmitted to the voice pipeline.
@@ -123,6 +145,12 @@ The business contributor must be able to enrich or correct the bot's answers thr
 6. In case of escalation, the system must be able to prepare the transfer or signal the need for an advisor.
 
 ### 5.4 Escalation to a Human
+
+> **NOT IMPLEMENTED as described (target).** There is no proactive escalation
+> detector or structured handoff today; the bot only produces a **reactive**
+> guardrail fallback message on low confidence / ungrounded amounts. The
+> intent-based triggers and context transfer below (incl. Genesys) are deferred
+> (Sprint 13, ADR-0019/0020).
 
 The bot must trigger an escalation when it detects:
 
@@ -180,6 +208,10 @@ channel/backend envelope described in the architecture.
 
 ### F3. Multi-Agent Routing
 
+> **NOT IMPLEMENTED (target).** No `IntentClassifier`/`AgentProfile` on the current
+> stack (an earlier version existed on `main`). Answers come from a single RAG
+> pipeline with KB domain filtering, and the UI shows no agent name. See ADR-0015.
+
 - The system must route each question to a specialized profile.
 - The initial profiles are:
   - Technical Support;
@@ -203,11 +235,16 @@ channel/backend envelope described in the architecture.
 
 ### F6. Telephony
 
+> **NOT IMPLEMENTED (target).** No Twilio audio ingress today (Sprint 13).
+
 - The system must be able to receive a telephone audio stream through Twilio.
 - The system must handle the expected telephone audio format.
 - The telephone journey must reuse the same business logic as the web journey.
 
 ### F6bis. Conversational Messaging
+
+> **NOT IMPLEMENTED (target).** No WhatsApp/messaging adapter exists; the backend
+> is architected to allow one later (shared channel/backend envelope).
 
 - The system must be extensible to a WhatsApp channel or equivalent messaging channel.
 - The messaging channel must reuse the existing conversational backend.
@@ -224,6 +261,10 @@ channel/backend envelope described in the architecture.
 
 ### F8. Administration and Monitoring
 
+> **NOT IMPLEMENTED (target).** There is no admin dashboard/UI. Runtime evidence
+> today is limited to structured logs + `/actuator/metrics` (slice timers); no
+> conversation-indicator or frequent-question analytics surface exists yet.
+
 - The system must expose conversation indicators.
 - The system must allow consultation of recent events.
 - The system must identify the most frequent questions.
@@ -236,6 +277,10 @@ channel/backend envelope described in the architecture.
 - The retention period for active sessions must be configurable.
 
 ### F10. Contact-Center Preparation
+
+> **NOT IMPLEMENTED (target).** No Genesys integration or handoff-context transfer
+> exists; only the "startup without a contact-center dependency" property holds
+> today. Deferred to Sprint 13 (ADR-0019/0020).
 
 - The system must allow startup without a mandatory dependency on an external contact-center solution.
 - The system must keep business logic, RAG, guardrails, and multi-agent routing in the existing backend.
