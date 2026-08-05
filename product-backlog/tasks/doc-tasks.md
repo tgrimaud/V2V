@@ -85,3 +85,86 @@ impact).
 - **Latency (already tracked):** the ADR-0029 pilot-gate closure is covered by the
   existing **TASK-WEB-015** (perceived-latency optimization levers) + a warm live
   sample — no new ticket created.
+
+---
+
+## TASK-DOC-004 - Truth-in-labeling: mark unimplemented V1 scope as NOT IMPLEMENTED / target
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0003/0004/0005 (BSS/PDF/comparison), ADR-0015 (multi-agent),
+ADR-0017 (billing on support foundation), ADR-0019/0020 (escalation/Genesys)
+**Depends on:** —
+**Classification:** Documentation integrity (product scope honesty)
+**Status:** 📋 Open — ready to start
+**Priority:** High
+**Branch:** `task/TASK-DOC-004-scope-truth-in-labeling`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`) — the single
+highest-severity finding: product/architecture prose describes billing, multi-agent routing,
+escalation and Genesys as present V1 scope, while `backend/src/main` contains **zero**
+`BssBilling|InvoicePdf|Galaxion|bill-run` and **zero** `IntentClassifier|AgentProfile|Escalation|Genesys`
+(verified by grep).
+
+### Context
+
+A stakeholder reading `docs/product/v1-scope.md` (§Access to BSS Data, §Invoice Comparison) or
+`docs/product/cahier-des-charges-fonctionnel.md` (§F3 multi-agent, §5.4 escalation on billing
+evidence gaps, §F6/F6bis telephony/WhatsApp) will assume these are delivered. They are not
+started. The current runnable product is a **general-support RAG voice bot**. The defect is the
+docs over-claiming — the gaps themselves are expected/roadmapped.
+
+### Scope
+
+- Add explicit "NOT IMPLEMENTED — target for a later sprint" markers to the billing/BSS/PDF/
+  comparison sections of `v1-scope.md` and the cahier; same for F3 multi-agent routing, §5.4
+  escalation, F6/F6bis telephony/WhatsApp, and any Genesys-as-V1 phrasing.
+- Add an implementation-status note to ADR-0003/0004/0005/0015/0019/0020 headers (target-only
+  vs built), consistent with the ADR README's built-vs-target convention.
+- Do **not** rewrite the requirements (they remain the roadmap) — only label current state.
+
+### Acceptance
+
+- Every V1-scope claim not backed by code carries a clear NOT IMPLEMENTED/target marker.
+- A reader of the cahier or v1-scope cannot mistake billing/routing/escalation/Genesys as
+  delivered. `git diff --check` clean; docs in English.
+
+---
+
+## TASK-DOC-005 - Doc freshness + backlog-index integrity reconciliation
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0036/0037 (status), ADR-0038/0039
+**Depends on:** —
+**Classification:** Documentation integrity (freshness + backlog)
+**Status:** 📋 Open — ready to start
+**Priority:** Medium
+**Branch:** `task/TASK-DOC-005-freshness-backlog-integrity`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — multiple
+authoritative surfaces still describe a pre-Sprint-7/Sprint-9 state, and `backlog-index.md`
+diverges from the source ticket files.
+
+### Context
+
+Stale "Sprint 9 / STT-only / nothing deployed" content persists in `docs/architecture/infra-v1.md`
+(L3-6), `docs/README.md` (L3), `docs/architecture/diagrams/README.md`, the architecture-spine
+Mermaid diagram (still shows `bridge_server.py`/`agent/bot.py`/`ask*` routes), the sprint-11
+"Why now" block, and entry READMEs. ADR-0037 cites the legacy `GET /api/conversation/ask-stream`
+(code uses `POST /converse-stream`); ADR-0036/0037 are still "Proposed" though shipped. Backlog
+integrity: US-041 (Draft vs Done), US-042 and OQ-008 missing from the index, BUG-001 (Closed vs
+New), EPIC-011/012 in the index but not in the epics file.
+
+### Scope
+
+- Refresh the stale banners/diagrams to the Sprint 11 rebuilt stack (or add a dated "current
+  state" pointer to `backlog-index.md` where a full rewrite is heavy).
+- Fix ADR-0037 endpoint name; promote ADR-0036/0037 to Accepted where code shipped; add the
+  ADR-0018→0029 supersession note inline.
+- Reconcile `backlog-index.md`: US-041/042, BUG-001 status, OQ-008 row, EPIC-011/012 presence.
+- French-in-`docs/` hygiene pass (ADR-0031/0034/0035, some QA reports) — English prose,
+  French only where it's genuine test-utterance/example content.
+
+### Acceptance
+
+- No entry/architecture/infra doc still claims the removed-code or STT-only state.
+- ADR statuses/endpoints match code; backlog-index matches the source ticket files (no
+  orphan/contradiction for the listed IDs). `git diff --check` clean.

@@ -1040,3 +1040,84 @@ idle TTL, graceful degradation to empty history on outage).
 - **Runtime-affecting:** the sanitized log preserves the existing structured fields; no new
   metric/slice (the append is faster, same observable outcome). Live smoke deferred (needs a real
   Redis; the behaviour is deterministic and unit-covered for the log path).
+
+---
+
+## TASK-BE-025 - Bound the streaming LLM call + embedding/pgvector client with timeouts
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0006 (Mistral chat + Ollama embeddings), ADR-0013 (SSE streaming)
+**Depends on:** —
+**Classification:** V1 backend robustness hardening
+**Status:** 📋 Open — ready to start
+**Priority:** High
+**Branch:** `task/TASK-BE-025-upstream-timeouts`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`).
+
+### Context
+
+The sync generation path wraps the provider call with an executor + HTTP read timeout
+(`AbstractChatClientAnswerAdapter.java:90-104`), but the **streaming** path calls
+`streamContent()` with **no call-level timeout** (`:122-139`) — a hung Mistral/Ollama stream
+ties up an SSE worker until the 60s emitter timeout (`ConverseStreamController.java:37`).
+Separately, the **embedding** client is a bare Spring AI `EmbeddingModel` with no custom HTTP
+timeout (`KnowledgeConfig.java:66`, `InProcKnowledgeRetrievalAdapter.java:24-27`), so a
+slow/down Ollama during `similaritySearch` relies on Spring defaults before
+`GlobalExceptionHandler` maps to 503.
+
+### Scope
+
+- Add a bounded timeout on the streaming generation call (first-token and/or overall stream
+  budget) that fails fast into the existing degraded/`ERR_UPSTREAM` path.
+- Configure an explicit HTTP timeout on the embedding client (and the pgvector query path if
+  separately configurable), env/`application.yml`-driven like the LLM timeouts.
+- Tests: fake a slow streaming provider + a slow embedding client and assert fail-fast within
+  budget (no worker hang), with the sanitized outcome preserved.
+
+### Acceptance
+
+- A hung streaming LLM aborts within a configured budget, not at the 60s emitter timeout.
+- A slow embedding/pgvector call fails fast within a configured budget.
+- Unit tests cover both timeouts; existing 337 tests stay green; ArchUnit OK.
+- Telemetry outcome (`timeout`/`upstream_unavailable`) is emitted on both paths.
+
+---
+
+## TASK-BE-026 - Resilience: bounded retries on idempotent reads + LLM circuit breaker
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0006, ADR-0028
+**Depends on:** TASK-BE-025 (timeouts first)
+**Classification:** V1 backend resilience (deferred)
+**Status:** Proposed — deferred (do after BE-025; adds a dependency, size before committing)
+**Priority:** Low
+**Branch:** `task/TASK-BE-026-resilience`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — there is **no**
+retry/circuit-breaker anywhere in the backend; every upstream is fail-fast-once.
+
+### Context
+
+Fail-fast → sanitized 503 is acceptable for a POC, but a real-time voice product with a cloud
+LLM + local embedding + pgvector benefits from bounded retries on **idempotent** reads
+(embedding, retrieval) and a circuit breaker on the LLM so a provider blip doesn't fail every
+turn. No `resilience4j` in `pom.xml` today.
+
+### Scope
+
+- Add bounded retries with jitter on idempotent reads (embedding, retrieval) — never on the
+  non-idempotent generation call beyond its timeout.
+- Add a circuit breaker on the LLM adapter (open → immediate degraded wording, don't hammer a
+  down provider); expose breaker state as a metric.
+- Keep the domain pure — resilience lives in the infrastructure adapters/config only.
+
+### Acceptance
+
+- Transient embedding/retrieval failures recover within the retry budget; the LLM breaker
+  opens/half-opens/closes as expected with metrics; domain layer unchanged.
+- Unit tests cover retry-then-succeed, retry-exhausted, and breaker open/half-open.
+
+### Notes
+
+- Deferred, not blocking: BE-025's timeouts remove the worst failure mode; retries/breaker are
+  an availability improvement. Confirm the dependency (resilience4j) is acceptable before start.

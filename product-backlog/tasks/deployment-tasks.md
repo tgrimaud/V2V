@@ -836,3 +836,157 @@ action immutable; the risk is low on a private repo but is a standard supply-cha
 
 - Deferred, not blocking: acceptable on the current private-repo pilot. Do it before the
   repo/CI surface widens or the images gain external consumers.
+
+---
+
+## TASK-INFRA-006 - Close the live-deploy open inputs (make the tst pilot runnable)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038, ADR-0033
+**Depends on:** platform team (external inputs), TASK-INFRA-002
+**Classification:** V1 pilot deployment (go-live blocker)
+**Status:** 📋 Open — ready to start (tracking + the parts we own)
+**Priority:** High
+**Branch:** `task/TASK-INFRA-006-close-deploy-open-inputs`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`) — the two-service stack
+**cannot run live** on eir-ai4cc-tst until a set of external inputs is closed.
+
+### Context
+
+Several inputs block the first live deployment and are not code we can merge alone:
+TLS cert + FQDN for the voice VIP (`haproxy.cfg:40`, no cert at `/etc/haproxy/certs/voice-vip.pem`),
+`VOICE_STUN=""` so WebRTC media cannot traverse for Prodpriv clients (`group_vars/voice.yml:37-38`),
+HAProxy/keepalived not automated by Ansible (committed `CHANGE_ME_VRRP`, `keepalived-vlp-t01.conf:38`),
+and undocumented SSH/ingress source CIDRs. Static QA is green; nothing more can be proven
+without these.
+
+### Scope
+
+- Track each open input with an owner + due date; mirror the list in
+  `docs/operations/deployment-eir-ai4cc-tst.md` (open inputs) and the first-deploy runbook.
+- Own-able parts: provide the HAProxy/keepalived apply path (playbook or documented manual
+  steps incl. `ip_nonlocal_bind`, VRRP secret handling, interface name), and the STUN/TURN
+  config wiring (`VOICE_STUN`/`VOICE_TURN` env → voice `.env`).
+- Parts blocked on the platform: TLS cert issuance + FQDN, SSH/ingress CIDR allowlist.
+
+### Acceptance
+
+- Every open input has an owner + status; the docs reflect resolved vs blocked.
+- The stack reaches a state where a live smoke test can be attempted (all self-owned inputs
+  closed), or the residual external blockers are explicitly named as the only gate.
+
+---
+
+## TASK-INFRA-007 - Deploy release safety: deep backend health check + wired voice drain
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038
+**Depends on:** TASK-INFRA-002 (HAProxy), TASK-OPS-002 (rolling deploy)
+**Classification:** V1 pilot deployment (release correctness)
+**Status:** 📋 Open — ready to start
+**Priority:** Medium
+**Branch:** `task/TASK-INFRA-007-deploy-release-safety`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — HAProxy probes a
+static endpoint and voice drain hooks are empty.
+
+### Context
+
+HAProxy backend health checks `/api/health`, which returns a static UP
+(`HealthController.java:17-21`) and does **not** reflect Redis/DB degradation that would fail
+`/actuator/health` (the endpoint Ansible already polls, `group_vars/backend.yml:8`). A backend
+with its dependencies down therefore stays in rotation. Separately, the voice rolling deploy
+sets `voice_lb_drain_cmd`/`voice_lb_enable_cmd` **empty** (`group_vars/voice.yml:56-57`), so a
+bridge being recreated is not drained — only a 60s grace pause protects in-flight calls.
+
+### Scope
+
+- Point the HAProxy backend health check at `/actuator/health` (or a dependency-aware
+  endpoint) so an unhealthy backend leaves rotation.
+- Populate `voice_lb_drain_cmd`/`voice_lb_enable_cmd` using the HAProxy admin-socket
+  commands documented in `deploy/haproxy/README.md` so a bridge is drained before recreate.
+- Extend `qa-validate-haproxy.sh` / `qa-validate-ansible.sh` checks accordingly.
+
+### Acceptance
+
+- HAProxy backend health reflects real backend health (unhealthy backend removed from LB).
+- Voice deploy drains the target bridge before recreate; QA scripts assert both.
+- Live drain/health behaviour validated once LB-host access is available (deferred to
+  TASK-INFRA-006 closure).
+
+---
+
+## TASK-OPS-007 - Centralized observability for the pilot (turn the telemetry on)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0028, ADR-0038, ADR-0039
+**Depends on:** TASK-OPS-002 (env templates), TASK-OBS-001 (OTLP exporters)
+**Classification:** V1 pilot deployment (observability / SLO substantiation)
+**Status:** 📋 Open — ready to start
+**Priority:** High
+**Branch:** `task/TASK-OPS-007-centralized-observability`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the instrumentation
+model is strong but **export is disabled** in prod, so no p95/p99 can be aggregated in the
+pilot; any SLO claim is unsubstantiable.
+
+### Context
+
+OTLP export is hard-disabled in `roles/compose_tier/templates/backend.env.j2:37-40` and
+`voice.env.j2:25-26`; backend trace sampling is 0.0. The `deploy/observability/` collector
+stack is local opt-in only. Operators would have to `curl` per-node Micrometer endpoints with
+no aggregation — insufficient for a latency SLO.
+
+### Scope
+
+- Add a minimal centralized collector to the pilot topology (OTLP endpoint + metric
+  aggregation, e.g. an OpenTelemetry Collector → Prometheus/backend of choice).
+- Enable OTLP export in the prod `.env` templates pointing at the collector; set a sane
+  sampling ratio.
+- Propagate W3C `traceparent` voice→backend so a call is one trace across tiers.
+
+### Acceptance
+
+- A backend + voice run exports traces/metrics to the collector; p50/p95/p99 by slice are
+  visible in one place.
+- Correlation id / traceparent links a voice turn to its backend spans.
+- Docs (`deploy/observability/README.md`, deployment ref) describe the pilot pipeline.
+
+---
+
+## TASK-OPS-008 - Data resilience: Redis + Postgres backup/restore
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0008 (Redis sessions + Postgres events), ADR-0038
+**Depends on:** TASK-BE-021 (Redis memory), TASK-OPS-003 (host prereqs)
+**Classification:** V1 pilot deployment (data durability)
+**Status:** 📋 Open — ready to start
+**Priority:** Medium
+**Branch:** `task/TASK-OPS-008-data-resilience`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — Postgres (`.102`)
+and Redis (`.107`) are single-node SPOFs with **no backup/restore**; rollback covers app
+images only.
+
+### Context
+
+The topology has one Postgres (KB + pgvector, `inventory/hosts.ini:19-20`) and one Redis
+(conversation memory, `:7-8`) with no replica, no Sentinel, and no `pg_dump`/AOF procedure in
+the repo. One VM loss = data loss + outage, and there is no restore runbook.
+
+### Scope
+
+- Redis: enable AOF (or scheduled RDB) on the `redis-data` volume + a backup job; document
+  restore.
+- Postgres: a scheduled `pg_dump` (or documented PITR) with off-host copy + a restore runbook
+  that recreates the `vector` extension and re-syncs KB if needed.
+- Add both procedures to `docs/operations/` and reference them from the first-deploy runbook.
+
+### Acceptance
+
+- Documented, tested backup + restore for Redis and Postgres (restore into a clean VM
+  verified at least once).
+- RPO/RTO stated for each; rollback runbook cross-links the data procedures.
+
+### Notes
+
+- HA (replica/Sentinel/cluster) is out of scope here — this ticket is durability, not
+  zero-downtime. HA can be a later hardening if the pilot widens.

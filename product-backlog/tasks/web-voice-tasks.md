@@ -2291,3 +2291,111 @@ Scenario: Warm-up never leaks a session or blocks the first turn
   the TASK-WEB-014 baseline.
 - Updated ADR-0037 evidence + streaming QA report + `voice-journey-timing.md`.
 - No API key / raw audio / path leak.
+
+---
+
+## TASK-WEB-022 - Latency gate remediation (meet ADR-0029 or revise it)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0029 (pilot latency criterion), ADR-0018, ADR-0037
+**Depends on:** TASK-WEB-015/020 (latency levers), TASK-OPS-007 (measurement)
+**Classification:** V1 pilot readiness (latency gate)
+**Status:** 📋 Open — ready to start
+**Priority:** High
+**Branch:** `task/TASK-WEB-022-latency-gate-remediation`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`) — the ADR-0029 gate
+(p95 mouth-to-ear ≤ 1.5 s) is **FAILED** (backlog records p95 ≈ 2142 ms) and the two latency
+levers **ship OFF by default**.
+
+### Context
+
+`VOICE_BACKEND_STREAM` defaults false (`voice_pipeline/answer.py:70-79`) and STT pre-warm is
+opt-in (`webrtc_signaling.py:148-161`), so a default pilot run is *slower* than the measured
+2142 ms. The gate was not met when Sprint 10 closed "on scope." Either the levers become the
+default and we re-measure, or a revised, signed-off gate is recorded.
+
+### Scope
+
+- Validate the STT idle-socket behaviour that pre-warm depends on (the reason it's OFF), then
+  enable pre-warm + `VOICE_BACKEND_STREAM` by default if safe.
+- Re-measure p95 mouth-to-ear + time-to-first-audio on a live real-backend run (needs
+  TASK-OPS-007 aggregation + open-input closure for a real call).
+- If ≤ 1.5 s is not reachable, produce a revised gate proposal (with rationale: cloud LLM +
+  cloud STT/TTS + browser egress) for Product/Architecture sign-off and update ADR-0029.
+
+### Acceptance
+
+- Levers enabled by default (or an explicit reason recorded) and a fresh p95 sample vs the
+  gate; ADR-0029 either passes or is formally revised with sign-off.
+- The latency QA report + `voice-journey-timing.md` reflect the new numbers.
+
+---
+
+## TASK-WEB-023 - Streaming provider protocols (break the Gradium lock on the hot path)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0002 (Pipecat + Gradium), ADR-0023/0024 (streaming STT/TTS)
+**Depends on:** —
+**Classification:** V1 modularity / provider replaceability (deferred)
+**Status:** Proposed — deferred (architecture prep; do before benchmarking a 2nd vendor)
+**Priority:** Low
+**Branch:** `task/TASK-WEB-023-streaming-provider-protocols`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — batch STT/TTS are
+behind clean ports, but the **streaming** (latency-critical) path is built only for Gradium
+(`web_voice/server.py:351-363`), so the least-replaceable path is the hot one.
+
+### Context
+
+`SttProvider`/`TtsProvider` batch protocols are clean and faked in tests, but streaming
+sessions are duck-typed around the Gradium WS protocol; a non-Gradium provider forces batch
+fallback or `None`. This contradicts the provider-agnostic product goal on the one path where
+latency matters most.
+
+### Scope
+
+- Define explicit `StreamingSttProvider` / `StreamingTtsProvider` protocols (open→session,
+  push audio/text, receive partials/audio, close) with the Gradium impls conforming.
+- Route `server.py` streaming selection through a factory keyed on provider, not a hard
+  `== GRADIUM` check.
+- Add a fake streaming provider for tests to prove the seam.
+
+### Acceptance
+
+- A fake streaming provider drives the WebRTC path in tests without Gradium; the Gradium impl
+  is one conforming implementation; architecture-separation tests updated.
+
+---
+
+## TASK-WEB-024 - WebRTC concurrency ceiling + drop the per-turn asyncio.run batch path
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0022 (WebRTC transport), ADR-0033
+**Depends on:** —
+**Classification:** V1 voice runtime scalability (deferred)
+**Status:** Proposed — deferred
+**Priority:** Low
+**Branch:** `task/TASK-WEB-024-webrtc-backpressure`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — unbounded WebRTC
+sessions on one asyncio loop + a `ThreadingHTTPServer`, and the Pipecat batch HTTP path spins
+a new event loop per turn.
+
+### Context
+
+`_sessions` has no cap (`web_voice/webrtc_signaling.py:254`); all sessions share one
+`BackgroundEventLoop` (`async_loop.py`); the batch `--runtime pipecat` path does
+`asyncio.run(...)` per HTTP turn (`web_voice/runtime.py:111-131`). No load/stress test exists,
+and LB VMs are 1 vCPU. Under concurrent calls this is a scaling and latency risk.
+
+### Scope
+
+- Add a session cap + explicit backpressure (reject/queue) on new WebRTC sessions with a
+  clear client error; expose an active-session gauge.
+- Reuse a shared loop for the batch HTTP path (as WebRTC already does) or retire that path if
+  unused in the pilot.
+- Add a basic concurrency/load test.
+
+### Acceptance
+
+- New sessions beyond the cap are rejected/queued cleanly (no crash); active-session metric
+  emitted; a load test documents the ceiling; batch path no longer creates a loop per turn.
