@@ -83,6 +83,9 @@
 
 # Voice tier only: put the node back in rotation on each LB once healthy
 # (TASK-INFRA-007, delegated to the admin socket on every LB node).
+# Non-fatal like the drain: re-enabling is best-effort. If it can't reach an LB the
+# node stays 'drain' there (fails safe: no new calls to a node we couldn't confirm)
+# rather than aborting the deploy.
 - name: "Re-enable the voice bridge in the load balancer"
   ansible.builtin.shell:
     cmd: "{{ voice_lb_enable_cmd }}"
@@ -93,3 +96,5 @@
     - voice_lb_enable_cmd | length > 0
     - voice_lb_socket_hosts | length > 0
   changed_when: true
+  ignore_unreachable: true
+  failed_when: false

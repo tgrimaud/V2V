@@ -56,12 +56,16 @@ voice_drain_grace_seconds: 60
 # socket lives on the LB nodes ([lb] group, platform-managed), so the drain/enable
 # commands are delegated there (see roles/compose_tier/tasks/drain.yml + main.yml).
 # We set state on EVERY LB node because either may hold the VIP via Keepalived.
-# NOTE: live behaviour is validated once LB-host SSH access is available
-# (deferred to TASK-INFRA-006). To fall back to grace-only, override with
-# `-e voice_lb_socket_hosts=[]`.
-voice_lb_socket_hosts:
-  - "vlp-ai4cc-t01.mt.lan"
-  - "vlp-ai4cc-t02.mt.lan"
+#
+# DEFAULT = OPT-IN (empty): the [lb] group is platform-managed and SSH access to it
+# is not confirmed yet (deferred to TASK-INFRA-006). Delegating a drain to an
+# unreachable LB with serial:1 + max_fail_percentage:0 would ABORT the whole voice
+# deploy, so the commands stay wired but the hosts list is empty -> grace-only until
+# LB access is validated. Turn it on then with, e.g.:
+#   -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'
+# As a second safety net the delegated tasks are non-fatal (ignore_unreachable +
+# failed_when: false): a failing LB hook degrades to grace-only, it never aborts.
+voice_lb_socket_hosts: []
 voice_lb_backend: "voice_bridges"
 voice_lb_admin_socket: "/run/haproxy/admin.sock"
 # This bridge's server name inside the voice_bridges backend (deploy/haproxy/haproxy.cfg).

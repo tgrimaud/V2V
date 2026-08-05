@@ -100,14 +100,28 @@ echo "set server voice_bridges/vla-t01 state drain" | socat stdio /run/haproxy/a
 echo "set server voice_bridges/vla-t01 state ready" | socat stdio /run/haproxy/admin.sock
 ```
 
-These are now wired (TASK-INFRA-007) in `deploy/ansible/group_vars/voice.yml`
-(`voice_lb_drain_cmd` / `voice_lb_enable_cmd`) and delegated to every LB node
-(`voice_lb_socket_hosts`) by `roles/compose_tier/tasks/drain.yml` + `main.yml`, so
+The commands are wired (TASK-INFRA-007) in `deploy/ansible/group_vars/voice.yml`
+(`voice_lb_drain_cmd` / `voice_lb_enable_cmd`) and delegated to every LB node listed
+in `voice_lb_socket_hosts` by `roles/compose_tier/tasks/drain.yml` + `main.yml`, so
 the socat command runs where the admin socket lives. Setting `state drain` on both
-LB nodes covers either holding the VIP via Keepalived. Combined with the OPS-002
-rolling `serial:1` and grace window, this upgrades the voice drain from best-effort
-to "no new calls during recreate". `socat` must be installed on the LB nodes. Live
-behaviour is validated once LB-host SSH access exists (deferred to TASK-INFRA-006).
+LB nodes covers either holding the VIP via Keepalived.
+
+**Enablement is opt-in.** `voice_lb_socket_hosts` defaults to **empty** because the
+`[lb]` group is platform-managed and SSH access to it is not confirmed yet (gated with
+TASK-INFRA-006): with `serial:1` + `max_fail_percentage:0`, delegating to an unreachable
+LB would abort the voice deploy. Until then the deploy runs grace-only (serial:1 +
+grace window). Enable the hook once LB access exists, e.g.:
+
+```bash
+ansible-playbook deploy.yml --limit voice \
+  -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'
+```
+
+Even when enabled the delegated tasks are non-fatal (`ignore_unreachable` +
+`failed_when: false`): a failing LB hook degrades to grace-only, it never aborts the
+deploy. Combined with `serial:1` and the grace window, an enabled hook upgrades the
+voice drain from best-effort to "no new calls during recreate". `socat` must be
+installed on the LB nodes. Live behaviour is validated under TASK-INFRA-006.
 
 ## Validate
 

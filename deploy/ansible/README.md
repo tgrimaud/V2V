@@ -76,9 +76,13 @@ The bridge exposes no active-session count or `/drain` endpoint yet, so a hard
 2. **LB node-down/up hook** (`voice_lb_drain_cmd` / `voice_lb_enable_cmd`, TASK-INFRA-007) —
    sets this bridge to `state drain`/`ready` on every LB node via the HAProxy admin
    socket (`socat … /run/haproxy/admin.sock`), delegated to `voice_lb_socket_hosts`,
-   so NEW calls stop hitting the node while it recreates. Live behaviour is validated
-   once LB-host SSH access exists (deferred to TASK-INFRA-006); disable with
-   `-e voice_lb_socket_hosts=[]` to fall back to grace-only (a warning is printed);
+   so NEW calls stop hitting the node while it recreates. **Opt-in:** `voice_lb_socket_hosts`
+   defaults to **empty** (the `[lb]` group is platform-managed, SSH not confirmed yet —
+   gated with TASK-INFRA-006), so the hook is off by default and the deploy runs grace-only.
+   Enable it once LB access exists with
+   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'`.
+   Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` + `failed_when: false`):
+   a failing LB hook degrades to grace-only with a warning, it never aborts the deploy;
 3. **bounded grace** (`voice_drain_grace_seconds`, default 60s) — lets an in-flight
    call wind down before recreate.
 

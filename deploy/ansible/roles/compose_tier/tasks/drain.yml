@@ -5,6 +5,9 @@
 
 # The admin socket lives on the LB nodes, so the drain is delegated to each of them
 # (either may hold the VIP via Keepalived). Uses shell because socat needs the pipe.
+# Non-fatal by design: a drain hook is a safety improvement, not a deploy gate. If an
+# LB node is unreachable or socat fails, we degrade to grace-only instead of aborting
+# the voice deploy (serial:1 + max_fail_percentage:0 would otherwise stop the roll).
 - name: "Stop new calls: mark {{ voice_lb_server_name }} 'drain' on each LB node"
   ansible.builtin.shell:
     cmd: "{{ voice_lb_drain_cmd }}"
@@ -14,14 +17,23 @@
     - voice_lb_drain_cmd | length > 0
     - voice_lb_socket_hosts | length > 0
   changed_when: true
+  ignore_unreachable: true
+  failed_when: false
+  register: voice_drain_result
 
-- name: "Warn when no LB drain hook is wired (calls not stopped, grace only)"
+- name: "Warn when the LB drain hook did not run cleanly (grace only)"
   ansible.builtin.debug:
     msg: >-
-      No LB drain hook active (voice_lb_drain_cmd or voice_lb_socket_hosts empty):
+      LB drain not applied (hook disabled, or a node was unreachable / socat failed):
       new calls are NOT stopped during recreate. Relying on serial:1 rolling + a
       {{ voice_drain_grace_seconds }}s grace window only.
-  when: voice_lb_drain_cmd | length == 0 or voice_lb_socket_hosts | length == 0
+  when: >-
+    voice_lb_drain_cmd | length == 0
+    or voice_lb_socket_hosts | length == 0
+    or (voice_drain_result.results | default([])
+        | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0)
+    or (voice_drain_result.results | default([])
+        | selectattr('unreachable', 'defined') | selectattr('unreachable') | list | length > 0)
 
 - name: "Grace window for in-flight calls to wind down"
   ansible.builtin.pause:

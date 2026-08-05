@@ -141,10 +141,15 @@ calls" cannot be done from the outside. Draining is therefore best-effort:
    bridge's server to `state drain` on every LB node via the HAProxy admin socket
    (`socat … /run/haproxy/admin.sock`), so NEW calls stop hitting it during
    recreate; `voice_lb_enable_cmd` sets it back to `state ready` once healthy. Both
-   are delegated to `voice_lb_socket_hosts` (the `[lb]` group). Live behaviour is
-   validated once LB-host SSH access exists (deferred to `TASK-INFRA-006`); the
-   playbook prints a warning and falls back to grace-only if the hook is disabled
-   (`-e voice_lb_socket_hosts=[]`).
+   are delegated to `voice_lb_socket_hosts` (the `[lb]` group). **The hook is opt-in:**
+   `voice_lb_socket_hosts` defaults to **empty** because the `[lb]` group is
+   platform-managed and its SSH access is not confirmed yet (gated with `TASK-INFRA-006`) —
+   with `serial:1` + `max_fail_percentage:0`, delegating to an unreachable LB would abort
+   the voice deploy. Until then the deploy runs grace-only and prints a warning. Enable it
+   once LB access exists with
+   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'`.
+   Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` +
+   `failed_when: false`): a failing LB hook degrades to grace-only, it never aborts.
 3. **Bounded grace** — `voice_drain_grace_seconds` (default 60s) lets an in-flight
    call wind down before the container is recreated.
 
