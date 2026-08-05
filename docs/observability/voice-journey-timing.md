@@ -101,6 +101,20 @@ discipline, `voice_common.pipeline_timing` applies an **outcome filter**: a
 excluded from the `tts_first_audio` slice distribution, so a barge-in's real
 time-to-first-audio never skews the success p95/p99 used against the ADR-0029 gate.
 
+**Metric definition and its deliberate trade-off (what this p95 means).** Read
+`tts_first_audio` as *"time-to-first-audio of **completed (uninterrupted, successful)**
+turns"*, not of every turn that produced audio. This is intentional (BUG-008 acceptance:
+failure/interrupted/unavailable must not contribute) so the ADR-0029 gate is judged on the
+normal answer path rather than on aborted turns. The trade-off is explicit: a first-audio
+slowdown that manifests **only** on barge-in turns will **not** surface in this p95. The
+interrupted sample is **not lost** — the emitter still records a real
+`voice.tts.first_audio` span with `outcome=interrupted` (and `tts.interrupted.elapsed_ms`);
+it is simply kept out of the SLO distribution. To inspect first-audio latency on barge-in
+turns, query the `voice.tts.first_audio` spans filtered to `outcome=interrupted` directly
+rather than reading the aggregated slice. Counting interrupted turns in the slice was
+considered and rejected here to honour the BUG-008 contract; revisit only by re-opening that
+decision, not by silently widening the filter.
+
 ### Streaming loop composite: `time_to_first_audio` (TASK-WEB-009)
 
 ADR-0018 defines the pilot acceptance metric `time_to_first_audio` as the latency

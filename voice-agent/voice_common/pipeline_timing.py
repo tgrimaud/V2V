@@ -106,6 +106,12 @@ class PipelineTimingReport:
 # emits the span at all on failure/unavailable (no audio played); this filter additionally
 # drops the interrupted span so only success turns count. Spans without an `outcome`
 # attribute (ingress / end-of-turn / stt / backend / egress) are unaffected.
+#
+# DELIBERATE metric definition (BUG-008 acceptance): tts_first_audio = first-audio latency
+# of COMPLETED (uninterrupted, successful) turns. The interrupted first-audio sample is NOT
+# lost — its span is still recorded with outcome=interrupted for ad-hoc inspection — it is
+# only kept out of this SLO distribution. Do NOT "widen" this filter to count interrupted
+# turns without re-opening the BUG-008 decision (see docs/observability/voice-journey-timing.md).
 _SUCCESS_OUTCOME = "success"
 _SUCCESS_ONLY_SPANS = frozenset({"voice.tts.first_audio"})
 
