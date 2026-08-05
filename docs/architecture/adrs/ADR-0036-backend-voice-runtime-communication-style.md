@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed (2026-07-29)
+Accepted (2026-07-31) — Flow A (live turn) is shipped as **synchronous request/response
+over HTTP** plus the backend **SSE** stream (TASK-BE-007) for intra-turn streaming, and
+the filler is runtime-local (TASK-WEB-019), exactly as decided here; this is the
+communication style running through Sprint 11. A message broker stays **rejected on
+Flow A** and **reserved for Flow B** (post-call/async/omnichannel, ~Sprint 12).
+Originally Proposed (2026-07-29).
 
 ## Context
 

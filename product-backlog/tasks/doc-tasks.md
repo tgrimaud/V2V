@@ -136,7 +136,19 @@ docs over-claiming — the gaps themselves are expected/roadmapped.
 **Related decisions:** ADR-0036/0037 (status), ADR-0038/0039
 **Depends on:** —
 **Classification:** Documentation integrity (freshness + backlog)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-DOC-005-freshness-backlog-integrity`) —
+refreshed the stale branch-state banners in `infra-v1.md`, `docs/README.md`, the diagrams
+README and `architecture.md` (Sprint 9→11, Redis-memory + deployment packaging built,
+old-bridge/legacy-route pointer kept as the allowed escape hatch for the heavy spine
+tables) and the sprint-11 "Why now" block; fixed ADR-0037's endpoint to
+`POST /api/conversation/converse-stream` and promoted **ADR-0036 + ADR-0037 to Accepted**
+(index + bodies); the ADR-0018→0029 supersession note was already inline. Reconciled
+`backlog-index.md` vs source: **US-041 → Done**, added **US-042** (Done) and **OQ-008**
+(Open) rows, **BUG-001 → Merged/validated**; added **EPIC-011 + EPIC-012** to the epics
+Epic Map + a new EPIC-012 section. French-in-`docs/` pass: ADR-0031/0034/0035 + QA reports
+verified English-prose with only genuine FR example utterances (no change needed).
+`git diff --check` clean; no entry/architecture/infra doc still claims the removed-code or
+STT-only state (remaining hits are dated review records). Docs-only, not runtime-affecting.
 **Priority:** Medium
 **Branch:** `task/TASK-DOC-005-freshness-backlog-integrity`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — multiple

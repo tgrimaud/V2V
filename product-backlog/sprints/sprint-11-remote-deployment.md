@@ -75,6 +75,12 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 
 ## Why now (state that justifies the sprint)
 
+> **Note (2026-08-05):** this block describes the **pre-sprint** state that justified
+> Sprint 11. Most gaps below are now closed — Docker images, CI, `deploy/compose/`
+> stacks, HAProxy/Keepalived, Ansible deploy and Redis-backed memory are delivered on
+> the sprint branch; live go-live remains gated by network-access open inputs
+> (TASK-INFRA-006). Read the **Status** block above for current state.
+
 - The pilot needs a **real environment**. The platform team has provisioned
   eir-ai4cc-tst; the stack currently has **no Dockerfile, no CI, and binds
   `127.0.0.1`** — none of it deploys as-is.
@@ -131,17 +137,17 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 | TASK-INFRA-006 | Close/track the live-deploy open inputs (TLS, TURN, LB apply, SSH CIDR) | 📋 Open |
 | TASK-OPS-007 | Centralized observability (OTLP collector + enable export) | 📋 Open |
 | TASK-WEB-022 | Latency gate remediation (meet ADR-0029 or revise it) | 📋 Open |
-| TASK-BE-025 | Streaming LLM + embedding/pgvector timeouts | 📋 Open |
+| TASK-BE-025 | Streaming LLM + embedding/pgvector timeouts | ✅ Merged into sprint-11 (2026-08-05): Flux inter-signal timeout on stream + bounded-executor timeouts on embedding & pgvector query, distinct `outcome=timeout`; `mvn test` 342 green; DB-side cancel tracked as BE-026 |
 
 ### In scope — should fix
 
 | Ticket | Title | Status |
 |---|---|---|
-| TASK-INFRA-007 | Deep backend health check + wired voice drain | ✅ Implemented on `task/TASK-INFRA-007-deploy-release-safety` (haproxy `/actuator/health` + admin-socket drain delegated to LB, opt-in + non-fatal; QA haproxy 33/33 + ansible 44/44; live deferred to INFRA-006) — awaiting review/QA/merge |
-| TASK-OPS-008 | Redis + Postgres backup/restore | ✅ Implemented on `task/TASK-OPS-008-data-resilience` (backup+restore scripts `deploy/backup/`, Ansible cron + 0600 vault env files, runbook `backup-restore.md` w/ RPO/RTO; QA ansible 49/49; live restore drill deferred to INFRA-006) — awaiting review/QA/merge |
-| TASK-DOC-005 | Doc freshness + backlog-index integrity | 📋 Open |
-| BUG-007 | `/converse` ignores the KB domain filter | 📋 New (P2) |
-| BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | 📋 New (P2) |
+| TASK-INFRA-007 | Deep backend health check + wired voice drain | ✅ Merged into sprint-11 (2026-08-05): haproxy `/actuator/health` + admin-socket drain delegated to LB, opt-in + non-fatal; QA haproxy 33/33 + ansible 58/58; live deferred to INFRA-006 |
+| TASK-OPS-008 | Redis + Postgres backup/restore | ✅ Merged into sprint-11 (2026-08-05): backup+restore scripts `deploy/backup/`, Ansible cron + 0600 vault env files, runbook `backup-restore.md` w/ RPO/RTO; QA ansible 58/58; live restore drill deferred to INFRA-006 |
+| TASK-DOC-005 | Doc freshness + backlog-index integrity | ✅ Merged into sprint-11 (2026-08-05): refreshed banners + sprint-11 "Why now"; ADR-0037 endpoint + ADR-0036/0037→Accepted; reconciled US-041/042, OQ-008, BUG-001, EPIC-011/012; `git diff --check` clean |
+| BUG-007 | `/converse` ignores the KB domain filter | ✅ Merged into sprint-11 (2026-08-05): documented intentional cross-domain voice retrieval (not a leak), locked with tests, clarified query-path vs ingestion-time classifier, linked OQ-008 |
+| BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | ✅ Merged into sprint-11 (2026-08-05): first-audio span emitted success-only (interrupted/failed carry elapsed on event), semantics documented; voice-agent 464 unittest green |
 
 ### Tracked but out of this sprint's execution (deferred)
 

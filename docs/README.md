@@ -1,15 +1,18 @@
 # Voice Support Bot Documentation
 
-> **Branch state (`feat/restart-from-scratch`, through Sprint 9):** the runnable
+> **Branch state (`feat/restart-from-scratch`, through Sprint 11):** the runnable
 > code on this branch is a **two-service** web Voice2Voice stack: the Python voice
 > runtime under `voice-agent/` (batch `POST /api/voice/turn` **and** streaming
 > WebRTC with barge-in) and the Java conversation backend under `backend/` (RAG
-> over pgvector, guardrails, memory; `POST /api/conversation/converse` etc.), plus
-> `docker-compose.yml` (Postgres + Ollama). **Still target-only:** billing/BSS,
-> invoice comparison, escalation/Genesys handoff, telephony, and the standalone
-> React frontend. Sections in these docs that describe those parts are design
-> intent. For what actually runs, start at `voice-agent/README.md` and
-> `product-backlog/backlog-index.md`.
+> over pgvector, guardrails, memory; `POST /converse` + `POST /converse-stream`).
+> Sprint 11 added the **deployment packaging**: Docker images for both services,
+> `deploy/compose/` stacks per tier (Postgres, Ollama sidecar, Redis), HAProxy/
+> Keepalived VIP config, GitHub Actions CI, and an Ansible deploy — packaged and
+> deployable, not yet live on tst (gated by network-access open inputs). **Still
+> target-only:** billing/BSS, invoice comparison, escalation/Genesys handoff,
+> telephony, and the standalone React frontend. Sections in these docs that
+> describe those parts are design intent. For what actually runs, start at
+> `voice-agent/README.md` and `product-backlog/backlog-index.md`.
 
 ## Structure
 

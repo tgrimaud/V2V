@@ -1,9 +1,13 @@
 # Infrastructure V1 - Machine/VM Target
 
 > **Branch note:** this is a **target** pilot topology (Java backend, Pipecat,
-> Postgres, Redis, etc.). None of it is deployed from `feat/restart-from-scratch`,
-> which only contains the Python STT-validation slice. The WebSocket bridge listed
-> as "legacy/fallback" was removed on this branch (preserved on `main`).
+> Postgres, Redis, etc.). `feat/restart-from-scratch` now carries the full web
+> Voice2Voice loop (Pipecat + WebRTC, Gradium STT/TTS, the Java conversation/RAG
+> backend) plus the Sprint 11 deployment packaging (Docker images, docker-compose
+> per tier, HAProxy/Keepalived, GitHub Actions CI, Ansible deploy). It is
+> **packaged and deployable** but not yet live on tst (gated by network-access
+> open inputs). The old custom WebSocket bridge was removed on this branch
+> (preserved on `main`).
 
 > **Concrete realization (2026-08-03):** the first remote environment,
 > **eir-ai4cc-tst**, realizes this generic target on **bare Rocky EL9 VMs with
