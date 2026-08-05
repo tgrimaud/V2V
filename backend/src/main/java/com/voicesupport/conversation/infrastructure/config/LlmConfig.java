@@ -87,8 +87,9 @@ public class LlmConfig {
     public MistralAnswerAdapter mistralAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.stream-timeout-ms:10000}") long streamTimeoutMs,
             @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
-        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
+        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     @Bean
@@ -96,8 +97,9 @@ public class LlmConfig {
     public OllamaAnswerAdapter ollamaAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.stream-timeout-ms:10000}") long streamTimeoutMs,
             @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
-        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
+        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     private static RestClient.Builder timeoutRestClientBuilder(long connectMs, long readMs) {

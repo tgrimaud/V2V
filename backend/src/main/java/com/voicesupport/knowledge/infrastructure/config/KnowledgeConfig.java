@@ -22,16 +22,44 @@ import com.voicesupport.knowledge.infrastructure.adapter.out.persistence.JpaKnow
 import com.voicesupport.knowledge.infrastructure.adapter.out.persistence.KbSourceStateRepository;
 import com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.ollama.OllamaEmbeddingModel;
+import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.Map;
 
 @Configuration
 public class KnowledgeConfig {
+
+    // Explicit Ollama embedding model (TASK-BE-025). The Ollama embedding auto-configuration builds
+    // an OllamaApi on a default RestClient with no read/connect timeout, so a slow/hung Ollama would
+    // stall every similaritySearch (embedding runs before the pgvector query) on Spring's defaults
+    // before GlobalExceptionHandler maps to 503. Defining the EmbeddingModel here (auto-config backs
+    // off via @ConditionalOnMissingBean) lets us bound the embedding HTTP call like the LLM client
+    // (env-driven). Stays Ollama nomic-embed-text (768d) — embeddings are never Mistral (1024d).
+    @Bean
+    public EmbeddingModel embeddingModel(
+            @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
+            @Value("${spring.ai.ollama.embedding.model:nomic-embed-text}") String model,
+            @Value("${voice-support.embedding.timeout-ms:5000}") long timeoutMs,
+            @Value("${voice-support.embedding.connect-timeout-ms:3000}") long connectMs) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) connectMs);
+        factory.setReadTimeout((int) timeoutMs);
+        OllamaApi ollamaApi = OllamaApi.builder().baseUrl(baseUrl)
+                .restClientBuilder(RestClient.builder().requestFactory(factory)).build();
+        return OllamaEmbeddingModel.builder()
+                .ollamaApi(ollamaApi)
+                .defaultOptions(OllamaOptions.builder().model(model).build())
+                .build();
+    }
 
     // Single adapter instance exposed as both the write port (VectorStorePort) and the
     // read port (VectorSearchPort); Spring injects it by interface type where required.

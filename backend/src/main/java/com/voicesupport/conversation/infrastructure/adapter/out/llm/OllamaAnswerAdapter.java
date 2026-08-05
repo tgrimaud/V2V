@@ -32,8 +32,9 @@ public class OllamaAnswerAdapter extends AbstractChatClientAnswerAdapter {
             """;
 
     public OllamaAnswerAdapter(
-            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs, int maxAnswerSentences) {
-        super(chatClient, telemetry, timeoutMs, maxAnswerSentences);
+            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs,
+            long streamTimeoutMs, int maxAnswerSentences) {
+        super(chatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     @Override

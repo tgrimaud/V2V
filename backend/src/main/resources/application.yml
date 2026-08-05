@@ -206,9 +206,21 @@ voice-support:
     # This value is also applied as the provider HTTP read timeout so a stalled socket is closed
     # (not just abandoned by the executor); raise it when selecting the slower local ollama chat.
     timeout-ms: ${LLM_TIMEOUT_MS:8000}
+    # Streaming (SSE) LLM budget (TASK-BE-025). The reactive stream() path uses a WebClient the
+    # RestClient read timeout above does NOT cover, so a hung provider would hold the SSE worker
+    # until the 60 s emitter timeout. This bounds the gap to the first token and between tokens
+    # (Reactor inter-signal timeout); a stall degrades to the sanitized 503 with a `timeout`
+    # outcome. Keep it above a realistic cold first-token time; 0 disables.
+    stream-timeout-ms: ${LLM_STREAM_TIMEOUT_MS:10000}
     # Provider HTTP connect timeout for the chat call (TASK-BE-012). Bounds the pre-read handshake
     # so a dead/unreachable endpoint fails fast rather than hanging a bounded LLM worker thread.
     connect-timeout-ms: ${LLM_CONNECT_TIMEOUT_MS:3000}
+  # Embedding client HTTP timeouts (TASK-BE-025). The Ollama embedding call runs before every
+  # pgvector similaritySearch; without an explicit timeout a slow/hung Ollama stalls retrieval on
+  # Spring defaults. Bounds read + connect on the embedding RestClient (env-driven, like the LLM).
+  embedding:
+    timeout-ms: ${EMBEDDING_TIMEOUT_MS:5000}
+    connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
     # Voice-first answer-length budget (TASK-BE-018). Appended per call as a concision directive in
     # the answer language, capping the spoken answer so long grounded answers stop dominating TTS
     # synthesis time (batch TTFA + live spoken tail). Does not weaken grounding (DEC-002 / BUG-004):

@@ -55,15 +55,24 @@ public abstract class AbstractChatClientAnswerAdapter
     private final ChatClient chatClient;
     private final BackendTelemetry telemetry;
     private final long timeoutMs;
+    // Streaming call budget (TASK-BE-025): the sync path is bounded by an executor + HTTP read
+    // timeout, but the reactive stream() path uses a WebClient the RestClient read timeout does not
+    // cover, so a hung provider would tie up the SSE worker until the 60 s emitter timeout. This is
+    // the max gap allowed to the first token and between consecutive tokens (Reactor inter-signal
+    // timeout); a stall trips a fail-fast TimeoutException that degrades to the sanitized 503 path.
+    // <= 0 disables the stream timeout.
+    private final long streamTimeoutMs;
     // Voice-first answer-length budget (TASK-BE-018): appended per call as a concision directive so
     // long grounded answers stop dominating TTS synthesis time. <= 0 disables the constraint.
     private final int maxAnswerSentences;
 
     protected AbstractChatClientAnswerAdapter(
-            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs, int maxAnswerSentences) {
+            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs,
+            long streamTimeoutMs, int maxAnswerSentences) {
         this.chatClient = chatClient;
         this.telemetry = telemetry;
         this.timeoutMs = timeoutMs;
+        this.streamTimeoutMs = streamTimeoutMs;
         this.maxAnswerSentences = maxAnswerSentences;
     }
 
@@ -134,13 +143,36 @@ public abstract class AbstractChatClientAnswerAdapter
             telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "success", elapsed(start));
             telemetry.recordAnswerLength(providerName(), answerChars[0]);
         } catch (RuntimeException e) {
-            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "error", elapsed(start));
-            throw new UpstreamUnavailableException("LLM streaming call failed", e);
+            // A stalled stream trips the Reactor inter-signal timeout (TASK-BE-025); record it as a
+            // distinct `timeout` outcome so a hung provider is not conflated with a hard error and
+            // does not skew the success p95. Both degrade to the sanitized ERR_UPSTREAM path.
+            boolean timedOut = isTimeout(e);
+            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), timedOut ? "timeout" : "error", elapsed(start));
+            String reason = timedOut
+                    ? "LLM streaming call timed out after " + streamTimeoutMs + " ms"
+                    : "LLM streaming call failed";
+            throw new UpstreamUnavailableException(reason, e);
         }
     }
 
     private java.util.stream.Stream<String> streamContent(String systemMessage, String question) {
-        return chatClient.prompt().system(systemMessage).user(question).stream().content().toStream();
+        reactor.core.publisher.Flux<String> content =
+                chatClient.prompt().system(systemMessage).user(question).stream().content();
+        if (streamTimeoutMs > 0) {
+            content = content.timeout(Duration.ofMillis(streamTimeoutMs));
+        }
+        return content.toStream();
+    }
+
+    // Reactor bridges a TimeoutException from Flux.timeout through the blocking stream wrapped in a
+    // RuntimeException, so scan the cause chain rather than matching the top-level type.
+    private static boolean isTimeout(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof TimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void forwardToken(String token, Consumer<String> onToken, boolean[] firstSeen, long start) {

@@ -31,8 +31,9 @@ public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
             """;
 
     public MistralAnswerAdapter(
-            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs, int maxAnswerSentences) {
-        super(chatClient, telemetry, timeoutMs, maxAnswerSentences);
+            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs,
+            long streamTimeoutMs, int maxAnswerSentences) {
+        super(chatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     @Override
