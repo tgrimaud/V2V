@@ -221,6 +221,12 @@ voice-support:
   embedding:
     timeout-ms: ${EMBEDDING_TIMEOUT_MS:5000}
     connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
+  # Overall retrieval budget (TASK-BE-025) for the outbound RETRIEVAL seam: bounds the whole
+  # retrieve() call (query embedding + pgvector similaritySearch) so a slow/locked DB query fails
+  # fast into the sanitized 503 with a `timeout` outcome instead of holding the request/SSE worker.
+  # Keep it above embedding.timeout-ms (5s) since embedding runs inside this budget. 0 disables.
+  retrieval:
+    timeout-ms: ${RETRIEVAL_TIMEOUT_MS:6000}
     # Voice-first answer-length budget (TASK-BE-018). Appended per call as a concision directive in
     # the answer language, capping the spoken answer so long grounded answers stop dominating TTS
     # synthesis time (batch TTFA + live spoken tail). Does not weaken grounding (DEC-002 / BUG-004):

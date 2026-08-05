@@ -1104,16 +1104,28 @@ Delivered on `task/TASK-BE-025-upstream-timeouts`:
   `OllamaEmbeddingModel` bean (auto-config backs off via `@ConditionalOnMissingBean`) built on a
   `SimpleClientHttpRequestFactory` with read + connect timeouts. Stays Ollama `nomic-embed-text`
   (768d). Config `voice-support.embedding.timeout-ms` (`EMBEDDING_TIMEOUT_MS`, default **5000**) +
-  `connect-timeout-ms` (default **3000**). The pgvector query itself is local + bounded by the JDBC
-  connection; a separate statement timeout is left out of this minimal scope.
-- **Tests (`mvn test` 340 green, +3):** new `ChatClientStreamTimeoutTest` drives the real adapter
-  over a fake `ChatModel` — a never-emitting stream aborts within budget as `timeout` with no token
+  `connect-timeout-ms` (default **3000**).
+- **Retrieval (pgvector) budget** (adversarial-review follow-up, 2026-08-05 — closes the AC
+  "a slow embedding/**pgvector** call fails fast"). `InProcKnowledgeRetrievalAdapter` now bounds the
+  whole `retrieve()` call (query embedding + `similaritySearch` SQL) with a wall-clock budget via a
+  bounded executor (mirrors the LLM sync pool): `future.get(budget)` frees the request/SSE worker
+  and records a distinct `outcome=timeout` on the `retrieval` slice, degrading to the sanitized
+  `ERR_UPSTREAM`. Config `voice-support.retrieval.timeout-ms` (`RETRIEVAL_TIMEOUT_MS`, default
+  **6000**, kept above the 5 s embedding budget), `<= 0` disables. **Residual:** JDBC ignores
+  interrupt, so the abandoned SQL keeps running on a daemon thread until Postgres returns — a true
+  DB-side cancel (`statement_timeout`/`socketTimeout` on the vector-store connection, shared with KB
+  sync inserts) is a tracked follow-up (BE-026 resilience). This removes the worker hang, which is
+  the acceptance criterion.
+- **Tests (`mvn test` 342 green):** `ChatClientStreamTimeoutTest` drives the real adapter over a
+  fake `ChatModel` — a never-emitting stream aborts within budget as `timeout` with no token
   forwarded; a first-token-then-stall aborts as `timeout` after forwarding the first token; a
-  completed stream is forwarded normally with no false timeout. Existing adapter/BDD constructions
-  updated for the new ctor arg; ArchUnit OK.
-- **Runtime-affecting:** adds a `timeout` outcome on the `voice_support.slice` `llm_wording` timer
-  (BE-009 telemetry); no new slice. Live smoke deferred (deterministic, unit-covered; needs a real
-  hung provider to exercise end-to-end).
+  completed stream is forwarded normally with no false timeout. `InProcKnowledgeRetrievalAdapterTest`
+  adds a slow-retrieval case (fails fast within budget, records `timeout`, no `success`) + a
+  within-budget success case. Existing adapter/BDD constructions updated for the new ctor args;
+  ArchUnit OK.
+- **Runtime-affecting:** adds a `timeout` outcome on the `voice_support.slice` `llm_wording` and
+  `retrieval` timers (BE-009 telemetry); no new slice. Live smoke deferred (deterministic,
+  unit-covered; needs a real hung provider/DB to exercise end-to-end).
 
 ---
 
