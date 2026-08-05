@@ -90,6 +90,31 @@ nothing flows downstream. Selected with `server --tts-mode streaming` (Gradium o
 default); `--tts-mode batch` keeps the batch processor. See ADR-0024 and
 `docs/qa/web-004-streaming-tts-qa.md`.
 
+**`tts_first_audio` is a success-only distribution (BUG-008).** The
+`voice.tts.first_audio` span is emitted **only when audio actually played**: the
+failure and unavailable paths carry no first-audio sample, so they emit no span (the
+elapsed time is reported as `elapsed_ms` on the `tts.failure` / `tts.unavailable`
+event instead — mirroring the interrupted path, which puts elapsed on `tts.interrupted`
+and only emits the span if a first chunk really played). On top of that emission
+discipline, `voice_common.pipeline_timing` applies an **outcome filter**: a
+`voice.tts.first_audio` span whose `outcome` is not `success` (e.g. `interrupted`) is
+excluded from the `tts_first_audio` slice distribution, so a barge-in's real
+time-to-first-audio never skews the success p95/p99 used against the ADR-0029 gate.
+
+**Metric definition and its deliberate trade-off (what this p95 means).** Read
+`tts_first_audio` as *"time-to-first-audio of **completed (uninterrupted, successful)**
+turns"*, not of every turn that produced audio. This is intentional (BUG-008 acceptance:
+failure/interrupted/unavailable must not contribute) so the ADR-0029 gate is judged on the
+normal answer path rather than on aborted turns. The trade-off is explicit: a first-audio
+slowdown that manifests **only** on barge-in turns will **not** surface in this p95. The
+interrupted sample is **not lost** — the emitter still records a real
+`voice.tts.first_audio` span with `outcome=interrupted` (and `tts.interrupted.elapsed_ms`);
+it is simply kept out of the SLO distribution. To inspect first-audio latency on barge-in
+turns, query the `voice.tts.first_audio` spans filtered to `outcome=interrupted` directly
+rather than reading the aggregated slice. Counting interrupted turns in the slice was
+considered and rejected here to honour the BUG-008 contract; revisit only by re-opening that
+decision, not by silently widening the filter.
+
 ### Streaming loop composite: `time_to_first_audio` (TASK-WEB-009)
 
 ADR-0018 defines the pilot acceptance metric `time_to_first_audio` as the latency
