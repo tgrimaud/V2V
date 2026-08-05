@@ -192,8 +192,12 @@ class StreamingTtsProcessor(FrameProcessor):
         if self._telemetry is None or self._envelope is None:
             return
         attrs = self._attrs(TtsOutcome.UNAVAILABLE.value)
-        self._telemetry.span(TTS_FIRST_AUDIO_SPAN, total_ms, **attrs)
-        self._telemetry.record("tts.unavailable", error_code=code, **attrs)
+        # BUG-008: no audio ever played, so total_ms is NOT a time-to-first-audio sample.
+        # Do not emit the voice.tts.first_audio span (it would skew tts_first_audio p95);
+        # the elapsed time lives on the outcome event instead (mirrors _emit_interrupted).
+        self._telemetry.record(
+            "tts.unavailable", error_code=code, elapsed_ms=round(total_ms, 3), **attrs
+        )
 
     def _emit_interrupted(
         self, first_audio_ms: float | None, chunk_count: int, total_ms: float
@@ -220,11 +224,14 @@ class StreamingTtsProcessor(FrameProcessor):
             return
         sanitized = sanitize_error(exc, domain="tts")
         attrs = self._attrs(TtsOutcome.FAILED.value)
-        self._telemetry.span(TTS_FIRST_AUDIO_SPAN, total_ms, **attrs)
+        # BUG-008: no first audio was produced, so do not emit the voice.tts.first_audio
+        # timing span (total_ms would pollute the tts_first_audio p95). The elapsed time is
+        # carried on the failure event instead (mirrors _emit_interrupted / _emit_unavailable).
         self._telemetry.record(
             "tts.failure",
             error_code=sanitized.reason_code,
             error_reason=sanitized.reason,
+            elapsed_ms=round(total_ms, 3),
             **attrs,
         )
 

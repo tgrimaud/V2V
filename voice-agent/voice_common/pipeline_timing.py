@@ -99,9 +99,28 @@ class PipelineTimingReport:
         return cls(slices=slices)
 
 
+# BUG-008: a slice latency distribution must reflect only turns that completed that
+# slice successfully. `voice.tts.first_audio` is emitted with outcome=interrupted on a
+# barge-in (a real first-audio sample, but not a completed turn) — so a non-success span
+# carrying that name must not skew the tts_first_audio p95/p99. The emitter side no longer
+# emits the span at all on failure/unavailable (no audio played); this filter additionally
+# drops the interrupted span so only success turns count. Spans without an `outcome`
+# attribute (ingress / end-of-turn / stt / backend / egress) are unaffected.
+_SUCCESS_OUTCOME = "success"
+_SUCCESS_ONLY_SPANS = frozenset({"voice.tts.first_audio"})
+
+
+def _counts_toward_slice(span: Span) -> bool:
+    if span.name not in _SUCCESS_ONLY_SPANS:
+        return True
+    return span.attributes.get("outcome", _SUCCESS_OUTCOME) == _SUCCESS_OUTCOME
+
+
 def _durations_by_span_name(spans: Iterable[Span]) -> dict[str, list[float]]:
     durations: dict[str, list[float]] = {}
     for span in spans:
+        if not _counts_toward_slice(span):
+            continue
         durations.setdefault(span.name, []).append(span.duration_ms)
     return durations
 

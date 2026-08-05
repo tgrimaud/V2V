@@ -268,7 +268,12 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         # THEN no audio is pushed and a sanitized tts.failure is recorded
         self.assertEqual(sink.audio, [])
         self.assertTrue(session.closed)
-        self.assertTrue(any(e.name == "tts.failure" for e in telemetry.events()))
+        failures = [e for e in telemetry.events() if e.name == "tts.failure"]
+        self.assertTrue(failures)
+        # AND (BUG-008) no voice.tts.first_audio span is emitted (no audio ever played, so
+        # total-elapsed is not a first-audio sample); the elapsed time lives on the event.
+        self.assertEqual([s for s in telemetry.spans() if s.name == TTS_FIRST_AUDIO_SPAN], [])
+        self.assertIn("elapsed_ms", failures[0].attributes)
 
     async def test_connect_failure_degrades_without_audio(self):
         # GIVEN the provider fails at connect/handshake time (open raises)
@@ -295,6 +300,9 @@ class StreamingTtsProcessorTest(unittest.IsolatedAsyncioTestCase):
         unavailable = [e for e in telemetry.events() if e.name == "tts.unavailable"]
         self.assertTrue(unavailable)
         self.assertEqual(unavailable[0].attributes["error_code"], "no_audio")
+        # AND (BUG-008) no voice.tts.first_audio span is emitted; elapsed lives on the event.
+        self.assertEqual([s for s in telemetry.spans() if s.name == TTS_FIRST_AUDIO_SPAN], [])
+        self.assertIn("elapsed_ms", unavailable[0].attributes)
 
     async def test_barge_in_cancels_synthesis_and_closes_session(self):
         # GIVEN a synthesis in flight (first chunk played, more pending on a gate)

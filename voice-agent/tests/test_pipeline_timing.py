@@ -60,6 +60,37 @@ class PipelineTimingReportTest(unittest.TestCase):
         # THEN
         self.assertEqual([s.slice for s in report.slices], list(PIPELINE_SLICES))
 
+    def test_tts_first_audio_excludes_non_success_spans(self) -> None:
+        # GIVEN a run mixing success first-audio spans with a barge-in (interrupted) span and a
+        # (legacy) failed span all carrying the voice.tts.first_audio name (BUG-008)
+        spans = [
+            Span("voice.tts.first_audio", 100.0, {"outcome": "success"}),
+            Span("voice.tts.first_audio", 200.0, {"outcome": "success"}),
+            Span("voice.tts.first_audio", 9999.0, {"outcome": "interrupted"}),
+            Span("voice.tts.first_audio", 8888.0, {"outcome": "failed"}),
+        ]
+
+        # WHEN the per-slice report is built
+        report = PipelineTimingReport.from_spans(spans)
+        tts = next(s for s in report.slices if s.slice == TTS_FIRST_AUDIO)
+
+        # THEN only the two success turns contribute to tts_first_audio (the non-success
+        # elapsed values 9999/8888 never inflate the distribution)
+        self.assertTrue(tts.measured)
+        self.assertEqual(tts.report.count, 2)
+        self.assertEqual(tts.report.max_ms, 200.0)
+
+    def test_tts_first_audio_all_non_success_is_not_measured(self) -> None:
+        # GIVEN a sample where every first-audio span is non-success
+        spans = [Span("voice.tts.first_audio", 500.0, {"outcome": "interrupted"})]
+
+        # WHEN the per-slice report is built
+        report = PipelineTimingReport.from_spans(spans)
+        tts = next(s for s in report.slices if s.slice == TTS_FIRST_AUDIO)
+
+        # THEN the slice is reported as not measured (a failed/interrupted turn is not a fast one)
+        self.assertFalse(tts.measured)
+
     def test_measured_slice_reports_percentiles_over_the_sample(self) -> None:
         # GIVEN a reviewed sample of STT turns
         spans = [_span("stt.request", float(value)) for value in range(1, 101)]

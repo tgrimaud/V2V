@@ -4,7 +4,10 @@
 
 - **Bug ID:** BUG-008
 - **Title:** `voice.tts.first_audio` span emitted with total-elapsed on failure/unavailable paths
-- **Status:** New
+- **Status:** 🚧 Fixed on `fix/BUG-008-tts-span-outcome-filter` (2026-08-05) — emitter discipline
+  (failure/unavailable emit no first-audio span, elapsed on the event) + a success-only outcome
+  filter in `pipeline_timing`. Voice-agent **464** unittest + behave **13/36/169** green. Merge on
+  explicit user request only.
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** Adversarial review
@@ -76,11 +79,29 @@ not filter by outcome, so p95/p99 for first-audio is inflated by non-success tur
 
 ## Developer Notes
 
-- root cause:
+- root cause: two independent leaks into the `tts_first_audio` distribution — (1) `_emit_failure`
+  and `_emit_unavailable` emitted the `voice.tts.first_audio` span with **total elapsed** even
+  though no audio ever played, and (2) `pipeline_timing` grouped spans purely by name, so even the
+  interrupted span (a real first-audio, but not a completed turn) counted toward the success p95.
 - files changed:
-- tests added/updated:
-- OpenTelemetry added/updated:
-- residual risk:
+  - `web_voice/streaming_tts_processor.py` — `_emit_failure` / `_emit_unavailable` no longer emit
+    the first-audio span; they carry `elapsed_ms` on the `tts.failure` / `tts.unavailable` event
+    (mirrors the existing `_emit_interrupted` discipline). `_emit_success` /  `_emit_interrupted`
+    unchanged.
+  - `voice_common/pipeline_timing.py` — `_durations_by_span_name` drops a `voice.tts.first_audio`
+    span whose `outcome != success` (`_counts_toward_slice` / `_SUCCESS_ONLY_SPANS`), so both the
+    per-slice report and the `time_to_first_audio` / `voice_to_first_audio` composites see only
+    success first-audio samples. Spans without an `outcome` attribute are unaffected.
+  - `docs/observability/voice-journey-timing.md` — documented the success-only semantics.
+- tests added/updated: `test_pipeline_timing.py` — `test_tts_first_audio_excludes_non_success_spans`
+  (success-only distribution, non-success elapsed never counts) + `test_tts_first_audio_all_non_
+  success_is_not_measured`. `test_streaming_tts_processor.py` — the failure and no_audio tests now
+  assert **no** first-audio span is emitted and `elapsed_ms` is on the event. Full voice-agent suite
+  464 unittest + behave 13/36/169 green.
+- OpenTelemetry added/updated: `tts.failure` / `tts.unavailable` events now carry `elapsed_ms`; the
+  spurious `voice.tts.first_audio` span on those paths is removed. No new metric name.
+- residual risk: none material — interrupted turns still emit a real first-audio span (outcome=
+  interrupted) for per-turn inspection, just excluded from the success p95 aggregation.
 
 ## QA Retest
 
@@ -92,6 +113,8 @@ not filter by outcome, so p95/p99 for first-audio is inflated by non-success tur
 
 ## Closure
 
-- **Closed by:**
+- **Closed by:** (pending user validation / merge)
 - **Closed date:**
-- **Closure reason:**
+- **Closure reason:** Fixed — `tts_first_audio` is now a success-only distribution via emitter
+  discipline (no first-audio span on failure/unavailable; elapsed on the event) + an outcome filter
+  in `pipeline_timing` that excludes non-success spans. Regression tests + doc added.
