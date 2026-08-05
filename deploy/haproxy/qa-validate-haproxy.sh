@@ -68,6 +68,12 @@ done
 grep -q 'state MASTER' "$T01" && grep -q 'priority 150' "$T01" && ok "t01 is MASTER (priority 150)" || bad "t01 not MASTER/150"
 grep -q 'state BACKUP' "$T02" && grep -q 'priority 100' "$T02" && ok "t02 is BACKUP (priority 100)" || bad "t02 not BACKUP/100"
 ! grep -q 'state MASTER' "$T02" && ok "t02 declares no MASTER instance" || bad "t02 wrongly MASTER"
+# BUG-006 regression: the chk_haproxy penalty MUST drop the master (150) below the
+# backup (100), else an HAProxy process death keeps the VIP on a node with no HAProxy
+# listening (blackhole) instead of failing over. weight -40 => 110 >= 100 was the bug.
+W=$(grep -m1 -Eo 'weight -[0-9]+' "$T01" | grep -Eo '[0-9]+')
+{ [ -n "$W" ] && [ $((150 - W)) -lt 100 ]; } && ok "HAProxy-death failover crosses priority (150-${W} < 100)" || bad "chk_haproxy weight too small: master stays >= backup on HAProxy death (BUG-006)"
+grep -q 'weight -60' "$T01" && grep -q 'weight -60' "$T02" && ok "chk_haproxy weight -60 on both nodes" || bad "chk_haproxy weight not -60 on both nodes"
 
 # --- 4. VRRP unicast across AZs -----------------------------------------------
 grep -q 'unicast_src_ip 192.168.0.100' "$T01" && grep -q 'unicast_peer' "$T01" && ok "t01 uses VRRP unicast (peer .101)" || bad "t01 missing VRRP unicast"

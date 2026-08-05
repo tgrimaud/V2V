@@ -56,8 +56,11 @@ HAProxy after rotation (`systemctl reload haproxy`).
 - Each backend server has `check`; HAProxy removes an instance after `fall 3`
   failed probes and restores it after `rise 2`, so an unhealthy node leaves
   rotation automatically.
-- Keepalived runs `chk_haproxy` (weight `-40`): if HAProxy dies on the active
-  node, its priority drops and the VIP fails over to the standby node.
+- Keepalived runs `chk_haproxy` (weight `-60`): if HAProxy dies on the active
+  node its priority drops from 150 to 90, **below** the standby's 100, so the VIP
+  fails over to the node that still has HAProxy. The penalty must cross the peer
+  priority — a smaller `-40` left the master at 110 > 100 and kept the VIP on the
+  dead node (BUG-006). Validate with a real `systemctl stop haproxy` on the master.
 - Two independent `vrrp_instance` blocks (VOICE_VIP vrid 51, BACKEND_VIP vrid 52)
   let the two VIPs fail over independently.
 
