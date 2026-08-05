@@ -959,7 +959,18 @@ no aggregation — insufficient for a latency SLO.
 **Related decisions:** ADR-0008 (Redis sessions + Postgres events), ADR-0038
 **Depends on:** TASK-BE-021 (Redis memory), TASK-OPS-003 (host prereqs)
 **Classification:** V1 pilot deployment (data durability)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-OPS-008-data-resilience`) —
+Redis AOF was already on (`--appendonly yes`); added an off-host-capable snapshot job
+(`deploy/backup/redis-backup.sh` BGSAVE + AOF tar) and a Postgres `pg_dump -Fc` job
+(`pg-backup.sh`, throwaway `postgres:16-alpine` client, one backend node) plus restore
+scripts (`redis-restore.sh`, `pg-restore.sh` recreating the `vector` extension + KB
+re-sync fallback). Ansible `compose_tier` role installs the scripts, renders `0600`
+`no_log` env files (secrets from vault, never the crontab), and schedules hourly/daily
+cron. New runbook `docs/operations/backup-restore.md` (RPO/RTO) cross-linked from the
+first-deploy + release-process docs. QA: `qa-validate-ansible.sh` 47/47 (incl. `bash -n`
+on all four scripts + credential-hygiene + one-node pinning). Live restore-into-clean-VM
+drill deferred to the TASK-INFRA-006 access window. Runtime-affecting: deploy tooling +
+schedule only, no application code change.
 **Priority:** Medium
 **Branch:** `task/TASK-OPS-008-data-resilience`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — Postgres (`.102`)

@@ -123,6 +123,33 @@ grep -q "docker logout {{ registry }}" "$ROLE_MAIN" \
   && grep -A4 "docker logout" "$ROLE_MAIN" | grep -q "registry_login_required | bool" \
   && ok "logout gated on registry_login_required" || bad "logout not gated on registry_login_required"
 
+# --- 11. Data backup/restore wiring (TASK-OPS-008) ----------------------------
+BK="../backup"
+grep -q "include_tasks: backup.yml" roles/compose_tier/tasks/main.yml && ok "backup.yml wired into the role" || bad "backup not wired"
+grep -Eq "tier in \['redis', 'backend'\]" roles/compose_tier/tasks/main.yml && ok "backup gated to redis+backend tiers" || bad "backup not gated to data tiers"
+# The four scripts exist, are executable and parse.
+bk_ok=1
+for s in redis-backup.sh redis-restore.sh pg-backup.sh pg-restore.sh; do
+  [ -x "${BK}/${s}" ] || { bk_ok=0; echo "    missing/x: ${s}"; }
+  bash -n "${BK}/${s}" >/dev/null 2>&1 || { bk_ok=0; echo "    bash -n failed: ${s}"; }
+done
+[ "$bk_ok" -eq 1 ] && ok "backup scripts present, executable and parse (bash -n)" || bad "a backup script is missing / non-exec / invalid"
+# pg_dump / restore use pgvector-aware, credential-safe patterns.
+grep -q 'CREATE EXTENSION IF NOT EXISTS vector' "${BK}/pg-restore.sh" && ok "pg-restore recreates the pgvector extension" || bad "pg-restore missing CREATE EXTENSION vector"
+grep -q 'api/knowledge/sync' "${BK}/pg-restore.sh" && ok "pg-restore documents the KB re-sync fallback" || bad "pg-restore missing KB re-sync path"
+grep -q 'REDISCLI_AUTH' "${BK}/redis-backup.sh" && ! grep -q 'redis-cli -a ' "${BK}/redis-backup.sh" && ok "redis backup auth via REDISCLI_AUTH (not argv)" || bad "redis backup exposes password in argv"
+# Password must reach pg_dump via docker's -e PGPASSWORD env passthrough, never as a
+# --password argv or an inline assignment (ignore the usage comment lines).
+grep -q '\-e PGPASSWORD' "${BK}/pg-backup.sh" \
+  && ! grep -vE '^[[:space:]]*#' "${BK}/pg-backup.sh" | grep -Eq '\-\-password[= ]|PGPASSWORD=[^"$]' \
+  && ok "pg backup auth via PGPASSWORD env (not argv)" || bad "pg backup password not env-sourced"
+# The Ansible role renders secrets into 0600 env files (no_log) sourced by cron, not the crontab.
+grep -q 'redis-backup.env' roles/compose_tier/tasks/backup.yml && grep -q 'pg-backup.env' roles/compose_tier/tasks/backup.yml && ok "backup secrets in sourced env files" || bad "backup env files missing"
+[ "$(grep -c 'no_log: true' roles/compose_tier/tasks/backup.yml)" -ge 2 ] && ok "backup env rendering uses no_log" || bad "backup env rendering not no_log"
+grep -q 'ansible.builtin.cron' roles/compose_tier/tasks/backup.yml && ok "backup schedule uses cron" || bad "no backup cron scheduled"
+grep -q "inventory_hostname == groups\['backend'\]\[0\]" roles/compose_tier/tasks/backup.yml && ok "pg backup runs on a single backend node" || bad "pg backup not pinned to one node"
+grep -q 'vault_redis_password' roles/compose_tier/tasks/backup.yml && grep -q 'vault_db_password' roles/compose_tier/tasks/backup.yml && ok "backup passwords sourced from vault_* vars" || bad "backup passwords not from vault"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

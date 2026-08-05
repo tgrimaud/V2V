@@ -129,6 +129,12 @@ ansible-playbook rollback.yml -e image_tag=1.1.0 --ask-vault-pass
 Pick the previous tag from the GHCR packages (image tags have no `v`). To roll back a single tier, add
 `--limit backend` (or `voice`). Verify health as above.
 
+> **Rollback covers app images only, not data.** A bad *data* event (corruption, an
+> accidental `DELETE FROM vector_store`, or losing the Postgres/Redis VM) is recovered
+> from backups, not by redeploying an image tag — see
+> [`backup-restore.md`](backup-restore.md) for the Redis + Postgres restore procedures
+> (RPO/RTO). The deploy schedules those backups automatically (TASK-OPS-008).
+
 ## Voice session draining (best-effort — known limitation)
 
 Restarting a voice bridge must avoid hard-cutting active calls. The bridge has no
@@ -167,6 +173,7 @@ Until then, prefer deploying voice during a low-traffic window.
 ## Related
 
 - Topology, ports, per-tier env: [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md)
+- Backup & restore (Redis + Postgres): [`backup-restore.md`](backup-restore.md)
 - CI workflows: `.github/workflows/` — QA report `docs/qa/task-ops-001-github-actions-ci-qa-report.md`
 - Compose stacks: [`deploy/compose/README.md`](../../deploy/compose/README.md)
 - ADR-0038 (remote deployment topology), ADR-0008 (Redis shared memory)

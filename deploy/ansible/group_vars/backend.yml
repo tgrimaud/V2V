@@ -51,3 +51,19 @@ kb_host_path: "{{ compose_root }}/backend/kb-assets"
 java_opts: "-XX:MaxRAMPercentage=75.0"
 backend_cpus: "3.0"
 backend_memory: "5g"
+
+# ---- Postgres backup schedule (TASK-OPS-008) --------------------------------
+# Daily pg_dump -Fc of the KB + pgvector DB (.102), run from ONE backend node via a
+# throwaway postgres client container (no client install). Restore + KB re-sync are in
+# deploy/backup/pg-restore.sh + docs/operations/backup-restore.md. Set pg_backup_remote
+# to protect against losing the Postgres VM.
+pg_backup_enabled: true
+pg_backup_host: "192.168.0.102"
+pg_backup_port: 5432
+pg_backup_database: "voicesupport"
+pg_client_image: "postgres:16-alpine"
+pg_backup_dir: "/var/backups/voice-support/postgres"
+pg_backup_cron_minute: "37"
+pg_backup_cron_hour: "2"          # daily 02:37
+pg_backup_keep: 14                 # ~2 weeks of daily dumps
+pg_backup_remote: ""               # e.g. "backup@vlb-ai4cc-t01.mt.lan:/srv/backups/postgres"
