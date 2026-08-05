@@ -29,9 +29,10 @@ flowchart TB
     V1["vla-t01 .103 : web_voice.server :8090"]
     V2["vla-t02 .104 : web_voice.server :8090"]
   end
-  subgraph bepool ["Backend Java - Docker"]
+  subgraph bepool ["Backend Java - Docker (+ ollama sidecar per VM)"]
     B1["vla-t03 .105 : backend :8080"]
     B2["vla-t04 .106 : backend :8080"]
+    OL["ollama nomic-embed-text (CPU sidecar, ADR-0039)"]
   end
   subgraph data [Data tier]
     PG["vlb-t01 .102 : Postgres 18 + pgvector (podman pod)"]
@@ -40,7 +41,6 @@ flowchart TB
   subgraph cloud ["Cloud APIs (egress to confirm)"]
     Mistral["Mistral (chat)"]
     Gradium["Gradium (STT/TTS)"]
-    Embed["Embeddings nomic-embed-text (placement open)"]
   end
   Browser -->|"HTTPS / WSS"| VIPvoice
   VIPvoice --> V1 & V2
@@ -50,7 +50,7 @@ flowchart TB
   B1 & B2 -->|"pgvector"| PG
   B1 & B2 -->|"shared memory"| RD
   B1 & B2 -.->|"chat"| Mistral
-  B1 & B2 -.->|"embeddings"| Embed
+  B1 & B2 -->|"embeddings (local sidecar)"| OL
 ```
 
 ## Network
@@ -98,8 +98,8 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Voice bridge (`voice-agent/`) | `vla-t01`/`t02` (`.103`/`.104`) | Docker + compose | `python -m web_voice.server --host 0.0.0.0 --port 8090`; WebRTC live path |
 | Backend Java (`backend/`) | `vla-t03`/`t04` (`.105`/`.106`) | Docker + compose | Spring Boot `:8080`; RAG, guardrails, memory |
 | PostgreSQL 18 + pgvector | `vlb-t01` (`.102`) | podman pod (`podpg`) | `CREATE EXTENSION vector`; `vector_store` 768 dim |
-| Redis | `vlb-t02` (`.107`) | Docker (planned) | Shared conversation memory (ADR-0008, TASK-BE-021) |
-| Embeddings (`nomic-embed-text`) | TBD | TBD | No dedicated host provisioned - see open inputs |
+| Redis | `vlb-t02` (`.107`) | Docker (`redis:7-alpine`, auth, AOF, no internal TLS) | Shared conversation memory (ADR-0008, TASK-BE-021) |
+| Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | Docker (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
 | Mistral (chat), Gradium (STT/TTS) | cloud | managed | Require controlled internet egress |
 
 ## Port matrix
@@ -113,8 +113,8 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Voice bridge | Gradium (cloud) | 443 | HTTPS/WSS | STT/TTS |
 | Backend VIP `.11` | backends `.105`/`.106` | 8080 | HTTP | LB to backend |
 | Backend | Postgres `.102` | 5432 | TCP | pgvector + JPA |
-| Backend | Redis `.107` | 6379 (confirm) | TCP | Shared session memory |
-| Backend | embeddings host | 11434 (if Ollama) | HTTP | Embeddings |
+| Backend | Redis `.107` | 6379 | TCP | Shared session memory (auth, no TLS) |
+| Backend | ollama sidecar (same VM) | 11434 | HTTP | Embeddings (compose network, not published) |
 | Backend | Mistral (cloud) | 443 | HTTPS | Chat LLM |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
 
@@ -129,7 +129,7 @@ docker-compose consumes. Defaults below are the code defaults - override on tst.
 |----------|-----------|-----------------|
 | `DB_URL` | `jdbc:postgresql://192.168.0.102:5432/<db>` | default `...localhost:5433/voicesupport` |
 | DB user / password | from secrets | default `voicesupport`/`voicesupport` |
-| `OLLAMA_BASE_URL` | embeddings host (TBD) | default `http://localhost:11434` |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` (co-located CPU sidecar, ADR-0039) | model `nomic-embed-text` (768 dim) pulled at deploy; no cloud egress for embeddings |
 | `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) |
 | `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only) |
 | `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default `memory` (in-process) |
@@ -171,19 +171,27 @@ Full runbook: `docs/operations/release-process.md` (TASK-OPS-002).
 
 ## PostgreSQL bootstrap
 
-On `vlb-ai4cc-t01` (`.102`), Postgres runs as a podman pod:
+Confirmed 2026-08-04: **PostgreSQL 18.4, single instance** on `vlb-ai4cc-t01`
+(`.102`), root access via `podpg`; the `vector` extension is available to install.
+DB name / app user are `voicesupport` (matches the backend defaults and the Ansible
+`db_url`/`db_username`); the app-user password is `vault_db_password` (ansible-vault).
+Run once as superuser:
 
-```
+```sql
 podpg
 psql
->> create database voicesupport;
+>> CREATE DATABASE voicesupport;
 >> \c voicesupport
->> CREATE EXTENSION vector;
+>> CREATE EXTENSION vector;                                   -- superuser
+>> CREATE USER voicesupport WITH PASSWORD '<vault_db_password>';
+>> GRANT ALL PRIVILEGES ON DATABASE voicesupport TO voicesupport;
+>> GRANT ALL ON SCHEMA public TO voicesupport;                -- PG15+ locks public
 ```
 
 The backend runs with `ddl-auto: update` and `initialize-schema: true`, so the
-`vector_store` (768 dim) and JPA tables are created on first start. Confirm the
-DB name / user / password to standardize with the secrets.
+`vector_store` (768 dim) and JPA tables are created on first start by the app user
+(hence the `SCHEMA public` grant). Reveal the real password with
+`ansible-vault view group_vars/all/vault.yml` in `deploy/ansible/`.
 
 ## Open inputs needed
 
@@ -192,21 +200,39 @@ These block or shape the Sprint 11 tickets; provide them incrementally.
 1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
    CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),
    and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
-2. **Internet egress from tst.** Is outbound allowed to `api.mistral.ai`, the
-   Gradium API, and the container registry (for image pulls)? Via a proxy?
-3. **Embeddings placement** (drives TASK-INFRA-003): run Ollama on CPU
-   (co-located on the backend VMs or the DB VM) vs switch to Mistral embeddings
-   (1024 dim -> `vector_store` recreation + re-sync + cloud egress).
+2. ~~**Internet egress from tst**~~ ✅ **Resolved (2026-08-04): DIRECT `:443`
+   egress** (no proxy) to the destinations the pilot needs (ADR-0039):
+   `api.mistral.ai` (chat, runtime), the Gradium API (STT/TTS, runtime), **GHCR**
+   `ghcr.io` + `pkg-containers.githubusercontent.com` (image pulls, deploy - #5), and
+   `registry.ollama.ai` (one-time `nomic-embed-text` model pull at deploy). No Docker
+   daemon / container proxy configuration required. Embedding inference needs no
+   egress (local sidecar).
+3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
+   `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
+   `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
 4. **TLS at the voice edge.** Certificate provisioning and the public FQDN for
    the voice VIP (`.prod.lan` / `10.195.59.39`).
-5. **Container registry** reachable from the VMs: GHCR (GitHub) vs an internal
-   Nexus/Artifactory, and its credentials.
-6. **Secrets store and delivery.** Where `MISTRAL_API_KEY`, `GRADIUM_API_KEY`,
-   `CONVERSATION_API_KEY`, DB and Redis credentials live, and how they reach the
-   VMs (GitHub Actions secrets -> Ansible vault -> `.env`).
-7. **PostgreSQL** database name / user / password to create on `.102`, and
-   confirmation the `vector` extension install is permitted.
-8. **Redis** run mode on `.107` (Docker container vs native), auth, and whether
-   TLS is required on the internal link.
+5. ~~**Container registry**~~ ✅ **Resolved (2026-08-05): GHCR, PRIVATE packages**
+   `ghcr.io/tgrimaud/voice-support-backend` and `ghcr.io/tgrimaud/voice-support-voice`
+   (pushed by TASK-OPS-001 with immutable tags `vX.Y.Z` / `sha-<short>`). Private → the
+   VMs authenticate with a **read-only token**: `registry_login_required: true` +
+   `vault_registry_username` (GitHub user `tgrimaud`) / `vault_registry_token` (PAT with
+   `read:packages`) in the ansible-vault; the `compose_tier` role runs `docker login`
+   before pull. Egress dependency: the VMs need `:443` to `ghcr.io` **and**
+   `pkg-containers.githubusercontent.com` (GHCR blob CDN) - see #2.
+6. ~~**Secrets store and delivery**~~ ✅ **Resolved (2026-08-04):** local
+   **ansible-vault** at `deploy/ansible/group_vars/all/vault.yml` (encrypted, master
+   password in git-ignored `.vault_pass`, auto-loaded via `ansible.cfg`). Mistral +
+   Gradium keys sourced from the local `.env`; `CONVERSATION_API_KEY` and the DB
+   password generated. Ansible renders each tier's `.env` from it at deploy.
+7. ~~**PostgreSQL**~~ ✅ **Resolved (2026-08-04):** PostgreSQL **18.4**, single
+   instance on `.102`; DB + app user `voicesupport` (password = `vault_db_password`);
+   `CREATE EXTENSION vector` available. Bootstrap SQL in the PostgreSQL section above.
+8. ~~**Redis**~~ ✅ **Resolved (2026-08-04):** we run Redis ourselves as a
+   **Docker** container on `.107` (`redis:7-alpine`, already wired in
+   `deploy/compose/redis/`): **auth ON** (`requirepass` = `vault_redis_password`,
+   shared with the backend), **AOF persistence**, `noeviction` (active sessions never
+   silently dropped), `maxmemory 2gb`. **No TLS on the internal link** (tenant-internal
+   `.107:6379`); revisit if the security policy requires encrypting the internal hop.
 9. **Frontend.** Is the voice bridge's built-in mic UI (`index.html`) sufficient
    for the pilot, or is a separate static host expected?

@@ -62,6 +62,11 @@
     IMAGE_TAG: "{{ image_tag }}"
   changed_when: true
 
+# Backend tier only: pull the embeddings model into the co-located Ollama sidecar.
+- name: "Pull the embeddings model into the Ollama sidecar"
+  ansible.builtin.include_tasks: ollama_model.yml
+  when: tier == 'backend'
+
 - name: "Verify the {{ tier }} stack is healthy"
   ansible.builtin.include_tasks: health.yml
 

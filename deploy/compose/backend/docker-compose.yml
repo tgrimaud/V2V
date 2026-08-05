@@ -20,8 +20,9 @@ services:
       DB_URL: "${DB_URL}"
       DB_USERNAME: "${DB_USERNAME}"
       DB_PASSWORD: "${DB_PASSWORD}"
-      # --- Embeddings (Ollama nomic-embed-text, 768 dim) - placement per TASK-INFRA-003 ---
-      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL}"
+      # --- Embeddings (Ollama nomic-embed-text, 768 dim) - CPU sidecar per ADR-0039 ---
+      # Default points at the co-located ollama sidecar below (compose service DNS).
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://ollama:11434}"
       OLLAMA_EMBEDDING_MODEL: "${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
       # --- Chat LLM (Mistral cloud) ---
       LLM_PROVIDER: "${LLM_PROVIDER:-mistral-api}"
@@ -50,8 +51,12 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}"
       OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
-      # --- JVM tuning without a rebuild (sized to the 8 GB flavor by default) ---
+      # --- JVM tuning without a rebuild (sized to share the 8 GB VM with ollama) ---
       JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
+    # Wait for the embeddings sidecar to be up (model pull happens at deploy time).
+    depends_on:
+      ollama:
+        condition: service_healthy
     # Mirror the image HEALTHCHECK so compose surfaces readiness (curl ships in the image).
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
@@ -59,12 +64,12 @@ services:
       timeout: 5s
       start_period: 90s
       retries: 3
-    # Sized to the vla-t03/t04 flavor (4 vCPU / 8 GB), leaving host headroom.
+    # Sized to share the vla-t03/t04 flavor (4 vCPU / 8 GB) with the ollama sidecar.
     deploy:
       resources:
         limits:
-          cpus: "${BACKEND_CPUS:-3.5}"
-          memory: "${BACKEND_MEMORY:-6g}"
+          cpus: "${BACKEND_CPUS:-3.0}"
+          memory: "${BACKEND_MEMORY:-5g}"
     logging:
       driver: json-file
       options:
@@ -75,3 +80,36 @@ services:
     # creates an empty dir and the KB sync simply finds nothing until populated).
     volumes:
       - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro"
+
+  # Embeddings sidecar (ADR-0039): Ollama nomic-embed-text on CPU, co-located on
+  # each backend VM. Keeps embeddings 768-dim (no vector_store recreation) and
+  # local (no cloud egress for RAG). The model is pulled at deploy time
+  # (Ansible: docker compose exec ollama ollama pull) into the named volume.
+  ollama:
+    image: "ollama/ollama:${OLLAMA_IMAGE_TAG:-0.5.4}"
+    container_name: voice-support-ollama
+    restart: unless-stopped
+    # Internal only: reachable from the backend over the compose network, never published.
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "${OLLAMA_CPUS:-1.0}"
+          memory: "${OLLAMA_MEMORY:-2g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - "ollama-models:/root/.ollama"
+
+volumes:
+  ollama-models:

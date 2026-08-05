@@ -10,9 +10,11 @@ registry_namespace: "tgrimaud"
 # TASK-OPS-001 (e.g. -e image_tag=v1.2.0 or -e image_tag=sha-abc1234).
 image_tag: "latest"
 
-# Set true and provide vault_registry_username / vault_registry_token for a
-# private registry pull (GHCR public packages need no login).
-registry_login_required: false
+# GHCR packages are PRIVATE (user decision 2026-08-05): the VMs authenticate with a
+# read-only token before pulling. Provide vault_registry_username (GitHub user) +
+# vault_registry_token (PAT with read:packages) in the vault; the compose_tier role
+# runs `docker login` before pull when this is true.
+registry_login_required: true
 
 # ---- Target layout ---------------------------------------------------------
 # Per-tier stack directory on each VM (compose file + rendered .env live here).

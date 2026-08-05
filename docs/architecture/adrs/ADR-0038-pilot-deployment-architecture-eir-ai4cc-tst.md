@@ -1,6 +1,6 @@
 # ADR-0038 - Pilot deployment architecture for the eir-ai4cc-tst environment
 
-- **Status:** Accepted (2026-08-03) - embeddings placement and provider egress remain open (TASK-INFRA-003)
+- **Status:** Accepted (2026-08-03); embeddings placement and provider egress resolved in ADR-0039 (TASK-INFRA-003, 2026-08-04)
 - **Deciders:** Product owner (Thomas Grimaud), architecture
 - **Related:** ADR-0008 (Redis active sessions / Postgres durable data), ADR-0010
   (industrialization requires contracts, SLOs and observability), ADR-0028
@@ -108,15 +108,15 @@ connection. **`CONVERSATION_API_KEY` must be non-empty in any non-local
 environment** (an empty key opens the protected endpoints - acceptable only on a
 laptop, never on the tst VIPs).
 
-### 6. Embeddings placement and provider egress (OPEN - TASK-INFRA-003)
+### 6. Embeddings placement and provider egress (RESOLVED - ADR-0039)
 
-The backend requires Ollama `nomic-embed-text` for embeddings, but the provided
-inventory has **no Ollama/GPU host**. The two candidates are (a) run Ollama on
-CPU co-located with the backend VMs (or the DB VM) or (b) switch to Mistral
-embeddings (1024 dim, which requires recreating the `vector_store` table and a
-full re-sync, and adds cloud egress). This is deferred to TASK-INFRA-003 pending
-the confirmed **internet egress policy** of the tst tenant (Mistral chat,
-Gradium STT/TTS and image-registry pulls all require controlled egress).
+Resolved by **ADR-0039** (TASK-INFRA-003): embeddings run on **Ollama
+`nomic-embed-text` (768 dim) as a CPU sidecar co-located per backend VM** (option
+a) - no `vector_store` recreation, no cloud egress for RAG. Mistral embeddings
+(option b) rejected for the pilot. The only provider egress the pilot needs is
+`api.mistral.ai:443` (chat), the Gradium API `:443` (STT/TTS) and the container
+registry `:443` (image pulls); the confirmed allowlist/proxy remains a platform
+input tracked in the deployment doc.
 
 ### 7. Observability
 

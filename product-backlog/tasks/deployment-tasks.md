@@ -328,7 +328,13 @@ Certificate issuance policy and STUN/TURN provisioning (open inputs); app config
 **Related decisions:** ADR-0038, ADR-0006 (Mistral chat / Ollama embeddings), ADR-0030
 **Depends on:** confirmed tst egress policy (open input)
 **Classification:** V1 pilot deployment (decision/spike)
-**Status:** To do (Sprint 11, branch `task/TASK-INFRA-003-embeddings-egress`)
+**Status:** ✅ Implemented — decision **ADR-0039** (Ollama `nomic-embed-text` CPU
+sidecar co-located per backend VM; Mistral embeddings rejected); backend compose +
+Ansible wired (sidecar + deploy-time model pull), dim stays 768. Adversarial 92/100
+(Pass; deploy-time Ollama-registry egress fix); QA GO (compose config + Ansible 33/33
++ compose 22/22, [report](../../docs/qa/task-infra-003-embeddings-egress-qa-report.md));
+live tst sync/retrieval deferred. ✅ **Merge-ready** (merge on the user's explicit
+request). Branch `task/TASK-INFRA-003-embeddings-egress`
 **Priority:** High (blocks a functional backend on tst)
 **Branch:** `task/TASK-INFRA-003-embeddings-egress`
 
