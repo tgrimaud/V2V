@@ -100,6 +100,25 @@ grep -q "include_tasks: drain.yml" roles/compose_tier/tasks/main.yml && ok "drai
 grep -q "tier == 'voice'" roles/compose_tier/tasks/main.yml && ok "drain gated to the voice tier" || bad "drain not gated to voice"
 grep -q "voice_drain_grace_seconds" roles/compose_tier/tasks/drain.yml && ok "bounded grace window in drain" || bad "no grace window in drain"
 grep -q "voice_lb_drain_cmd" roles/compose_tier/tasks/drain.yml && ok "LB node-down hook present (INFRA-002 seam)" || bad "no LB drain hook"
+# TASK-INFRA-007: the drain/enable hooks are WIRED (socat -> admin.sock) but the
+# hosts list defaults to EMPTY (opt-in) and the delegated tasks are non-fatal, so a
+# platform-managed LB with no SSH access yet cannot abort the voice deploy.
+VOICE_VARS="group_vars/voice.yml"
+grep -Eq "voice_lb_drain_cmd: .+socat.+admin.sock" "$VOICE_VARS"  && ok "drain cmd populated (socat -> admin.sock)"  || bad "voice_lb_drain_cmd not wired to the admin socket"
+grep -Eq "voice_lb_enable_cmd: .+socat.+admin.sock" "$VOICE_VARS" && ok "enable cmd populated (socat -> admin.sock)" || bad "voice_lb_enable_cmd not wired to the admin socket"
+grep -q "state drain" "$VOICE_VARS" && grep -q "state ready" "$VOICE_VARS" && ok "drain/enable set HAProxy server state" || bad "drain/enable missing state drain|ready"
+grep -q "voice_lb_socket_hosts" "$VOICE_VARS" && ok "LB socket hosts declared for delegation" || bad "no voice_lb_socket_hosts declared"
+grep -q "delegate_to:" roles/compose_tier/tasks/drain.yml && ok "drain delegated to the LB node(s)" || bad "drain not delegated to LB"
+grep -q "delegate_to:" roles/compose_tier/tasks/main.yml && ok "re-enable delegated to the LB node(s)" || bad "re-enable not delegated to LB"
+# Adversarial review 2026-08-05: default hosts must be empty (opt-in) so delegating a
+# drain to an unreachable platform-managed LB (serial:1 + max_fail_percentage:0) can't
+# abort the voice deploy. Live enablement is gated with TASK-INFRA-006.
+grep -Eq "^voice_lb_socket_hosts: \[\]" "$VOICE_VARS" && ok "LB drain defaults to opt-in (empty hosts -> grace-only)" || bad "voice_lb_socket_hosts default is not empty (could abort deploy on unreachable LB)"
+# Even if an operator enables it, the delegated hooks must be non-fatal (degrade to grace).
+grep -q "ignore_unreachable: true" roles/compose_tier/tasks/drain.yml && grep -q "failed_when: false" roles/compose_tier/tasks/drain.yml \
+  && ok "drain hook is non-fatal (ignore_unreachable + failed_when:false)" || bad "drain hook can abort the deploy"
+grep -q "ignore_unreachable: true" roles/compose_tier/tasks/main.yml && grep -q "failed_when: false" roles/compose_tier/tasks/main.yml \
+  && ok "re-enable hook is non-fatal (ignore_unreachable + failed_when:false)" || bad "re-enable hook can abort the deploy"
 
 # --- 8. Health verification ----------------------------------------------------
 grep -q "ansible.builtin.uri" roles/compose_tier/tasks/health.yml && ok "HTTP health probe present" || bad "no HTTP health probe"

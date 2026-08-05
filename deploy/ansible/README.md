@@ -73,12 +73,19 @@ The bridge exposes no active-session count or `/drain` endpoint yet, so a hard
 "wait until 0 active calls" is not possible from the outside. Draining is:
 
 1. **serial:1 rolling** — only one bridge recreates at a time; the VIP peer keeps serving;
-2. **LB node-down/up hook** (`voice_lb_drain_cmd` / `voice_lb_enable_cmd`) — stops
-   NEW calls hitting the node while it recreates. Empty until HAProxy is configured
-   (TASK-INFRA-002); a warning is printed when unset;
+2. **LB node-down/up hook** (`voice_lb_drain_cmd` / `voice_lb_enable_cmd`, TASK-INFRA-007) —
+   sets this bridge to `state drain`/`ready` on every LB node via the HAProxy admin
+   socket (`socat … /run/haproxy/admin.sock`), delegated to `voice_lb_socket_hosts`,
+   so NEW calls stop hitting the node while it recreates. **Opt-in:** `voice_lb_socket_hosts`
+   defaults to **empty** (the `[lb]` group is platform-managed, SSH not confirmed yet —
+   gated with TASK-INFRA-006), so the hook is off by default and the deploy runs grace-only.
+   Enable it once LB access exists with
+   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'`.
+   Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` + `failed_when: false`):
+   a failing LB hook degrades to grace-only with a warning, it never aborts the deploy;
 3. **bounded grace** (`voice_drain_grace_seconds`, default 60s) — lets an in-flight
    call wind down before recreate.
 
-Completion paths for an exact drain: wire the HAProxy node-down hook (INFRA-002),
-or add a bridge `/drain` + active-session endpoint (follow-up). Both are documented
-in the runbook so this is a tracked limitation, not a silent gap.
+Remaining path for an *exact* drain: add a bridge `/drain` + active-session endpoint
+(follow-up) so the fixed grace becomes a poll-until-zero wait. The LB node-down hook
+above already stops new calls; this is a tracked limitation, not a silent gap.

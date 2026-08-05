@@ -47,7 +47,11 @@ grep -Eq 'bind 192\.168\.0\.11:8080' "$CFG"               && ok "backend fronten
 grep -q '192.168.0.103:8090' "$CFG" && grep -q '192.168.0.104:8090' "$CFG" && ok "voice backend targets both bridges :8090" || bad "voice backend targets wrong"
 grep -q '192.168.0.105:8080' "$CFG" && grep -q '192.168.0.106:8080' "$CFG" && ok "backend backend targets both nodes :8080"  || bad "backend targets wrong"
 grep -q 'http-check send meth GET uri /$' "$CFG"          && ok "voice health check GET /"              || bad "voice health check missing"
-grep -q 'uri /api/health' "$CFG"                          && ok "backend health check GET /api/health" || bad "backend health check missing"
+# TASK-INFRA-007: the backend must use the deep dependency-aware /actuator/health,
+# NOT the static /api/health (which never reflects DB/Redis degradation).
+grep -q 'uri /actuator/health' "$CFG"                     && ok "backend deep health check GET /actuator/health" || bad "backend not using deep /actuator/health"
+awk '/^backend backend_java/{b=1} /^backend |^frontend /{if($0!~"backend_java")b=0} b&&/uri \/api\/health/{f=1} END{exit f}' "$CFG" \
+  && ok "backend no longer uses the static /api/health" || bad "backend still probes the shallow /api/health"
 grep -Eq 'server .* check' "$CFG"                         && ok "backends use active health 'check'"    || bad "no 'check' on servers"
 grep -q 'stats socket /run/haproxy/admin.sock' "$CFG"     && ok "admin socket present (OPS-002 drain seam)" || bad "admin socket missing"
 grep -q 'ssl-min-ver TLSv1.2' "$CFG"                      && ok "TLS min version >= 1.2"                || bad "TLS floor not set"
