@@ -47,7 +47,7 @@ public class AnswerConcisionSteps {
         retrievalPort = new FakeKnowledgeRetrievalPort();
         BackendTelemetry telemetry = new BackendTelemetry(new SimpleMeterRegistry());
         MistralAnswerAdapter generator = new MistralAnswerAdapter(
-                ChatClient.builder(model).build(), telemetry, 0, budget);
+                ChatClient.builder(model).build(), telemetry, 0, 0, budget);
         RetrievalGroundingService grounding = new RetrievalGroundingService(
                 new InputGuardrail(), new RetrievalConfidenceGuardrail(0.5), retrievalPort);
         service = new AnswerService(

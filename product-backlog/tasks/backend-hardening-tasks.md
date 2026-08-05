@@ -1049,7 +1049,9 @@ idle TTL, graceful degradation to empty history on outage).
 **Related decisions:** ADR-0006 (Mistral chat + Ollama embeddings), ADR-0013 (SSE streaming)
 **Depends on:** —
 **Classification:** V1 backend robustness hardening
-**Status:** 📋 Open — ready to start
+**Status:** 🚧 Implemented on `task/TASK-BE-025-upstream-timeouts` (branched from
+`feat/sprint-11-remote-deployment`, 2026-08-05). `mvn test` **340** green (+3), ArchUnit OK.
+Merge on explicit user request only.
 **Priority:** High
 **Branch:** `task/TASK-BE-025-upstream-timeouts`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
@@ -1081,6 +1083,49 @@ slow/down Ollama during `similaritySearch` relies on Spring defaults before
 - A slow embedding/pgvector call fails fast within a configured budget.
 - Unit tests cover both timeouts; existing 337 tests stay green; ArchUnit OK.
 - Telemetry outcome (`timeout`/`upstream_unavailable`) is emitted on both paths.
+
+### Implementation notes (2026-08-05)
+
+Delivered on `task/TASK-BE-025-upstream-timeouts`:
+
+- **Streaming LLM budget.** `AbstractChatClientAnswerAdapter` gains a `streamTimeoutMs` ctor arg;
+  `streamContent()` applies `Flux.timeout(Duration.ofMillis(streamTimeoutMs))` (Reactor
+  inter-signal timeout — bounds time-to-first-token *and* the gap between tokens) before
+  `.toStream()`. A stall trips a `TimeoutException` that the blocking bridge surfaces as a
+  `RuntimeException`; the streaming `generate(...)` catch scans the cause chain (`isTimeout`) and
+  degrades to `UpstreamUnavailableException` → the existing sanitized `ERR_UPSTREAM` path, well
+  before the 60 s emitter timeout. Recorded as a distinct `outcome=timeout` on the `llm_wording`
+  slice so a hung provider never pollutes the success p95. `<= 0` disables. Config
+  `voice-support.llm.stream-timeout-ms` (`LLM_STREAM_TIMEOUT_MS`, default **10000**), wired through
+  `LlmConfig` into both `MistralAnswerAdapter` and `OllamaAnswerAdapter`.
+- **Embedding client timeout.** The Ollama embedding auto-config built an `OllamaApi` on a
+  timeout-less RestClient, so a slow Ollama stalled every `similaritySearch` (embedding precedes
+  the pgvector query) on Spring defaults. `KnowledgeConfig` now defines an explicit
+  `OllamaEmbeddingModel` bean (auto-config backs off via `@ConditionalOnMissingBean`) built on a
+  `SimpleClientHttpRequestFactory` with read + connect timeouts. Stays Ollama `nomic-embed-text`
+  (768d). Config `voice-support.embedding.timeout-ms` (`EMBEDDING_TIMEOUT_MS`, default **5000**) +
+  `connect-timeout-ms` (default **3000**).
+- **Retrieval (pgvector) budget** (adversarial-review follow-up, 2026-08-05 — closes the AC
+  "a slow embedding/**pgvector** call fails fast"). `InProcKnowledgeRetrievalAdapter` now bounds the
+  whole `retrieve()` call (query embedding + `similaritySearch` SQL) with a wall-clock budget via a
+  bounded executor (mirrors the LLM sync pool): `future.get(budget)` frees the request/SSE worker
+  and records a distinct `outcome=timeout` on the `retrieval` slice, degrading to the sanitized
+  `ERR_UPSTREAM`. Config `voice-support.retrieval.timeout-ms` (`RETRIEVAL_TIMEOUT_MS`, default
+  **6000**, kept above the 5 s embedding budget), `<= 0` disables. **Residual:** JDBC ignores
+  interrupt, so the abandoned SQL keeps running on a daemon thread until Postgres returns — a true
+  DB-side cancel (`statement_timeout`/`socketTimeout` on the vector-store connection, shared with KB
+  sync inserts) is a tracked follow-up (BE-026 resilience). This removes the worker hang, which is
+  the acceptance criterion.
+- **Tests (`mvn test` 342 green):** `ChatClientStreamTimeoutTest` drives the real adapter over a
+  fake `ChatModel` — a never-emitting stream aborts within budget as `timeout` with no token
+  forwarded; a first-token-then-stall aborts as `timeout` after forwarding the first token; a
+  completed stream is forwarded normally with no false timeout. `InProcKnowledgeRetrievalAdapterTest`
+  adds a slow-retrieval case (fails fast within budget, records `timeout`, no `success`) + a
+  within-budget success case. Existing adapter/BDD constructions updated for the new ctor args;
+  ArchUnit OK.
+- **Runtime-affecting:** adds a `timeout` outcome on the `voice_support.slice` `llm_wording` and
+  `retrieval` timers (BE-009 telemetry); no new slice. Live smoke deferred (deterministic,
+  unit-covered; needs a real hung provider/DB to exercise end-to-end).
 
 ---
 
