@@ -12,7 +12,7 @@ Keepalived (VRRP).
 | VIP | Bind | Role | Backends | Health check |
 |-----|------|------|----------|--------------|
 | Voice `.10` | `:443` (TLS) | TLS edge + L7 LB for WebRTC **signaling** + web UI | `vla-t01/t02:8090` | `GET /` → 200 |
-| Backend `.11` | `:8080` | internal L7 LB for the conversation API | `vla-t03/t04:8080` | `GET /api/health` → 200 |
+| Backend `.11` | `:8080` | internal L7 LB for the conversation API | `vla-t03/t04:8080` | `GET /actuator/health` → 200 (deep: DB + Redis) |
 
 **HAProxy does NOT carry WebRTC media.** The SDP offer (`POST
 /api/voice/webrtc/offer`) and the UI go through HAProxy over HTTPS; the actual
@@ -56,6 +56,11 @@ HAProxy after rotation (`systemctl reload haproxy`).
 - Each backend server has `check`; HAProxy removes an instance after `fall 3`
   failed probes and restores it after `rise 2`, so an unhealthy node leaves
   rotation automatically.
+- The backend VIP probes `/actuator/health` (TASK-INFRA-007), a **deep** check that
+  aggregates the DB indicator (and Redis when `REDIS_HEALTH_ENABLED=true`) and returns
+  `503` when a dependency is down — so a backend with Postgres/Redis broken is pulled
+  from rotation, unlike the old static `/api/health`. The voice VIP keeps the lightweight
+  `GET /` signaling probe (the bridge has no dependency-aware endpoint).
 - Keepalived runs `chk_haproxy` (weight `-60`): if HAProxy dies on the active
   node its priority drops from 150 to 90, **below** the standby's 100, so the VIP
   fails over to the node that still has HAProxy. The penalty must cross the peer
@@ -95,10 +100,14 @@ echo "set server voice_bridges/vla-t01 state drain" | socat stdio /run/haproxy/a
 echo "set server voice_bridges/vla-t01 state ready" | socat stdio /run/haproxy/admin.sock
 ```
 
-Wire these into `deploy/ansible/group_vars/voice.yml` (`voice_lb_drain_cmd` /
-`voice_lb_enable_cmd`), running them on an LB node (e.g. via `delegate_to`).
-Combined with the OPS-002 rolling `serial:1` and grace window, this upgrades the
-voice drain from best-effort to "no new calls during recreate".
+These are now wired (TASK-INFRA-007) in `deploy/ansible/group_vars/voice.yml`
+(`voice_lb_drain_cmd` / `voice_lb_enable_cmd`) and delegated to every LB node
+(`voice_lb_socket_hosts`) by `roles/compose_tier/tasks/drain.yml` + `main.yml`, so
+the socat command runs where the admin socket lives. Setting `state drain` on both
+LB nodes covers either holding the VIP via Keepalived. Combined with the OPS-002
+rolling `serial:1` and grace window, this upgrades the voice drain from best-effort
+to "no new calls during recreate". `socat` must be installed on the LB nodes. Live
+behaviour is validated once LB-host SSH access exists (deferred to TASK-INFRA-006).
 
 ## Validate
 

@@ -100,6 +100,15 @@ grep -q "include_tasks: drain.yml" roles/compose_tier/tasks/main.yml && ok "drai
 grep -q "tier == 'voice'" roles/compose_tier/tasks/main.yml && ok "drain gated to the voice tier" || bad "drain not gated to voice"
 grep -q "voice_drain_grace_seconds" roles/compose_tier/tasks/drain.yml && ok "bounded grace window in drain" || bad "no grace window in drain"
 grep -q "voice_lb_drain_cmd" roles/compose_tier/tasks/drain.yml && ok "LB node-down hook present (INFRA-002 seam)" || bad "no LB drain hook"
+# TASK-INFRA-007: the drain/enable hooks are now WIRED (not empty) to the HAProxy
+# admin socket, delegated to the LB nodes; QA asserts the wiring offline.
+VOICE_VARS="group_vars/voice.yml"
+grep -Eq "voice_lb_drain_cmd: .+socat.+admin.sock" "$VOICE_VARS"  && ok "drain cmd populated (socat -> admin.sock)"  || bad "voice_lb_drain_cmd not wired to the admin socket"
+grep -Eq "voice_lb_enable_cmd: .+socat.+admin.sock" "$VOICE_VARS" && ok "enable cmd populated (socat -> admin.sock)" || bad "voice_lb_enable_cmd not wired to the admin socket"
+grep -q "state drain" "$VOICE_VARS" && grep -q "state ready" "$VOICE_VARS" && ok "drain/enable set HAProxy server state" || bad "drain/enable missing state drain|ready"
+grep -q "voice_lb_socket_hosts" "$VOICE_VARS" && ok "LB socket hosts declared for delegation" || bad "no voice_lb_socket_hosts declared"
+grep -q "delegate_to:" roles/compose_tier/tasks/drain.yml && ok "drain delegated to the LB node(s)" || bad "drain not delegated to LB"
+grep -q "delegate_to:" roles/compose_tier/tasks/main.yml && ok "re-enable delegated to the LB node(s)" || bad "re-enable not delegated to LB"
 
 # --- 8. Health verification ----------------------------------------------------
 grep -q "ansible.builtin.uri" roles/compose_tier/tasks/health.yml && ok "HTTP health probe present" || bad "no HTTP health probe"

@@ -137,21 +137,23 @@ calls" cannot be done from the outside. Draining is therefore best-effort:
 
 1. **Rolling `serial: 1`** — only one bridge recreates at a time; the VIP peer
    keeps serving new and existing calls.
-2. **LB node-down/up hook** — `voice_lb_drain_cmd` marks the node down at the load
-   balancer so NEW calls stop hitting it during recreate, `voice_lb_enable_cmd`
-   restores it once healthy. Empty until HAProxy is configured (`TASK-INFRA-002`);
-   the playbook prints a warning when unset.
+2. **LB node-down/up hook** (`TASK-INFRA-007`) — `voice_lb_drain_cmd` sets this
+   bridge's server to `state drain` on every LB node via the HAProxy admin socket
+   (`socat … /run/haproxy/admin.sock`), so NEW calls stop hitting it during
+   recreate; `voice_lb_enable_cmd` sets it back to `state ready` once healthy. Both
+   are delegated to `voice_lb_socket_hosts` (the `[lb]` group). Live behaviour is
+   validated once LB-host SSH access exists (deferred to `TASK-INFRA-006`); the
+   playbook prints a warning and falls back to grace-only if the hook is disabled
+   (`-e voice_lb_socket_hosts=[]`).
 3. **Bounded grace** — `voice_drain_grace_seconds` (default 60s) lets an in-flight
    call wind down before the container is recreated.
 
-**To make draining exact**, complete one of:
+**To make draining exact**, complete the remaining path:
 
-- **HAProxy node-down** (`TASK-INFRA-002`): set `voice_lb_drain_cmd` /
-  `voice_lb_enable_cmd` to the socket/admin command that disables the backend
-  server, so new calls are provably stopped before recreate; or
 - **Bridge `/drain` endpoint** (follow-up): expose active-session count and a
   drain mode on the voice bridge, and replace the fixed grace with a poll-until-zero
-  (bounded) wait.
+  (bounded) wait. The LB node-down hook above already stops *new* calls; this closes
+  the "wait until 0 active calls" gap the bridge cannot yet report.
 
 Until then, prefer deploying voice during a low-traffic window.
 

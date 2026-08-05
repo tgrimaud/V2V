@@ -81,11 +81,15 @@
 - name: "Verify the {{ tier }} stack is healthy"
   ansible.builtin.include_tasks: health.yml
 
-# Voice tier only: put the node back in rotation once healthy.
+# Voice tier only: put the node back in rotation on each LB once healthy
+# (TASK-INFRA-007, delegated to the admin socket on every LB node).
 - name: "Re-enable the voice bridge in the load balancer"
-  ansible.builtin.command:
+  ansible.builtin.shell:
     cmd: "{{ voice_lb_enable_cmd }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ voice_lb_socket_hosts }}"
   when:
     - tier == 'voice'
     - voice_lb_enable_cmd | length > 0
+    - voice_lb_socket_hosts | length > 0
   changed_when: true

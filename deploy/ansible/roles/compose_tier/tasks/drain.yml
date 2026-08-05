@@ -1,20 +1,27 @@
 ---
-# Best-effort voice session draining (TASK-OPS-002). See group_vars/voice.yml and
-# docs/operations/release-process.md for the limitation and the two completion paths.
+# Best-effort voice session draining (TASK-OPS-002, wired in TASK-INFRA-007). See
+# group_vars/voice.yml and docs/operations/release-process.md for the ceiling and
+# the remaining path to an exact drain (bridge /drain endpoint).
 
-- name: "Stop new calls: mark {{ inventory_hostname }} down at the load balancer"
-  ansible.builtin.command:
+# The admin socket lives on the LB nodes, so the drain is delegated to each of them
+# (either may hold the VIP via Keepalived). Uses shell because socat needs the pipe.
+- name: "Stop new calls: mark {{ voice_lb_server_name }} 'drain' on each LB node"
+  ansible.builtin.shell:
     cmd: "{{ voice_lb_drain_cmd }}"
-  when: voice_lb_drain_cmd | length > 0
+  delegate_to: "{{ item }}"
+  loop: "{{ voice_lb_socket_hosts }}"
+  when:
+    - voice_lb_drain_cmd | length > 0
+    - voice_lb_socket_hosts | length > 0
   changed_when: true
 
 - name: "Warn when no LB drain hook is wired (calls not stopped, grace only)"
   ansible.builtin.debug:
     msg: >-
-      voice_lb_drain_cmd is empty: new calls are NOT stopped during recreate.
-      Relying on serial:1 rolling + a {{ voice_drain_grace_seconds }}s grace window.
-      Wire the HAProxy node-down hook (TASK-INFRA-002) for a true drain.
-  when: voice_lb_drain_cmd | length == 0
+      No LB drain hook active (voice_lb_drain_cmd or voice_lb_socket_hosts empty):
+      new calls are NOT stopped during recreate. Relying on serial:1 rolling + a
+      {{ voice_drain_grace_seconds }}s grace window only.
+  when: voice_lb_drain_cmd | length == 0 or voice_lb_socket_hosts | length == 0
 
 - name: "Grace window for in-flight calls to wind down"
   ansible.builtin.pause:

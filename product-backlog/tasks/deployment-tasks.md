@@ -884,7 +884,15 @@ without these.
 **Related decisions:** ADR-0038
 **Depends on:** TASK-INFRA-002 (HAProxy), TASK-OPS-002 (rolling deploy)
 **Classification:** V1 pilot deployment (release correctness)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-05, branch `task/TASK-INFRA-007-deploy-release-safety`) —
+HAProxy `backend_java` now probes the deep `/actuator/health` (DB + Redis-when-enabled,
+503 on degradation) instead of the static `/api/health`; the voice drain/enable hooks are
+wired to the HAProxy admin socket (`socat … /run/haproxy/admin.sock`, `state drain`/`ready`)
+and delegated to every LB node (`voice_lb_socket_hosts`, either may hold the VIP). QA:
+`qa-validate-haproxy.sh` 33/33 (incl. real `haproxy -c` + "no static `/api/health`" regression)
+and `qa-validate-ansible.sh` 41/41 (incl. syntax-check + drain-wiring assertions). Live
+drain/health behaviour deferred to TASK-INFRA-006 (LB-host SSH access). Runtime-affecting:
+deploy/health config only, no application code change.
 **Priority:** Medium
 **Branch:** `task/TASK-INFRA-007-deploy-release-safety`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — HAProxy probes a
