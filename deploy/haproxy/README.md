@@ -61,6 +61,25 @@ HAProxy after rotation (`systemctl reload haproxy`).
 - Two independent `vrrp_instance` blocks (VOICE_VIP vrid 51, BACKEND_VIP vrid 52)
   let the two VIPs fail over independently.
 
+## Edge rate limiting (TASK-INFRA-004)
+
+The public voice frontend (`.10:443`) sheds per-source-IP bursts at the TLS edge
+before they reach the bridges, using a stick-table:
+
+```
+stick-table type ip size 100k expire 10m store conn_rate(10s),http_req_rate(10s)
+tcp-request connection track-sc0 src
+tcp-request connection reject   if { sc0_conn_rate    gt 50 }   # >50 conns / 10s / IP
+http-request deny deny_status 429 if { sc0_http_req_rate gt 100 }  # >100 reqs / 10s / IP
+```
+
+- Scope: **signaling + UI HTTP only.** WebRTC media is UDP peer-to-peer (not
+  proxied), so a call's audio is never rate-limited by this.
+- The thresholds are **pilot defaults** (generous for a browser loading many page
+  assets); tune them once live traffic shape is known. The internal backend
+  frontend (`.11:8080`, LB→backend only) is intentionally **not** rate-limited.
+- A rejected request returns `429`; a connection-rate breach is dropped at accept.
+
 ## Voice draining hook (wires TASK-OPS-002)
 
 The admin socket (`/run/haproxy/admin.sock`) lets the OPS-002 deploy drain a
