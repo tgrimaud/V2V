@@ -52,6 +52,14 @@ grep -Eq 'server .* check' "$CFG"                         && ok "backends use ac
 grep -q 'stats socket /run/haproxy/admin.sock' "$CFG"     && ok "admin socket present (OPS-002 drain seam)" || bad "admin socket missing"
 grep -q 'ssl-min-ver TLSv1.2' "$CFG"                      && ok "TLS min version >= 1.2"                || bad "TLS floor not set"
 
+# Edge rate limiting (TASK-INFRA-004): the public voice frontend sheds per-IP bursts.
+grep -q 'stick-table type ip .*conn_rate' "$CFG" && grep -q 'http_req_rate' "$CFG" && ok "edge stick-table tracks conn_rate + http_req_rate" || bad "edge rate-limit stick-table missing"
+grep -q 'tcp-request connection track-sc0 src' "$CFG"    && ok "source IP tracked at connection"       || bad "no per-source tracking"
+grep -q 'tcp-request connection reject if { sc0_conn_rate gt' "$CFG" && ok "connection-rate burst rejected"     || bad "no connection-rate limit"
+grep -q 'http-request deny deny_status 429 if { sc0_http_req_rate gt' "$CFG" && ok "request-rate burst denied (429)" || bad "no request-rate limit"
+# The rate limit lives on the public voice edge, not the internal backend frontend.
+awk '/^frontend voice_https/{v=1} /^frontend backend_http/{v=0} v&&/stick-table/{f=1} END{exit !f}' "$CFG" && ok "rate limit scoped to the voice TLS edge" || bad "rate limit not on the voice frontend"
+
 # --- 3. Keepalived VRRP invariants --------------------------------------------
 for f in "$T01" "$T02"; do
   grep -q 'vrrp_instance VOICE_VIP' "$f" && grep -q 'vrrp_instance BACKEND_VIP' "$f" \

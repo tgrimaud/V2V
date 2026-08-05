@@ -371,6 +371,67 @@ Self-hosted LLM/STT/TTS (infra-v1 GPU option) - not a pilot prerequisite.
 
 ---
 
+## TASK-INFRA-004 - HAProxy edge rate limiting (per-IP burst control at the voice TLS edge)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038, ADR-0033 (WebRTC/TLS edge)
+**Depends on:** TASK-INFRA-002 (HAProxy/Keepalived config)
+**Classification:** V1 pilot deployment (edge security hardening)
+**Status:** 🚧 Implemented on `task/TASK-INFRA-004-haproxy-edge-rate-limit`
+(from `feat/sprint-11-remote-deployment`, 2026-08-05). QA green: `qa-validate-haproxy.sh`
+**30/30** incl. a real `haproxy -c` parse of the rate-limited config (via the haproxy:2.8
+container). Live burst test deferred to the LB hosts. Merge on explicit user request.
+**Priority:** Low
+**Branch:** `task/TASK-INFRA-004-haproxy-edge-rate-limit`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — low-severity
+finding: the public TLS edge had no rate limiting, so a single client could flood the
+signaling/UI surface and the bridges behind it.
+
+### Context
+
+INFRA-002 stood up the voice TLS edge (`.10:443`) with roundrobin LB + health checks but
+**no abuse control**. On a public/Prodpriv edge, an unbounded client can open connections
+and issue signaling/UI requests as fast as it likes, exhausting bridge resources. WebRTC
+*media* is UDP peer-to-peer (not proxied), so only the HTTP signaling/UI surface is exposed
+here — but that surface still fronts the bridges and deserves a burst ceiling.
+
+### Scope
+
+- Add a per-source-IP stick-table on the **voice** frontend tracking `conn_rate` +
+  `http_req_rate` (10s windows); reject connection-rate bursts at accept and deny
+  request-rate bursts with **429**, before the bridges.
+- Keep the **internal** backend frontend (`.11:8080`, LB→backend only) unrate-limited.
+- Pilot-tuned thresholds (generous for a browser), documented as tunable; media never
+  affected.
+
+### Acceptance
+
+- The voice frontend carries the stick-table + `track-sc0` + a connection-rate reject +
+  an http-request 429 deny; the config still passes `haproxy -c`.
+- The rate limit is scoped to the voice edge, not the internal backend frontend.
+- `qa-validate-haproxy.sh` stays green with the new checks.
+
+### Implementation notes (2026-08-05)
+
+- `haproxy.cfg` voice frontend: `stick-table type ip size 100k expire 10m store
+  conn_rate(10s),http_req_rate(10s)`; `tcp-request connection track-sc0 src`;
+  `tcp-request connection reject if { sc0_conn_rate gt 50 }`;
+  `http-request deny deny_status 429 if { sc0_http_req_rate gt 100 }`.
+- `qa-validate-haproxy.sh`: +5 checks (stick-table counters, source tracking, conn-rate
+  reject, 429 request-rate deny, and an `awk` scope check that the stick-table is under the
+  voice frontend, not the backend one) → **30/30** with the container `haproxy -c` parse.
+- `README.md`: new "Edge rate limiting" section (config snippet, pilot-threshold note,
+  media-not-affected caveat).
+
+### Residual (accepted / deferred)
+
+- **Threshold tuning + a live burst test** need real traffic + LB-host access — deferred;
+  the parse + structural checks are deterministic.
+- Distributed floods (many source IPs) are out of scope for a per-IP table; a WAF / global
+  concurrency cap is a later hardening if the pilot goes wider.
+
+---
+
 ## TASK-OPS-003 - Host prerequisites (Docker Engine + compose plugin) via Ansible
 
 **Parent:** EPIC-012
