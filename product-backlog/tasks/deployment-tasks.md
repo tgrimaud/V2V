@@ -804,8 +804,18 @@ of a session's signaling to the bridge that answered the offer.
 **Related decisions:** ADR-0038
 **Depends on:** TASK-OPS-001 (the workflows)
 **Classification:** V1 pilot deployment (CI supply-chain hardening)
-**Status:** Proposed (2026-08-05) — **ticket only, deferred** (low risk for a private-repo
-pilot; recommended before wider exposure).
+**Status:** ✅ Implemented (2026-08-06, branch `task/TASK-OPS-006-pin-actions-sha`) — all 8
+third-party `uses:` in `tests.yml` + `images.yml` repinned to full commit SHAs (with a
+trailing `# vX.Y.Z` readability comment), resolved live via `git ls-remote` (identical to the
+commit each floating major tag pointed to, so no behaviour change): `actions/checkout` v4.4.0,
+`actions/setup-java` v4.9.1, `actions/setup-python` v5.6.0, `docker/metadata-action` v5.10.0,
+`docker/setup-buildx-action` v3.12.0, `docker/login-action` v3.7.0, `docker/build-push-action`
+v6.19.2. Added `.github/dependabot.yml` (weekly `github-actions` ecosystem, grouped
+actions/docker PRs, `ci` commit prefix) so SHAs are bumped by reviewed PRs. The local reusable
+`uses: ./.github/workflows/tests.yml` is intentionally exempt (same-repo ref). QA:
+`.github/qa-validate-workflows.sh` **27/27** (+3 new: SHA-pin, `# vX.Y.Z` comment guard,
+Dependabot presence/YAML) and `actionlint` clean. **Not runtime-affecting** (CI-only; no app
+code, no new latency slice → no OpenTelemetry change). Pending review/merge on user request.
 **Priority:** Low
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the CI workflows
 reference third-party actions by **mutable major-version tags**, not immutable commit SHAs.
