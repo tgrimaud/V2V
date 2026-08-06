@@ -809,3 +809,45 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/tasks/{web-voice-tasks.md, backend-hardening-tasks.md}` — WEB-021 / BE-017
   merged status
 - `done-tasks.md` — this entry
+
+## 2026-08-06 — Sprint 11: centralized observability (OPS-007) + latency-lever defaults (WEB-022)
+
+**Summary:**
+
+- **TASK-OPS-007 — centralized pilot observability.** Voice→backend spans previously
+  landed in **separate traces** because the voice runtime records telemetry and exports
+  **post-hoc** (no live OTel context during the HTTP call). Fix: derive a **deterministic**
+  W3C `traceparent` from the `correlation_id` (pure BLAKE2b → 128-bit trace + 64-bit span,
+  new `voice_common/trace_context.py`), inject it on the backend hop, and anchor the exported
+  `voice.turn` root under the **same** derived context; children now parent to the root via
+  `set_span_in_context(root)` so a turn is one span tree. Backend continues the trace via
+  `micrometer-tracing-bridge-otel` (default W3C propagation + **ParentBased** sampler — the
+  `01` sampled flag survives a low probability arg). Shipped an **opt-in** collector+Prometheus
+  stack (`deploy/observability/docker-compose.otel.yml`, `prometheus.yml`, scrapes the
+  collector `:8889`, UI `:9090`) enabled by **one** Ansible variable `otel_collector_endpoint`
+  (empty ⇒ export OFF on both tiers).
+- **TASK-WEB-022 — latency-gate remediation / sign-off.** Product/Architecture decisions:
+  (1) **flip the validated levers to code defaults** so a default pilot run uses the fast path —
+  `VOICE_BACKEND_STREAM` default **ON** (lever 1), end-of-turn hold default **350 ms** (lever 3),
+  backend warm-up ON (lever 2); **STT pre-warm stays OFF** (unvalidated Gradium idle-socket).
+  (2) **Keep the ADR-0029 gate at m2e p95 ≤ 1.5 s** (revision rejected — >1.5 s breaks deals per
+  market data); it stays **OPEN**, still FAILED by ~640 ms (p95 ≈ 2142 ms combined cold), residual
+  handed to **TASK-STT-014** + **TASK-BE-020** + a live re-measure (blocked on platform access).
+  The runtime default lives in `_silence_window_config()` (350 ms), the detector library constant
+  stays 500 ms for batch/fixture; `backend_stream_enabled()` env parsing inverted to fail-safe.
+- Both tickets **merged into `feat/sprint-11-remote-deployment`** (fast-forward) and **WEB-022
+  user-validated on the live local stack** (backend + voice-agent + Postgres + Ollama, WebRTC at
+  `http://127.0.0.1:8090/webrtc.html`; "ca marche plutôt bien").
+
+### Files changed
+- `voice-agent/voice_common/trace_context.py` — deterministic BLAKE2b `derive_trace_ids` / `derive_traceparent`
+- `voice-agent/conversation_backend/http_backend.py` — inject `traceparent` on the backend hop
+- `voice-agent/voice_common/otel_export.py` — `_parent_context()` root anchoring + child parenting
+- `voice-agent/voice_pipeline/answer.py` — `backend_stream_enabled()` default ON (fail-safe parse)
+- `voice-agent/web_voice/webrtc_signaling.py` — `PILOT_END_OF_TURN_SILENCE_MS = 350.0` default
+- `voice-agent/tests/test_webrtc_signaling.py` — expect the 350 ms pilot default
+- `deploy/observability/{docker-compose.otel.yml, prometheus.yml}` — opt-in collector + Prometheus
+- `deploy/ansible/group_vars/all/vars.yml` + `roles/compose_tier/templates/{backend,voice}.env.j2` — `otel_collector_endpoint` wiring
+- `docs/architecture/adrs/{ADR-0037,ADR-0029}-*.md` — WEB-022 sign-off (levers default, gate kept 1.5 s OPEN)
+- `docs/{observability/voice-journey-timing.md, qa/streaming-voice-qa-report.md, product/v1-scope.md, operations/deployment-eir-ai4cc-tst.md}` — default-lever notes
+- `product-backlog/{tasks/web-voice-tasks.md, sprints/sprint-11-remote-deployment.md, backlog-index.md}` — statuses
