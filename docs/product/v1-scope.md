@@ -8,7 +8,10 @@
 > over batch `POST /api/voice/turn` and streaming WebRTC with barge-in, plus the
 > pilot deployment packaging (Docker/compose, HAProxy VIPs, CI, Ansible). The
 > `time_to_first_audio` / mouth-to-ear latency slices are instrumented end-to-end
-> (ADR-0029 pilot gate — currently **not met**, p95 ≈ 2142 ms).
+> (ADR-0029 pilot gate ≤ 1.5 s — currently **not met**, p95 ≈ 2142 ms). The validated
+> latency levers are now **default-on** (first-sentence streaming + 350 ms end-of-turn
+> hold, TASK-WEB-022); the residual ~640 ms is handed to TASK-STT-014 + TASK-BE-020 and a
+> live re-measurement (blocked on platform open inputs).
 >
 > **NOT built yet (this whole "V1 Functional Scope" section is a target):**
 > Billing/BSS access, invoice PDF extraction + deterministic comparison, customer

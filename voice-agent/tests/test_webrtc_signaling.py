@@ -329,11 +329,12 @@ class SilenceWindowConfigTest(unittest.TestCase):
         else:
             os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = self._saved
 
-    def test_unset_yields_no_override(self) -> None:
-        from web_voice.webrtc_signaling import _silence_window_config
+    def test_unset_yields_the_pilot_tuned_default(self) -> None:
+        from web_voice.webrtc_signaling import PILOT_END_OF_TURN_SILENCE_MS, _silence_window_config
 
-        # GIVEN no override -> THEN the processor default applies (empty config)
-        self.assertEqual(_silence_window_config(), {})
+        # GIVEN no override -> THEN the validated pilot tuned hold applies (TASK-WEB-022)
+        self.assertEqual(_silence_window_config(), {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS})
+        self.assertEqual(PILOT_END_OF_TURN_SILENCE_MS, 350.0)
 
     def test_valid_override_above_floor_is_honoured(self) -> None:
         import os
@@ -359,11 +360,13 @@ class SilenceWindowConfigTest(unittest.TestCase):
 
         from web_voice.webrtc_signaling import _silence_window_config
 
-        # GIVEN a non-numeric / non-positive value -> THEN no override (default wins)
+        # GIVEN a non-numeric / non-positive value -> THEN the pilot tuned default wins
+        from web_voice.webrtc_signaling import PILOT_END_OF_TURN_SILENCE_MS
+
         os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "soon"
-        self.assertEqual(_silence_window_config(), {})
+        self.assertEqual(_silence_window_config(), {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS})
         os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "0"
-        self.assertEqual(_silence_window_config(), {})
+        self.assertEqual(_silence_window_config(), {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS})
 
     def test_below_floor_logs_a_clamp_warning_once(self) -> None:
         import os

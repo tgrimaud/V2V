@@ -62,22 +62,26 @@ BACKEND_WARMUP_EVENT = "voice.backend.warmup"
 BACKEND_WARMUP_METRIC = "voice.backend.warmup.count"
 
 # TASK-WEB-020 (lever 1): stream the backend answer to TTS on the first vetted sentence
-# instead of waiting for the whole answer. Opt-in (default OFF) so the blocking path stays
-# the safe fallback until the live before/after pass validates the win (ADR-0037).
+# instead of waiting for the whole answer. Default ON since TASK-WEB-022: the live
+# before/after pass (2026-07-30, real backend, DEC-002 held 5/5) recorded it as a strict
+# win with no regression (mouth-to-ear p50 2697 → 1831 ms, −866), so the fast path is the
+# pilot default. A deployment can still fall back to the safe blocking path with an
+# explicit falsy value (ADR-0037).
 BACKEND_STREAM_ENV_VAR = "VOICE_BACKEND_STREAM"
 
 
 def backend_stream_enabled() -> bool:
-    """Whether to stream the backend answer sentence-by-sentence (default OFF, opt-in).
+    """Whether to stream the backend answer sentence-by-sentence (default ON since WEB-022).
 
-    Enabled only by an explicit truthy value (`1`/`true`/`yes`/`on`); anything else — and
-    an unset variable — keeps the safe blocking path, so the lever ships dark and is
-    switched on deliberately for the measured live pass.
+    Disabled only by an explicit falsy value (`0`/`false`/`no`/`off`); anything else — and
+    an unset variable — uses the streamed first-sentence path (the validated latency win).
+    Mirrors `backend_warmup_enabled` so a deployment can switch the lever off without a code
+    change while it stays on by default.
     """
     raw = os.environ.get(BACKEND_STREAM_ENV_VAR)
     if raw is None:
-        return False
-    return raw.strip().lower() in ("1", "true", "yes", "on")
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
 
 
 def backend_warmup_enabled() -> bool:

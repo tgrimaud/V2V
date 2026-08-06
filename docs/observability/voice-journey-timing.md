@@ -328,6 +328,16 @@ is the job of levers 1 (backend SSE first-sentence → TTS) and 2 (connect-time 
 full pilot pass is written up in
 [`streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md#live-pilot-pass--real-backend-mouth-to-ear--lever-3-beforeafter-2026-07-29).
 
+**Default levers as of TASK-WEB-022 (2026-08-06).** The validated levers are now the code
+defaults so a default run uses the fast path (the review's "pilot runs slower than measured"
+gap is closed): `VOICE_BACKEND_STREAM` **ON** (lever 1, strict-win first-sentence streaming),
+the streaming runtime end-of-turn hold **350 ms** (lever 3, `PILOT_END_OF_TURN_SILENCE_MS` in
+`web_voice/webrtc_signaling.py`; the detector library default `DEFAULT_SILENCE_WINDOW_MS`
+stays 500 ms for batch/fixture callers), backend warm-up **ON** (lever 2). **STT pre-warm
+stays OFF** (unvalidated Gradium idle-socket). The ADR-0029 gate is still FAILED by ~640 ms
+even with levers 1+2 (combined cold m2e p95 ≈ 2142 ms); the residual is handed to
+TASK-STT-014 + TASK-BE-020 and a live re-measurement — the gate number stays 1.5 s.
+
 The `backend_first_token` slice is measured for both the `stub` and `http`
 backends (the span comes from `voice_pipeline/answer.py` on the blocking path and from
 `voice_pipeline/streaming_answer.py` on the streamed path, not the adapter), and a

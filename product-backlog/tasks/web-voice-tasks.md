@@ -2300,7 +2300,26 @@ Scenario: Warm-up never leaks a session or blocks the first turn
 **Related decisions:** ADR-0029 (pilot latency criterion), ADR-0018, ADR-0037
 **Depends on:** TASK-WEB-015/020 (latency levers), TASK-OPS-007 (measurement)
 **Classification:** V1 pilot readiness (latency gate)
-**Status:** 📋 Open — ready to start
+**Status:** ✅ Implemented (2026-08-06, branch `task/TASK-WEB-022-latency-gate-remediation`) —
+Product/Architecture sign-off resolved the two decisions this ticket gated on: **(1) flip the
+validated levers to their code defaults** so a default run uses the fast path (closing the
+review's "pilot runs slower than measured" gap), and **(2) keep the ADR-0029 gate at m2e p95
+≤ 1.5 s** (revision rejected — market data: > 1.5 s breaks deals). Code: `VOICE_BACKEND_STREAM`
+default → **ON** (`voice_pipeline/answer.py`, Live Lever-1 strict win, DEC-002 5/5); streaming
+end-of-turn hold default → **350 ms** (`PILOT_END_OF_TURN_SILENCE_MS` in
+`web_voice/webrtc_signaling.py`; detector library default stays 500 ms for batch/fixture);
+backend warm-up stays **ON**; **STT pre-warm stays OFF** (unvalidated Gradium idle-socket —
+documented as the one lever kept dark). Deploy config already carried these values
+(`group_vars/voice.yml`, `.env.example` refreshed). Gate remains **FAILED** by ~640 ms
+(combined cold m2e p95 ≈ 2142 ms); the residual is handed to **TASK-STT-014** (STT
+finalize-tail) + **TASK-BE-020** (first-sentence backend generation) plus a **live
+re-measurement** on the tst collector (needs TASK-OPS-007 aggregation + platform open inputs).
+No pilot SLO claimed until that live p95 exists. Docs: ADR-0037 + ADR-0029 status notes,
+`voice-journey-timing.md`, `streaming-voice-qa-report.md` (TASK-WEB-022 section), v1-scope +
+deployment env tables. QA: voice-agent 476 unittest + 169 behave green; `git diff --check`
+clean; no Ansible-validated surface changed (only comment lines in `.env.example`).
+Runtime-affecting: default behaviour of the streaming path + end-of-turn hold (instrumentation
+unchanged). **Live gate re-measurement remains deferred** (platform-blocked).
 **Priority:** High
 **Branch:** `task/TASK-WEB-022-latency-gate-remediation`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,

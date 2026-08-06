@@ -585,3 +585,21 @@ spare). No leak, no fallback.
   operational controls.
 - **Required before an SLO claim (ADR-0010):** per-channel/per-step dashboards,
   alerting, degraded-mode and provider-outage tests — out of this sprint.
+
+## TASK-WEB-022 — Latency levers made default + gate status (2026-08-06)
+
+Follows the review finding that the levers shipped OFF (so a default pilot run was *slower*
+than the measured numbers). Product/Architecture sign-off (2026-08-06):
+
+- **Levers flipped to their validated code defaults** (offline regression re-run green:
+  voice-agent 476 unittest + 169 behave): `VOICE_BACKEND_STREAM` **ON** (Live Lever-1 pass:
+  strict win, m2e p50 −866 ms, DEC-002 5/5), end-of-turn hold **350 ms**
+  (`PILOT_END_OF_TURN_SILENCE_MS`; Live 2026-07-29: 0/10 false-cut vs 500 ms), backend
+  warm-up **ON** (Live Lever-2 pass: cold turn-1 spike removed). **STT pre-warm stays OFF** —
+  the only lever with an unvalidated turn-1 idle-socket failure mode.
+- **Gate unchanged at m2e p95 ≤ 1.5 s and still FAILED** (combined cold p95 ≈ 2142 ms,
+  margin −642 ms). Revising the number was rejected (market data: > 1.5 s breaks deals). The
+  residual ~640 ms is handed to **TASK-STT-014** (STT finalize-tail) + **TASK-BE-020**
+  (first-sentence backend generation), then a **live re-measurement** on the tst collector
+  (TASK-OPS-007 aggregation + platform open inputs). No pilot SLO is claimed until that live
+  p95 is captured; this ticket closes the "levers default" half only.

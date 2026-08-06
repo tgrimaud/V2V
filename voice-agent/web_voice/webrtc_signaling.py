@@ -122,23 +122,30 @@ def _barge_in_config() -> dict[str, int]:
     return config
 
 
-def _silence_window_config() -> dict[str, float]:
-    """Read the optional end-of-turn hold override (TASK-WEB-015 lever 3).
+# TASK-WEB-022 (lever 3): the tuned end-of-turn hold is the pilot RUNTIME default. The live
+# before/after pass (2026-07-29, real backend) measured 350 ms with a 0/10 premature-cut rate
+# (vs 500 ms), so the streaming runtime holds 350 ms by default while the detector library
+# default (`DEFAULT_SILENCE_WINDOW_MS`, 500 ms) stays untouched for batch/fixture callers.
+PILOT_END_OF_TURN_SILENCE_MS = 350.0
 
-    `VOICE_END_OF_TURN_SILENCE_MS` tunes the trailing-silence window (default 500 ms)
-    down toward `MIN_SAFE_SILENCE_WINDOW_MS` to shave latency. A value below the floor
-    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop
-    into constant premature cuts; unset or invalid -> the processor default applies.
+
+def _silence_window_config() -> dict[str, float]:
+    """Resolve the end-of-turn hold for the streaming runtime (TASK-WEB-015/022 lever 3).
+
+    Defaults to the validated tuned hold (`PILOT_END_OF_TURN_SILENCE_MS`, 350 ms).
+    `VOICE_END_OF_TURN_SILENCE_MS` overrides it: a value below `MIN_SAFE_SILENCE_WINDOW_MS`
+    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop into
+    constant premature cuts; unset or invalid -> the pilot default applies.
     """
     raw = os.environ.get("VOICE_END_OF_TURN_SILENCE_MS")
     if raw is None:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     try:
         value = float(raw)
     except ValueError:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     if value <= 0:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     if value < MIN_SAFE_SILENCE_WINDOW_MS:
         _warn_silence_clamp_once(value)
         return {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS}
@@ -154,6 +161,12 @@ def _stt_prewarm_enabled() -> bool:
     `acquire()` only recovers from an open *failure*, not from a stale-but-opened session,
     so this stays opt-in (`VOICE_STT_PREWARM=1`) until the live turn-1 sample confirms it is
     safe. The connect-time backend warm-up (the larger, side-effect-free win) stays on.
+
+    TASK-WEB-022 decision: this is the ONE latency lever deliberately kept OFF by default —
+    levers 1 (`VOICE_BACKEND_STREAM`) and 3 (end-of-turn hold) are now default-on because
+    their live before/after showed a strict win with no regression, whereas STT pre-warm's
+    turn-1 safety is unvalidated and its failure mode degrades the first turn. Enable it only
+    with a live turn-1 sample confirming a `voice.stt.prewarm` `hit` (not a stale `fallback`).
     """
     raw = os.environ.get("VOICE_STT_PREWARM")
     if raw is None:

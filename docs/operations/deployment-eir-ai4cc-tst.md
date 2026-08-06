@@ -160,7 +160,8 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `VOICE_TURN` | TURN URLs (confirm) | Comma-separated; relayed media when host candidates are unreachable |
 | `VOICE_TURN_USERNAME` | from platform | TURN relay username (config) |
 | `VOICE_TURN_CREDENTIAL` | from secrets (`vault_turn_credential`) | TURN relay credential (never committed) |
-| `VOICE_BACKEND_STREAM` | `1` (pilot GO) | lever 1; code default OFF (TASK-WEB-020) |
+| `VOICE_BACKEND_STREAM` | `1` (pilot GO) | lever 1; **code default now ON** (TASK-WEB-022) — set `0` to force the blocking path |
+| `VOICE_END_OF_TURN_SILENCE_MS` | unset ⇒ 350 ms | lever 3; validated tuned hold is the code default (TASK-WEB-022); override to retune |
 | `VOICE_BACKEND_WARMUP` | on | connect-time warm-up (TASK-WEB-021) |
 | `VOICE_STT_PREWARM` | evaluate | opt-in; validate idle-socket behaviour live |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset ⇒ OFF; set `otel_collector_endpoint` to enable | per-turn spans → centralized collector; `voice.turn` trace stitches to backend via derived `traceparent` (TASK-OPS-007) |
