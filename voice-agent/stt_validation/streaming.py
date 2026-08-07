@@ -17,7 +17,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Protocol
+from typing import Awaitable, Callable, Protocol, runtime_checkable
 
 DEFAULT_MODEL = "default"
 DEFAULT_LANGUAGE = "fr"
@@ -42,6 +42,40 @@ class FinalTranscript:
 
 class StreamingSttError(RuntimeError):
     """Streaming STT failed. The message is safe to surface (never carries the key)."""
+
+
+@runtime_checkable
+class StreamingSttSession(Protocol):
+    """A single live streaming-STT turn (TASK-WEB-023).
+
+    The explicit contract the WebRTC hot path (`StreamingSttProcessor`) drives, so any
+    vendor — not just Gradium — can back it: push audio, drain partials as they stream,
+    finalize on end-of-turn, then close. `GradiumStreamingSession` is one implementation.
+    """
+
+    async def send_audio(self, pcm: bytes) -> None: ...
+
+    def poll_partials(self) -> list[PartialTranscript]: ...
+
+    async def finish(self) -> None: ...
+
+    async def wait_final(self) -> FinalTranscript: ...
+
+    async def aclose(self) -> None: ...
+
+
+@runtime_checkable
+class StreamingSttProvider(Protocol):
+    """Opens `StreamingSttSession`s for the low-latency voice path (TASK-WEB-023).
+
+    Breaks the Gradium lock on the streaming (latency-critical) STT path: the runtime and
+    the provider factory depend on this protocol, not on `GradiumStreamingSttProvider`.
+    A conforming provider exposes a stable `name` and an async `open()`.
+    """
+
+    name: str
+
+    async def open(self) -> StreamingSttSession: ...
 
 
 class WebSocketLike(Protocol):

@@ -23,7 +23,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Protocol
+from typing import Any, AsyncIterator, Awaitable, Callable, Protocol, runtime_checkable
 
 from .providers import DEFAULT_AUDIO_FORMAT, EmptyTextError
 
@@ -49,6 +49,40 @@ class AudioChunk:
 
 class StreamingTtsError(RuntimeError):
     """Streaming TTS failed. The message is safe to surface (never carries the key)."""
+
+
+@runtime_checkable
+class StreamingTtsSession(Protocol):
+    """A single streaming-TTS synthesis (TASK-WEB-023).
+
+    Send-once / receive-many: push the text, then stream `AudioChunk`s for incremental
+    playback, then close. The explicit contract the WebRTC hot path
+    (`StreamingTtsProcessor`) drives so any vendor can back it; `GradiumStreamingTtsSession`
+    is one implementation.
+    """
+
+    async def synthesize(self, text: str) -> None: ...
+
+    def stream(self) -> AsyncIterator[AudioChunk]: ...
+
+    async def aclose(self) -> None: ...
+
+
+@runtime_checkable
+class StreamingTtsProvider(Protocol):
+    """Opens `StreamingTtsSession`s for incremental playback (TASK-WEB-023).
+
+    Breaks the Gradium lock on the streaming (latency-critical) TTS path: the runtime and
+    the provider factory depend on this protocol, not on `GradiumStreamingTtsProvider`.
+    A conforming provider exposes a stable `name`, an `audio_format` and an async `open()`.
+    """
+
+    name: str
+
+    @property
+    def audio_format(self) -> str: ...
+
+    async def open(self) -> StreamingTtsSession: ...
 
 
 class WebSocketLike(Protocol):

@@ -12,7 +12,14 @@ from .gradium_tts_provider import (
     GradiumTtsProvider,
 )
 from .models import SynthesisResult, TtsOutcome
-from .provider_factory import PROVIDER_NAMES, build_provider
+from .provider_factory import (
+    PROVIDER_NAMES,
+    build_provider,
+    build_streaming_provider,
+    register_streaming_provider,
+    streaming_provider_names,
+    supports_streaming,
+)
 from .providers import (
     DEFAULT_AUDIO_FORMAT,
     EmptyTextError,
@@ -20,6 +27,7 @@ from .providers import (
     TtsProvider,
 )
 from .runner import EMPTY_TEXT_CODE, TTS_FIRST_AUDIO_SPAN, TtsSynthesisRunner
+from .streaming import StreamingTtsProvider, StreamingTtsSession
 
 __all__ = [
     "DEFAULT_AUDIO_FORMAT",
@@ -32,9 +40,15 @@ __all__ = [
     "TTS_FIRST_AUDIO_SPAN",
     "EmptyTextError",
     "FixtureTtsProvider",
+    "StreamingTtsProvider",
+    "StreamingTtsSession",
     "SynthesisResult",
     "TtsOutcome",
     "TtsProvider",
     "TtsSynthesisRunner",
     "build_provider",
+    "build_streaming_provider",
+    "register_streaming_provider",
+    "streaming_provider_names",
+    "supports_streaming",
 ]
