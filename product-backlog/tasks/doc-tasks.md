@@ -7,8 +7,71 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 |---|---|---|
 | TASK-DOC-001 | Full-branch code review after Sprint 5 | Done (2026-07-15) — tracked in `backlog-index.md` |
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
+| TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | 🚧 In progress (branch `task/TASK-DOC-006-genesys-audio-connector-media-plane`) |
 
 ---
+
+## TASK-DOC-006 - Clarify Genesys AudioHook vs Audio Connector As The V2V Media Plane
+
+**Parent:** EPIC-001 (Product and architecture baseline)
+**Related decisions:** ADR-0020 (Genesys handoff), ADR-0019 (escalation contract),
+ADR-0002 (Pipecat + Gradium), ADR-0009 (independent channel adapters), ADR-0040 (new)
+**Classification:** Documentation + architecture (ADR)
+**Status:** 🚧 In progress
+**Priority:** Medium
+**Branch:** `task/TASK-DOC-006-genesys-audio-connector-media-plane`
+
+### Trigger
+
+While confirming the target Genesys integration, the team read the Genesys
+[AudioHook introduction](https://developer.genesys.cloud/devapps/audiohook/introduction),
+[Protocol Reference](https://developer.genesys.cloud/devapps/audiohook/protocol-reference)
+and [Audio Connector overview](https://help.genesys.cloud/articles/audio-connector-overview/).
+This surfaced a naming/architecture ambiguity: **AudioHook is the protocol, and it
+exposes two very different features** — a listen-only *Bot Transcription Connector*
+(monitoring/transcription) and a **bidirectional *Audio Connector*** (the bot receives
+**and sends** audio: `playback-started`/`playback-completed`, barge-in, `BotTurnResponse`).
+Our V2V bot must **speak** to the caller, so only the **Audio Connector** feature fits.
+ADR-0020 currently treats "Audio Connector or AudioHook routing" as interchangeable,
+which is misleading.
+
+### Objective
+
+Record the correct target integration and remove the ambiguity, without any runtime
+code change.
+
+### Scope
+
+- **ADR-0020** — replace the loose "Audio Connector or AudioHook" wording with the
+  precise distinction (AudioHook = protocol; Audio Connector = the bidirectional
+  feature required for V2V; Bot Transcription Connector = listen-only, not our path).
+- **New ADR-0040** — "Genesys Audio Connector as the V2V media plane": document the
+  three-plane split (media / control-routing / context-handoff), the Audio Connector
+  constraints (premium app, max 5 integrations, one bidirectional stream per session,
+  IVR channel, 15 min default call cap, PCMU/L16 codecs), and the overlap between
+  Genesys-native barge-in/end-of-turn events and the runtime's bespoke detectors.
+- **`docs/architecture/diagrams/target-v1-solution.drawio`** — label the telephony
+  entry as Genesys Cloud CX via Audio Connector (AudioHook `wss`, bidirectional) and
+  clarify that escalation routing is Genesys Architect + Platform API, with context
+  carried on Architect variables / conversation attributes (not on the media socket).
+
+### Out Of Scope
+
+- Any code, port, adapter or endpoint change (no Genesys adapter is implemented yet;
+  full Genesys voice routing stays deferred to Sprint 13, gated by OQ-006).
+- Building or spiking the Audio Connector WebSocket server.
+- Not runtime-affecting → no OpenTelemetry change.
+
+### Acceptance Criteria
+
+- ADR-0020 no longer implies AudioHook (bare) can route the bidirectional bot
+  conversation; it points to ADR-0040 for the media-plane detail.
+- ADR-0040 exists, is `Accepted` (target), lists the three planes, the Audio Connector
+  constraints, and the barge-in/end-of-turn overlap, and is added to the ADR index.
+- The target diagram shows Genesys + Audio Connector on the media edge and Genesys
+  routing on escalation; `python3 -c "import xml.dom.minidom as m; m.parse(...)"` passes.
+- `git diff --check` passes; all touched `docs/` content is in English (the target
+  diagram stays French to match the existing artifact).
 
 ## TASK-DOC-002 - Reconcile Stale "Current-State" Documentation After Sprint 9
 
