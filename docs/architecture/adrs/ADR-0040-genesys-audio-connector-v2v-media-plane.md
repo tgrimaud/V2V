@@ -125,4 +125,5 @@ the NFR budget and must be tracked, not discovered late:
 - `docs/architecture/adrs/ADR-0025-barge-in-native-interruption.md`
 - `docs/architecture/adrs/ADR-0033-webrtc-single-live-voice-transport.md`
 - `docs/architecture/diagrams/target-v1-solution.drawio`
+- `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`
 - Genesys: AudioHook introduction, AudioHook Protocol Reference, Audio Connector overview

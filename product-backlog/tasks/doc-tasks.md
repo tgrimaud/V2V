@@ -54,6 +54,10 @@ code change.
   entry as Genesys Cloud CX via Audio Connector (AudioHook `wss`, bidirectional) and
   clarify that escalation routing is Genesys Architect + Platform API, with context
   carried on Architect variables / conversation attributes (not on the media socket).
+- **`docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`**
+  — adversarial architecture review of this path (scorecard, critical risks, hard
+  questions, dependency review, NFR/SLA gaps, must/should/defer changes) to gate the
+  future Audio Connector feasibility spike.
 
 ### Out Of Scope
 
