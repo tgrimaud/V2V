@@ -27,7 +27,13 @@ from web_voice.runtime import (  # noqa: E402
     StdlibTurnProcessor,
     build_turn_processor,
 )
-from web_voice.server import TURN_ROUTE, WebVoiceHTTPServer, build_handler  # noqa: E402
+from web_voice.error_response import SessionCapacityError  # noqa: E402
+from web_voice.server import (  # noqa: E402
+    TURN_ROUTE,
+    WEBRTC_OFFER_ROUTE,
+    WebVoiceHTTPServer,
+    build_handler,
+)
 
 
 class _FakeBackend:
@@ -311,6 +317,98 @@ class VoiceTurnEndpointTest(unittest.TestCase):
     def _error_body(self, port: int) -> dict:
         _status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
         return json.loads(payload)
+
+
+class PipecatBatchLoopReuseTest(unittest.TestCase):
+    """TASK-WEB-024: the batch pipecat path reuses one background loop across turns
+    instead of creating and tearing down an event loop per HTTP turn (asyncio.run)."""
+
+    def test_reuses_one_background_loop_across_turns_then_closes_it(self) -> None:
+        processor = PipecatTurnProcessor(_ingress(), _egress())
+        envelope = ChannelEnvelope.for_web_turn(correlation_id="c")
+        # GIVEN a fresh processor -> the loop is created lazily (none until the first turn)
+        self.assertIsNone(processor._loop)
+        # WHEN two turns run
+        processor.run_turn(b"\x01\x02" * 100, envelope)
+        first_loop = processor._loop
+        self.assertIsNotNone(first_loop)
+        processor.run_turn(b"\x01\x02" * 100, envelope)
+        # THEN the same loop instance served both turns (not recreated per turn)
+        self.assertIs(processor._loop, first_loop)
+        # AND close() stops the loop it owns
+        processor.close()
+        self.assertIsNone(processor._loop)
+
+    def test_injected_loop_is_reused_and_left_open_for_its_owner(self) -> None:
+        from web_voice.async_loop import BackgroundEventLoop
+
+        loop = BackgroundEventLoop()
+        loop.start()
+        try:
+            processor = PipecatTurnProcessor(_ingress(), _egress(), loop=loop)
+            envelope = ChannelEnvelope.for_web_turn(correlation_id="c")
+            processor.run_turn(b"\x01\x02" * 100, envelope)
+            self.assertIs(processor._loop, loop)
+            # WHEN the processor is closed -> it does NOT stop a caller-owned loop
+            processor.close()
+            self.assertIs(processor._loop, loop)
+            # AND the loop is still usable afterwards
+            result = processor.run_turn(b"\x01\x02" * 100, envelope)
+            self.assertIs(result.transcript_result.outcome, SttOutcome.SUCCESS)
+        finally:
+            loop.stop()
+
+
+class WebRtcOfferBackpressureTest(unittest.TestCase):
+    """TASK-WEB-024: the offer endpoint answers 503 (+ Retry-After) when the signaling
+    layer refuses on the concurrency cap, and stays 502 for any other negotiation error."""
+
+    def _serve(self, signaling) -> int:
+        # The offer route does not use the turn processor, so a placeholder is enough.
+        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(object(), signaling))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_address[1]
+
+    def _post_offer(self, port: int):
+        conn = HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("POST", WEBRTC_OFFER_ROUTE, body=b"{}")
+        response = conn.getresponse()
+        payload = response.read()
+        retry_after = response.getheader("Retry-After")
+        conn.close()
+        return response.status, retry_after, payload
+
+    def test_capacity_rejection_returns_503_with_retry_after(self) -> None:
+        class _FullSignaling:
+            def handle_offer(self, offer, **kwargs):
+                raise SessionCapacityError(8, 8)
+
+        # GIVEN a signaling layer at capacity
+        port = self._serve(_FullSignaling())
+        # WHEN a WebRTC offer is posted
+        status, retry_after, payload = self._post_offer(port)
+        # THEN the client gets a clean 503 + Retry-After with the active/max counts
+        self.assertEqual(status, 503)
+        self.assertEqual(retry_after, "5")
+        body = json.loads(payload)
+        self.assertEqual(body["error"], "capacity")
+        self.assertEqual(body["active"], 8)
+        self.assertEqual(body["max"], 8)
+
+    def test_other_negotiation_error_stays_502_and_leaks_no_detail(self) -> None:
+        class _BoomSignaling:
+            def handle_offer(self, offer, **kwargs):
+                raise RuntimeError("raw sdp negotiation boom")
+
+        # GIVEN a signaling layer that fails for a non-capacity reason
+        port = self._serve(_BoomSignaling())
+        status, _retry_after, payload = self._post_offer(port)
+        # THEN it is a generic 502 that never echoes the raw exception text
+        self.assertEqual(status, 502)
+        self.assertEqual(json.loads(payload)["error"], "webrtc_negotiation_failed")
+        self.assertNotIn("boom", payload.decode("utf-8"))
 
 
 if __name__ == "__main__":

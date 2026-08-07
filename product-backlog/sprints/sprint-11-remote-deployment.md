@@ -148,6 +148,7 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 | TASK-DOC-005 | Doc freshness + backlog-index integrity | ✅ Merged into sprint-11 (2026-08-05): refreshed banners + sprint-11 "Why now"; ADR-0037 endpoint + ADR-0036/0037→Accepted; reconciled US-041/042, OQ-008, BUG-001, EPIC-011/012; `git diff --check` clean |
 | BUG-007 | `/converse` ignores the KB domain filter | ✅ Merged into sprint-11 (2026-08-05): documented intentional cross-domain voice retrieval (not a leak), locked with tests, clarified query-path vs ingestion-time classifier, linked OQ-008 |
 | BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | ✅ Merged into sprint-11 (2026-08-05): first-audio span emitted success-only (interrupted/failed carry elapsed on event), semantics documented; voice-agent 464 unittest green |
+| TASK-WEB-024 | WebRTC concurrency ceiling + backpressure + drop per-turn batch loop | ✅ Implemented (2026-08-07, branch `task/TASK-WEB-024-webrtc-backpressure`): session cap `VOICE_MAX_WEBRTC_SESSIONS` (default 8) → offers past it get **503 + Retry-After** (renegotiations never capped); `voice.webrtc.active_sessions` gauge + `voice.webrtc.session_rejected` event; batch `PipecatTurnProcessor` reuses one persistent `BackgroundEventLoop` instead of `asyncio.run` per turn. QA voice-agent **487** unittest (+11) + **169** behave, `qa-validate-ansible.sh` **69/69**. Runtime-affecting (gauge/event). Pending review/merge |
 
 ### Tracked but out of this sprint's execution (deferred)
 
@@ -155,7 +156,6 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 |---|---|
 | TASK-BE-026 | Retries on idempotent reads + LLM circuit breaker |
 | TASK-WEB-023 | Streaming provider protocols (Gradium unlock) |
-| TASK-WEB-024 | WebRTC concurrency ceiling + drop per-turn loop |
 | TASK-OPS-006 | SHA-pin GitHub Actions + Dependabot (already ticketed) |
 | TASK-INFRA-005 | Validate WebRTC signaling stickiness at the voice LB |
 

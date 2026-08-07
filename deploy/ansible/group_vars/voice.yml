@@ -45,6 +45,11 @@ voice_stun: ""
 voice_turn: ""
 voice_turn_username: ""
 
+# Live WebRTC concurrency ceiling (TASK-WEB-024): max simultaneous sessions per bridge.
+# Offers past it get HTTP 503 + Retry-After. Sessions share one asyncio loop, so this
+# bounds load on a 2 vCPU VM; the app also uses it to emit the active-session gauge.
+voice_max_webrtc_sessions: 8
+
 # Resource sizing (2 vCPU / 4 GB VM).
 voice_cpus: "1.5"
 voice_memory: "3g"
