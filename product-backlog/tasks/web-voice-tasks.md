@@ -2356,8 +2356,8 @@ default and we re-measure, or a revised, signed-off gate is recorded.
 **Parent:** EPIC-012
 **Related decisions:** ADR-0002 (Pipecat + Gradium), ADR-0023/0024 (streaming STT/TTS)
 **Depends on:** —
-**Classification:** V1 modularity / provider replaceability (deferred)
-**Status:** Proposed — deferred (architecture prep; do before benchmarking a 2nd vendor)
+**Classification:** V1 modularity / provider replaceability
+**Status:** ✅ Implemented (2026-08-07, branch `task/TASK-WEB-023-streaming-provider-protocols`)
 **Priority:** Low
 **Branch:** `task/TASK-WEB-023-streaming-provider-protocols`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — batch STT/TTS are
@@ -2383,6 +2383,28 @@ latency matters most.
 
 - A fake streaming provider drives the WebRTC path in tests without Gradium; the Gradium impl
   is one conforming implementation; architecture-separation tests updated.
+
+### Implementation (2026-08-07)
+
+- **Protocols:** added `runtime_checkable` `StreamingSttProvider`/`StreamingSttSession`
+  (`stt_validation/streaming.py`) and `StreamingTtsProvider`/`StreamingTtsSession`
+  (`tts_synthesis/streaming.py`) as the explicit streaming seam; the Gradium streaming
+  impls conform (proven by `isinstance` conformance tests).
+- **Registries:** both `provider_factory.py` modules now hold a per-provider streaming
+  builder registry with `register_streaming_provider()`, `streaming_provider_names()`,
+  `supports_streaming()` and a registry-keyed `build_streaming_provider()`. Gradium is
+  registered as the default streaming builder; the fixture provider stays batch-only.
+- **Server selection:** `web_voice/server.py` streaming selection keys off
+  `supports_streaming(args.provider)` instead of the scattered `args.provider != GRADIUM`
+  checks; batch-only providers fall back to the batch aggregator.
+- **Exports:** new protocols + registry helpers exported from both package `__init__`.
+- **Tests:** `tests/test_streaming_provider_protocols.py` — protocol conformance (Gradium +
+  a non-Gradium fake), factory registry behaviour, and server streaming selection driven by
+  a registered fake vendor with no Gradium branch and no network.
+- **Not runtime-affecting** in the observability sense: pure structural seam, no new
+  latency slice or telemetry span; existing streaming spans keep firing unchanged.
+
+**QA:** 484 unittest, 13 features / 36 scenarios / 169 behave steps green.
 
 ---
 
