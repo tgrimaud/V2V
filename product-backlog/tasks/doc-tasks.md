@@ -7,7 +7,7 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 |---|---|---|
 | TASK-DOC-001 | Full-branch code review after Sprint 5 | Done (2026-07-15) — tracked in `backlog-index.md` |
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
-| TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | 🚧 In progress (branch `task/TASK-DOC-006-genesys-audio-connector-media-plane`) |
+| TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | ✅ Merged into `feat/restart-from-scratch` (2026-08-07) — spawned spike TASK-WEB-025 |
 
 ---
 
@@ -17,7 +17,7 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 **Related decisions:** ADR-0020 (Genesys handoff), ADR-0019 (escalation contract),
 ADR-0002 (Pipecat + Gradium), ADR-0009 (independent channel adapters), ADR-0040 (new)
 **Classification:** Documentation + architecture (ADR)
-**Status:** 🚧 In progress
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-08-07); ticket branch mergeable for deletion
 **Priority:** Medium
 **Branch:** `task/TASK-DOC-006-genesys-audio-connector-media-plane`
 
