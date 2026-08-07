@@ -31,10 +31,12 @@ from stt_validation.provider_factory import (  # noqa: E402
     PROVIDER_NAMES,
     build_provider,
     build_streaming_provider,
+    supports_streaming as stt_supports_streaming,
 )
 from tts_synthesis.provider_factory import (  # noqa: E402
     build_provider as build_tts_provider,
     build_streaming_provider as build_streaming_tts_provider,
+    supports_streaming as tts_supports_streaming,
 )
 from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
@@ -390,7 +392,7 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
 
 def _streaming_stt_by_language(args) -> dict[str, Any]:
     """Per-session streaming STT providers keyed by language (US-042, WebRTC path)."""
-    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+    if args.stt_mode != "streaming" or not stt_supports_streaming(args.provider):
         return {}
     return {
         "fr": build_streaming_provider(args.provider, language="fr"),
@@ -402,7 +404,7 @@ def _streaming_tts_by_language(args) -> dict[str, Any]:
     """Per-session streaming TTS voices keyed by language (US-042, WebRTC path). French uses the
     default voice; English uses GRADIUM_VOICE_ID_EN when configured (Gradium picks language by voice).
     """
-    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+    if args.tts_mode != "streaming" or not tts_supports_streaming(args.provider):
         return {}
     by_language = {"fr": build_streaming_tts_provider(args.provider)}
     english_voice = os.environ.get("GRADIUM_VOICE_ID_EN")
@@ -436,10 +438,11 @@ def _tts_by_language(provider_name: str) -> dict[str, Any]:
 def _build_streaming_provider(args) -> Any:
     """Build the streaming STT provider for the WebRTC path, or None (batch fallback).
 
-    Streaming STT (TASK-STT-010) is Gradium-only; any other provider or an explicit
-    `--stt-mode batch` keeps the batch utterance-aggregator path.
+    Selection is keyed on the provider registry (TASK-WEB-023): a provider with no
+    registered streaming variant, or an explicit `--stt-mode batch`, keeps the batch
+    utterance-aggregator path. Adding a vendor is a registration, not an edit here.
     """
-    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+    if args.stt_mode != "streaming" or not stt_supports_streaming(args.provider):
         return None
     return build_streaming_provider(args.provider)
 
@@ -447,10 +450,11 @@ def _build_streaming_provider(args) -> Any:
 def _build_streaming_tts_provider(args) -> Any:
     """Build the streaming TTS provider for the WebRTC path, or None (batch fallback).
 
-    Streaming TTS (TASK-WEB-004) is Gradium-only; any other provider or an explicit
-    `--tts-mode batch` keeps the batch TTS processor (synthesize whole clip then play).
+    Selection is keyed on the provider registry (TASK-WEB-023): a provider with no
+    registered streaming variant, or an explicit `--tts-mode batch`, keeps the batch
+    TTS processor (synthesize whole clip then play). Adding a vendor is a registration.
     """
-    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+    if args.tts_mode != "streaming" or not tts_supports_streaming(args.provider):
         return None
     return build_streaming_tts_provider(args.provider)
 
