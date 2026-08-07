@@ -41,7 +41,7 @@ from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
 from .egress import WebVoiceEgress  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
-from .error_response import client_error_body  # noqa: E402
+from .error_response import SessionCapacityError, client_error_body  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
 from .runtime import (  # noqa: E402
     DEFAULT_RUNTIME,
@@ -122,6 +122,16 @@ def build_handler(
             try:
                 offer = json.loads(body or b"{}")
                 answer = signaling.handle_offer(offer)
+            except SessionCapacityError as exc:
+                # Backpressure (TASK-WEB-024): the concurrency ceiling is reached. 503 +
+                # Retry-After tells the client to retry later instead of failing hard; the
+                # refusal is already recorded in the signaling telemetry (no detail leaked).
+                self._send_json(
+                    503,
+                    {"error": "capacity", "active": exc.active, "max": exc.cap},
+                    extra_headers={"Retry-After": "5"},
+                )
+                return
             except Exception:  # noqa: BLE001 - never leak SDP/session detail to the client
                 self._send_json(502, {"error": "webrtc_negotiation_failed"})
                 return
@@ -226,11 +236,15 @@ def build_handler(
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_json(self, status: int, payload: dict) -> None:
+        def _send_json(
+            self, status: int, payload: dict, extra_headers: dict[str, str] | None = None
+        ) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -485,6 +499,10 @@ def main() -> int:
             signaling.close()
         if loop is not None:
             loop.stop()
+        # Stop the batch pipecat processor's background loop if it started one (TASK-WEB-024).
+        close = getattr(processor, "close", None)
+        if callable(close):
+            close()
     return 0
 
 

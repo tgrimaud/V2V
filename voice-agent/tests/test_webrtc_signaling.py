@@ -205,7 +205,8 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
             connection=SimpleNamespace(pc_id="pc-3"),
             session=_HangingSession(),
             envelope=SimpleNamespace(correlation_id="c"),
-            telemetry=SimpleNamespace(),
+            # A real recorder: _discard emits the active-session gauge on it (TASK-WEB-024).
+            telemetry=TelemetryRecorder(),
             task=run_task,
         )
         service._sessions["pc-3"] = record
@@ -484,6 +485,162 @@ class FarewellWiringTest(unittest.IsolatedAsyncioTestCase):
                 os.environ.pop("VOICE_FAREWELL_ENABLED", None)
             else:
                 os.environ["VOICE_FAREWELL_ENABLED"] = saved
+
+
+class MaxSessionsConfigTest(unittest.TestCase):
+    """TASK-WEB-024: the WebRTC concurrency ceiling is env-tunable, safe on bad input."""
+
+    def setUp(self) -> None:
+        self._saved = __import__("os").environ.pop("VOICE_MAX_WEBRTC_SESSIONS", None)
+
+    def tearDown(self) -> None:
+        import os
+
+        if self._saved is None:
+            os.environ.pop("VOICE_MAX_WEBRTC_SESSIONS", None)
+        else:
+            os.environ["VOICE_MAX_WEBRTC_SESSIONS"] = self._saved
+
+    def test_unset_uses_the_code_default(self) -> None:
+        from web_voice.webrtc_signaling import DEFAULT_MAX_WEBRTC_SESSIONS, _max_sessions_config
+
+        # GIVEN no override -> THEN the conservative code default applies
+        self.assertEqual(_max_sessions_config(), DEFAULT_MAX_WEBRTC_SESSIONS)
+
+    def test_positive_override_is_honoured(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import _max_sessions_config
+
+        os.environ["VOICE_MAX_WEBRTC_SESSIONS"] = "3"
+        self.assertEqual(_max_sessions_config(), 3)
+
+    def test_invalid_or_non_positive_falls_back_to_default(self) -> None:
+        import os
+
+        from web_voice.webrtc_signaling import DEFAULT_MAX_WEBRTC_SESSIONS, _max_sessions_config
+
+        # GIVEN a non-numeric / non-positive value -> THEN the default wins (never unbounded)
+        os.environ["VOICE_MAX_WEBRTC_SESSIONS"] = "lots"
+        self.assertEqual(_max_sessions_config(), DEFAULT_MAX_WEBRTC_SESSIONS)
+        os.environ["VOICE_MAX_WEBRTC_SESSIONS"] = "0"
+        self.assertEqual(_max_sessions_config(), DEFAULT_MAX_WEBRTC_SESSIONS)
+
+
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class SessionCapTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-024: new offers past the cap are refused (backpressure) with observable
+    evidence, and the active-session gauge is emitted on accept/close transitions."""
+
+    def _service(self, *, max_sessions: int, logged: list):
+        from web_voice.webrtc_signaling import WebRtcSignalingService
+
+        return WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=logged.append, max_sessions=max_sessions,
+        )
+
+    async def test_offer_past_the_cap_is_rejected_with_refusal_telemetry(self) -> None:
+        from web_voice.webrtc_signaling import (
+            ACTIVE_SESSIONS_METRIC,
+            REASON_CAPACITY,
+            SESSION_REJECTED_EVENT,
+            SessionCapacityError,
+        )
+
+        # GIVEN a service already holding as many live sessions as the cap allows
+        logged: list = []
+        service = self._service(max_sessions=2, logged=logged)
+        service._sessions = {"a": object(), "b": object()}
+        # WHEN a brand-new offer arrives (no pc_id -> a new session)
+        with self.assertRaises(SessionCapacityError) as ctx:
+            await service._negotiate({"sdp": "x", "type": "offer"})
+        # THEN it is refused with the active/cap counts (the HTTP layer turns this into 503)
+        self.assertEqual(ctx.exception.active, 2)
+        self.assertEqual(ctx.exception.cap, 2)
+        # AND the refusal is recorded once: a reject event + the active-session gauge
+        self.assertEqual(len(logged), 1)
+        recorder = logged[0]
+        reject = next(e for e in recorder.events() if e.name == SESSION_REJECTED_EVENT)
+        self.assertEqual(reject.attributes["reason"], REASON_CAPACITY)
+        self.assertEqual(reject.attributes["active_sessions"], 2)
+        gauge = next(m for m in recorder.metrics() if m.name == ACTIVE_SESSIONS_METRIC)
+        self.assertEqual(gauge.attributes["outcome"], "rejected")
+        self.assertEqual(gauge.value, 2.0)
+
+    async def test_offers_mid_negotiation_count_toward_the_cap(self) -> None:
+        from web_voice.webrtc_signaling import SessionCapacityError
+
+        # GIVEN no live sessions yet, but two offers already negotiating (slots reserved)
+        logged: list = []
+        service = self._service(max_sessions=2, logged=logged)
+        service._pending = 2
+        # WHEN a third offer arrives -> THEN it is refused: reservations count toward the
+        # cap, so concurrent in-flight negotiations cannot race past it (TOCTOU guard).
+        with self.assertRaises(SessionCapacityError) as ctx:
+            await service._negotiate({"sdp": "x", "type": "offer"})
+        self.assertEqual(ctx.exception.active, 2)
+
+    async def test_discard_emits_the_active_session_gauge_after_freeing_the_slot(self) -> None:
+        from web_voice.webrtc_signaling import ACTIVE_SESSIONS_METRIC, _Session
+
+        # GIVEN a service holding one live session
+        logged: list = []
+        service = self._service(max_sessions=4, logged=logged)
+        record = _Session(
+            connection=SimpleNamespace(pc_id="pc-1"),
+            session=SimpleNamespace(),
+            envelope=SimpleNamespace(correlation_id="c"),
+            telemetry=TelemetryRecorder(),
+        )
+        service._sessions["pc-1"] = record
+        # WHEN the session is discarded (call ended)
+        service._discard("pc-1")
+        # THEN the gauge reflects the freed slot (0 active) with a closed outcome
+        gauge = next(m for m in record.telemetry.metrics() if m.name == ACTIVE_SESSIONS_METRIC)
+        self.assertEqual(gauge.attributes["outcome"], "closed")
+        self.assertEqual(gauge.value, 0.0)
+        self.assertEqual(logged, [record.telemetry])
+
+
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class WebRtcConcurrencyCeilingTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-WEB-024 load/ceiling proof: with a live session at the cap, the next real
+    offer is refused end-to-end (no crash), documenting the concurrency ceiling."""
+
+    async def test_second_offer_is_refused_once_the_cap_is_reached(self) -> None:
+        from aiortc import RTCPeerConnection
+        from aiortc.mediastreams import AudioStreamTrack
+
+        from web_voice.async_loop import BackgroundEventLoop
+        from web_voice.webrtc_signaling import SessionCapacityError, WebRtcSignalingService
+
+        loop = BackgroundEventLoop()
+        loop.start()
+        # GIVEN a service that allows exactly one live WebRTC session
+        service = WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=loop, log=lambda _t: None, max_sessions=1,
+        )
+        browser = RTCPeerConnection()
+        try:
+            browser.addTrack(AudioStreamTrack())
+            await browser.setLocalDescription(await browser.createOffer())
+            await _wait_ice(browser)
+            offer = {"sdp": browser.localDescription.sdp, "type": browser.localDescription.type}
+            # WHEN the first offer establishes a session (fills the single slot)
+            answer = await asyncio.to_thread(service.handle_offer, offer)
+            self.assertEqual(answer["type"], "answer")
+            self.assertEqual(service.active_sessions(), 1)
+            # THEN a second offer is refused cleanly with a capacity error (-> HTTP 503)
+            with self.assertRaises(SessionCapacityError):
+                await asyncio.to_thread(service.handle_offer, {"sdp": "x", "type": "offer"})
+            # AND the live session is untouched (backpressure never drops existing calls)
+            self.assertEqual(service.active_sessions(), 1)
+        finally:
+            await browser.close()
+            await asyncio.to_thread(service.close)
+            loop.stop()
 
 
 async def _set(event: asyncio.Event) -> None:

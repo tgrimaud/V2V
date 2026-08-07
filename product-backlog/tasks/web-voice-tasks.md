@@ -2392,7 +2392,20 @@ latency matters most.
 **Related decisions:** ADR-0022 (WebRTC transport), ADR-0033
 **Depends on:** —
 **Classification:** V1 voice runtime scalability (deferred)
-**Status:** Proposed — deferred
+**Status:** ✅ Implemented (2026-08-07, branch `task/TASK-WEB-024-webrtc-backpressure`) —
+(1) **concurrency ceiling + backpressure**: `WebRtcSignalingService` caps live sessions at
+`VOICE_MAX_WEBRTC_SESSIONS` (code default 8, env-tunable, safe on bad input); a new offer past
+the cap is refused *before* any WebRTC allocation with a `SessionCapacityError` that the HTTP
+layer turns into a clean **503 + `Retry-After`** (renegotiations of existing sessions are never
+capped). (2) **active-session gauge**: `voice.webrtc.active_sessions` metric on accept/close +
+a `voice.webrtc.session_rejected` event on refusal, exported via OTLP (root-span attrs/events).
+(3) **batch path**: `PipecatTurnProcessor` now reuses one lazily-created persistent
+`BackgroundEventLoop` (`run_coroutine_threadsafe`) instead of `asyncio.run(...)` per HTTP turn;
+`close()` stops a self-owned loop on shutdown. QA: voice-agent **487** unittest (+11:
+cap-config parsing, cap rejection + refusal telemetry, discard gauge, live WebRTC ceiling,
+HTTP 503/502 translation, batch loop reuse/ownership) + **169** behave, `qa-validate-ansible.sh`
+**69/69** (key parity holds with the new `VOICE_MAX_WEBRTC_SESSIONS`). Runtime-affecting: adds
+the active-session gauge + refusal event (observability mandate met). Pending review/merge.
 **Priority:** Low
 **Branch:** `task/TASK-WEB-024-webrtc-backpressure`
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — unbounded WebRTC
