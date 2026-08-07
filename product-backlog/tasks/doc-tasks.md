@@ -77,6 +77,12 @@ code change.
 - `git diff --check` passes; all touched `docs/` content is in English (the target
   diagram stays French to match the existing artifact).
 
+### Follow-up Ticket Spawned
+
+- **TASK-WEB-025** — Genesys Audio Connector feasibility spike (investigation only),
+  gated by OQ-006, with the review's Must-fix items (R1–R6) as acceptance criteria
+  (`product-backlog/tasks/web-voice-tasks.md`).
+
 ## TASK-DOC-002 - Reconcile Stale "Current-State" Documentation After Sprint 9
 
 **Parent:** EPIC-001 (Product and architecture baseline)

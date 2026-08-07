@@ -174,8 +174,11 @@ failure-mode testing yet — per the skill's strict rule, 4+ requires evidence.
 
 ## Next Step
 
-Recommended operational move: create a **bounded Audio Connector feasibility spike
-ticket** (measurement-first: per-leg latency + one degraded mode + a minimal load test)
-rather than opening implementation directly, taking the "Must fix" items above as
-acceptance criteria. This spike stays gated by OQ-006 and does not move any conversation
-logic out of the Java backend.
+Recommended operational move: run a **bounded Audio Connector feasibility spike**
+(measurement-first: per-leg latency + one degraded mode + a minimal load test) rather
+than opening implementation directly, taking the "Must fix" items above as acceptance
+criteria. This spike stays gated by OQ-006 and does not move any conversation logic out
+of the Java backend.
+
+This spike is now tracked as **TASK-WEB-025** (`product-backlog/tasks/web-voice-tasks.md`),
+investigation-only, with the R1–R6 Must-fix items as acceptance criteria.
