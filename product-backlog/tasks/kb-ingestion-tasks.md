@@ -19,6 +19,95 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | ✅ Merged into `feat/restart-from-scratch` (Sprint 8, user-validated 2026-07-21, `23cb49b`; sprint closed `365251d`) — adversarial 92/100, QA functional PASS (bulk latency → BE-014) |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
+| TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | Proposed — offline, needs no pilot access. Baseline = current stack (fixed chunker, top-K=8, dense-only). EPIC-005 / ADR-0032 / OQ-008 |
+| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | Proposed — **gated** on the TASK-BE-027 baseline showing eviction-by-near-duplicates persists. Cheap, pgvector-native. EPIC-005 / ADR-0032 |
+
+---
+
+## TASK-BE-027 — Retrieval-Quality Eval Harness + Baseline Measurement (Offline)
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related decision:** ADR-0032 (retrieval-quality strategy) — this ticket is its measurement gate
+**Related:** OQ-008, BUG-003 (fixed chunking), BUG-004 (closed)
+**Classification:** V1 quality (RAG measurement) — offline, needs no pilot/external access
+**Status:** Proposed
+**Priority:** Medium
+
+### Trigger
+
+BUG-003 fixed chunking and top-K was raised to 8, but OQ-008 (pgvector + hybrid/rerank vs
+Qdrant) cannot be resolved by intuition. ADR-0032 states the choice between the remaining
+levers (MMR → hybrid → rerank → Qdrant) must be **measured**. There is no repeatable
+retrieval-quality eval today — every judgement is a one-off manual `/retrieve` check.
+
+### Objective
+
+Build a small, versioned, repeatable **offline** eval that scores retrieval quality on the
+loaded corpus, so each lever's marginal gain (and the eventual engine decision) is
+evidence-driven. Record the **baseline** for the current stack.
+
+### Scope
+
+- A versioned, labeled **eval set** (~20–40 questions) across the covered domains
+  (internet/box troubleshooting, résiliation/billing), in **FR and EN**, each labeled with
+  the article/section that holds the answer, and each carrying **phrasing variants** (bare,
+  greeting-prefixed, reworded).
+- A runner that calls `POST /api/conversation/retrieve` (backend-only, deterministic) for
+  every query/variant and computes **recall@k (k=4,8)**, **MRR**, and a **phrasing-stability**
+  score, reported **per language and per domain** (not just an aggregate).
+- A committed **baseline report** for the current configuration (fixed chunker, top-K=8,
+  dense-only, no MMR).
+- OpenTelemetry: reuse existing `/retrieve` retrieval spans/metrics; the harness is a client,
+  so mark runtime instrumentation N/A beyond what `/retrieve` already emits.
+
+### Out of scope
+
+- No change to the retrieval algorithm itself (MMR/hybrid/rerank land in later tickets).
+- No engine change; no pilot/live-voice run required (the harness is deterministic backend).
+
+### Acceptance
+
+- The eval set and runner are committed and reproducible; a single command produces the
+  report.
+- The baseline report exists with recall@k, MRR and phrasing-stability per FR/EN and domain.
+- ADR-0032's proposed acceptance bar (recall@8 ≥ 0.9 & stability ≥ 0.9) is confirmed or
+  adjusted against the baseline, and OQ-008 records the next lever decision.
+- Tests cover the metric computation (GIVEN labeled hits WHEN scored THEN recall/MRR correct).
+- `git diff --check` clean.
+
+---
+
+## TASK-BE-028 — Retrieval Lever 2b: MMR Diversity Over Over-Fetched Candidates
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related decision:** ADR-0032 (lever 2b)
+**Related:** TASK-BE-027 (baseline gate), OQ-008
+**Classification:** V1 quality (RAG)
+**Status:** Proposed — **gated** on the TASK-BE-027 baseline showing near-duplicate eviction persists
+**Priority:** Low
+
+### Objective
+
+If the TASK-BE-027 baseline confirms near-duplicate header/fragment chunks still crowd out
+the answer chunk within the over-fetched set, apply **MMR (Maximal Marginal Relevance)**
+diversity re-ranking over the top-K candidates before they reach the LLM, so the answer chunk
+is retained. Cheap, pgvector-native, store-independent.
+
+### Scope
+
+- MMR selection over the over-fetched candidates behind the existing `VectorSearchPort`
+  boundary (no engine change), env-tunable λ (relevance vs diversity).
+- Re-run TASK-BE-027 to record the marginal gain vs baseline.
+
+### Acceptance
+
+- MMR is applied over the over-fetched set; the answer chunk is retained where the baseline
+  evicted it, with a measured recall@8 / stability improvement in the TASK-BE-027 report.
+- OpenTelemetry: retrieval span records that MMR ran (candidate count in/out).
+- Tests cover MMR selection (GIVEN near-duplicate candidates WHEN MMR selects THEN diverse
+  set keeps the answer chunk).
+- If the baseline already clears the bar without MMR, this ticket is closed as **not needed**
+  with that evidence.
 
 ---
 

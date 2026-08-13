@@ -282,12 +282,24 @@ the "one Postgres" simplicity.
 
 - Confirm the lever order: (1) fix chunking, (2) topK/over-fetch + MMR, (3) hybrid
   (keyword + dense, e.g. Postgres FTS `tsvector`), (4) cross-encoder reranker, (5) change
-  vector DB — with (5) gated on a concrete trigger.
+  vector DB — with (5) gated on a concrete trigger. **Lever order confirmed in ADR-0032.**
 - Concrete trigger(s) that would justify Qdrant (native hybrid without hand-rolling,
   volumetry ≫ V1, quantization, vector multitenancy, latency at scale).
 - Whether hybrid/rerank on pgvector is enough to meet the retrieval-quality bar after
-  BUG-003 is fixed (measure before deciding).
+  BUG-003 is fixed (**measure before deciding**).
 - Whether the eventual decision warrants a full ADR (stubbed as ADR-0032, Proposed).
+
+### Progress (2026-08-13)
+
+- ✅ Lever 1 (chunking) done via BUG-003; ✅ lever 2 top-K over-fetch done (4 → 8);
+  BUG-004 (LLM refusal) closed. MMR / hybrid / rerank not yet built.
+- The remaining decision now hinges on **measurement**, not more debate. ADR-0032 adds a
+  measurement protocol (labeled FR/EN eval set with phrasing variants; recall@k, MRR,
+  phrasing-stability; proposed bar recall@8 ≥ 0.9 & stability ≥ 0.9).
+- **TASK-BE-027** builds that offline eval harness + baseline (no pilot/external access
+  needed); **TASK-BE-028** adds MMR gated on the baseline. OQ-008 is resolved once the
+  harness numbers show whether pgvector + the needed levers clear the bar or a Qdrant
+  trigger has fired.
 
 ### Notes
 
