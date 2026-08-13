@@ -110,11 +110,31 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
 ## Follow-ups
 
 - ✅ Fix BUG-003 (chunking) on pgvector (done 2026-07-22) + raise top-K to 8.
-- **TASK-BE-027** — build the offline retrieval-quality eval harness + labeled eval set and
-  record the **baseline** (fixed chunker, top-K=8, dense-only). This is the gate for the rest
-  of this ADR; it needs no pilot/external access.
+- ✅ **TASK-BE-027** — offline eval harness + labeled eval set built (`scripts/retrieval_eval/`);
+  **baseline recorded 2026-08-13** (`reports/baseline-2026-08-13.md`).
 - **TASK-BE-028** — add MMR (diversity) over the over-fetched candidates, gated on the
   baseline showing eviction-by-near-duplicates persists; re-measure.
+
+### Baseline result (2026-08-13, 14 questions / 29 variants, dense-only, top-K=8)
+
+| Scope | recall@4 | recall@8 | MRR | phrasing-stability |
+|---|---|---|---|---|
+| overall | 0.83 | **0.90** | 0.77 | **0.79** |
+| FR | 0.91 | 0.96 | 0.86 | 0.91 |
+| EN | 0.50 | 0.67 | 0.45 | 0.33 |
+| billing | 1.00 | 1.00 | 0.92 | 1.00 |
+| commercial | 1.00 | 1.00 | 1.00 | 1.00 |
+| support | 0.62 | 0.77 | 0.57 | 0.50 |
+
+Reading: after lever 1 + top-K, **FR / billing / commercial clear the bar** (billing &
+commercial perfect). The gap is concentrated in **EN and the support domain**, where three
+questions still **flip on a greeting prefix** (`sup-fr-slow`, `sup-en-internet`,
+`sup-en-wifi`) — the residual BUG-003-class brittleness. Overall stability 0.79 **misses**
+the ≥ 0.90 bar, so a further lever is justified. This is a corpus/strategy signal, not an
+engine one: no Qdrant trigger has fired. Next lever = **MMR (TASK-BE-028)**, targeted at the
+support/EN flips; if flips persist after MMR, escalate to hybrid (`tsvector`) then rerank.
+EN support coverage (FR-only curated FAQs vs thinner EN CSV troubleshooting) is a separate
+content gap worth flagging to Product.
 - Hybrid (`tsvector` fusion) and cross-encoder rerank stay as levers 3–4, each adopted only
   if the harness shows the previous lever misses the acceptance bar.
 - Resolve OQ-008 with the harness numbers; promote this ADR to **Accepted** (stay pgvector +

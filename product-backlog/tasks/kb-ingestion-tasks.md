@@ -19,8 +19,8 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-013 | `CsvArticleConnector` + embedding `DomainClassifier` — bulk KB ingestion from `articles.csv` | V1 core (KB content) | TASK-BE-003 | ✅ Merged into `feat/restart-from-scratch` (Sprint 8, user-validated 2026-07-21, `23cb49b`; sprint closed `365251d`) — adversarial 92/100, QA functional PASS (bulk latency → BE-014) |
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
-| TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | Proposed — offline, needs no pilot access. Baseline = current stack (fixed chunker, top-K=8, dense-only). EPIC-005 / ADR-0032 / OQ-008 |
-| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | Proposed — **gated** on the TASK-BE-027 baseline showing eviction-by-near-duplicates persists. Cheap, pgvector-native. EPIC-005 / ADR-0032 |
+| TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (9 metric tests green), **baseline recorded** (overall recall@8 0.90, stability 0.79; FR/billing/commercial pass, EN+support lag). Awaiting adversarial review + QA. EPIC-005 / ADR-0032 / OQ-008 |
+| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | Proposed — **gate satisfied**: the TASK-BE-027 baseline shows stability 0.79 < 0.90 with three questions flipping on a greeting prefix (support/EN). Cheap, pgvector-native. EPIC-005 / ADR-0032 |
 
 ---
 
@@ -30,8 +30,19 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 **Related decision:** ADR-0032 (retrieval-quality strategy) — this ticket is its measurement gate
 **Related:** OQ-008, BUG-003 (fixed chunking), BUG-004 (closed)
 **Classification:** V1 quality (RAG measurement) — offline, needs no pilot/external access
-**Status:** Proposed
+**Status:** 🚧 Implemented (2026-08-13) — harness + baseline delivered; awaiting adversarial review + QA
 **Priority:** Medium
+**Branch:** `task/TASK-BE-027-retrieval-quality-eval-harness`
+
+### Result (baseline 2026-08-13)
+
+Harness lives in `scripts/retrieval_eval/` (pure `metrics.py` with 9 unit tests, `run_eval.py`
+runner, versioned `eval_set.json` of 14 questions / 29 variants FR+EN, `reports/`). Baseline
+against the live backend (dense-only, top-K=8): overall **recall@8 0.90 / stability 0.79**;
+FR (0.96/0.91), billing (1.00/1.00) and commercial (1.00/1.00) clear the bar, while **EN
+(0.67/0.33) and support (0.77/0.50)** lag with three phrasing flips. Conclusion: no Qdrant
+trigger fired; the next lever is **MMR (TASK-BE-028)**, and EN support content coverage is a
+separate gap for Product.
 
 ### Trigger
 

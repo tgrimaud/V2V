@@ -296,10 +296,15 @@ the "one Postgres" simplicity.
 - The remaining decision now hinges on **measurement**, not more debate. ADR-0032 adds a
   measurement protocol (labeled FR/EN eval set with phrasing variants; recall@k, MRR,
   phrasing-stability; proposed bar recall@8 ≥ 0.9 & stability ≥ 0.9).
-- **TASK-BE-027** builds that offline eval harness + baseline (no pilot/external access
-  needed); **TASK-BE-028** adds MMR gated on the baseline. OQ-008 is resolved once the
-  harness numbers show whether pgvector + the needed levers clear the bar or a Qdrant
-  trigger has fired.
+- **TASK-BE-027** built the offline eval harness + labeled eval set (`scripts/retrieval_eval/`);
+  **TASK-BE-028** adds MMR gated on the baseline. OQ-008 is resolved once the harness numbers
+  show whether pgvector + the needed levers clear the bar or a Qdrant trigger has fired.
+- **Baseline (2026-08-13, dense-only, top-K=8):** overall recall@8 **0.90**, phrasing-stability
+  **0.79** — FR / billing / commercial clear the bar (billing & commercial perfect), but **EN
+  and the support domain lag** (EN stability 0.33; support 0.50) with three questions flipping
+  on a greeting prefix. No Qdrant trigger fired → next lever is **MMR (TASK-BE-028)**, then
+  hybrid/rerank if flips persist. EN support **content coverage** (FR-only curated FAQs vs
+  thinner EN CSV troubleshooting) is a separate gap to raise with Product.
 
 ### Notes
 
