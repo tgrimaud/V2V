@@ -306,10 +306,13 @@ the "one Postgres" simplicity.
   `sup-en-wifi` — retrieval never ran, a BUG-001-class over-block, **not** a retrieval/vector
   problem) and **1 is a genuine retrieval eviction** (`sup-fr-slow`).
 - **Corrected lever reading:** no Qdrant trigger; pgvector retrieval is strong. **MMR
-  (TASK-BE-028)** is justified but narrow (the single eviction). The **EN gap is guardrail
-  topicality (OFF_TOPIC over-block), out of OQ-008 scope** → recommend a guardrail/EN follow-up
-  (BUG-001 class). EN support **content coverage** is a separate gap for Product. Without the
-  guardrail-vs-eviction split this would have been misattributed to retrieval (the BUG-003 trap).
+  (TASK-BE-028)** is justified but narrow (the single eviction) — **implemented 2026-08-13**
+  (`MmrReranker` behind `VectorSearchPort`, env-tunable λ/over-fetch, observed via
+  `RetrievalObserverPort`; eval re-run pending backend access). The **EN gap is guardrail
+  topicality (OFF_TOPIC over-block), out of OQ-008 scope** → now tracked as **BUG-009**
+  (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN support
+  **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction split
+  this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 

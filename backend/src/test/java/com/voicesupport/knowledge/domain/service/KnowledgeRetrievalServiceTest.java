@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.domain.service;
 
 import com.voicesupport.knowledge.domain.model.valueobject.KnowledgeChunk;
+import com.voicesupport.knowledge.fake.FakeRetrievalObserverPort;
 import com.voicesupport.knowledge.fake.FakeVectorSearchPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("KnowledgeRetrievalService (query embed + domain-filtered top-k)")
@@ -68,5 +70,48 @@ class KnowledgeRetrievalServiceTest {
         // THEN no search happens and the result is empty
         assertTrue(chunks.isEmpty());
         assertEquals(0, vectorSearch.callCount);
+    }
+
+    @Test
+    @DisplayName("with MMR enabled, over-fetches top-k * multiplier then re-selects a diverse top-k")
+    void mmrOverFetchesThenReselects() {
+        // GIVEN MMR is wired with a x3 over-fetch, and the store returns near-duplicate headers plus
+        // a distinct answer chunk — plain top-2 by score would evict the answer (BUG-003)
+        FakeRetrievalObserverPort observer = new FakeRetrievalObserverPort();
+        KnowledgeRetrievalService mmrService = new KnowledgeRetrievalService(
+                vectorSearch, new MmrReranker(0.7), observer, 3);
+        vectorSearch.setResults(List.of(
+                new KnowledgeChunk("wifi help wifi help wifi help", "h1", "support", 0.82),
+                new KnowledgeChunk("wifi help wifi help wifi help now", "h2", "support", 0.81),
+                new KnowledgeChunk("restart the router to fix a slow connection", "ans", "support", 0.80)));
+
+        // WHEN retrieving the top-2
+        List<KnowledgeChunk> chunks = mmrService.retrieve("why is my wifi slow", "support", 2);
+
+        // THEN the store was over-fetched (2 * 3 = 6) and MMR kept the answer chunk over a redundant header
+        assertEquals(6, vectorSearch.lastTopK);
+        assertEquals(2, chunks.size());
+        assertTrue(chunks.stream().anyMatch(c -> c.sourceId().equals("ans")));
+        assertFalse(chunks.stream().anyMatch(c -> c.sourceId().equals("h2")));
+
+        // AND the MMR observability hook received the in/out counts
+        assertEquals(1, observer.calls);
+        assertEquals(6, observer.lastFetchK);
+        assertEquals(3, observer.lastCandidateCount);
+        assertEquals(2, observer.lastSelectedCount);
+        assertEquals(0.7, observer.lastLambda);
+    }
+
+    @Test
+    @DisplayName("with MMR disabled (single-arg constructor), delegates plain dense top-k")
+    void mmrDisabledDelegatesPlainTopK() {
+        // GIVEN the MMR-disabled wiring
+        vectorSearch.setResults(List.of(new KnowledgeChunk("x", "s#1", "support", 0.7)));
+
+        // WHEN retrieving
+        service.retrieve("question", "support", 5);
+
+        // THEN the store receives the requested top-k unchanged (no over-fetch)
+        assertEquals(5, vectorSearch.lastTopK);
     }
 }

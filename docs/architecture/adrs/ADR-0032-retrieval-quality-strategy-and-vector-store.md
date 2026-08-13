@@ -112,8 +112,17 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
 - ✅ Fix BUG-003 (chunking) on pgvector (done 2026-07-22) + raise top-K to 8.
 - ✅ **TASK-BE-027** — offline eval harness + labeled eval set built (`scripts/retrieval_eval/`);
   **baseline recorded 2026-08-13** (`reports/baseline-2026-08-13.md`).
-- **TASK-BE-028** — add MMR (diversity) over the over-fetched candidates, gated on the
-  baseline showing eviction-by-near-duplicates persists; re-measure.
+- 🚧 **TASK-BE-028** — MMR (diversity) over the over-fetched candidates **implemented**
+  (2026-08-13, `task/TASK-BE-028-mmr-diversity`): pure `MmrReranker` (relevance = dense score,
+  redundancy = lexical Jaccard proxy since the store returns no candidate embeddings) selecting
+  top-k from `top-k * fetch-multiplier` over-fetched candidates, behind `VectorSearchPort`
+  (no engine change), env-tunable λ / multiplier, observed via `RetrievalObserverPort`
+  (`voice_support.retrieval_mmr_selected` + `[RETRIEVAL-MMR]` log). 8 new tests (347 backend
+  green). **Eval re-run to quantify the marginal gain is pending a running backend + pgvector +
+  synced corpus** (same pilot-access blocker); adversarial review + QA to follow.
+- **BUG-009** — the two EN `OFF_TOPIC` guardrail blocks are now a tracked bug: the OFF_TOPIC
+  royalty pattern (`…|roi|queen|king`) lacks word boundaries, so `king` matches inside
+  "wor**king**". Out of OQ-008 scope (guardrail, not retrieval).
 
 ### Baseline result (2026-08-13, 14 questions / 29 variants, dense-only, top-K=8)
 
@@ -142,7 +151,8 @@ Conclusions:
 - **MMR (TASK-BE-028)** is justified but **narrow** — it targets the single retrieval
   eviction, not the EN gap.
 - The **dominant EN gap is the input guardrail classifying legitimate support questions as
-  `OFF_TOPIC`** → belongs to guardrail/EN-topicality work (BUG-001 class), **out of OQ-008
+  `OFF_TOPIC`** → now tracked as **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern
+  matches inside "wor**king**"); guardrail/EN-topicality work (BUG-001 class), **out of OQ-008
   scope**. Had the harness not separated guardrail blocks from evictions, this would have been
   misattributed to retrieval (MMR/hybrid/Qdrant) — the exact BUG-003 trap.
 - EN support **content coverage** (FR-only curated FAQs vs thinner EN CSV troubleshooting)

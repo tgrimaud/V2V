@@ -7,12 +7,14 @@ import com.voicesupport.knowledge.domain.port.out.AudienceClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.DomainClassifierPort;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceStatePort;
+import com.voicesupport.knowledge.domain.port.out.RetrievalObserverPort;
 import com.voicesupport.knowledge.domain.port.out.SyncObserverPort;
 import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import com.voicesupport.knowledge.domain.service.KnowledgeIngestionService;
 import com.voicesupport.knowledge.domain.service.KnowledgeRetrievalService;
 import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
+import com.voicesupport.knowledge.domain.service.MmrReranker;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.EmbeddingDomainClassifierAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.KeywordAudienceClassifierAdapter;
@@ -116,9 +118,23 @@ public class KnowledgeConfig {
         return new KnowledgeIngestionService(vectorStorePort, textChunker);
     }
 
+    // TASK-BE-028: MMR diversity re-ranking over the over-fetched dense candidates (BUG-003).
+    // Over-fetch top-k * fetch-multiplier, then greedily re-select top-k balancing relevance
+    // (dense score) against lexical redundancy so near-duplicate chunks stop evicting the answer
+    // chunk. Set mmr.enabled=false to fall back to plain dense top-k. Re-measure the retrieval
+    // eval baseline (TASK-BE-027) after tuning lambda / fetch-multiplier.
     @Bean
-    public KnowledgeRetrievalUseCase knowledgeRetrievalUseCase(VectorSearchPort vectorSearchPort) {
-        return new KnowledgeRetrievalService(vectorSearchPort);
+    public KnowledgeRetrievalUseCase knowledgeRetrievalUseCase(
+            VectorSearchPort vectorSearchPort,
+            RetrievalObserverPort retrievalObserver,
+            @Value("${voice-support.knowledge.retrieval.mmr.enabled:true}") boolean mmrEnabled,
+            @Value("${voice-support.knowledge.retrieval.mmr.lambda:0.7}") double mmrLambda,
+            @Value("${voice-support.knowledge.retrieval.mmr.fetch-multiplier:3}") int fetchMultiplier) {
+        if (!mmrEnabled) {
+            return new KnowledgeRetrievalService(vectorSearchPort);
+        }
+        return new KnowledgeRetrievalService(
+                vectorSearchPort, new MmrReranker(mmrLambda), retrievalObserver, fetchMultiplier);
     }
 
     @Bean

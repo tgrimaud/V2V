@@ -126,6 +126,17 @@ voice-support:
     # are always exposed as Micrometer meters (voice_support.kb_sync_batch / kb_sync_chunks /
     # kb_sync, tagged source_type). Raise it for very large corpora to keep the log quiet.
     sync-progress-every: ${KB_SYNC_PROGRESS_EVERY:500}
+    retrieval:
+      # MMR diversity re-ranking (TASK-BE-028, BUG-003). Over-fetch top-k * fetch-multiplier dense
+      # candidates then greedily re-select top-k balancing relevance (dense score) against lexical
+      # redundancy, so near-duplicate header/fragment chunks stop evicting the answer chunk. The
+      # most relevant chunk is always selected first, so the confidence guardrail's best score is
+      # preserved. enabled=false → plain dense top-k. lambda in [0,1]: higher = more relevance,
+      # lower = more diversity. Re-measure the TASK-BE-027 eval baseline after tuning.
+      mmr:
+        enabled: ${KB_RETRIEVAL_MMR_ENABLED:true}
+        lambda: ${KB_RETRIEVAL_MMR_LAMBDA:0.7}
+        fetch-multiplier: ${KB_RETRIEVAL_MMR_FETCH_MULTIPLIER:3}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

@@ -20,7 +20,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). Awaiting QA. EPIC-005 / ADR-0032 / OQ-008 |
-| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | Proposed — **gate narrowly satisfied**: the baseline shows **1 retrieval eviction** (`sup-fr-slow`); the other 2 misses are `OFF_TOPIC` guardrail blocks (out of scope, guardrail/EN follow-up). Cheap, pgvector-native. EPIC-005 / ADR-0032 |
+| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | 🚧 Implemented (2026-08-13, `task/TASK-BE-028-mmr-diversity`) — pure `MmrReranker` behind `VectorSearchPort` (relevance=dense score, redundancy=Jaccard proxy), env-tunable λ/over-fetch, `RetrievalObserverPort` observability; 8 new tests (347 backend green). **Eval re-run + adversarial + QA pending backend access.** Gate: 1 eviction (`sup-fr-slow`); 2 EN `OFF_TOPIC` blocks → BUG-009 (out of scope). EPIC-005 / ADR-0032 |
 
 ---
 
@@ -98,8 +98,31 @@ evidence-driven. Record the **baseline** for the current stack.
 **Related decision:** ADR-0032 (lever 2b)
 **Related:** TASK-BE-027 (baseline gate), OQ-008
 **Classification:** V1 quality (RAG)
-**Status:** Proposed — **gated** on the TASK-BE-027 baseline showing near-duplicate eviction persists
+**Status:** 🚧 Implemented (2026-08-13, branch `task/TASK-BE-028-mmr-diversity`, stacked on
+`task/TASK-BE-027-retrieval-quality-eval-harness`). Eval re-run to quantify the marginal gain,
+adversarial review and QA are **pending a running backend + pgvector + synced corpus** (same
+pilot-access blocker as Sprint 11).
 **Priority:** Low
+
+### Implementation (2026-08-13)
+
+- **`MmrReranker`** (pure domain, `knowledge/domain/service/`): greedy MMR selecting top-k from
+  the over-fetched candidates — `score(d) = λ·relevance(d) − (1−λ)·max_{s∈selected} sim(d,s)`.
+  Relevance is the dense similarity already carried by each `KnowledgeChunk`; redundancy is a
+  store-independent **lexical Jaccard token-set proxy** (the vector store returns no candidate
+  embeddings, so a second embedding round-trip is avoided). The single most relevant chunk is
+  always selected first, so the confidence guardrail's best score is preserved.
+- **`KnowledgeRetrievalService`** over-fetches `top-k · fetch-multiplier` then MMR-selects
+  `top-k`, behind the existing `VectorSearchPort` (no engine change). MMR-disabled wiring keeps
+  the plain dense top-k path (backward compatible).
+- **Config** (`voice-support.knowledge.retrieval.mmr.*`): `enabled` (default true), `lambda`
+  (0.7), `fetch-multiplier` (3) — all env-tunable (`KB_RETRIEVAL_MMR_*`).
+- **Observability:** `RetrievalObserverPort` (mirrors `SyncObserverPort`) →
+  `LoggingRetrievalObserverAdapter` emits `voice_support.retrieval_mmr_selected` +
+  `[RETRIEVAL-MMR]` structured log (fetch_k / candidates / selected / lambda). Per-slice
+  RETRIEVAL latency stays timed on the seam adapter.
+- **Tests:** `MmrRerankerTest` (6) + `KnowledgeRetrievalServiceTest` MMR cases (2) + fake
+  observer; full backend suite **347 green, 0 failures**.
 
 ### Objective
 
