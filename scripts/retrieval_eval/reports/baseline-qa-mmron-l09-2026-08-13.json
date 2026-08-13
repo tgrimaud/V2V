@@ -1,0 +1,921 @@
+{
+  "generated": "2026-08-13T15:37:37",
+  "base_url": "http://localhost:8081",
+  "top_k": 8,
+  "domain_mode": "none",
+  "acceptance": {
+    "recall_at_8": 0.9,
+    "stability": 0.9
+  },
+  "overall": {
+    "recall_at_4": 0.8620689655172413,
+    "recall_at_8": 0.896551724137931,
+    "mrr": 0.7721674876847291,
+    "phrasing_stability": 0.7857142857142857,
+    "variant_count": 29,
+    "question_count": 14,
+    "guardrail_block_variants": 2,
+    "retrieval_eviction_variants": 1,
+    "unstable_question_ids": [
+      "sup-en-internet",
+      "sup-en-wifi",
+      "sup-fr-slow"
+    ]
+  },
+  "by_language": {
+    "en": {
+      "recall_at_4": 0.6666666666666666,
+      "recall_at_8": 0.6666666666666666,
+      "mrr": 0.4583333333333333,
+      "phrasing_stability": 0.3333333333333333,
+      "variant_count": 6,
+      "question_count": 3,
+      "guardrail_block_variants": 2,
+      "retrieval_eviction_variants": 0,
+      "unstable_question_ids": [
+        "sup-en-internet",
+        "sup-en-wifi"
+      ]
+    },
+    "fr": {
+      "recall_at_4": 0.9130434782608695,
+      "recall_at_8": 0.9565217391304348,
+      "mrr": 0.8540372670807453,
+      "phrasing_stability": 0.9090909090909091,
+      "variant_count": 23,
+      "question_count": 11,
+      "guardrail_block_variants": 0,
+      "retrieval_eviction_variants": 1,
+      "unstable_question_ids": [
+        "sup-fr-slow"
+      ]
+    }
+  },
+  "by_domain": {
+    "billing": {
+      "recall_at_4": 1.0,
+      "recall_at_8": 1.0,
+      "mrr": 0.9166666666666666,
+      "phrasing_stability": 1.0,
+      "variant_count": 12,
+      "question_count": 6,
+      "guardrail_block_variants": 0,
+      "retrieval_eviction_variants": 0,
+      "unstable_question_ids": []
+    },
+    "commercial": {
+      "recall_at_4": 1.0,
+      "recall_at_8": 1.0,
+      "mrr": 1.0,
+      "phrasing_stability": 1.0,
+      "variant_count": 4,
+      "question_count": 2,
+      "guardrail_block_variants": 0,
+      "retrieval_eviction_variants": 0,
+      "unstable_question_ids": []
+    },
+    "support": {
+      "recall_at_4": 0.6923076923076923,
+      "recall_at_8": 0.7692307692307693,
+      "mrr": 0.5686813186813187,
+      "phrasing_stability": 0.5,
+      "variant_count": 13,
+      "question_count": 6,
+      "guardrail_block_variants": 2,
+      "retrieval_eviction_variants": 1,
+      "unstable_question_ids": [
+        "sup-en-internet",
+        "sup-en-wifi",
+        "sup-fr-slow"
+      ]
+    }
+  },
+  "variants": [
+    {
+      "question_id": "sup-fr-internet",
+      "variant": "J'ai un problème de connexion internet.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "telecom-faq.md",
+        "421",
+        "421",
+        "324",
+        "421",
+        "324",
+        "230",
+        "440"
+      ],
+      "acceptable": [
+        "13",
+        "230",
+        "324",
+        "326",
+        "854",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-internet",
+      "variant": "Bonjour, j'ai un problème de connexion internet.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "telecom-faq.md",
+        "421",
+        "421",
+        "324",
+        "440",
+        "230",
+        "421",
+        "265"
+      ],
+      "acceptable": [
+        "13",
+        "230",
+        "324",
+        "326",
+        "854",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-internet",
+      "variant": "Ma box ne se connecte plus à internet.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "telecom-faq.md",
+        "421",
+        "telecom-faq.md",
+        "79",
+        "telecom-faq.md",
+        "230",
+        "telecom-faq.md",
+        "420"
+      ],
+      "acceptable": [
+        "13",
+        "230",
+        "324",
+        "326",
+        "854",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-slow",
+      "variant": "Ma connexion internet est très lente.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "305",
+        "telecom-faq.md",
+        "230",
+        "864",
+        "telecom-faq.md",
+        "79",
+        "79",
+        "317"
+      ],
+      "acceptable": [
+        "13",
+        "854",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 2,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.5,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-slow",
+      "variant": "Bonjour, internet est très lent chez moi.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "305",
+        "932",
+        "20",
+        "305",
+        "366",
+        "750",
+        "11",
+        "350"
+      ],
+      "acceptable": [
+        "13",
+        "854",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": null,
+      "recall_at_4": false,
+      "recall_at_8": false,
+      "reciprocal_rank": 0.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "retrieval_eviction",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-wifi",
+      "variant": "Mon wifi ne fonctionne pas.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "230",
+        "telecom-faq.md",
+        "278",
+        "13",
+        "21",
+        "79",
+        "324",
+        "324"
+      ],
+      "acceptable": [
+        "21",
+        "23",
+        "324",
+        "326",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 2,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.5,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-wifi",
+      "variant": "Bonjour, je n'ai plus de wifi à la maison.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "telecom-faq.md",
+        "telecom-faq.md",
+        "420",
+        "899",
+        "13",
+        "324",
+        "445",
+        "278"
+      ],
+      "acceptable": [
+        "21",
+        "23",
+        "324",
+        "326",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-tv",
+      "variant": "Mon décodeur TV ne s'allume plus.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "telecom-faq.md",
+        "421",
+        "telecom-faq.md",
+        "421",
+        "421",
+        "313",
+        "235",
+        "754"
+      ],
+      "acceptable": [
+        "421",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-fr-tv",
+      "variant": "Bonjour, ma télé ne marche pas.",
+      "language": "fr",
+      "domain": "support",
+      "ranked_source_ids": [
+        "422",
+        "811",
+        "284",
+        "305",
+        "907",
+        "907",
+        "421",
+        "199"
+      ],
+      "acceptable": [
+        "421",
+        "telecom-faq.md"
+      ],
+      "first_hit_rank": 7,
+      "recall_at_4": false,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.1429,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-en-internet",
+      "variant": "I have an internet connection problem.",
+      "language": "en",
+      "domain": "support",
+      "ranked_source_ids": [
+        "235",
+        "421",
+        "450",
+        "324",
+        "79",
+        "421",
+        "450",
+        "324"
+      ],
+      "acceptable": [
+        "13",
+        "230",
+        "324",
+        "326",
+        "854"
+      ],
+      "first_hit_rank": 4,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.25,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "sup-en-internet",
+      "variant": "Hello, my internet is not working.",
+      "language": "en",
+      "domain": "support",
+      "ranked_source_ids": [],
+      "acceptable": [
+        "13",
+        "230",
+        "324",
+        "326",
+        "854"
+      ],
+      "first_hit_rank": null,
+      "recall_at_4": false,
+      "recall_at_8": false,
+      "reciprocal_rank": 0.0,
+      "answerable": false,
+      "verdict": "OFF_TOPIC",
+      "outcome": "guardrail_block",
+      "error": null
+    },
+    {
+      "question_id": "sup-en-wifi",
+      "variant": "My WiFi is not working.",
+      "language": "en",
+      "domain": "support",
+      "ranked_source_ids": [],
+      "acceptable": [
+        "21",
+        "23",
+        "324",
+        "326"
+      ],
+      "first_hit_rank": null,
+      "recall_at_4": false,
+      "recall_at_8": false,
+      "reciprocal_rank": 0.0,
+      "answerable": false,
+      "verdict": "OFF_TOPIC",
+      "outcome": "guardrail_block",
+      "error": null
+    },
+    {
+      "question_id": "sup-en-wifi",
+      "variant": "Hello, I keep having WiFi problems.",
+      "language": "en",
+      "domain": "support",
+      "ranked_source_ids": [
+        "324",
+        "324",
+        "23",
+        "324",
+        "256",
+        "450",
+        "79",
+        "324"
+      ],
+      "acceptable": [
+        "21",
+        "23",
+        "324",
+        "326"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-understand",
+      "variant": "Je ne comprends pas un montant sur ma facture.",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "billing-faq.md",
+        "249",
+        "223",
+        "17",
+        "879",
+        "billing-faq.md",
+        "24"
+      ],
+      "acceptable": [
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-understand",
+      "variant": "Bonjour, il y a un montant que je ne comprends pas sur ma facture.",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "billing-faq.md",
+        "249",
+        "billing-faq.md",
+        "879",
+        "17",
+        "223",
+        "24"
+      ],
+      "acceptable": [
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-higher",
+      "variant": "Ma facture est plus élevée que d'habitude.",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "billing-faq.md",
+        "259",
+        "829",
+        "223",
+        "879",
+        "927",
+        "813"
+      ],
+      "acceptable": [
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-higher",
+      "variant": "Bonjour, pourquoi ma facture a augmenté ce mois-ci ?",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "306",
+        "879",
+        "358",
+        "billing-faq.md",
+        "14",
+        "14",
+        "24"
+      ],
+      "acceptable": [
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-payment",
+      "variant": "Comment changer mon RIB ?",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "billing-faq.md",
+        "billing-faq.md",
+        "249",
+        "839",
+        "615",
+        "384",
+        "839"
+      ],
+      "acceptable": [
+        "24",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-payment",
+      "variant": "Bonjour, je veux changer ma carte bancaire.",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "billing-faq.md",
+        "855",
+        "billing-faq.md",
+        "22",
+        "272",
+        "220",
+        "billing-faq.md"
+      ],
+      "acceptable": [
+        "24",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-consult",
+      "variant": "Comment consulter ma facture ?",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "24",
+        "829",
+        "24",
+        "billing-faq.md",
+        "306",
+        "223",
+        "879"
+      ],
+      "acceptable": [
+        "879",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-consult",
+      "variant": "Bonjour, où puis-je voir ma facture ?",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "24",
+        "164",
+        "billing-faq.md",
+        "829",
+        "192",
+        "223",
+        "billing-faq.md"
+      ],
+      "acceptable": [
+        "879",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-cancel",
+      "variant": "Comment résilier mon abonnement ?",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "billing-faq.md",
+        "771",
+        "255",
+        "192",
+        "274",
+        "192",
+        "192",
+        "383"
+      ],
+      "acceptable": [
+        "255",
+        "474",
+        "785",
+        "829",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-fr-cancel",
+      "variant": "Bonjour, je souhaite résilier mon abonnement.",
+      "language": "fr",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "771",
+        "billing-faq.md",
+        "192",
+        "192",
+        "907",
+        "215",
+        "192",
+        "274"
+      ],
+      "acceptable": [
+        "255",
+        "474",
+        "785",
+        "829",
+        "billing-faq.md"
+      ],
+      "first_hit_rank": 2,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.5,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-en-cancel",
+      "variant": "How do I cancel my subscription?",
+      "language": "en",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "255",
+        "12",
+        "235",
+        "235",
+        "366",
+        "255",
+        "294",
+        "190"
+      ],
+      "acceptable": [
+        "255",
+        "358",
+        "474",
+        "829"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "bil-en-cancel",
+      "variant": "Hello, I want to terminate my contract.",
+      "language": "en",
+      "domain": "billing",
+      "ranked_source_ids": [
+        "192",
+        "255",
+        "262",
+        "275",
+        "11",
+        "855",
+        "192",
+        "11"
+      ],
+      "acceptable": [
+        "255",
+        "358",
+        "474",
+        "829"
+      ],
+      "first_hit_rank": 2,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 0.5,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "com-fr-subscribe",
+      "variant": "Je souhaite souscrire à une offre.",
+      "language": "fr",
+      "domain": "commercial",
+      "ranked_source_ids": [
+        "commercial-faq.md",
+        "1",
+        "304",
+        "20",
+        "375",
+        "550",
+        "79",
+        "192"
+      ],
+      "acceptable": [
+        "commercial-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "com-fr-subscribe",
+      "variant": "Bonjour, je veux souscrire à une nouvelle offre internet.",
+      "language": "fr",
+      "domain": "commercial",
+      "ranked_source_ids": [
+        "commercial-faq.md",
+        "550",
+        "932",
+        "199",
+        "230",
+        "11",
+        "billing-faq.md",
+        "864"
+      ],
+      "acceptable": [
+        "commercial-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "com-fr-moving",
+      "variant": "Je déménage, que dois-je faire pour mon abonnement ?",
+      "language": "fr",
+      "domain": "commercial",
+      "ranked_source_ids": [
+        "commercial-faq.md",
+        "192",
+        "270",
+        "899",
+        "18",
+        "12",
+        "235",
+        "784"
+      ],
+      "acceptable": [
+        "commercial-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    },
+    {
+      "question_id": "com-fr-moving",
+      "variant": "Bonjour, je déménage bientôt, comment ça se passe ?",
+      "language": "fr",
+      "domain": "commercial",
+      "ranked_source_ids": [
+        "commercial-faq.md",
+        "192",
+        "19",
+        "270",
+        "18",
+        "18",
+        "190",
+        "187"
+      ],
+      "acceptable": [
+        "commercial-faq.md"
+      ],
+      "first_hit_rank": 1,
+      "recall_at_4": true,
+      "recall_at_8": true,
+      "reciprocal_rank": 1.0,
+      "answerable": true,
+      "verdict": "PASS",
+      "outcome": "hit",
+      "error": null
+    }
+  ]
+}

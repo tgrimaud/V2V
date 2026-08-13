@@ -28,7 +28,7 @@
         <mxCell id="ingress" value="Ingress / LB&lt;br&gt;TLS + WebSocket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
           <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="telephony" value="Connecteur telephonie&lt;br&gt;Twilio / SIP trunk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
+        <mxCell id="telephony" value="Genesys Cloud CX&lt;br&gt;Audio Connector (AudioHook) - Twilio fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
           <mxGeometry x="30" y="140" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="pipecat" value="Pipecat&lt;br&gt;orchestration voix temps reel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
@@ -97,7 +97,7 @@
         <mxCell id="handoff_context" value="Resume contexte&lt;br&gt;preuves BSS + historique" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
           <mxGeometry x="30" y="150" width="170" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="ccaas" value="CCaaS / centre contact&lt;br&gt;file conseiller" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
+        <mxCell id="ccaas" value="Genesys Cloud CX&lt;br&gt;routing Architect + Platform API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="human">
           <mxGeometry x="270" y="150" width="170" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ai" value="Ports IA et fournisseurs interchangeables" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;html=1;" vertex="1" parent="1">
@@ -151,7 +151,7 @@
         <mxCell id="e_text_ingress" value="texte" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_text" target="ingress">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_telephony_pipecat" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="telephony" target="pipecat">
+        <mxCell id="e_telephony_pipecat" value="Audio Connector&#10;AudioHook wss bidirectionnel" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="telephony" target="pipecat">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_ingress_api" value="requete" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ingress" target="conversation_api">
@@ -223,7 +223,7 @@
         <mxCell id="e_handoff_context" value="resume" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff" target="handoff_context">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_context_ccaas" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff_context" target="ccaas">
+        <mxCell id="e_context_ccaas" value="variables Architect / attributs conversation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff_context" target="ccaas">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_otel_dashboards" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="otel" target="dashboards">

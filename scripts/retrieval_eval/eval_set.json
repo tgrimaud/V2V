@@ -1,0 +1,173 @@
+{
+  "version": "1.0",
+  "created": "2026-08-13",
+  "ticket": "TASK-BE-027",
+  "adr": "ADR-0032",
+  "notes": [
+    "Each question is labeled with acceptable_source_ids derived from the KB TITLE/SECTION",
+    "semantics (not from the retrieval ranking being measured), so recall is non-circular.",
+    "A source_id is a chunk's article id: the CSV 'document_id' (shared across FR/EN) or a",
+    "markdown filename (e.g. 'telecom-faq.md', the curated FAQ). recall@k passes when ANY",
+    "acceptable source is in the top-k. Every question includes a greeting-prefixed variant,",
+    "the BUG-003 brittleness axis. FR questions lean on the curated FR FAQs + FR articles;",
+    "EN questions lean on the EN CSV articles (the FAQ md files are FR-only)."
+  ],
+  "default_top_k": 8,
+  "questions": [
+    {
+      "id": "sup-fr-internet",
+      "language": "fr",
+      "domain": "support",
+      "topic": "internet connection problem",
+      "acceptable_source_ids": ["telecom-faq.md", "13", "324", "326", "230", "854"],
+      "variants": [
+        "J'ai un problème de connexion internet.",
+        "Bonjour, j'ai un problème de connexion internet.",
+        "Ma box ne se connecte plus à internet."
+      ]
+    },
+    {
+      "id": "sup-fr-slow",
+      "language": "fr",
+      "domain": "support",
+      "topic": "slow connection",
+      "acceptable_source_ids": ["telecom-faq.md", "13", "854"],
+      "variants": [
+        "Ma connexion internet est très lente.",
+        "Bonjour, internet est très lent chez moi."
+      ]
+    },
+    {
+      "id": "sup-fr-wifi",
+      "language": "fr",
+      "domain": "support",
+      "topic": "wifi not working",
+      "acceptable_source_ids": ["telecom-faq.md", "324", "326", "21", "23"],
+      "variants": [
+        "Mon wifi ne fonctionne pas.",
+        "Bonjour, je n'ai plus de wifi à la maison."
+      ]
+    },
+    {
+      "id": "sup-fr-tv",
+      "language": "fr",
+      "domain": "support",
+      "topic": "tv decoder",
+      "acceptable_source_ids": ["telecom-faq.md", "421"],
+      "variants": [
+        "Mon décodeur TV ne s'allume plus.",
+        "Bonjour, ma télé ne marche pas."
+      ]
+    },
+    {
+      "id": "sup-en-internet",
+      "language": "en",
+      "domain": "support",
+      "topic": "internet connection problem",
+      "acceptable_source_ids": ["13", "324", "326", "230", "854"],
+      "variants": [
+        "I have an internet connection problem.",
+        "Hello, my internet is not working."
+      ]
+    },
+    {
+      "id": "sup-en-wifi",
+      "language": "en",
+      "domain": "support",
+      "topic": "wifi issues",
+      "acceptable_source_ids": ["324", "326", "21", "23"],
+      "variants": [
+        "My WiFi is not working.",
+        "Hello, I keep having WiFi problems."
+      ]
+    },
+    {
+      "id": "bil-fr-understand",
+      "language": "fr",
+      "domain": "billing",
+      "topic": "understand an amount on the invoice",
+      "acceptable_source_ids": ["billing-faq.md"],
+      "variants": [
+        "Je ne comprends pas un montant sur ma facture.",
+        "Bonjour, il y a un montant que je ne comprends pas sur ma facture."
+      ]
+    },
+    {
+      "id": "bil-fr-higher",
+      "language": "fr",
+      "domain": "billing",
+      "topic": "invoice higher than usual",
+      "acceptable_source_ids": ["billing-faq.md"],
+      "variants": [
+        "Ma facture est plus élevée que d'habitude.",
+        "Bonjour, pourquoi ma facture a augmenté ce mois-ci ?"
+      ]
+    },
+    {
+      "id": "bil-fr-payment",
+      "language": "fr",
+      "domain": "billing",
+      "topic": "change payment method",
+      "acceptable_source_ids": ["billing-faq.md", "24"],
+      "variants": [
+        "Comment changer mon RIB ?",
+        "Bonjour, je veux changer ma carte bancaire."
+      ]
+    },
+    {
+      "id": "bil-fr-consult",
+      "language": "fr",
+      "domain": "billing",
+      "topic": "consult the invoice",
+      "acceptable_source_ids": ["billing-faq.md", "879"],
+      "variants": [
+        "Comment consulter ma facture ?",
+        "Bonjour, où puis-je voir ma facture ?"
+      ]
+    },
+    {
+      "id": "bil-fr-cancel",
+      "language": "fr",
+      "domain": "billing",
+      "topic": "cancel subscription",
+      "acceptable_source_ids": ["billing-faq.md", "255", "474", "829", "785"],
+      "variants": [
+        "Comment résilier mon abonnement ?",
+        "Bonjour, je souhaite résilier mon abonnement."
+      ]
+    },
+    {
+      "id": "bil-en-cancel",
+      "language": "en",
+      "domain": "billing",
+      "topic": "cancel subscription",
+      "acceptable_source_ids": ["255", "474", "358", "829"],
+      "variants": [
+        "How do I cancel my subscription?",
+        "Hello, I want to terminate my contract."
+      ]
+    },
+    {
+      "id": "com-fr-subscribe",
+      "language": "fr",
+      "domain": "commercial",
+      "topic": "subscribe to an offer",
+      "acceptable_source_ids": ["commercial-faq.md"],
+      "variants": [
+        "Je souhaite souscrire à une offre.",
+        "Bonjour, je veux souscrire à une nouvelle offre internet."
+      ]
+    },
+    {
+      "id": "com-fr-moving",
+      "language": "fr",
+      "domain": "commercial",
+      "topic": "moving house",
+      "acceptable_source_ids": ["commercial-faq.md"],
+      "variants": [
+        "Je déménage, que dois-je faire pour mon abonnement ?",
+        "Bonjour, je déménage bientôt, comment ça se passe ?"
+      ]
+    }
+  ]
+}

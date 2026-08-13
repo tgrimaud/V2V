@@ -2453,3 +2453,96 @@ and LB VMs are 1 vCPU. Under concurrent calls this is a scaling and latency risk
 
 - New sessions beyond the cap are rejected/queued cleanly (no crash); active-session metric
   emitted; a load test documents the ceiling; batch path no longer creates a loop per turn.
+
+---
+
+## TASK-WEB-025 - Genesys Audio Connector feasibility spike (investigation only)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0040 (Audio Connector as V2V media plane), ADR-0020 (Genesys handoff),
+ADR-0019 (escalation contract), ADR-0029 (mouth-to-ear latency gate), ADR-0025 (barge-in), ADR-0033
+(direct WebRTC transport)
+**Depends on:** OQ-006 (Genesys pilot environment access) — **gated**
+**Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
+**Status:** Proposed — spike (investigation only), gated by OQ-006
+**Priority:** Low (foundational for the Sprint 13 Genesys go/no-go)
+**Branch:** `task/TASK-WEB-025-genesys-audio-connector-spike` (to create when work starts; ticket
+authored under TASK-DOC-006)
+**Surfaced by:** `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`
+(Must-fix items R1–R6)
+
+### Context
+
+ADR-0040 sets Genesys **Audio Connector** (the bidirectional AudioHook feature) as the target V2V
+media plane, but the adversarial review flagged that we start in a latency deficit (the ADR-0029
+mouth-to-ear gate is already FAIL at ~2.1 s on the shorter direct WebRTC path), the Audio Connector
+constraints are unquantified against our journey (premium, ≤5 integrations/org, one bidirectional
+stream/session, IVR channel, 15-minute default call cap, PCMU/L16 codecs), and no failure mode is
+designed or tested. This spike de-risks those unknowns **by measurement** before any implementation
+is opened. It is a throwaway prototype + a report, not V1 delivery.
+
+### Scope (investigation questions to answer)
+
+- **R1 — Isolated Genesys-leg latency:** Architect **Call Audio Connector** fork → our `wss` server
+  → bot audio back. Report p50/p95 for the Genesys leg alone and re-score the full round trip against
+  ADR-0029 (Genesys ingress, fork, `wss` out, transcoding, return, egress).
+- **R2 — 15-minute cap:** confirm the default call cap and whether the billing-explanation journey
+  (auth + BSS + PDF + hold) fits, or needs checkpoint/resume.
+- **R3 — At least one degraded mode:** observe/define what Architect does when our endpoint is
+  down/slow/times out (target: route straight to the advisor queue) and confirm the flow resumes
+  cleanly at session end.
+- **R4 — Barge-in / end-of-turn ownership:** confirm the native Genesys events (`barge-in`,
+  `playback-started`/`playback-completed`, `BotTurnResponse`) and decide the per-path rule (Genesys
+  events on the Genesys path; in-house detectors kept for direct WebRTC only, ADR-0025/0033).
+- **R5 — Handoff mapping:** determine the size/type limits of Architect input/output variables and
+  conversation attributes, and decide whether the `EscalationHandoff` (ADR-0019) travels inline or as
+  `handoff_id` + backend fetch.
+- **R6 — Concurrency:** measure a minimal concurrent-session ceiling on a 1-vCPU-class runtime and
+  note the premium ≤5-integrations impact (counterpart of TASK-WEB-024 for the Genesys path).
+- **Codec:** confirm L16 vs PCMU end to end and budget any transcoding to the Gradium PCM16
+  expectation.
+- **Observability:** confirm the Genesys correlation id (conversationId / participant) can be
+  propagated into OpenTelemetry spans across the round trip.
+
+### Out Of Scope
+
+- **No conversation logic moves to Genesys** — RAG, billing reasoning, guardrails, escalation policy
+  and memory stay in the Java backend (ADR-0001). The spike must not touch backend business code.
+- **Not the V1 implementation** of the Genesys path (that stays gated by OQ-006, targeted Sprint 13).
+- The prototype `wss` server and Architect flow are **throwaway**; no production hardening, no SLO
+  claim, no permanent adapter.
+- Twilio-vs-Genesys pilot-entry decision (recorded as a follow-up once the spike reports).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The Genesys leg latency is measured and re-scored against the gate
+  Given a throwaway Audio Connector wss server and a minimal Architect Call Audio Connector flow
+  When a voice round trip is exercised end to end
+  Then the isolated Genesys-leg latency is reported as p50/p95
+  And the full mouth-to-ear round trip is re-scored against the ADR-0029 gate with a go/no-go note
+```
+
+```gherkin
+Scenario: At least one degraded mode is characterised
+  Given the Audio Connector session is active
+  When our wss endpoint is made unavailable or times out
+  Then the observed Architect behaviour is documented (e.g. route to the advisor queue)
+  And the recommended fail-safe fallback is stated
+```
+
+```gherkin
+Scenario: The escalation handoff transport is decided
+  Given the EscalationHandoff payload from ADR-0019
+  When it is mapped onto Architect variables / conversation attributes
+  Then the size/type limits are documented
+  And the transport decision (inline vs handoff_id + backend fetch) is recorded
+```
+
+### Required Evidence
+
+- A short **measurement report** (per-leg latency p50/p95, codec observed, minimal concurrency
+  ceiling, degraded-mode behaviour, 15-min cap check) — no raw audio, no secrets, no PII in logs.
+- A **go/no-go recommendation** that updates ADR-0040 and feeds the Sprint 13 decision.
+- Throwaway prototype + Architect flow config referenced (not merged into the runtime).
+- Correlation-id propagation note (Genesys → OpenTelemetry).

@@ -26,6 +26,16 @@ Genesys offers two relevant integration shapes:
 - full voice routing, where Genesys is the telephony entry point and streams the
   complete bot conversation to Pipecat/Gradium through Audio Connector.
 
+Terminology (important, see ADR-0040): **AudioHook is the WebSocket/TLS protocol**;
+it exposes two distinct features. The **Bot Transcription Connector** feature is
+**listen-only** (monitoring, transcription, analytics) and cannot play audio back to
+the caller. The **Audio Connector** feature is **bidirectional** (the service receives
+customer audio and sends bot audio back, with `playback-*`, barge-in and
+`BotTurnResponse` events) and is the only feature that fits a Voice2Voice bot that must
+**speak**. Wherever this ADR previously said "Audio Connector or AudioHook" as if
+interchangeable, the correct target is the **Audio Connector** feature — bare
+AudioHook transcription is not a V2V media path.
+
 The target enterprise pattern should keep Genesys as the system of record for the
 contact-center interaction: call ingestion, IVR and ANI context, compliance
 recording, routing, queueing, supervision, agent desktop, and contact-center
@@ -55,12 +65,14 @@ The mandatory V1 handoff context includes, subject to the pilot trust model:
 - customer/session identifiers permitted for Genesys transfer;
 - recommended next advisor action.
 
-Full Genesys Audio Connector or AudioHook routing of the complete bot
-conversation remains a bounded feasibility spike or pilot option. In that shape,
-Genesys routes a call to a virtual-agent flow or queue, streams audio to the
-voice runtime, and receives the resulting audio back. The Java backend is still
-called through the normalized channel envelope and remains the source of truth
-for conversation decisions.
+Full Genesys **Audio Connector** routing of the complete bot conversation remains a
+bounded feasibility spike or pilot option. In that shape, a Genesys Architect flow
+invokes the **Call Audio Connector** action, which forks the call audio to the voice
+runtime over the AudioHook WebSocket and pauses the flow, streams audio to the runtime
+and receives the resulting bot audio back, then resumes the flow. The Java backend is
+still called through the normalized channel envelope and remains the source of truth
+for conversation decisions. See ADR-0040 for the media/control/context plane split and
+the Audio Connector constraints.
 
 Full Genesys voice routing becomes V1 core only if the pilot environment
 explicitly requires Genesys as the entry telephony layer.
@@ -82,7 +94,7 @@ action.
   Connector routing.
 - The handoff payload must stay owned by the Java backend so billing evidence,
   escalation policy and audit rules remain centralized.
-- Any Audio Connector or AudioHook spike must measure the full round trip:
+- Any Audio Connector spike must measure the full round trip:
   Genesys -> voice runtime -> STT -> backend -> TTS -> Genesys.
 - Customer identification should reuse Genesys IVR, ANI, or existing
   contact-center lookup context when available. The backend still enforces BSS
@@ -105,6 +117,7 @@ action.
 
 ## Related Documents
 
+- `docs/architecture/adrs/ADR-0040-genesys-audio-connector-v2v-media-plane.md`
 - `docs/architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md`
 - `docs/architecture/adrs/ADR-0017-billing-v1-with-general-support-foundation.md`
 - `docs/architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md`

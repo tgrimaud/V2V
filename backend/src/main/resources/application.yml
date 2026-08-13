@@ -145,6 +145,34 @@ voice-support:
     # are always exposed as Micrometer meters (voice_support.kb_sync_batch / kb_sync_chunks /
     # kb_sync, tagged source_type). Raise it for very large corpora to keep the log quiet.
     sync-progress-every: ${KB_SYNC_PROGRESS_EVERY:500}
+    retrieval:
+      # MMR diversity re-ranking (TASK-BE-028, BUG-003). Over-fetch top-k * fetch-multiplier dense
+      # candidates then greedily re-select top-k balancing relevance (dense score) against lexical
+      # redundancy. The most relevant chunk is always selected first, so the confidence guardrail's
+      # best score is preserved. DISABLED by default: the TASK-BE-027 A/B on the live corpus
+      # (2026-08-13, reports/ab-mmr-2026-08-13.md) showed lambda=0.7 HURTS (recall@8 0.90→0.86,
+      # stability 0.79→0.71) because nomic-embed cosine scores are compressed (~0.49-0.80) so the
+      # redundancy term dominates; lambda=0.9 is only neutral (recall@4 +0.03, no gain on recall@8/
+      # stability) and does NOT fix the one eviction — that miss is a greeting-induced recall miss
+      # (the answer chunk is absent from candidates when "Bonjour," is prepended), not a diversity
+      # problem. Keep it as a tested, env-toggleable dedup guard; if enabled, use lambda>=0.9.
+      mmr:
+        enabled: ${KB_RETRIEVAL_MMR_ENABLED:false}
+        lambda: ${KB_RETRIEVAL_MMR_LAMBDA:0.9}
+        fetch-multiplier: ${KB_RETRIEVAL_MMR_FETCH_MULTIPLIER:3}
+      # Query greeting-normalization (TASK-BE-029, BUG-003 / OQ-008). Strips a leading greeting
+      # ("Bonjour, ...", "Hello ...") from the EMBEDDING query only — the raw question still drives
+      # the input guardrail, the LLM prompt and the logs. DISABLED by default: the TASK-BE-027 A/B
+      # on the live corpus (2026-08-13, reports/ab-query-norm-2026-08-13.md) showed it is STRICTLY
+      # NEUTRAL (recall@8 0.90, stability 0.79 — identical with it on or off). The one eviction it
+      # was meant to fix (sup-fr-slow) persists after stripping "Bonjour,": the answer chunk is still
+      # absent from top-8, so the miss is driven by the CORE PHRASING ("internet est très lent chez
+      # moi" vs "Ma connexion internet est très lente"), NOT the greeting — the greeting was
+      # mis-attributed as the cause. Kept as a tested, env-toggleable robustness guard (strips
+      # greetings correctly with zero regression); enable it if real voice traffic shows
+      # greeting-only recall flips. Deterministic, no vector-store change.
+      query-normalization:
+        enabled: ${KB_RETRIEVAL_QUERY_NORMALIZATION_ENABLED:false}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

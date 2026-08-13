@@ -282,12 +282,48 @@ the "one Postgres" simplicity.
 
 - Confirm the lever order: (1) fix chunking, (2) topK/over-fetch + MMR, (3) hybrid
   (keyword + dense, e.g. Postgres FTS `tsvector`), (4) cross-encoder reranker, (5) change
-  vector DB — with (5) gated on a concrete trigger.
+  vector DB — with (5) gated on a concrete trigger. **Lever order confirmed in ADR-0032.**
 - Concrete trigger(s) that would justify Qdrant (native hybrid without hand-rolling,
   volumetry ≫ V1, quantization, vector multitenancy, latency at scale).
 - Whether hybrid/rerank on pgvector is enough to meet the retrieval-quality bar after
-  BUG-003 is fixed (measure before deciding).
+  BUG-003 is fixed (**measure before deciding**).
 - Whether the eventual decision warrants a full ADR (stubbed as ADR-0032, Proposed).
+
+### Progress (2026-08-13)
+
+- ✅ Lever 1 (chunking) done via BUG-003; ✅ lever 2 top-K over-fetch done (4 → 8);
+  BUG-004 (LLM refusal) closed. MMR / hybrid / rerank not yet built.
+- The remaining decision now hinges on **measurement**, not more debate. ADR-0032 adds a
+  measurement protocol (labeled FR/EN eval set with phrasing variants; recall@k, MRR,
+  phrasing-stability; proposed bar recall@8 ≥ 0.9 & stability ≥ 0.9).
+- **TASK-BE-027** built the offline eval harness + labeled eval set (`scripts/retrieval_eval/`);
+  **TASK-BE-028** adds MMR gated on the baseline. OQ-008 is resolved once the harness numbers
+  show whether pgvector + the needed levers clear the bar or a Qdrant trigger has fired.
+- **Baseline (2026-08-13, dense-only, top-K=8; measures whole-pipeline grounding success, not
+  isolated vector recall):** overall recall@8 **0.90**, phrasing-stability **0.79**. FR / billing
+  / commercial clear the bar (billing & commercial perfect). **Miss classification is decisive:**
+  of 3 failures, **2 are `OFF_TOPIC` input-guardrail blocks on EN** (`sup-en-internet`,
+  `sup-en-wifi` — retrieval never ran, a BUG-001-class over-block, **not** a retrieval/vector
+  problem) and **1 is a genuine retrieval eviction** (`sup-fr-slow`).
+- **Corrected lever reading:** no Qdrant trigger; pgvector retrieval is strong. **MMR
+  (TASK-BE-028)** was implemented and **A/B-measured on the live corpus (2026-08-13,
+  `ab-mmr-2026-08-13.md`)** — result: it does **not** clear the bar and is **left OFF by
+  default**. λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71 (compressed `nomic` scores
+  let the diversity term dominate); λ=0.9 is neutral and does not fix the one eviction.
+- **Query greeting-normalization (TASK-BE-029)** was then implemented and **A/B-measured
+  (2026-08-13, `ab-query-norm-2026-08-13.md`)** to test whether the eviction was greeting-induced —
+  result: **strictly neutral, left OFF by default**, and the **greeting hypothesis is disproven**.
+  Stripping "Bonjour," leaves `"internet est très lent chez moi."`, which **still** misses the
+  answer chunk in top-8, whereas the bare variant `"Ma connexion internet est très lente."` hits it
+  at rank 2. So `sup-fr-slow` is a **core-phrasing recall miss**, not a greeting one — neither MMR
+  nor greeting normalization reaches it.
+- **Corrected next lever = phrasing-robust recall:** hybrid lexical (`tsvector`) + dense fusion or
+  query expansion — or enrich the eval set with a variant that differs *only* by the greeting. This
+  is the remaining concrete OQ-008 follow-up (query normalization and diversity are both exhausted).
+- The **EN gap is guardrail topicality (OFF_TOPIC over-block), out of OQ-008 scope** → tracked as
+  **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN
+  support **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction
+  split this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 
