@@ -20,7 +20,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-014 | Batch embedding/insert (`VectorStorePort.storeChunks`) + sync progress metrics/logs | V1 core (KB content) | TASK-BE-013 | In review — implemented + live-validated (150-article batched sync 75s→44.7s, 42.7 chunks/s), 178 tests green; awaiting adversarial review + QA acceptance |
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). Awaiting QA. EPIC-005 / ADR-0032 / OQ-008 |
-| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. EPIC-005 / ADR-0032 |
+| TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — merge-ready pending user validation. EPIC-005 / ADR-0032 |
 
 ---
 
@@ -104,7 +104,9 @@ evidence-driven. Record the **baseline** for the current stack.
 shows MMR does not clear the bar: λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71,
 λ=0.9 is neutral and does not fix the one eviction (`sup-fr-slow` is a greeting-induced recall
 miss — answer absent from candidates when "Bonjour," is prepended, not a diversity problem).
-Kept as a tested, env-toggleable dedup guard (use λ≥0.9). Adversarial review + QA still to run.
+Kept as a tested, env-toggleable dedup guard (use λ≥0.9). **Adversarial review 93/100 (Pass)
++ QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`, 2026-08-13) — merge-ready
+pending user validation.
 **Priority:** Low
 
 ### Implementation (2026-08-13)
@@ -163,6 +165,26 @@ Same build, only the MMR config changed; `:8081`, pgvector + Ollama, `--top-k 8`
   3. **Acceptance reframed** — the stated "measured recall@8/stability improvement" is *not* met;
      resolved via the ticket's explicit "close as not needed / disable with evidence" clause.
 - **Follow-up:** the real lever (query greeting-normalization) is tracked as **TASK-BE-029**.
+
+### QA functional & latency outcome (2026-08-13)
+
+- **Verdict:** **QA Pass** — full report `docs/qa/task-be-028-mmr-qa-report.md`.
+- **Functional (fresh repackaged jar, `:8081`, MMR-adapter at DEBUG):**
+  - Shipped default (`enabled:false`, no env) → **0** `[RETRIEVAL-MMR]` invocations and retrieval
+    **identical to baseline** (recall@8 **0.90**, stability **0.79**, evict 1). No regression.
+  - Enabled path (`KB_RETRIEVAL_MMR_ENABLED=true`, λ=0.9) → **27** invocations, sample
+    `fetch_k=24 candidates=24 selected=8 lambda=0.9` (over-fetch ×3 verified); **quality-neutral**
+    (recall@4 0.83→0.86, recall@8/MRR/stability unchanged, evict still 1 — MMR does not fix the
+    greeting recall miss, as expected → TASK-BE-029).
+- **Latency (retrieval slice, `[TELEMETRY] slice=retrieval`, n=27/arm, warm):** MMR off
+  p50 96 / p95 107 / p99 139 ms; MMR on λ=0.9 p50 95 / p95 158 / p99 192 ms (+~50 ms p95/p99 from
+  over-fetch ×3 + rerank). Default off → **zero added latency** in prod.
+- **QA-found process note (Info):** local `mvn test-compile` does not repackage the fat jar — a
+  first `java -jar` ran a **stale** pre-default-flip jar and reproduced the λ=0.7 numbers under
+  "default". Rebuilt with `mvn -o package`; CI builds from source (source default is `false`), so
+  no product impact.
+- **Residuals (non-blocking, accepted):** relevance/redundancy scale mismatch (λ non-portable),
+  `[RETRIEVAL-MMR]` log at DEBUG (metric `voice_support.retrieval_mmr_selected` is not log-gated).
 
 ### Objective
 
