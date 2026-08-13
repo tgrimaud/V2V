@@ -15,6 +15,12 @@ vault_conversation_api_key: "CHANGE_ME"
 vault_gradium_api_key: "CHANGE_ME"
 vault_redis_password: "CHANGE_ME"
 
+# WebRTC TURN relay credential (open input #12). Only needed once a TURN relay is
+# provisioned and voice_turn / voice_turn_username are set in group_vars/voice.yml.
+# Leave empty for the web pilot's STUN / host-candidate-only default (VOICE_TURN unset);
+# voice.env.j2 renders it with `| default('')`, so an empty/absent value is safe.
+vault_turn_credential: ""
+
 # Private registry pull credentials (only used when registry_login_required=true).
 vault_registry_username: ""
 vault_registry_token: ""
