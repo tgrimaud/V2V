@@ -146,6 +146,24 @@ Same build, only the MMR config changed; `:8081`, pgvector + Ollama, `--top-k 8`
   improvement); kept as a tested, env-toggleable dedup guard with a safe λ=0.9 preset. The real
   OQ-008 next lever is **query greeting-normalization and/or hybrid lexical fusion**.
 
+### Adversarial review outcome (2026-08-13)
+
+- **Verdict:** Proceed. **Score: 93/100. QA gate: Pass.** Implementation is correct,
+  boundary-clean (ADR-0027; `ContextBoundaryTest` green), well-tested and observable; the team
+  measured the lever and disabled it with evidence — a valid outcome under this ticket's own
+  close-condition. **No blocking findings.**
+- **Non-blocking (recorded residual):**
+  1. **Relevance/redundancy scale mismatch** — MMR combines an *un-normalized* relevance (the
+     compressed `nomic` cosine, ~0.49–0.80) with a 0–1 Jaccard redundancy, so λ has no consistent
+     meaning across corpora (this is *why* λ=0.7 failed). If MMR is ever revisited, min-max
+     normalize relevance within the candidate set before combining. Low risk while OFF by default.
+  2. **Observability minor** — `[RETRIEVAL-MMR]` log carries no correlation id and the metric
+     records only `selected` count (no candidate/fetch counter). Fine while disabled; add the
+     correlation id + a candidate-count meter if MMR is enabled in an environment.
+  3. **Acceptance reframed** — the stated "measured recall@8/stability improvement" is *not* met;
+     resolved via the ticket's explicit "close as not needed / disable with evidence" clause.
+- **Follow-up:** the real lever (query greeting-normalization) is tracked as **TASK-BE-029**.
+
 ### Objective
 
 If the TASK-BE-027 baseline confirms near-duplicate header/fragment chunks still crowd out
