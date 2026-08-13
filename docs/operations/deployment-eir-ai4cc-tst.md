@@ -59,8 +59,22 @@ flowchart TB
 - Tenant subnet: `192.168.0.0/24` (`EIR-AI4CC-SUBNET`).
 - Gateways: Internet `.1`, Prodpriv `.254`, Admin `.253`.
 - Exposure per VM: Admin (`VL1422` / `.mt.lan`) and/or Prodpriv (`VL2909` / `.prod.lan`).
-- SSH access: `ssh grimaud@<hostname>.mt.lan` then `sudo su -` (public key for
+- SSH access: `ssh grimaud@<hostname>.prod.lan` then `sudo su -` (public key for
   `thomas.grimaud` is installed on all VMs).
+- Ingress flows opened on the Prodpriv network (VLAN 2909, flow request 2026-08-13),
+  from two client sources — `10.195.80.81` (`EXT_H_NAT-ITSF-Nice_Users`) and
+  `10.195.29.11` (`EXT_H_NAT-ITSF-WireguardUsr`, VLAN 456):
+  - **SSH `:22/TCP`** to every VM's Prod IP (`10.195.x.x`, see the VM inventory) — the
+    control node running Ansible must sit behind one of these sources (Nice office NAT
+    or the Wireguard VPN).
+  - **HTTPS/HTTP `:443` + `:80` TCP** to the voice VIP `vip-ai4cc-voice-t01`
+    (`10.195.59.39`).
+  - ⚠️ **TCP only.** The WebRTC **media is UDP** (RTP/SRTP, peer-to-peer to a bridge) and
+    is **not** in this request — remote-client audio still needs UDP media flows to the
+    bridges' Prod IPs **and** a TURN relay (open input #12), not just these TCP flows.
+    The media flow request (TURN-relay option + direct-candidate fallback) and the
+    Genesys Audio Connector note are in
+    [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md).
 
 ## VIPs
 
@@ -80,14 +94,14 @@ flowchart TB
 
 | Role | Hostname | Flavor (vCPU/RAM/disk) | Private IP | Admin IP | Prod IP | AZ |
 |------|----------|------------------------|-----------|----------|---------|----|
-| LB / HAProxy | `vlp-ai4cc-t01.mt.lan` | 1/2/20 | `192.168.0.100` | `172.23.16.244` | `10.195.56.56` | costa-dc1 |
-| LB / HAProxy | `vlp-ai4cc-t02.mt.lan` | 1/2/20 | `192.168.0.101` | `172.23.16.137` | `10.195.56.147` | fontvieille-dc3 |
-| PostgreSQL 18 (+ pgvector) | `vlb-ai4cc-t01.mt.lan` | 4/16/160 | `192.168.0.102` | `172.23.18.103` | - | costa-dc1 |
-| Voice bridge | `vla-ai4cc-t01.mt.lan` | 2/4/40 | `192.168.0.103` | `172.23.18.131` | - | costa-dc1 |
-| Voice bridge | `vla-ai4cc-t02.mt.lan` | 2/4/40 | `192.168.0.104` | `172.23.16.102` | - | fontvieille-dc3 |
-| Backend Java | `vla-ai4cc-t03.mt.lan` | 4/8/80 | `192.168.0.105` | `172.23.19.87` | - | costa-dc1 |
-| Backend Java | `vla-ai4cc-t04.mt.lan` | 4/8/80 | `192.168.0.106` | `172.23.16.59` | - | fontvieille-dc3 |
-| Redis | `vlb-ai4cc-t02.mt.lan` | 2/4/40 | `192.168.0.107` | `172.23.19.159` | - | fontvieille-dc3 |
+| LB / HAProxy | `vlp-ai4cc-t01.prod.lan` | 1/2/20 | `192.168.0.100` | `172.23.16.244` | `10.195.56.56` | costa-dc1 |
+| LB / HAProxy | `vlp-ai4cc-t02.prod.lan` | 1/2/20 | `192.168.0.101` | `172.23.16.137` | `10.195.56.147` | fontvieille-dc3 |
+| PostgreSQL 18 (+ pgvector) | `vlb-ai4cc-t01.prod.lan` | 4/16/160 | `192.168.0.102` | `172.23.18.103` | `10.195.58.234` | costa-dc1 |
+| Voice bridge | `vla-ai4cc-t01.prod.lan` | 2/4/40 | `192.168.0.103` | `172.23.18.131` | `10.195.59.127` | costa-dc1 |
+| Voice bridge | `vla-ai4cc-t02.prod.lan` | 2/4/40 | `192.168.0.104` | `172.23.16.102` | `10.195.56.240` | fontvieille-dc3 |
+| Backend Java | `vla-ai4cc-t03.prod.lan` | 4/8/80 | `192.168.0.105` | `172.23.19.87` | `10.195.56.102` | costa-dc1 |
+| Backend Java | `vla-ai4cc-t04.prod.lan` | 4/8/80 | `192.168.0.106` | `172.23.16.59` | `10.195.56.39` | fontvieille-dc3 |
+| Redis | `vlb-ai4cc-t02.prod.lan` | 2/4/40 | `192.168.0.107` | `172.23.19.159` | `10.195.56.100` | fontvieille-dc3 |
 
 HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier.
 
@@ -217,8 +231,8 @@ the hard sequencing constraint. Detail + resolution evidence per item below.
 
 | # | Input | Owner | Status | Gate (must close before) |
 |---|-------|-------|--------|--------------------------|
-| 1a | SSH source CIDR allowlist (`:22` ingress) | Platform (netsec) | 🔴 Blocked | any Ansible deploy over SSH |
-| 1b | Voice-VIP client reachability + confirmed VIP ports (backend `:8080` is a placeholder) | Platform | 🟡 Partial | live smoke test |
+| 1a | SSH source CIDR allowlist (`:22` ingress) | Platform (netsec) | 🟢 Resolved (2026-08-13) — `:22/TCP` opened from `10.195.80.81` (ITSF Nice NAT) + `10.195.29.11` (ITSF Wireguard) to every VM Prod IP on VLAN 2909 | — |
+| 1b | Voice-VIP client reachability + confirmed VIP ports (backend `:8080` is a placeholder) | Platform | 🟢 Resolved (2026-08-13) — `:443`+`:80/TCP` opened from both sources to voice VIP `10.195.59.39`; backend VIP stays internal-only (not in ingress list, correct) | — |
 | 2 | Internet egress (Mistral/Gradium/GHCR/Ollama) | VSB + Platform | 🟢 Resolved (2026-08-04) | — |
 | 3 | Embeddings placement (local Ollama sidecar) | VSB / Arch | 🟢 Resolved (ADR-0039) | — |
 | 4 | TLS certificate + public FQDN for the voice VIP | Platform (PKI) | 🔴 Blocked | live HTTPS at `.10:443` |
@@ -228,8 +242,8 @@ the hard sequencing constraint. Detail + resolution evidence per item below.
 | 8 | Redis (Docker, auth, AOF) | VSB | 🟢 Resolved (2026-08-04) | — |
 | 9 | Frontend: built-in mic UI vs separate static host | Product | 🟡 Decision | UAT |
 | 10 | LB apply: NIC name, `virtual_router_id` uniqueness, VRRP secret, run/access on `[lb]` | Platform (config + apply path owned by VSB) | 🟡 Partial | HA failover test |
-| 11 | Prod IP `10.195.59.39` → private VIP `.10` NAT mapping | Platform | 🔴 Blocked | external client reachability |
-| 12 | STUN/TURN relay endpoint(s) + credentials for WebRTC media | Platform (wiring owned by VSB) | 🔴 Blocked | remote-client media (audio) |
+| 11 | Prod IP `10.195.59.39` → private VIP `.10` NAT mapping | Platform | 🟡 Partial (2026-08-13) — ingress `:443`+`:80` to `10.195.59.39` requested; the `.39 → 192.168.0.10` NAT still to confirm | external client reachability |
+| 12 | STUN/TURN relay endpoint(s) + credentials for WebRTC media **+ UDP media flows** | Platform (wiring owned by VSB) | 🔴 Blocked | remote-client media (audio) |
 | 13 | Observability collector host placement (which VM runs `deploy/observability/` + set `otel_collector_endpoint`) | VSB (host = platform decision) | 🟡 Decision | centralized p50/p95/p99 + cross-tier traces on tst |
 
 **Readiness (2026-08-05).** Every **VSB-owned** input is closed: registry (#5),
@@ -239,16 +253,25 @@ a documented manual **apply path** ([`deploy/haproxy/README.md`](../../deploy/ha
 `VOICE_TURN_CREDENTIAL` → runtime `build_ice_servers`, #12), and the **centralized
 observability pipeline** (collector + Prometheus stack, W3C `traceparent` voice→backend,
 one-variable `otel_collector_endpoint` enablement — TASK-OPS-007, #13). The stack is
-code-complete for a live smoke test; the **only remaining gates are platform-owned**: TLS
-cert + FQDN (#4), SSH/ingress CIDR (#1a), the Prod→VIP NAT mapping (#11), a TURN relay
-endpoint + credentials (#12), and the platform-side LB apply/NIC/VRID/secret confirmation
-(#10). The frontend-host decision (#9) and the observability collector host (#13) are
+code-complete for a live smoke test. **SSH ingress (#1a) and voice-VIP client reachability
+(#1b) are resolved** by the 2026-08-13 VLAN-2909 flow request (`:22` to every VM Prod IP,
+`:443`+`:80` to the voice VIP, from the ITSF Nice-NAT + Wireguard sources). The **remaining
+gates are platform-owned**: TLS cert + FQDN (#4), the Prod→VIP NAT mapping (#11), a TURN
+relay endpoint + credentials **and UDP media flows** (#12 — the flow request is TCP-only, so
+remote-client audio is still blocked), and the platform-side LB apply/NIC/VRID/secret
+confirmation (#10). The frontend-host decision (#9) and the observability collector host (#13) are
 VSB/Product decisions, not code blockers. No further self-owned code is required to
 attempt the first live smoke test.
 
-1. **Ingress flows to authorize.** SSH source range(s) (admin bastion / office
-   CIDR), who reaches the voice VIP `.10` (browsers on Prodpriv, Genesys, other),
-   and the confirmed VIP ports (voice, backend - `8080` is a placeholder).
+1. ~~**Ingress flows to authorize**~~ ✅ **Resolved (2026-08-13, VLAN-2909 flow
+   request).** `:22/TCP` from `10.195.80.81` (ITSF Nice NAT) and `10.195.29.11` (ITSF
+   Wireguard, VLAN 456) to every VM Prod IP (`10.195.x.x`); `:443`+`:80/TCP` from both
+   sources to the voice VIP `10.195.59.39`. Ansible therefore runs from a Nice-NAT or
+   Wireguard-connected control node and reaches the VMs by `.prod.lan` DNS. The backend
+   VIP stays internal-only (not exposed), as intended. **Caveat:** the request is
+   **TCP-only** — WebRTC media is **UDP** (RTP/SRTP, peer-to-peer to the bridges), so
+   remote-client audio still needs UDP media flows to the bridge Prod IPs plus a TURN
+   relay (#12).
 2. ~~**Internet egress from tst**~~ ✅ **Resolved (2026-08-04): DIRECT `:443`
    egress** (no proxy) to the destinations the pilot needs (ADR-0039):
    `api.mistral.ai` (chat, runtime), the Gradium API (STT/TTS, runtime), **GHCR**

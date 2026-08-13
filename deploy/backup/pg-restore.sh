@@ -10,7 +10,7 @@
 #
 # Usage:  PGPASSWORD=... ./pg-restore.sh /var/backups/voice-support/postgres/<db>-<ts>.dump
 # Env:    PGHOST (192.168.0.102), PGPORT (5432), PGUSER (voicesupport),
-#         PGDATABASE (voicesupport), PG_CLIENT_IMAGE (postgres:16-alpine), PGPASSWORD.
+#         PGDATABASE (voicesupport), PG_CLIENT_IMAGE (postgres:18-alpine), PGPASSWORD.
 set -euo pipefail
 
 DUMP="${1:-}"
@@ -18,7 +18,7 @@ PGHOST="${PGHOST:-192.168.0.102}"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-voicesupport}"
 PGDATABASE="${PGDATABASE:-voicesupport}"
-PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:16-alpine}"
+PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:18-alpine}"
 
 log() { echo "[pg-restore] $*"; }
 die() { echo "[pg-restore] ERROR: $*" >&2; exit 1; }

@@ -10,7 +10,7 @@
 #
 # Usage:  PGPASSWORD=... ./pg-backup.sh
 # Env:    PGHOST (default 192.168.0.102), PGPORT (5432), PGUSER (voicesupport),
-#         PGDATABASE (voicesupport), PG_CLIENT_IMAGE (postgres:16-alpine),
+#         PGDATABASE (voicesupport), PG_CLIENT_IMAGE (postgres:18-alpine),
 #         BACKUP_DIR (/var/backups/voice-support/postgres), BACKUP_KEEP (14),
 #         BACKUP_REMOTE (optional rsync/scp target), PGPASSWORD.
 set -euo pipefail
@@ -19,7 +19,7 @@ PGHOST="${PGHOST:-192.168.0.102}"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-voicesupport}"
 PGDATABASE="${PGDATABASE:-voicesupport}"
-PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:16-alpine}"
+PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:18-alpine}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/voice-support/postgres}"
 BACKUP_KEEP="${BACKUP_KEEP:-14}"
 BACKUP_REMOTE="${BACKUP_REMOTE:-}"

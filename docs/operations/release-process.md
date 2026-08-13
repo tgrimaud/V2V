@@ -28,7 +28,7 @@ companion to the topology reference
 
 1. **CI is green** on the mainline and images are published (see "Promote a version").
 2. **Control node** has `ansible-core >= 2.15` (`pip install ansible-core`).
-3. **SSH + sudo** for `grimaud` on every target VM (`ssh grimaud@<host>.mt.lan`, then sudo).
+3. **SSH + sudo** for `grimaud` on every target VM (`ssh grimaud@<host>.prod.lan`, then sudo).
 4. **Targets** have Docker Engine + the `docker compose` v2 plugin — provision bare
    Rocky EL9 VMs once with `ansible-playbook prereqs.yml` (TASK-OPS-003; idempotent,
    installs Docker + compose v2 + opens each tier's firewalld port).
@@ -153,7 +153,7 @@ calls" cannot be done from the outside. Draining is therefore best-effort:
    with `serial:1` + `max_fail_percentage:0`, delegating to an unreachable LB would abort
    the voice deploy. Until then the deploy runs grace-only and prints a warning. Enable it
    once LB access exists with
-   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'`.
+   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'`.
    Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` +
    `failed_when: false`): a failing LB hook degrades to grace-only, it never aborts.
 3. **Bounded grace** — `voice_drain_grace_seconds` (default 60s) lets an in-flight

@@ -80,7 +80,7 @@ The bridge exposes no active-session count or `/drain` endpoint yet, so a hard
    defaults to **empty** (the `[lb]` group is platform-managed, SSH not confirmed yet —
    gated with TASK-INFRA-006), so the hook is off by default and the deploy runs grace-only.
    Enable it once LB access exists with
-   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'`.
+   `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'`.
    Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` + `failed_when: false`):
    a failing LB hook degrades to grace-only with a warning, it never aborts the deploy;
 3. **bounded grace** (`voice_drain_grace_seconds`, default 60s) — lets an in-flight

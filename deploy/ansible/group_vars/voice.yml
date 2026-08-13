@@ -75,7 +75,7 @@ voice_drain_grace_seconds: 60
 # unreachable LB with serial:1 + max_fail_percentage:0 would ABORT the whole voice
 # deploy, so the commands stay wired but the hosts list is empty -> grace-only until
 # LB access is validated. Turn it on then with, e.g.:
-#   -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'
+#   -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'
 # As a second safety net the delegated tasks are non-fatal (ignore_unreachable +
 # failed_when: false): a failing LB hook degrades to grace-only, it never aborts.
 voice_lb_socket_hosts: []
@@ -83,8 +83,8 @@ voice_lb_backend: "voice_bridges"
 voice_lb_admin_socket: "/run/haproxy/admin.sock"
 # This bridge's server name inside the voice_bridges backend (deploy/haproxy/haproxy.cfg).
 voice_lb_server_names:
-  vla-ai4cc-t01.mt.lan: "vla-t01"
-  vla-ai4cc-t02.mt.lan: "vla-t02"
+  vla-ai4cc-t01.prod.lan: "vla-t01"
+  vla-ai4cc-t02.prod.lan: "vla-t02"
 voice_lb_server_name: "{{ voice_lb_server_names[inventory_hostname] | default(inventory_hostname) }}"
 # socat needs a shell (pipe); tasks use ansible.builtin.shell + delegate_to the LB.
 voice_lb_drain_cmd: "echo 'set server {{ voice_lb_backend }}/{{ voice_lb_server_name }} state drain' | socat stdio {{ voice_lb_admin_socket }}"

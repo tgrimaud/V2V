@@ -78,13 +78,14 @@ older than `CONVERSATION_MEMORY_TTL_SECONDS` (default 1 h) expire naturally afte
 
 The role installs `pg-backup.sh` + a daily cron on **one** backend node (it dumps the
 shared `.102`, so one node is enough). It runs `pg_dump -Fc` inside a throwaway
-`postgres:16-alpine` container (no client install), prunes to `pg_backup_keep`, and copies
+`postgres:18-alpine` container (no client install), prunes to `pg_backup_keep`, and copies
 off-host when `pg_backup_remote` is set. `PGPASSWORD` comes from a `0600` env file.
 
 > **Match `pg_client_image` to the server major version.** `pg_dump`/`pg_restore` refuse a
-> server newer than the client (e.g. a `16` client against a `17` server errors out). The
-> platform Postgres (`.102`) is externally managed, so confirm its version and override
-> `pg_client_image` in `group_vars/backend.yml` accordingly before relying on the schedule.
+> server newer than the client (e.g. a `16` client against an `18` server errors out). The
+> platform Postgres (`.102`) is **PostgreSQL 18**, so `pg_client_image` is `postgres:18-alpine`
+> in `group_vars/backend.yml`; confirm the server version and keep them aligned before
+> relying on the schedule.
 
 Run on demand:
 

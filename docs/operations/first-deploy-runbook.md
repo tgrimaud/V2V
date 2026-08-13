@@ -36,7 +36,7 @@ or drop it into the git-ignored `deploy/ansible/.vault_pass` (auto-loaded via
 
 ## Step 0 — Access and open inputs
 
-- **SSH** reaches every VM: `ssh grimaud@<hostname>.mt.lan` then `sudo su -`
+- **SSH** reaches every VM: `ssh grimaud@<hostname>.prod.lan` then `sudo su -`
   (public key already installed). The VMs live on the tenant subnet
   `192.168.0.0/24`; from outside you need the VPN/bastion route to that subnet
   (**open input #1** — ingress/SSH source range). Deployment cannot start until
@@ -118,7 +118,7 @@ the database, the `vector` extension (superuser) and the app user. Reveal the
 password with `ansible-vault view group_vars/all/vault.yml`.
 
 ```bash
-ssh grimaud@vlb-ai4cc-t01.mt.lan
+ssh grimaud@vlb-ai4cc-t01.prod.lan
 sudo su -
 podpg
 psql
@@ -149,7 +149,7 @@ ansible-playbook deploy.yml -e image_tag=0.4.0 --limit redis --ask-vault-pass   
 Verify:
 
 ```bash
-ssh grimaud@vlb-ai4cc-t02.mt.lan \
+ssh grimaud@vlb-ai4cc-t02.prod.lan \
   'docker exec voice-support-redis redis-cli -a "<vault_redis_password>" ping'   # -> PONG
 ```
 

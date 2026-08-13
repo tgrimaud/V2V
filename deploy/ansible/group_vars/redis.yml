@@ -38,4 +38,4 @@ redis_backup_dir: "/var/backups/voice-support/redis"
 redis_backup_cron_minute: "17"
 redis_backup_cron_hour: "*"      # hourly at :17
 redis_backup_keep: 168            # ~7 days of hourly snapshots
-redis_backup_remote: ""           # e.g. "backup@vlb-ai4cc-t01.mt.lan:/srv/backups/redis"
+redis_backup_remote: ""           # e.g. "backup@vlb-ai4cc-t01.prod.lan:/srv/backups/redis"

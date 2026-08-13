@@ -37,8 +37,8 @@ GRAPH="$(ansible-inventory -i inventory/hosts.ini --graph 2>/dev/null)"
 for grp in redis backend voice; do
   echo "$GRAPH" | grep -q "@${grp}:" && ok "inventory has group '$grp'" || bad "inventory missing group '$grp'"
 done
-[ "$(echo "$GRAPH" | grep -c 'vla-ai4cc-t0[12].mt.lan')" -eq 2 ] && ok "voice group has 2 bridges" || bad "voice group host count wrong"
-[ "$(echo "$GRAPH" | grep -c 'vla-ai4cc-t0[34].mt.lan')" -eq 2 ] && ok "backend group has 2 nodes"  || bad "backend group host count wrong"
+[ "$(echo "$GRAPH" | grep -c 'vla-ai4cc-t0[12].prod.lan')" -eq 2 ] && ok "voice group has 2 bridges" || bad "voice group host count wrong"
+[ "$(echo "$GRAPH" | grep -c 'vla-ai4cc-t0[34].prod.lan')" -eq 2 ] && ok "backend group has 2 nodes"  || bad "backend group host count wrong"
 
 # --- 3. Template render (no undefined var) + .env key parity -------------------
 for tier in backend voice redis; do

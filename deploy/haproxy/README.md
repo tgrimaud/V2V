@@ -170,7 +170,7 @@ grace window). Enable the hook once LB access exists, e.g.:
 
 ```bash
 ansible-playbook deploy.yml --limit voice \
-  -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.mt.lan","vlp-ai4cc-t02.mt.lan"]}'
+  -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'
 ```
 
 Even when enabled the delegated tasks are non-fatal (`ignore_unreachable` +
