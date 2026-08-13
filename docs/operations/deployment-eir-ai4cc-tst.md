@@ -26,11 +26,11 @@ flowchart TB
     VIPvoice["VIP voice .10 (Prodpriv 10.195.59.39, TLS edge)"]
     VIPbackend["VIP backend .11 (internal only)"]
   end
-  subgraph voicepool ["Voice bridge - Docker"]
+  subgraph voicepool ["Voice bridge - podman"]
     V1["vla-t01 .103 : web_voice.server :8090"]
     V2["vla-t02 .104 : web_voice.server :8090"]
   end
-  subgraph bepool ["Backend Java - Docker (+ ollama sidecar per VM)"]
+  subgraph bepool ["Backend Java - podman (+ ollama sidecar per VM)"]
     B1["vla-t03 .105 : backend :8080"]
     B2["vla-t04 .106 : backend :8080"]
     OL["ollama nomic-embed-text (CPU sidecar, ADR-0039)"]
@@ -110,11 +110,11 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Component | VMs | Runtime | Notes |
 |-----------|-----|---------|-------|
 | HAProxy + Keepalived | `vlp-t01`/`t02` (`.100`/`.101`) | native (platform) | Two VIPs, health checks, TLS termination at the voice edge |
-| Voice bridge (`voice-agent/`) | `vla-t01`/`t02` (`.103`/`.104`) | Docker + compose | `python -m web_voice.server --host 0.0.0.0 --port 8090`; WebRTC live path |
-| Backend Java (`backend/`) | `vla-t03`/`t04` (`.105`/`.106`) | Docker + compose | Spring Boot `:8080`; RAG, guardrails, memory |
+| Voice bridge (`voice-agent/`) | `vla-t01`/`t02` (`.103`/`.104`) | podman + compose | `python -m web_voice.server --host 0.0.0.0 --port 8090`; WebRTC live path |
+| Backend Java (`backend/`) | `vla-t03`/`t04` (`.105`/`.106`) | podman + compose | Spring Boot `:8080`; RAG, guardrails, memory |
 | PostgreSQL 18 + pgvector | `vlb-t01` (`.102`) | podman pod (`podpg`) | `CREATE EXTENSION vector`; `vector_store` 768 dim |
-| Redis | `vlb-t02` (`.107`) | Docker (`redis:7-alpine`, auth, AOF, no internal TLS) | Shared conversation memory (ADR-0008, TASK-BE-021) |
-| Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | Docker (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
+| Redis | `vlb-t02` (`.107`) | podman (`redis:7-alpine`, auth, AOF, no internal TLS) | Shared conversation memory (ADR-0008, TASK-BE-021) |
+| Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | podman (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
 | Mistral (chat), Gradium (STT/TTS) | cloud | managed | Require controlled internet egress |
 
 ## Port matrix
@@ -131,7 +131,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Backend | Redis `.107` | 6379 | TCP | Shared session memory (auth, no TLS) |
 | Backend | ollama sidecar (same VM) | 11434 | HTTP | Embeddings (compose network, not published) |
 | Backend | Mistral (cloud) | 443 | HTTPS | Chat LLM |
-| Backend / voice VMs | `download.docker.com` + Rocky EL9 mirrors | 443 | HTTPS | **Provisioning only** — Docker CE repo + OS packages (`prereqs.yml`, TASK-OPS-003/004) |
+| Backend / voice VMs | compose-provider source (`github.com` releases by default, or an internal mirror) + Rocky EL9 mirrors | 443 | HTTPS | **Provisioning only** — Docker Compose v2 provider binary + OS/podman packages (`prereqs.yml`, TASK-OPS-003/004, TASK-INFRA-008) |
 | Backend / voice VMs | `ghcr.io` + `pkg-containers.githubusercontent.com` | 443 | HTTPS | Deploy — image pulls (private GHCR, read-only token) |
 | Backend VMs | `registry.ollama.ai` | 443 | HTTPS | Deploy — one-time `nomic-embed-text` model pull (ADR-0039) |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
@@ -139,7 +139,7 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 ## Configuration per tier (environment variables)
 
 All configuration is environment-driven; Ansible renders a `.env` per tier that
-docker-compose consumes. Defaults below are the code defaults - override on tst.
+the compose stack (`podman compose`) consumes. Defaults below are the code defaults - override on tst.
 
 ### Backend Java (`vla-t03`/`t04`)
 
@@ -190,7 +190,7 @@ promote/deploy/rollback: [`release-process.md`](release-process.md) (TASK-OPS-00
    `behave`), builds both images, and pushes them to the registry with an
    immutable version tag.
 2. **Ansible over SSH** renders the per-tier `.env` from secrets, then
-   `docker compose pull && docker compose up -d` on the target VMs, draining
+   `podman compose pull && podman compose up -d` on the target VMs, draining
    active voice sessions before restarting a bridge.
 3. **Rollback** = redeploy the previous image tag.
 
@@ -276,18 +276,19 @@ attempt the first live smoke test.
    egress** (no proxy) to the destinations the pilot needs (ADR-0039):
    `api.mistral.ai` (chat, runtime), the Gradium API (STT/TTS, runtime), **GHCR**
    `ghcr.io` + `pkg-containers.githubusercontent.com` (image pulls, deploy - #5), and
-   `registry.ollama.ai` (one-time `nomic-embed-text` model pull at deploy). No Docker
-   daemon / container proxy configuration required. Embedding inference needs no
-   egress (local sidecar).
-   **Provisioning-time egress (one-time host bootstrap, `prereqs.yml` / TASK-OPS-003
-   + OPS-004):** installing the container runtime on the bare app VMs (`backend` +
-   `voice` tiers) additionally needs `:443` to `download.docker.com` (the Docker CE
-   `dnf` repo definition + `docker-ce`/`containerd.io`/compose packages) and to the
-   **Rocky Linux EL9 OS mirrors** used by `dnf` (`dl.rockylinux.org` / the configured
-   mirrorlist, plus EPEL if enabled). This is a bootstrap-only dependency: once Docker
-   is installed the app tiers no longer need it, and the Redis/DB/LB hosts are not
-   `prereqs` targets. If a package proxy/mirror is mandated, point the VMs' `dnf` +
-   the Docker CE repo at it instead of the public hosts.
+   `registry.ollama.ai` (one-time `nomic-embed-text` model pull at deploy). The runtime
+   is **podman** (no Docker daemon / container proxy configuration required). Embedding
+   inference needs no egress (local sidecar).
+   **Provisioning-time egress (one-time host bootstrap, `prereqs.yml` / TASK-OPS-003 +
+   OPS-004 + TASK-INFRA-008):** the app VMs (`backend` + `voice` tiers) are podman-native,
+   so the bootstrap only needs `:443` to the **compose-provider source** (the Docker
+   Compose v2 binary — `github.com` releases by default, `compose_provider_url`-overridable
+   to an internal mirror) and to the **Rocky Linux EL9 OS mirrors** used by `dnf`
+   (`dl.rockylinux.org` / the configured mirrorlist, plus EPEL if enabled) for
+   `podman`/`podman-docker`. This is a bootstrap-only dependency: once the provider is
+   installed the app tiers no longer need it, and the Redis/DB/LB hosts are not `prereqs`
+   targets. If a package proxy/mirror is mandated, point the VMs' `dnf` and
+   `compose_provider_url` at it instead of the public hosts.
 3. ~~**Embeddings placement**~~ ✅ **Resolved (ADR-0039, 2026-08-04):** Ollama
    `nomic-embed-text` CPU sidecar co-located per backend VM (768 dim, no
    `vector_store` recreation, no cloud egress). Mistral embeddings rejected for the pilot.
@@ -299,7 +300,7 @@ attempt the first live smoke test.
    image tag `X.Y.Z` — plus `sha-<short>`; `latest` on the mainline only). Private → the
    VMs authenticate with a **read-only token**: `registry_login_required: true` +
    `vault_registry_username` (GitHub user `tgrimaud`) / `vault_registry_token` (PAT with
-   `read:packages`) in the ansible-vault; the `compose_tier` role runs `docker login`
+   `read:packages`) in the ansible-vault; the `compose_tier` role runs `podman login`
    before pull. Egress dependency: the VMs need `:443` to `ghcr.io` **and**
    `pkg-containers.githubusercontent.com` (GHCR blob CDN) - see #2.
 6. ~~**Secrets store and delivery**~~ ✅ **Resolved (2026-08-04):** local
@@ -311,7 +312,7 @@ attempt the first live smoke test.
    instance on `.102`; DB + app user `voicesupport` (password = `vault_db_password`);
    `CREATE EXTENSION vector` available. Bootstrap SQL in the PostgreSQL section above.
 8. ~~**Redis**~~ ✅ **Resolved (2026-08-04):** we run Redis ourselves as a
-   **Docker** container on `.107` (`redis:7-alpine`, already wired in
+   **podman** container on `.107` (`redis:7-alpine`, already wired in
    `deploy/compose/redis/`): **auth ON** (`requirepass` = `vault_redis_password`,
    shared with the backend), **AOF persistence**, `noeviction` (active sessions never
    silently dropped), `maxmemory 2gb`. **No TLS on the internal link** (tenant-internal

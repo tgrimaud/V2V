@@ -99,17 +99,22 @@ Required values:
 
 ## Step 3 — Provision the container runtime (once per host)
 
-Installs Docker Engine + `docker compose` v2 and opens each tier's firewalld port
-(TASK-OPS-003). Idempotent, safe to re-run.
+Ensures **podman + the `podman-docker` shim**, installs the **Docker Compose v2 binary
+as podman's compose provider**, writes `/etc/containers/containers.conf` +
+`/etc/containers/nodocker`, enables the rootful `podman.socket`, and opens each tier's
+firewalld port (TASK-OPS-003, runtime revised by TASK-INFRA-008 / ADR-0038 addendum).
+Idempotent, safe to re-run.
 
 ```bash
 cd deploy/ansible
 ansible-playbook prereqs.yml --limit 'redis:backend'      # add voice when deploying it
 ```
 
-On Rocky EL9 the role passes `allowerasing` so `containerd.io` can replace the
-default `podman`/`runc`. The data VM `.102` (podman pod for Postgres) is **not** a
-prereqs target.
+The VMs are **podman-native** (podman 5.x, no Docker CE) — the deploy runs the per-tier
+stacks with `podman compose`, which delegates to the installed Compose v2 provider. For
+an air-gapped prod, override `compose_provider_url` (and matching `compose_provider_checksum`)
+to an internal mirror. The data VM `.102` (podman pod for Postgres) is **not** a prereqs
+target.
 
 ## Step 4 — Bootstrap PostgreSQL (once)
 
@@ -251,9 +256,9 @@ stays reproducible and rollback-addressable.
 | Backend fails on first start (pgvector) | `CREATE EXTENSION vector` not run, or app user lacks `SCHEMA public` | Re-run step 4 as superuser; grant `SCHEMA public` to `voicesupport` |
 | RAG answers are ungrounded / empty | First `POST /api/knowledge/sync` not run, or KB assets missing under `KB_HOST_PATH` | Confirm `knowledge-base/` + `articles.csv` on the host, re-run the sync |
 | `/actuator/health` flips DOWN | `REDIS_HEALTH_ENABLED=true` without a reachable Redis | Only enable it on the backend once Redis is deployed (step 5); default off |
-| `dnf` conflict on `containerd.io` | Rocky EL9 ships `podman`/`runc` | Already handled by `allowerasing` in `prereqs.yml`; ensure `.102` is excluded |
+| `podman compose` "looking up compose provider failed" | Compose v2 provider not installed / `containers.conf` missing | Re-run `prereqs.yml` (installs the provider + writes `containers.conf`); check `compose_provider_url` reachability |
 | Embeddings model pull times out | `registry.ollama.ai:443` egress denied | Allow the egress, or pre-seed the model into the `ollama-models` volume (ADR-0039) |
-| KB read-only mount denied (SELinux) | AVC on the `:ro` bind | Add `:Z` to the KB mount (documented in the compose stack) |
+| KB read-only mount denied (SELinux) | AVC on the `:ro` bind under podman | Already handled: the KB mount is `:ro,Z` in the backend compose (TASK-INFRA-008); confirm `getenforce` and re-run the deploy |
 
 ## Related
 

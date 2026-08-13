@@ -1,6 +1,6 @@
 # ADR-0038 - Pilot deployment architecture for the eir-ai4cc-tst environment
 
-- **Status:** Accepted (2026-08-03); embeddings placement and provider egress resolved in ADR-0039 (TASK-INFRA-003, 2026-08-04)
+- **Status:** Accepted (2026-08-03); embeddings placement and provider egress resolved in ADR-0039 (TASK-INFRA-003, 2026-08-04); **container runtime revised to podman in the 2026-08-13 addendum below (TASK-INFRA-008)**
 - **Deciders:** Product owner (Thomas Grimaud), architecture
 - **Related:** ADR-0008 (Redis active sessions / Postgres durable data), ADR-0010
   (industrialization requires contracts, SLOs and observability), ADR-0028
@@ -157,3 +157,68 @@ the ADR-0010 industrialization gate.
   K8s stays the aspirational evolution, not the pilot deployment.
 - **A message broker for backend<->voice communication.** Out of scope here and
   already rejected for the live path in ADR-0036.
+
+## Addendum (2026-08-13, TASK-INFRA-008) — container runtime is podman, not Docker CE
+
+**Trigger.** Step 0 of the first-deploy access window revealed that every app VM
+(`vla-ai4cc-t01..t04`, `vlb-ai4cc-t02`) runs **podman 5.8.2** with the
+`podman-docker` shim, **no Docker CE**, **no compose provider** (`podman compose`
+fails "looking up compose provider"), `podman.socket` **disabled**, and SELinux
+**Enforcing**. §1 above chose Docker + compose but the Alternatives section already
+anticipated this: *"Revisit if the platform standardizes on podman."* It has, and the
+Postgres pod on `.102` was already podman — so the platform is podman-native.
+
+**Decision (supersedes §1's Docker CE assumption).** Run the per-tier compose stacks
+on **podman (rootful, via the deploy's `become: true`)** using the **Docker Compose v2
+binary registered as podman's compose provider**, driven by `podman compose`. This was
+chosen over the two alternatives below because it keeps the committed Compose files
+byte-for-byte (`deploy.resources.limits`, `depends_on: condition: service_healthy`,
+healthchecks, `json-file` logging all behave as under Docker) while aligning with the
+platform runtime — the lowest-risk path to the same behaviour ADR-0038 already validated
+in QA.
+
+Concretely (implemented in `host_prereqs` + `compose_tier`):
+
+1. **No Docker CE.** `host_prereqs` ensures `podman` + `podman-docker` (both present),
+   removing the `docker-ce`/`containerd.io`/`docker-compose-plugin` install and the
+   `docker` group step (podman has no daemon/group).
+2. **Compose provider.** Install the pinned **Docker Compose v2** binary
+   (`compose_provider_version`, checksum-verified; `compose_provider_url` overridable to
+   an internal mirror for an air-gapped prod) to `compose_provider_path`
+   (`/usr/local/lib/docker/cli-plugins/docker-compose`), and register it in
+   `/etc/containers/containers.conf` (`[engine] compose_providers=[…]`,
+   `compose_warning_logs=false`). `/etc/containers/nodocker` quiets the shim banner.
+3. **Docker-compatible socket.** Enable the rootful `podman.socket` so the provider has a
+   stable Docker API endpoint.
+4. **Compose command.** `compose_cmd: "podman compose"` (was `docker compose`);
+   `compose_tier` logs in/out with `podman login`/`podman logout` (auth at
+   `/run/containers/0/auth.json`, dropped after the pull, same credential-at-rest posture
+   as before).
+5. **SELinux relabel.** The backend KB `:ro` bind mount becomes **`:ro,Z`** — mandatory
+   under podman on Enforcing EL9, backward-compatible with Docker. Redis uses a named
+   volume and the voice tier has no bind mount, so neither needs a relabel.
+6. **Shim reliance.** `docker exec/run/inspect/cp` in `health.yml` and the `deploy/backup/`
+   scripts keep working via the `podman-docker` shim; container names are fixed
+   (`container_name:`), so provider naming differences don't matter.
+
+**Consequences.**
+
+- No application or Compose-file behaviour change; only the runtime under compose swaps.
+- Provisioning egress adds the compose-provider download source (GitHub releases by
+  default, `compose_provider_url`-overridable) alongside the existing Rocky mirrors.
+- The Kubernetes long-term target (Alternatives) is unchanged; podman here does not commit
+  the operator to any orchestrator.
+- Live validation is folded into the tier-A first-deploy smoke (TASK-INFRA-006 window).
+
+**Alternatives considered (2026-08-13).**
+
+- **`podman-compose` (EPIC/EPEL 1.5.0).** One `dnf install`, but a separate Python engine
+  with historically weaker Compose-spec fidelity (`deploy.resources`, `depends_on`
+  conditions) — would risk diverging from the QA-validated Docker behaviour. Kept as the
+  offline fallback if the provider binary can't be shipped.
+- **Install Docker CE anyway (Option A).** Rejected: fights the platform's standard
+  runtime and coexists poorly with the podman Postgres pod; higher operational surface for
+  a pilot.
+- **Rewrite to Quadlet / `podman play kube`.** The clean podman-native end state, but a
+  full rewrite of the deploy for no pilot-visible gain; deferred to the industrialization
+  path.

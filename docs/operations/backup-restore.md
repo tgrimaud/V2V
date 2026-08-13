@@ -10,6 +10,11 @@ not zero-downtime.
 > Scripts: [`../../deploy/backup/`](../../deploy/backup/). Scheduling is wired by the
 > Ansible `compose_tier` role (`tasks/backup.yml`); tune via `group_vars/redis.yml`
 > and `group_vars/backend.yml`.
+>
+> **Runtime note (TASK-INFRA-008).** The VMs run **podman**; the `docker …` calls in the
+> backup/restore scripts (`docker run`/`exec`/`inspect`/`cp`, `docker compose`) execute
+> through the `podman-docker` shim, so they work unchanged. `PG_CLIENT_IMAGE`
+> (`postgres:18-alpine`) is pulled by podman.
 
 ## At a glance
 

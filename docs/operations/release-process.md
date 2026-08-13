@@ -29,9 +29,10 @@ companion to the topology reference
 1. **CI is green** on the mainline and images are published (see "Promote a version").
 2. **Control node** has `ansible-core >= 2.15` (`pip install ansible-core`).
 3. **SSH + sudo** for `grimaud` on every target VM (`ssh grimaud@<host>.prod.lan`, then sudo).
-4. **Targets** have Docker Engine + the `docker compose` v2 plugin — provision bare
-   Rocky EL9 VMs once with `ansible-playbook prereqs.yml` (TASK-OPS-003; idempotent,
-   installs Docker + compose v2 + opens each tier's firewalld port).
+4. **Targets** have **podman + the `podman compose` provider** (the Docker Compose v2
+   binary) — provision the podman-native Rocky EL9 VMs once with
+   `ansible-playbook prereqs.yml` (TASK-OPS-003 / TASK-INFRA-008; idempotent, installs
+   podman + the compose provider + `podman.socket` and opens each tier's firewalld port).
 5. **Vault** is populated:
    ```bash
    cd deploy/ansible
@@ -91,7 +92,7 @@ Deploy order (enforced by the playbook):
    (`GET /` → 200). Depends on the backend VIP.
 
 Each tier: the role copies the compose file, renders `.env` (mode `0600`,
-`no_log`), `docker compose pull` at the target tag, `docker compose up -d`, then
+`no_log`), `podman compose pull` at the target tag, `podman compose up -d`, then
 verifies health. Re-running the same tag is idempotent.
 
 ### First deploy — populate the RAG index

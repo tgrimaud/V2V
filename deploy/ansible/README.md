@@ -1,8 +1,9 @@
 # Ansible deploy — eir-ai4cc-tst (TASK-OPS-002)
 
-Deploys the released Docker images (built and pushed by CI, TASK-OPS-001) to the
+Deploys the released OCI images (built and pushed by CI, TASK-OPS-001) to the
 tst VMs over SSH, reproducibly, with a documented rollback and best-effort voice
-session draining. It drives the per-tier `docker compose` stacks from
+session draining. The VMs are **podman-native**, so it drives the per-tier stacks
+with **`podman compose`** (Docker Compose v2 provider, TASK-INFRA-008) from
 `deploy/compose/` (TASK-INFRA-001).
 
 > Full operational runbook: [`docs/operations/release-process.md`](../../docs/operations/release-process.md).
@@ -21,11 +22,14 @@ deploy/ansible/
 │   ├── voice.yml               # voice tier config + draining knobs
 │   └── redis.yml               # redis tier config
 ├── roles/
-│   ├── host_prereqs/tasks/main.yml   # install Docker Engine + compose v2 + firewalld (Rocky EL9)
+│   ├── host_prereqs/            # ensure podman + install the compose provider + firewalld (Rocky EL9)
+│   │   ├── tasks/main.yml
+│   │   ├── defaults/main.yml    # compose_provider_* (version/url/checksum/path)
+│   │   └── templates/containers.conf.j2
 │   └── compose_tier/                 # generic: dir + compose copy + .env render + pull + up + health
 │       ├── tasks/{main,drain,health,kb_assets,ollama_model}.yml
 │       └── templates/{backend,voice,redis}.env.j2
-├── prereqs.yml                 # one-time host provisioning (Docker) on redis/backend/voice
+├── prereqs.yml                 # one-time host provisioning (podman runtime) on redis/backend/voice
 ├── deploy.yml                  # redis -> backend (rolling) -> voice (rolling, drained)
 └── rollback.yml                # redeploy a pinned previous tag (imports deploy.yml)
 ```
@@ -33,8 +37,9 @@ deploy/ansible/
 ## Prerequisites
 
 - Control node: `ansible-core` >= 2.15 (`pip install ansible-core`).
-- Targets: SSH key access for `grimaud` with `sudo`. The Docker Engine + `docker
-  compose` v2 plugin are installed by `prereqs.yml` (run once per fresh host, below).
+- Targets: SSH key access for `grimaud` with `sudo`. podman + the `podman compose`
+  provider (Docker Compose v2 binary) are provisioned by `prereqs.yml` (run once per
+  fresh host, below).
 - Secrets: `cp group_vars/all/vault.example.yml group_vars/all/vault.yml`, fill it,
   then `ansible-vault encrypt group_vars/all/vault.yml` (the real file is git-ignored).
 - A published, immutable **image** tag — never `latest`. Note the image tag has

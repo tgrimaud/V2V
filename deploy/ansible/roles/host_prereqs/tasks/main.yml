@@ -1,48 +1,64 @@
 ---
-# Provision the container runtime on a bare Rocky Linux EL9 VM (TASK-OPS-003).
-# The compose_tier role (TASK-OPS-002) assumes docker + the compose v2 plugin exist;
-# this role installs them. Idempotent: dnf/systemd report changed only on first apply.
+# Provision the container runtime on a Rocky Linux EL9 VM (TASK-OPS-003, runtime
+# revised by TASK-INFRA-008 / ADR-0038 addendum 2026-08-13).
 #
-# SELinux note (EL9 enforcing): the backend KB `:ro` bind mount may need `:Z`
-# relabeling. If the first deploy hits an AVC denial reading /app/kb-assets, add `:Z`
-# to that volume in deploy/compose/backend/docker-compose.yml (tracked follow-up).
+# The tst VMs are podman-native (podman 5.x + podman-docker shim, no Docker CE). The
+# compose_tier role (TASK-OPS-002) drives `podman compose`, which delegates to the
+# Docker Compose v2 binary installed here as podman's compose provider. Idempotent:
+# dnf/get_url/systemd report changed only on first apply.
+#
+# SELinux note (EL9 enforcing): the backend KB `:ro` bind mount is relabelled `:ro,Z`
+# in deploy/compose/backend/docker-compose.yml so the container reads /app/kb-assets
+# under podman without an AVC denial (TASK-INFRA-008).
 
-- name: "Install dnf plugins core (repo management)"
-  ansible.builtin.dnf:
-    name: dnf-plugins-core
-    state: present
-
-- name: "Add the Docker CE repository (Rocky/RHEL EL9)"
-  ansible.builtin.get_url:
-    url: "https://download.docker.com/linux/centos/docker-ce.repo"
-    dest: /etc/yum.repos.d/docker-ce.repo
-    mode: "0644"
-
-- name: "Install Docker Engine + compose v2 plugin"
+- name: "Ensure podman + the docker CLI shim are present"
   ansible.builtin.dnf:
     name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
+      - podman
+      - podman-docker
     state: present
-    # Rocky EL9 ships container-tools (podman/runc); containerd.io conflicts with
-    # runc. allowerasing lets dnf remove the conflicting packages on the app VMs
-    # (the DB VM's podman pod is on .102, which is NOT a prereqs target).
-    allowerasing: true
 
-- name: "Enable and start the Docker service"
+- name: "Quiet the podman-docker emulation banner"
+  ansible.builtin.copy:
+    dest: /etc/containers/nodocker
+    content: ""
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "Ensure the compose provider plugin directory exists"
+  ansible.builtin.file:
+    path: "{{ compose_provider_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Docker Compose v2 as podman's compose provider (keeps the committed compose files
+# unchanged). checksum omitted only if compose_provider_checksum is empty (falsy).
+- name: "Install the Docker Compose v2 binary as podman's compose provider"
+  ansible.builtin.get_url:
+    url: "{{ compose_provider_url }}"
+    dest: "{{ compose_provider_path }}"
+    checksum: "{{ compose_provider_checksum or omit }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Register the compose provider in containers.conf"
+  ansible.builtin.template:
+    src: containers.conf.j2
+    dest: /etc/containers/containers.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# Docker-compatible API endpoint the compose provider talks to (rootful, system).
+- name: "Enable and start the podman API socket"
   ansible.builtin.systemd:
-    name: docker
+    name: podman.socket
     enabled: true
     state: started
-
-- name: "Add the deploy user to the docker group"
-  ansible.builtin.user:
-    name: "{{ ansible_user | default('grimaud') }}"
-    groups: docker
-    append: true
 
 # Tier-aware firewalld: open the published port so cross-VM traffic works
 # (backend<->redis, VIP<->tier). Uses firewall-cmd directly to avoid a collection
@@ -93,10 +109,10 @@
     - (fw_rich is defined and fw_rich is changed) or (fw_add is defined and fw_add is changed)
   changed_when: true
 
-- name: "Confirm docker + compose v2 are available"
+- name: "Confirm podman + the compose provider are available"
   ansible.builtin.command:
     cmd: "{{ item }}"
   loop:
-    - "docker --version"
-    - "docker compose version"
+    - "podman --version"
+    - "podman compose version"
   changed_when: false

@@ -21,8 +21,9 @@ registry_login_required: true
 # Per-tier stack directory on each VM (compose file + rendered .env live here).
 compose_root: "/opt/voice-support"
 
-# Compose command on the target (docker compose v2 plugin).
-compose_cmd: "docker compose"
+# Compose command on the target: `podman compose` delegating to the Docker Compose v2
+# binary installed as podman's compose provider (TASK-INFRA-008 / ADR-0038 addendum).
+compose_cmd: "podman compose"
 
 # ---- Centralized observability (TASK-OPS-007, ADR-0028 addendum) -----------
 # ONE OTLP endpoint where the backend + voice tiers ship traces/metrics so a call is one

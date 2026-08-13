@@ -29,7 +29,7 @@
 
 - name: "Log in to the registry ({{ registry }})"
   ansible.builtin.shell:
-    cmd: "docker login {{ registry }} -u {{ vault_registry_username }} --password-stdin"
+    cmd: "podman login {{ registry }} -u {{ vault_registry_username }} --password-stdin"
     stdin: "{{ vault_registry_token }}"
   when: registry_login_required | bool
   no_log: true
@@ -64,11 +64,12 @@
 
 # Drop the registry credentials from the host now that the images are local
 # (TASK-OPS-004): the login above is only needed for the pull, so leaving the token
-# cached in ~/.docker/config.json is an unnecessary credential-at-rest surface. The
-# next deploy logs in again. The Ollama model pull + health checks below need no creds.
+# cached in podman's auth file (/run/containers/0/auth.json) is an unnecessary
+# credential-at-rest surface. The next deploy logs in again. The Ollama model pull +
+# health checks below need no creds.
 - name: "Log out of the registry (drop cached credentials)"
   ansible.builtin.command:
-    cmd: "docker logout {{ registry }}"
+    cmd: "podman logout {{ registry }}"
   when: registry_login_required | bool
   changed_when: false
   no_log: true

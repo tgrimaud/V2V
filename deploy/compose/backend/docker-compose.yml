@@ -76,10 +76,12 @@ services:
         max-size: "10m"
         max-file: "5"
     # KB assets provided at deploy time (Ansible drops knowledge-base/ + articles.csv
-    # under KB_HOST_PATH). Read-only, directory bind mount (safe if absent: Docker
+    # under KB_HOST_PATH). Read-only, directory bind mount (safe if absent: the runtime
     # creates an empty dir and the KB sync simply finds nothing until populated).
+    # `,Z` relabels the mount for SELinux (Enforcing on the EL9 VMs) so podman can read
+    # it without an AVC denial (TASK-INFRA-008); backward-compatible with Docker.
     volumes:
-      - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro"
+      - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro,Z"
 
   # Embeddings sidecar (ADR-0039): Ollama nomic-embed-text on CPU, co-located on
   # each backend VM. Keeps embeddings 768-dim (no vector_store recreation) and

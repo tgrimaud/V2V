@@ -939,6 +939,63 @@ bridge being recreated is not drained — only a 60s grace pause protects in-fli
 
 ---
 
+## TASK-INFRA-008 - Adapt the pilot deployment to the podman container runtime (Option B)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0038 (addendum 2026-08-13, container runtime = podman)
+**Depends on:** TASK-OPS-003 (host prereqs), TASK-OPS-002 (compose deploy), TASK-INFRA-006 (SSH access)
+**Classification:** V1 pilot deployment (runtime alignment)
+**Status:** ✅ Implemented (2026-08-13, branch `feat/sprint-11-remote-deployment`) — the deploy
+no longer installs Docker CE. `host_prereqs` now ensures **podman + the `podman-docker` shim**
+(both already shipped on the Rocky EL9 VMs), installs the **Docker Compose v2 binary as
+podman's compose provider** (`compose_provider_*` vars, overridable to an internal mirror),
+writes `/etc/containers/containers.conf` (`compose_providers` + `compose_warning_logs=false`)
+and `/etc/containers/nodocker`, and enables the rootful `podman.socket` (Docker-compatible API
+for the provider). `compose_cmd` flips to **`podman compose`**; `compose_tier` uses
+`podman login`/`podman logout` (credentials land in `/run/containers/0/auth.json`, dropped
+after the pull). The backend KB `:ro` bind mount is relabelled **`:ro,Z`** (SELinux Enforcing
+on EL9 — mandatory under podman, backward-compatible with docker). `docker exec/run/inspect/cp`
+in `health.yml` and the backup scripts keep working through the shim. Runtime-affecting: deploy
+tooling only, no application code change.
+**Priority:** High (blocks first-deploy Steps 3, 5, 6, 7)
+**Branch:** `feat/sprint-11-remote-deployment`
+**Surfaced by:** Step 0 first-deploy access (2026-08-13) — every app VM runs **podman 5.8.2**
+with the `podman-docker` shim, **no Docker CE**, **no compose provider** (`podman compose`
+fails "looking up compose provider"), `podman.socket` **disabled**, and SELinux **Enforcing**.
+ADR-0038 §1 had chosen Docker + compose and explicitly said "Revisit if the platform
+standardizes on podman"; it has.
+
+### Context
+
+ADR-0038 assumed Docker CE + the compose v2 plugin, and `prereqs.yml`/`host_prereqs` installed
+`docker-ce`/`docker-compose-plugin` from the Docker repo. The provisioned VMs instead ship
+podman 5.8.2 (rootless-capable, `wheel`/sudo for rootful) with only the docker CLI shim, and
+neither `docker-compose-plugin` (no Docker repo) nor a compose provider is present. Installing
+Docker CE would fight the platform's standard runtime and its Postgres podman pod on `.102`.
+
+### Scope
+
+- `host_prereqs`: stop installing Docker CE; ensure `podman` + `podman-docker`; install a
+  Compose v2 provider binary (pinned version + checksum, URL overridable for an internal
+  mirror); render `/etc/containers/containers.conf` (`[engine] compose_providers`,
+  `compose_warning_logs=false`) + `/etc/containers/nodocker`; enable rootful `podman.socket`;
+  verify `podman --version` + `podman compose version`.
+- `compose_cmd: "podman compose"`; `compose_tier` login/logout via `podman`.
+- Relabel the backend KB bind mount `:ro` → `:ro,Z` for SELinux Enforcing.
+- Update ADR-0038 (addendum), the first-deploy runbook (Step 3), the deployment reference and
+  backup-restore doc (shim reliance).
+
+### Acceptance
+
+- `prereqs.yml` on a fresh VM leaves `podman compose version` working and `podman.socket`
+  active, with no Docker CE installed.
+- `deploy.yml` per tier pulls + brings up each stack via `podman compose` and passes the
+  existing health gates; the backend reads the `:ro,Z` KB mount without an SELinux AVC.
+- Backup/restore scripts still run (through the `podman-docker` shim).
+- Live validation folded into the first-deploy tier-A smoke (TASK-INFRA-006 access window).
+
+---
+
 ## TASK-OPS-007 - Centralized observability for the pilot (turn the telemetry on)
 
 **Parent:** EPIC-012

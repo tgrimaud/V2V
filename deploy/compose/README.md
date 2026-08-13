@@ -20,16 +20,20 @@ One instance runs per VM; the HAProxy/Keepalived VIPs load-balance each pair
 
 ## Usage (per VM)
 
+The tst VMs are podman-native, so use `podman compose` (Docker Compose v2 provider,
+TASK-INFRA-008). On a Docker dev machine substitute `docker compose` — the files are
+identical.
+
 ```bash
 cd deploy/compose/<tier>
 cp .env.example .env      # Ansible renders the real .env from secrets (TASK-OPS-002)
 # edit .env — never commit it
-docker compose config     # validate the rendered stack
-docker compose up -d
-docker compose ps         # STATUS should reach "healthy"
+podman compose config     # validate the rendered stack
+podman compose up -d
+podman compose ps         # STATUS should reach "healthy"
 ```
 
-Rollback = set `IMAGE_TAG` to the previous version and `docker compose up -d`
+Rollback = set `IMAGE_TAG` to the previous version and `podman compose up -d`
 (full runbook in TASK-OPS-002).
 
 ## Conventions
@@ -40,7 +44,7 @@ Rollback = set `IMAGE_TAG` to the previous version and `docker compose up -d`
 - **Image reference** is `${*_IMAGE}:${IMAGE_TAG}` so the registry (open input #5)
   and the version are injected at deploy time, not hard-coded.
 - **Healthchecks** mirror the image `HEALTHCHECK`s (backend `/actuator/health`,
-  voice `GET /`, Redis authenticated `PING`) so `docker compose ps` reflects real
+  voice `GET /`, Redis authenticated `PING`) so `podman compose ps` reflects real
   readiness.
 - **Resource limits** are sized to each VM flavor and `restart: unless-stopped`;
   logs use `json-file` with rotation (10 MB × 5).

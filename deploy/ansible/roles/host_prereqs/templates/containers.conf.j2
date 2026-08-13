@@ -1,0 +1,6 @@
+# Managed by Ansible (host_prereqs, TASK-INFRA-008 / ADR-0038 addendum).
+# Registers the Docker Compose v2 binary as podman's compose provider so
+# `podman compose` runs the per-tier deploy stacks unchanged. Do not edit by hand.
+[engine]
+compose_providers=["{{ compose_provider_path }}"]
+compose_warning_logs=false
