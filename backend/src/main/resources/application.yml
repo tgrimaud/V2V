@@ -129,13 +129,17 @@ voice-support:
     retrieval:
       # MMR diversity re-ranking (TASK-BE-028, BUG-003). Over-fetch top-k * fetch-multiplier dense
       # candidates then greedily re-select top-k balancing relevance (dense score) against lexical
-      # redundancy, so near-duplicate header/fragment chunks stop evicting the answer chunk. The
-      # most relevant chunk is always selected first, so the confidence guardrail's best score is
-      # preserved. enabled=false → plain dense top-k. lambda in [0,1]: higher = more relevance,
-      # lower = more diversity. Re-measure the TASK-BE-027 eval baseline after tuning.
+      # redundancy. The most relevant chunk is always selected first, so the confidence guardrail's
+      # best score is preserved. DISABLED by default: the TASK-BE-027 A/B on the live corpus
+      # (2026-08-13, reports/ab-mmr-2026-08-13.md) showed lambda=0.7 HURTS (recall@8 0.90→0.86,
+      # stability 0.79→0.71) because nomic-embed cosine scores are compressed (~0.49-0.80) so the
+      # redundancy term dominates; lambda=0.9 is only neutral (recall@4 +0.03, no gain on recall@8/
+      # stability) and does NOT fix the one eviction — that miss is a greeting-induced recall miss
+      # (the answer chunk is absent from candidates when "Bonjour," is prepended), not a diversity
+      # problem. Keep it as a tested, env-toggleable dedup guard; if enabled, use lambda>=0.9.
       mmr:
-        enabled: ${KB_RETRIEVAL_MMR_ENABLED:true}
-        lambda: ${KB_RETRIEVAL_MMR_LAMBDA:0.7}
+        enabled: ${KB_RETRIEVAL_MMR_ENABLED:false}
+        lambda: ${KB_RETRIEVAL_MMR_LAMBDA:0.9}
         fetch-multiplier: ${KB_RETRIEVAL_MMR_FETCH_MULTIPLIER:3}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose

@@ -120,15 +120,17 @@ public class KnowledgeConfig {
 
     // TASK-BE-028: MMR diversity re-ranking over the over-fetched dense candidates (BUG-003).
     // Over-fetch top-k * fetch-multiplier, then greedily re-select top-k balancing relevance
-    // (dense score) against lexical redundancy so near-duplicate chunks stop evicting the answer
-    // chunk. Set mmr.enabled=false to fall back to plain dense top-k. Re-measure the retrieval
-    // eval baseline (TASK-BE-027) after tuning lambda / fetch-multiplier.
+    // (dense score) against lexical redundancy. Disabled by default: the TASK-BE-027 live A/B
+    // (reports/ab-mmr-2026-08-13.md) showed lambda=0.7 degrades recall@8/stability (compressed
+    // nomic scores → redundancy dominates) and lambda=0.9 is only neutral, so MMR is kept as a
+    // tested, env-toggleable dedup guard rather than an on-by-default lever. enabled=false →
+    // plain dense top-k. If enabling, use lambda>=0.9.
     @Bean
     public KnowledgeRetrievalUseCase knowledgeRetrievalUseCase(
             VectorSearchPort vectorSearchPort,
             RetrievalObserverPort retrievalObserver,
-            @Value("${voice-support.knowledge.retrieval.mmr.enabled:true}") boolean mmrEnabled,
-            @Value("${voice-support.knowledge.retrieval.mmr.lambda:0.7}") double mmrLambda,
+            @Value("${voice-support.knowledge.retrieval.mmr.enabled:false}") boolean mmrEnabled,
+            @Value("${voice-support.knowledge.retrieval.mmr.lambda:0.9}") double mmrLambda,
             @Value("${voice-support.knowledge.retrieval.mmr.fetch-multiplier:3}") int fetchMultiplier) {
         if (!mmrEnabled) {
             return new KnowledgeRetrievalService(vectorSearchPort);

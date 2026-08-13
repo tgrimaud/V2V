@@ -306,13 +306,18 @@ the "one Postgres" simplicity.
   `sup-en-wifi` — retrieval never ran, a BUG-001-class over-block, **not** a retrieval/vector
   problem) and **1 is a genuine retrieval eviction** (`sup-fr-slow`).
 - **Corrected lever reading:** no Qdrant trigger; pgvector retrieval is strong. **MMR
-  (TASK-BE-028)** is justified but narrow (the single eviction) — **implemented 2026-08-13**
-  (`MmrReranker` behind `VectorSearchPort`, env-tunable λ/over-fetch, observed via
-  `RetrievalObserverPort`; eval re-run pending backend access). The **EN gap is guardrail
-  topicality (OFF_TOPIC over-block), out of OQ-008 scope** → now tracked as **BUG-009**
-  (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN support
-  **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction split
-  this would have been misattributed to retrieval (the BUG-003 trap).
+  (TASK-BE-028)** was implemented and **A/B-measured on the live corpus (2026-08-13,
+  `ab-mmr-2026-08-13.md`)** — result: it does **not** clear the bar and is **left OFF by
+  default**. λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71 (compressed `nomic` scores
+  let the diversity term dominate); λ=0.9 is neutral and does not fix the one eviction. That
+  eviction (`sup-fr-slow`) is a **greeting-induced recall miss** (the answer chunk is absent from
+  candidates when "Bonjour," is prepended), not a diversity problem.
+- **Next lever is recall, not diversity:** normalize the query before embedding (strip a leading
+  greeting) and/or hybrid lexical (`tsvector`) fusion. This is the concrete OQ-008 follow-up.
+- The **EN gap is guardrail topicality (OFF_TOPIC over-block), out of OQ-008 scope** → tracked as
+  **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN
+  support **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction
+  split this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 

@@ -112,17 +112,24 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
 - ✅ Fix BUG-003 (chunking) on pgvector (done 2026-07-22) + raise top-K to 8.
 - ✅ **TASK-BE-027** — offline eval harness + labeled eval set built (`scripts/retrieval_eval/`);
   **baseline recorded 2026-08-13** (`reports/baseline-2026-08-13.md`).
-- 🚧 **TASK-BE-028** — MMR (diversity) over the over-fetched candidates **implemented**
-  (2026-08-13, `task/TASK-BE-028-mmr-diversity`): pure `MmrReranker` (relevance = dense score,
-  redundancy = lexical Jaccard proxy since the store returns no candidate embeddings) selecting
-  top-k from `top-k * fetch-multiplier` over-fetched candidates, behind `VectorSearchPort`
-  (no engine change), env-tunable λ / multiplier, observed via `RetrievalObserverPort`
-  (`voice_support.retrieval_mmr_selected` + `[RETRIEVAL-MMR]` log). 8 new tests (347 backend
-  green). **Eval re-run to quantify the marginal gain is pending a running backend + pgvector +
-  synced corpus** (same pilot-access blocker); adversarial review + QA to follow.
-- **BUG-009** — the two EN `OFF_TOPIC` guardrail blocks are now a tracked bug: the OFF_TOPIC
-  royalty pattern (`…|roi|queen|king`) lacks word boundaries, so `king` matches inside
-  "wor**king**". Out of OQ-008 scope (guardrail, not retrieval).
+- ⚠️ **TASK-BE-028** — MMR (diversity) implemented + **A/B-measured on the live local corpus**
+  (2026-08-13, `task/TASK-BE-028-mmr-diversity`, `reports/ab-mmr-2026-08-13.md`) and **left
+  OFF by default**. Pure `MmrReranker` (relevance = dense score, redundancy = lexical Jaccard
+  proxy — the store returns no candidate embeddings) selecting top-k from `top-k *
+  fetch-multiplier`, behind `VectorSearchPort`, env-toggleable, observed via
+  `RetrievalObserverPort`. **A/B verdict (×3 over-fetch):** λ=0.7 **degrades** recall@8
+  0.90→0.86 and stability 0.79→0.71 (compressed `nomic` scores → the redundancy term dominates)
+  and adds a new eviction; λ=0.9 is **neutral** (recall@4 +0.03, no gain on recall@8/stability)
+  and **does not fix the one eviction**. That eviction (`sup-fr-slow`) is a **greeting-induced
+  recall miss** — the answer chunk is absent from candidates only when "Bonjour," is prepended —
+  so it is out of MMR's reach. Kept as a tested dedup guard (use λ≥0.9 if enabled). 8 tests, 347
+  backend green.
+- **Next OQ-008 lever = recall, not diversity:** normalize the query before embedding (strip a
+  leading greeting) and/or add hybrid lexical (`tsvector`) fusion — this is what the
+  phrasing-stability flip (`sup-fr-slow`) needs, confirmed by the A/B.
+- **BUG-009** — the two EN `OFF_TOPIC` guardrail blocks are a tracked bug: the OFF_TOPIC royalty
+  pattern (`…|roi|queen|king`) lacks word boundaries, so `king` matches inside "wor**king**".
+  Out of OQ-008 scope (guardrail, not retrieval).
 
 ### Baseline result (2026-08-13, 14 questions / 29 variants, dense-only, top-K=8)
 
