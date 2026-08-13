@@ -21,6 +21,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). Awaiting QA. EPIC-005 / ADR-0032 / OQ-008 |
 | TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — merge-ready pending user validation. EPIC-005 / ADR-0032 |
+| TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | Proposed — **gated by TASK-BE-027 evidence**: the A/B (`ab-mmr-2026-08-13.md`) proved `sup-fr-slow` is evicted **only** on the greeting variant (answer chunk absent from candidates), a BUG-003 phrasing-stability flip that MMR cannot reach. Cheap, embedding-only, no store change. EPIC-005 / ADR-0032 / OQ-008 |
 
 ---
 
@@ -208,6 +209,59 @@ is retained. Cheap, pgvector-native, store-independent.
   set keeps the answer chunk).
 - If the baseline already clears the bar without MMR, this ticket is closed as **not needed**
   with that evidence.
+
+---
+
+## TASK-BE-029 — Retrieval Query Normalization (strip leading greeting before embedding)
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related decision:** ADR-0032 (retrieval quality), OQ-008
+**Related:** TASK-BE-027 (eval harness that surfaced this), TASK-BE-028 (MMR — proved out of scope)
+**Classification:** V1 quality (RAG)
+**Status:** Proposed — gated by the TASK-BE-027 evidence below.
+**Priority:** Medium
+
+### Why (evidence, not intuition)
+
+The TASK-BE-027 live A/B (`scripts/retrieval_eval/reports/ab-mmr-2026-08-13.md`, 2026-08-13)
+isolated the single retrieval eviction in the baseline. `sup-fr-slow` fails **only** on the
+greeting-prefixed variant:
+
+- `"Ma connexion internet est très lente."` → answer chunk (`telecom-faq.md`) hits at rank 2.
+- `"Bonjour, internet est très lent chez moi."` → the answer chunk is **absent from the whole
+  candidate set** (even over-fetched ×3), so no re-ranking (MMR) can recover it.
+
+The leading `"Bonjour, "` shifts the query embedding enough to miss the answer — a **BUG-003
+phrasing-stability flip**. This is a **recall** problem at query time, not a diversity problem,
+so it needs query normalization, not MMR/hybrid/Qdrant.
+
+### Objective
+
+Normalize the customer's question **before embedding** (retrieval query only — the answer
+language, guardrail wording and displayed text are unchanged) so trivial conversational prefixes
+do not change which evidence is retrieved. Minimal, deterministic, language-aware (FR/EN),
+embedding-only, no vector-store change.
+
+### Scope
+
+- Strip a leading greeting / politeness prefix (e.g. `bonjour`, `bonsoir`, `salut`, `hello`,
+  `hi`, `coucou`, optionally followed by a name + separator) from the **embedding query** used by
+  retrieval, reusing/aligning with the `InputGuardrail` greeting vocabulary so the two stay
+  consistent. Never strip when the greeting is the whole turn (that stays a greeting decision).
+- Keep the original question for the guardrail, the LLM prompt and logs; only the retrieval
+  embedding text is normalized.
+- Env-toggleable; deterministic and unit-testable with no backend.
+
+### Acceptance
+
+- With normalization on, `sup-fr-slow` greeting and non-greeting variants retrieve the **same**
+  evidence (phrasing-stability for that question → 1.0) in a re-run of the TASK-BE-027 harness,
+  with overall recall@8 / stability **not regressed**.
+- A regression test proves greeting-prefixed and bare variants of the same question produce the
+  same normalized retrieval query (and that a whole-utterance greeting is untouched).
+- OpenTelemetry: the normalization is observable (e.g. a flag/count that the query was rewritten)
+  or explicitly marked not-applicable with rationale.
+- If the harness shows no phrasing-stability gain, close as **not needed** with that evidence.
 
 ---
 
