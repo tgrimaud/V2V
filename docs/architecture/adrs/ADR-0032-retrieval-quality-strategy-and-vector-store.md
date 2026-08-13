@@ -117,24 +117,36 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
 
 ### Baseline result (2026-08-13, 14 questions / 29 variants, dense-only, top-K=8)
 
-| Scope | recall@4 | recall@8 | MRR | phrasing-stability |
-|---|---|---|---|---|
-| overall | 0.83 | **0.90** | 0.77 | **0.79** |
-| FR | 0.91 | 0.96 | 0.86 | 0.91 |
-| EN | 0.50 | 0.67 | 0.45 | 0.33 |
-| billing | 1.00 | 1.00 | 0.92 | 1.00 |
-| commercial | 1.00 | 1.00 | 1.00 | 1.00 |
-| support | 0.62 | 0.77 | 0.57 | 0.50 |
+**This measures whole-pipeline pre-LLM grounding success** (input guardrail → retrieval →
+confidence guardrail), **not isolated vector recall** — a blocked guardrail decision returns
+no evidence. Each miss is therefore classified as a **guardrail block** or a **retrieval
+eviction** so the right lever is chosen (the BUG-003 lesson: the block is often downstream).
 
-Reading: after lever 1 + top-K, **FR / billing / commercial clear the bar** (billing &
-commercial perfect). The gap is concentrated in **EN and the support domain**, where three
-questions still **flip on a greeting prefix** (`sup-fr-slow`, `sup-en-internet`,
-`sup-en-wifi`) — the residual BUG-003-class brittleness. Overall stability 0.79 **misses**
-the ≥ 0.90 bar, so a further lever is justified. This is a corpus/strategy signal, not an
-engine one: no Qdrant trigger has fired. Next lever = **MMR (TASK-BE-028)**, targeted at the
-support/EN flips; if flips persist after MMR, escalate to hybrid (`tsvector`) then rerank.
-EN support coverage (FR-only curated FAQs vs thinner EN CSV troubleshooting) is a separate
-content gap worth flagging to Product.
+| Scope | recall@4 | recall@8 | MRR | stability | guardrail-block | retrieval-eviction |
+|---|---|---|---|---|---|---|
+| overall | 0.83 | **0.90** | 0.77 | **0.79** | 2 | 1 |
+| FR | 0.91 | 0.96 | 0.86 | 0.91 | 0 | 1 |
+| EN | 0.50 | 0.67 | 0.45 | 0.33 | 2 | 0 |
+| billing | 1.00 | 1.00 | 0.92 | 1.00 | 0 | 0 |
+| commercial | 1.00 | 1.00 | 1.00 | 1.00 | 0 | 0 |
+| support | 0.62 | 0.77 | 0.57 | 0.50 | 2 | 1 |
+
+Reading (corrected after miss classification): **pgvector retrieval itself is strong** — FR
+0.96, billing and commercial perfect. Of the three failures, **two are `OFF_TOPIC`
+input-guardrail blocks on EN** (`sup-en-internet`, `sup-en-wifi` — retrieval never ran; a
+BUG-001-class guardrail over-block, **not** a retrieval or vector-store problem) and **one is
+a genuine retrieval eviction** (`sup-fr-slow`, verdict PASS but the answer chunk evicted).
+Conclusions:
+
+- **No Qdrant trigger fired**; the vector store is not the issue.
+- **MMR (TASK-BE-028)** is justified but **narrow** — it targets the single retrieval
+  eviction, not the EN gap.
+- The **dominant EN gap is the input guardrail classifying legitimate support questions as
+  `OFF_TOPIC`** → belongs to guardrail/EN-topicality work (BUG-001 class), **out of OQ-008
+  scope**. Had the harness not separated guardrail blocks from evictions, this would have been
+  misattributed to retrieval (MMR/hybrid/Qdrant) — the exact BUG-003 trap.
+- EN support **content coverage** (FR-only curated FAQs vs thinner EN CSV troubleshooting)
+  remains a separate gap for Product.
 - Hybrid (`tsvector` fusion) and cross-encoder rerank stay as levers 3–4, each adopted only
   if the harness shows the previous lever misses the acceptance bar.
 - Resolve OQ-008 with the harness numbers; promote this ADR to **Accepted** (stay pgvector +

@@ -5,6 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from metrics import (  # noqa: E402
+    GUARDRAIL_BLOCK,
+    HIT,
+    RETRIEVAL_EVICTION,
     VariantResult,
     aggregate,
     mean_reciprocal_rank,
@@ -14,10 +17,10 @@ from metrics import (  # noqa: E402
 
 
 def _variant(question_id: str, ranked: tuple[str, ...], acceptable: set[str],
-             variant: str = "q") -> VariantResult:
+             variant: str = "q", answerable: bool = True) -> VariantResult:
     return VariantResult(
         question_id=question_id, variant=variant, language="fr", domain="support",
-        ranked_source_ids=ranked, acceptable=frozenset(acceptable))
+        ranked_source_ids=ranked, acceptable=frozenset(acceptable), answerable=answerable)
 
 
 class FirstHitRankTest(unittest.TestCase):
@@ -86,6 +89,37 @@ class PhrasingStabilityTest(unittest.TestCase):
         score, unstable = phrasing_stability(results, 8)
         self.assertEqual(score, 0.0)
         self.assertEqual(unstable, ["q1"])
+
+
+class OutcomeClassificationTest(unittest.TestCase):
+    def test_hit_when_acceptable_in_top_k(self):
+        # GIVEN the answer within top-8
+        v = _variant("q1", ("a", "gold"), {"gold"})
+        # WHEN / THEN classified as a hit
+        self.assertEqual(v.outcome(8), HIT)
+
+    def test_guardrail_block_when_no_evidence_returned(self):
+        # GIVEN a blocked grounding decision (empty evidence, not answerable)
+        v = _variant("q1", (), {"gold"}, answerable=False)
+        # WHEN / THEN the miss is a guardrail block, not a retrieval eviction
+        self.assertEqual(v.outcome(8), GUARDRAIL_BLOCK)
+
+    def test_retrieval_eviction_when_evidence_present_but_answer_absent(self):
+        # GIVEN retrieval returned evidence but no acceptable source is in top-8
+        v = _variant("q1", ("a", "b", "c"), {"gold"}, answerable=True)
+        # WHEN / THEN the miss is a genuine retrieval eviction
+        self.assertEqual(v.outcome(8), RETRIEVAL_EVICTION)
+
+    def test_aggregate_counts_block_and_eviction(self):
+        # GIVEN one guardrail block and one retrieval eviction
+        results = [
+            _variant("q1", (), {"gold"}, answerable=False),
+            _variant("q2", ("a", "b"), {"gold"}, answerable=True),
+        ]
+        # WHEN aggregated THEN each miss kind is counted
+        agg = aggregate(results)
+        self.assertEqual(agg.guardrail_block_variants, 1)
+        self.assertEqual(agg.retrieval_eviction_variants, 1)
 
 
 class AggregateTest(unittest.TestCase):

@@ -11,9 +11,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+HIT = "hit"
+GUARDRAIL_BLOCK = "guardrail_block"
+RETRIEVAL_EVICTION = "retrieval_eviction"
+
+
 @dataclass(frozen=True)
 class VariantResult:
-    """Outcome of one phrasing variant of a question."""
+    """Outcome of one phrasing variant of a question.
+
+    ``answerable`` / ``verdict`` come from the /retrieve grounding decision. When a variant is
+    blocked by the input or confidence guardrail the response carries **no evidence**, so a miss
+    must be classified as a guardrail block rather than a retrieval eviction (BUG-003 lesson:
+    the block can be downstream of retrieval, not a ranking problem).
+    """
 
     question_id: str
     variant: str
@@ -21,6 +32,8 @@ class VariantResult:
     domain: str
     ranked_source_ids: tuple[str, ...]
     acceptable: frozenset[str]
+    answerable: bool = True
+    verdict: str = ""
     error: str | None = None
 
     def first_hit_rank(self) -> int | None:
@@ -40,6 +53,18 @@ class VariantResult:
         rank = self.first_hit_rank()
         return 1.0 / rank if rank is not None else 0.0
 
+    def outcome(self, k: int) -> str:
+        """Classify the top-k result: hit, guardrail_block, or retrieval_eviction.
+
+        A miss with no returned evidence (grounding blocked) is a guardrail block; a miss with
+        evidence present but no acceptable source in top-k is a genuine retrieval eviction.
+        """
+        if self.recall_at_k(k):
+            return HIT
+        if not self.answerable or not self.ranked_source_ids:
+            return GUARDRAIL_BLOCK
+        return RETRIEVAL_EVICTION
+
 
 @dataclass
 class Aggregate:
@@ -49,6 +74,8 @@ class Aggregate:
     phrasing_stability: float
     variant_count: int
     question_count: int
+    guardrail_block_variants: int = 0
+    retrieval_eviction_variants: int = 0
     unstable_question_ids: list[str] = field(default_factory=list)
 
 
@@ -90,6 +117,7 @@ def phrasing_stability(results: list[VariantResult], k: int) -> tuple[float, lis
 def aggregate(results: list[VariantResult], stability_k: int = 8) -> Aggregate:
     stability, unstable = phrasing_stability(results, stability_k)
     question_ids = {r.question_id for r in results}
+    outcomes = [r.outcome(stability_k) for r in results]
     return Aggregate(
         recall_at_4=recall_at_k(results, 4),
         recall_at_8=recall_at_k(results, 8),
@@ -97,5 +125,7 @@ def aggregate(results: list[VariantResult], stability_k: int = 8) -> Aggregate:
         phrasing_stability=stability,
         variant_count=len(results),
         question_count=len(question_ids),
+        guardrail_block_variants=outcomes.count(GUARDRAIL_BLOCK),
+        retrieval_eviction_variants=outcomes.count(RETRIEVAL_EVICTION),
         unstable_question_ids=sorted(unstable),
     )

@@ -299,12 +299,17 @@ the "one Postgres" simplicity.
 - **TASK-BE-027** built the offline eval harness + labeled eval set (`scripts/retrieval_eval/`);
   **TASK-BE-028** adds MMR gated on the baseline. OQ-008 is resolved once the harness numbers
   show whether pgvector + the needed levers clear the bar or a Qdrant trigger has fired.
-- **Baseline (2026-08-13, dense-only, top-K=8):** overall recall@8 **0.90**, phrasing-stability
-  **0.79** — FR / billing / commercial clear the bar (billing & commercial perfect), but **EN
-  and the support domain lag** (EN stability 0.33; support 0.50) with three questions flipping
-  on a greeting prefix. No Qdrant trigger fired → next lever is **MMR (TASK-BE-028)**, then
-  hybrid/rerank if flips persist. EN support **content coverage** (FR-only curated FAQs vs
-  thinner EN CSV troubleshooting) is a separate gap to raise with Product.
+- **Baseline (2026-08-13, dense-only, top-K=8; measures whole-pipeline grounding success, not
+  isolated vector recall):** overall recall@8 **0.90**, phrasing-stability **0.79**. FR / billing
+  / commercial clear the bar (billing & commercial perfect). **Miss classification is decisive:**
+  of 3 failures, **2 are `OFF_TOPIC` input-guardrail blocks on EN** (`sup-en-internet`,
+  `sup-en-wifi` — retrieval never ran, a BUG-001-class over-block, **not** a retrieval/vector
+  problem) and **1 is a genuine retrieval eviction** (`sup-fr-slow`).
+- **Corrected lever reading:** no Qdrant trigger; pgvector retrieval is strong. **MMR
+  (TASK-BE-028)** is justified but narrow (the single eviction). The **EN gap is guardrail
+  topicality (OFF_TOPIC over-block), out of OQ-008 scope** → recommend a guardrail/EN follow-up
+  (BUG-001 class). EN support **content coverage** is a separate gap for Product. Without the
+  guardrail-vs-eviction split this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 

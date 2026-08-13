@@ -21,7 +21,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from metrics import Aggregate, VariantResult, aggregate
+from metrics import (
+    GUARDRAIL_BLOCK,
+    RETRIEVAL_EVICTION,
+    Aggregate,
+    VariantResult,
+    aggregate,
+)
 
 HERE = Path(__file__).resolve().parent
 ACCEPTANCE_RECALL8 = 0.9
@@ -43,8 +49,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def retrieve(base_url: str, question: str, top_k: int, domain: str | None,
-             api_key: str | None) -> tuple[list[str], str | None]:
-    """Return (ranked source_ids, error). error is None on success."""
+             api_key: str | None) -> dict:
+    """Return {ranked, answerable, verdict, error}. error is None on success."""
     payload: dict[str, object] = {"question": question, "top_k": top_k}
     if domain:
         payload["domain"] = domain
@@ -58,9 +64,10 @@ def retrieve(base_url: str, question: str, top_k: int, domain: str | None,
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        return [], f"{type(exc).__name__}: {exc}"
+        return {"ranked": [], "answerable": False, "verdict": "", "error": f"{type(exc).__name__}: {exc}"}
     ranked = [str(e.get("source_id")) for e in data.get("evidence", [])]
-    return ranked, None
+    return {"ranked": ranked, "answerable": bool(data.get("answerable")),
+            "verdict": str(data.get("verdict") or ""), "error": None}
 
 
 def run(args: argparse.Namespace) -> tuple[list[VariantResult], dict]:
@@ -70,11 +77,12 @@ def run(args: argparse.Namespace) -> tuple[list[VariantResult], dict]:
         acceptable = frozenset(str(s) for s in q["acceptable_source_ids"])
         domain = q["domain"] if args.domain_mode == "intended" else None
         for variant in q["variants"]:
-            ranked, error = retrieve(args.base_url, variant, args.top_k, domain, args.api_key)
+            r = retrieve(args.base_url, variant, args.top_k, domain, args.api_key)
             results.append(VariantResult(
                 question_id=q["id"], variant=variant, language=q["language"],
-                domain=q["domain"], ranked_source_ids=tuple(ranked),
-                acceptable=acceptable, error=error))
+                domain=q["domain"], ranked_source_ids=tuple(r["ranked"]),
+                acceptable=acceptable, answerable=r["answerable"], verdict=r["verdict"],
+                error=r["error"]))
     return results, spec
 
 
@@ -89,41 +97,61 @@ def _breakdown(results: list[VariantResult], key: str) -> dict[str, Aggregate]:
 
 def _agg_row(name: str, a: Aggregate) -> str:
     return (f"| {name} | {a.recall_at_4:.2f} | {a.recall_at_8:.2f} | {a.mrr:.2f} | "
-            f"{a.phrasing_stability:.2f} | {a.question_count} | {a.variant_count} |")
+            f"{a.phrasing_stability:.2f} | {a.guardrail_block_variants} | "
+            f"{a.retrieval_eviction_variants} | {a.question_count} | {a.variant_count} |")
+
+
+def _header_lines(spec: dict, args: argparse.Namespace, overall: Aggregate,
+                  error_count: int) -> list[str]:
+    lines = [
+        "# Pre-LLM grounding-quality baseline report (TASK-BE-027 / ADR-0032)",
+        "",
+        "> **What this measures:** success of the whole `POST /api/conversation/retrieve` "
+        "pre-LLM grounding pipeline (input guardrail → retrieval → confidence guardrail), "
+        "**not** isolated vector recall. A blocked guardrail decision returns no evidence, so a "
+        "miss can be a guardrail block rather than a retrieval eviction — each miss is therefore "
+        "classified below so the right lever is chosen (the BUG-003 lesson).",
+        "",
+        f"- **Date:** {dt.date.today().isoformat()}",
+        f"- **Base URL:** {args.base_url}",
+        f"- **top_k:** {args.top_k} | **domain-mode:** {args.domain_mode}",
+        f"- **Eval set:** v{spec['version']} ({overall.question_count} questions, "
+        f"{overall.variant_count} variants)",
+        "- **Config under test:** fixed chunker (BUG-003) + top-K over-fetch, dense-only "
+        "(no MMR/hybrid/rerank)",
+    ]
+    if error_count:
+        lines.append(f"- **Request errors:** {error_count} (see JSON report)")
+    lines += [
+        "",
+        "> **Caveats:** labels (`acceptable_source_ids`) are title/section-heuristic, not "
+        "adjudicated against article bodies, so treat absolute numbers as a baseline to track "
+        "**deltas**, not ground truth. If pgvector uses an approximate (HNSW) index, results may "
+        "vary slightly between runs.",
+    ]
+    return lines
 
 
 def build_markdown(results: list[VariantResult], spec: dict, args: argparse.Namespace,
                    overall: Aggregate) -> str:
-    lines: list[str] = []
-    lines.append("# Retrieval-quality baseline report (TASK-BE-027 / ADR-0032)")
-    lines.append("")
-    lines.append(f"- **Date:** {dt.date.today().isoformat()}")
-    lines.append(f"- **Base URL:** {args.base_url}")
-    lines.append(f"- **top_k:** {args.top_k} | **domain-mode:** {args.domain_mode}")
-    lines.append(f"- **Eval set:** v{spec['version']} ({overall.question_count} questions, "
-                 f"{overall.variant_count} variants)")
-    lines.append(f"- **Config under test:** fixed chunker (BUG-003) + top-K over-fetch, "
-                 f"dense-only (no MMR/hybrid/rerank)")
     errors = [r for r in results if r.error]
-    if errors:
-        lines.append(f"- **Request errors:** {len(errors)} (see JSON report)")
+    lines = _header_lines(spec, args, overall, len(errors))
     lines.append("")
     lines.append("## Acceptance check (ADR-0032 proposed bar)")
     lines.append("")
     r8 = "PASS" if overall.recall_at_8 >= ACCEPTANCE_RECALL8 else "FAIL"
     st = "PASS" if overall.phrasing_stability >= ACCEPTANCE_STABILITY else "FAIL"
-    lines.append(f"- recall@8 ≥ {ACCEPTANCE_RECALL8}: **{r8}** ({overall.recall_at_8:.2f})")
+    lines.append(f"- grounding recall@8 ≥ {ACCEPTANCE_RECALL8}: **{r8}** ({overall.recall_at_8:.2f})")
     lines.append(f"- phrasing-stability ≥ {ACCEPTANCE_STABILITY}: **{st}** "
                  f"({overall.phrasing_stability:.2f})")
-    if overall.unstable_question_ids:
-        lines.append(f"- Flipped (phrasing-brittle) questions: "
-                     f"{', '.join(overall.unstable_question_ids)}")
+    lines.append(f"- Miss breakdown (top-8): guardrail-block **{overall.guardrail_block_variants}**, "
+                 f"retrieval-eviction **{overall.retrieval_eviction_variants}** (of "
+                 f"{overall.variant_count} variants)")
     lines.append("")
-    header = ("| Scope | recall@4 | recall@8 | MRR | stability | questions | variants |\n"
-              "|---|---|---|---|---|---|---|")
     lines.append("## Aggregates")
     lines.append("")
-    lines.append(header)
+    lines.append("| Scope | recall@4 | recall@8 | MRR | stability | block | evict | q | v |")
+    lines.append("|---|---|---|---|---|---|---|---|---|")
     lines.append(_agg_row("overall", overall))
     for lang, a in _breakdown(results, "language").items():
         lines.append(_agg_row(f"language={lang}", a))
@@ -132,11 +160,22 @@ def build_markdown(results: list[VariantResult], spec: dict, args: argparse.Name
     lines.append("")
     lines.append("## Per-question (top-8)")
     lines.append("")
-    lines.append("| Question | lang | domain | variants pass@8 | best rank | flips? |")
-    lines.append("|---|---|---|---|---|---|")
+    lines.append("| Question | lang | domain | pass@8 | best rank | flips? | flip cause |")
+    lines.append("|---|---|---|---|---|---|---|")
     lines.extend(_question_rows(results))
     lines.append("")
     return "\n".join(lines)
+
+
+def _flip_cause(variants: list[VariantResult]) -> str:
+    outcomes = {v.outcome(8) for v in variants}
+    if len({v.recall_at_k(8) for v in variants}) <= 1:
+        return "—"
+    if GUARDRAIL_BLOCK in outcomes and RETRIEVAL_EVICTION in outcomes:
+        return "mixed"
+    if GUARDRAIL_BLOCK in outcomes:
+        return "guardrail"
+    return "retrieval"
 
 
 def _question_rows(results: list[VariantResult]) -> list[str]:
@@ -151,7 +190,7 @@ def _question_rows(results: list[VariantResult]) -> list[str]:
         flips = "yes" if len({v.recall_at_k(8) for v in variants}) > 1 else "no"
         v0 = variants[0]
         rows.append(f"| {qid} | {v0.language} | {v0.domain} | {passes}/{len(variants)} | "
-                    f"{best} | {flips} |")
+                    f"{best} | {flips} | {_flip_cause(variants)} |")
     return rows
 
 
@@ -171,7 +210,9 @@ def to_json(results: list[VariantResult], overall: Aggregate, args: argparse.Nam
                 "domain": r.domain, "ranked_source_ids": list(r.ranked_source_ids),
                 "acceptable": sorted(r.acceptable), "first_hit_rank": r.first_hit_rank(),
                 "recall_at_4": r.recall_at_k(4), "recall_at_8": r.recall_at_k(8),
-                "reciprocal_rank": round(r.reciprocal_rank(), 4), "error": r.error,
+                "reciprocal_rank": round(r.reciprocal_rank(), 4),
+                "answerable": r.answerable, "verdict": r.verdict, "outcome": r.outcome(8),
+                "error": r.error,
             }
             for r in results
         ],
@@ -180,6 +221,10 @@ def to_json(results: list[VariantResult], overall: Aggregate, args: argparse.Nam
 
 def main() -> int:
     args = parse_args()
+    if args.top_k < 8:
+        print(f"WARNING: --top-k {args.top_k} < 8; recall@8 and stability@8 require at least 8 "
+              f"results. Using top_k=8.", file=sys.stderr)
+        args.top_k = 8
     results, spec = run(args)
     overall = aggregate(results)
     out_dir = Path(args.out_dir)
@@ -192,6 +237,7 @@ def main() -> int:
         encoding="utf-8")
     print(f"recall@4={overall.recall_at_4:.2f} recall@8={overall.recall_at_8:.2f} "
           f"MRR={overall.mrr:.2f} stability={overall.phrasing_stability:.2f} "
+          f"block={overall.guardrail_block_variants} evict={overall.retrieval_eviction_variants} "
           f"({overall.question_count}q/{overall.variant_count}v) -> {out_dir}")
     errors = [r for r in results if r.error]
     if errors:

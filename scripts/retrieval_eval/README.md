@@ -1,10 +1,18 @@
 # Retrieval-quality eval harness (TASK-BE-027 / ADR-0032)
 
-Offline, repeatable measurement of KB retrieval quality against
-`POST /api/conversation/retrieve`. It is the **decision gate for OQ-008 / ADR-0032**: the
-choice between the remaining levers (MMR → hybrid → cross-encoder rerank → Qdrant) is driven
-by these numbers, not by intuition. Needs no pilot/external access — only the backend,
-pgvector and a loaded corpus.
+Offline, repeatable measurement against `POST /api/conversation/retrieve`. It is the
+**decision gate for OQ-008 / ADR-0032**: the choice between the remaining levers (MMR →
+hybrid → cross-encoder rerank → Qdrant) is driven by these numbers, not by intuition. Needs
+no pilot/external access — only the backend, pgvector and a loaded corpus.
+
+> **Important — what "success" means here.** `/retrieve` runs the whole pre-LLM grounding
+> pipeline: **input guardrail → retrieval → confidence guardrail**. A blocked guardrail
+> decision returns **no evidence**, so a miss is not necessarily a retrieval failure. The
+> harness therefore classifies every miss as a **guardrail block** (`answerable=false`, no
+> evidence — e.g. an `OFF_TOPIC` verdict) or a **retrieval eviction** (evidence returned but
+> the answer chunk is not in top-k). This is the BUG-003 lesson: pick the right lever
+> (guardrail/threshold vs MMR/hybrid/Qdrant) instead of misattributing a downstream block to
+> retrieval.
 
 ## What it measures
 
@@ -18,9 +26,13 @@ recall is non-circular). A `source_id` is a chunk's article id: the CSV `documen
 - **MRR**: mean reciprocal rank of the first acceptable source.
 - **phrasing-stability** (= 1 − flip-rate): fraction of questions whose variants all agree on
   the top-k outcome. A "flip" is a trivial phrasing change moving the answer in/out of top-k.
+- **miss classification**: per scope, the count of **guardrail-block** vs **retrieval-eviction**
+  misses; per question, the **flip cause** (guardrail / retrieval / mixed).
 
 Reported overall and broken down **per language and per domain**, so a gap (e.g. EN support)
 is never hidden inside an aggregate.
+
+> `--top-k` is clamped to ≥ 8 because recall@8 and stability@8 need at least 8 results.
 
 ## Prerequisites
 
