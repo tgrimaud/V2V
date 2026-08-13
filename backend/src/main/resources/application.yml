@@ -141,6 +141,19 @@ voice-support:
         enabled: ${KB_RETRIEVAL_MMR_ENABLED:false}
         lambda: ${KB_RETRIEVAL_MMR_LAMBDA:0.9}
         fetch-multiplier: ${KB_RETRIEVAL_MMR_FETCH_MULTIPLIER:3}
+      # Query greeting-normalization (TASK-BE-029, BUG-003 / OQ-008). Strips a leading greeting
+      # ("Bonjour, ...", "Hello ...") from the EMBEDDING query only — the raw question still drives
+      # the input guardrail, the LLM prompt and the logs. DISABLED by default: the TASK-BE-027 A/B
+      # on the live corpus (2026-08-13, reports/ab-query-norm-2026-08-13.md) showed it is STRICTLY
+      # NEUTRAL (recall@8 0.90, stability 0.79 — identical with it on or off). The one eviction it
+      # was meant to fix (sup-fr-slow) persists after stripping "Bonjour,": the answer chunk is still
+      # absent from top-8, so the miss is driven by the CORE PHRASING ("internet est très lent chez
+      # moi" vs "Ma connexion internet est très lente"), NOT the greeting — the greeting was
+      # mis-attributed as the cause. Kept as a tested, env-toggleable robustness guard (strips
+      # greetings correctly with zero regression); enable it if real voice traffic shows
+      # greeting-only recall flips. Deterministic, no vector-store change.
+      query-normalization:
+        enabled: ${KB_RETRIEVAL_QUERY_NORMALIZATION_ENABLED:false}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

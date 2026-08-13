@@ -21,7 +21,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-017 | French translation of the `articles.csv` corpus for dev FR RAG coverage (`csv-article-fr` connector) | Dev tooling (KB content, non-prod) | TASK-BE-013, TASK-BE-014 | ✅ Delivered (2026-07-22) — 306 articles translated → `articles-fr.csv`, ingested `csv-article-fr` = **4989 chunks**; TextChunker hard-split fix for oversized FR paragraphs; FR questions now ground on FR content |
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). Awaiting QA. EPIC-005 / ADR-0032 / OQ-008 |
 | TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — merge-ready pending user validation. EPIC-005 / ADR-0032 |
-| TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | Proposed — **gated by TASK-BE-027 evidence**: the A/B (`ab-mmr-2026-08-13.md`) proved `sup-fr-slow` is evicted **only** on the greeting variant (answer chunk absent from candidates), a BUG-003 phrasing-stability flip that MMR cannot reach. Cheap, embedding-only, no store change. EPIC-005 / ADR-0032 / OQ-008 |
+| TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **STRICTLY NEUTRAL, default OFF** (`ab-query-norm-2026-08-13.md`): greeting hypothesis **disproven** — stripping "Bonjour," leaves "internet est très lent chez moi." which still misses the answer, so `sup-fr-slow` is a **core-phrasing** recall miss, not a greeting one. 0 regression / 0 gain (recall@8 0.90, stability 0.79 on/off). Kept as tested env-toggle; real lever = phrasing-robust recall. 354 backend green. EPIC-005 / ADR-0032 / OQ-008 |
 
 ---
 
@@ -218,10 +218,49 @@ is retained. Cheap, pgvector-native, store-independent.
 **Related decision:** ADR-0032 (retrieval quality), OQ-008
 **Related:** TASK-BE-027 (eval harness that surfaced this), TASK-BE-028 (MMR — proved out of scope)
 **Classification:** V1 quality (RAG)
-**Status:** Proposed — gated by the TASK-BE-027 evidence below.
+**Status:** ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **STRICTLY NEUTRAL, default OFF**.
+Branch `task/TASK-BE-029-query-greeting-normalization` (stacked on `task/TASK-BE-028-mmr-diversity`).
+The A/B (`reports/ab-query-norm-2026-08-13.md`) **disproved the greeting hypothesis**: stripping
+`"Bonjour,"` leaves `"internet est très lent chez moi."` which **still** does not retrieve the
+answer chunk — the `sup-fr-slow` eviction is a **core-phrasing** recall miss, not a greeting one.
+Normalization fires correctly (13× on the eval set) with **zero regression and zero gain**
+(recall@8 0.90, stability 0.79 identical on/off). Closed under this ticket's own close-condition;
+kept as a tested, env-toggleable robustness guard. 27 new test invocations, 354 backend green.
 **Priority:** Medium
 
-### Why (evidence, not intuition)
+### Implementation + A/B outcome (2026-08-13)
+
+- **`QueryNormalizer`** (pure domain, `knowledge/domain/service/`): strips a leading run of greeting
+  tokens (`bonjour|bonsoir|salut|coucou|hey|hello|hi|yo|bjr|slt|cc|bsr|hola|hallo|good morning…`,
+  aligned with `InputGuardrail.GREETING_PATTERNS` but duplicated to respect the context boundary,
+  ADR-0027) followed by separators, from the **embedding query only**. Preserves the remainder
+  verbatim (accents kept — they matter for FR embeddings); word-boundary anchored so a greeting
+  inside a longer word (`salut`ations, `hi`story) is never stripped; never empties a whole-utterance
+  greeting (defensive — those are already guardrail-blocked before retrieval).
+- **`KnowledgeRetrievalService`** normalizes the query before `VectorSearchPort.search()` (both the
+  plain and MMR paths); the raw question still drives the input guardrail, the LLM prompt and the
+  logs (they run upstream). Orthogonal, independent toggle to MMR.
+- **Observability:** `RetrievalObserverPort.queryNormalized(domain, originalLength, normalizedLength)`
+  → counter `voice_support.retrieval_query_normalized{domain}` + `[RETRIEVAL-NORMALIZE]` DEBUG log
+  (lengths only, never the raw query — no content/PII). `NoopRetrievalObserver` (service package)
+  keeps the port a pure interface (ArchUnit).
+- **A/B (`reports/ab-query-norm-2026-08-13.md`, same build, `:8081`):**
+
+  | Arm | recall@4 | recall@8 | MRR | stability | eviction | normalize calls |
+  |---|---|---|---|---|---|---|
+  | Normalization OFF | 0.828 | **0.897** | 0.767 | **0.786** | 1 | 0 |
+  | Normalization ON | 0.828 | **0.897** | 0.767 | **0.786** | 1 | 13 |
+
+- **Root-cause correction:** the greeting variant `"Bonjour, internet est très lent chez moi."`
+  strips to `"internet est très lent chez moi."` and still returns `305,305,366,932,79,235,317,11`
+  (no `telecom-faq.md`), while the bare variant `"Ma connexion internet est très lente."` hits it at
+  rank 2. The differentiator is the **core wording**, not the greeting — the earlier TASK-BE-027
+  attribution was wrong.
+- **Decision:** default OFF (no measured gain, mirrors BE-028), kept as a tested env-toggle. The
+  real OQ-008 lever for `sup-fr-slow` is phrasing-robust recall (hybrid lexical+dense / query
+  expansion) or an eval-set variant that differs *only* by the greeting.
+
+### Why (original hypothesis — now disproven, kept for the record)
 
 The TASK-BE-027 live A/B (`scripts/retrieval_eval/reports/ab-mmr-2026-08-13.md`, 2026-08-13)
 isolated the single retrieval eviction in the baseline. `sup-fr-slow` fails **only** on the

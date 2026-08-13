@@ -309,11 +309,17 @@ the "one Postgres" simplicity.
   (TASK-BE-028)** was implemented and **A/B-measured on the live corpus (2026-08-13,
   `ab-mmr-2026-08-13.md`)** — result: it does **not** clear the bar and is **left OFF by
   default**. λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71 (compressed `nomic` scores
-  let the diversity term dominate); λ=0.9 is neutral and does not fix the one eviction. That
-  eviction (`sup-fr-slow`) is a **greeting-induced recall miss** (the answer chunk is absent from
-  candidates when "Bonjour," is prepended), not a diversity problem.
-- **Next lever is recall, not diversity:** normalize the query before embedding (strip a leading
-  greeting) and/or hybrid lexical (`tsvector`) fusion. This is the concrete OQ-008 follow-up.
+  let the diversity term dominate); λ=0.9 is neutral and does not fix the one eviction.
+- **Query greeting-normalization (TASK-BE-029)** was then implemented and **A/B-measured
+  (2026-08-13, `ab-query-norm-2026-08-13.md`)** to test whether the eviction was greeting-induced —
+  result: **strictly neutral, left OFF by default**, and the **greeting hypothesis is disproven**.
+  Stripping "Bonjour," leaves `"internet est très lent chez moi."`, which **still** misses the
+  answer chunk in top-8, whereas the bare variant `"Ma connexion internet est très lente."` hits it
+  at rank 2. So `sup-fr-slow` is a **core-phrasing recall miss**, not a greeting one — neither MMR
+  nor greeting normalization reaches it.
+- **Corrected next lever = phrasing-robust recall:** hybrid lexical (`tsvector`) + dense fusion or
+  query expansion — or enrich the eval set with a variant that differs *only* by the greeting. This
+  is the remaining concrete OQ-008 follow-up (query normalization and diversity are both exhausted).
 - The **EN gap is guardrail topicality (OFF_TOPIC over-block), out of OQ-008 scope** → tracked as
   **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN
   support **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction

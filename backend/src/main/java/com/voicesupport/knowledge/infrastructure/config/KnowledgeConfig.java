@@ -15,6 +15,7 @@ import com.voicesupport.knowledge.domain.service.KnowledgeIngestionService;
 import com.voicesupport.knowledge.domain.service.KnowledgeRetrievalService;
 import com.voicesupport.knowledge.domain.service.KnowledgeSyncService;
 import com.voicesupport.knowledge.domain.service.MmrReranker;
+import com.voicesupport.knowledge.domain.service.QueryNormalizer;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.EmbeddingDomainClassifierAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.KeywordAudienceClassifierAdapter;
@@ -123,20 +124,30 @@ public class KnowledgeConfig {
     // (dense score) against lexical redundancy. Disabled by default: the TASK-BE-027 live A/B
     // (reports/ab-mmr-2026-08-13.md) showed lambda=0.7 degrades recall@8/stability (compressed
     // nomic scores → redundancy dominates) and lambda=0.9 is only neutral, so MMR is kept as a
-    // tested, env-toggleable dedup guard rather than an on-by-default lever. enabled=false →
-    // plain dense top-k. If enabling, use lambda>=0.9.
+    // tested, env-toggleable dedup guard rather than an on-by-default lever. If enabling, use
+    // lambda>=0.9.
+    //
+    // TASK-BE-029: query greeting-normalization strips a leading greeting from the embedding query
+    // (raw question still drives guardrail/LLM/logs). Disabled by default: the TASK-BE-027 A/B
+    // (reports/ab-query-norm-2026-08-13.md) showed it is strictly neutral (the sup-fr-slow eviction
+    // persists after stripping "Bonjour," → the miss is core-phrasing, not the greeting). Kept as a
+    // tested, env-toggleable robustness guard. Independent, orthogonal toggle to MMR.
     @Bean
     public KnowledgeRetrievalUseCase knowledgeRetrievalUseCase(
             VectorSearchPort vectorSearchPort,
             RetrievalObserverPort retrievalObserver,
             @Value("${voice-support.knowledge.retrieval.mmr.enabled:false}") boolean mmrEnabled,
             @Value("${voice-support.knowledge.retrieval.mmr.lambda:0.9}") double mmrLambda,
-            @Value("${voice-support.knowledge.retrieval.mmr.fetch-multiplier:3}") int fetchMultiplier) {
-        if (!mmrEnabled) {
+            @Value("${voice-support.knowledge.retrieval.mmr.fetch-multiplier:3}") int fetchMultiplier,
+            @Value("${voice-support.knowledge.retrieval.query-normalization.enabled:false}")
+            boolean queryNormalizationEnabled) {
+        MmrReranker reranker = mmrEnabled ? new MmrReranker(mmrLambda) : null;
+        QueryNormalizer normalizer = queryNormalizationEnabled ? new QueryNormalizer() : null;
+        if (reranker == null && normalizer == null) {
             return new KnowledgeRetrievalService(vectorSearchPort);
         }
         return new KnowledgeRetrievalService(
-                vectorSearchPort, new MmrReranker(mmrLambda), retrievalObserver, fetchMultiplier);
+                vectorSearchPort, reranker, retrievalObserver, fetchMultiplier, normalizer);
     }
 
     @Bean

@@ -124,9 +124,21 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
   recall miss** — the answer chunk is absent from candidates only when "Bonjour," is prepended —
   so it is out of MMR's reach. Kept as a tested dedup guard (use λ≥0.9 if enabled). 8 tests, 347
   backend green.
-- **Next OQ-008 lever = recall, not diversity:** normalize the query before embedding (strip a
-  leading greeting) and/or add hybrid lexical (`tsvector`) fusion — this is what the
-  phrasing-stability flip (`sup-fr-slow`) needs, confirmed by the A/B.
+- ⚠️ **TASK-BE-029** — query greeting-normalization implemented + **A/B-measured** (2026-08-13,
+  `task/TASK-BE-029-query-greeting-normalization`, `reports/ab-query-norm-2026-08-13.md`) and
+  **left OFF by default**. Pure `QueryNormalizer` strips a leading greeting from the embedding
+  query only (raw question still drives guardrail/LLM/logs), env-toggleable, observed via
+  `RetrievalObserverPort.queryNormalized`. **A/B verdict: strictly neutral** (recall@8 0.90,
+  stability 0.79 identical on/off; normalizer fired 13×, 0 regression / 0 gain). **The greeting
+  hypothesis is disproven:** stripping "Bonjour," leaves `"internet est très lent chez moi."`,
+  which still misses `telecom-faq.md` in top-8, whereas the bare variant `"Ma connexion internet
+  est très lente."` hits it at rank 2 — the `sup-fr-slow` eviction is driven by the **core
+  phrasing**, not the greeting (the earlier TASK-BE-027 attribution was wrong). Kept as a tested
+  robustness guard. 354 backend green.
+- **Corrected OQ-008 lever = phrasing-robust recall:** neither diversity (BE-028) nor greeting
+  normalization (BE-029) fixes `sup-fr-slow`. The remaining lever is hybrid lexical (`tsvector`)
+  + dense fusion or query expansion — or enriching the eval set with a variant that differs *only*
+  by the greeting to keep the two phrasings otherwise identical.
 - **BUG-009** — the two EN `OFF_TOPIC` guardrail blocks are a tracked bug: the OFF_TOPIC royalty
   pattern (`…|roi|queen|king`) lacks word boundaries, so `king` matches inside "wor**king**".
   Out of OQ-008 scope (guardrail, not retrieval).

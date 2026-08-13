@@ -16,22 +16,33 @@ public class KnowledgeRetrievalService implements KnowledgeRetrievalUseCase {
     private final MmrReranker mmrReranker;
     private final RetrievalObserverPort observer;
     private final int fetchMultiplier;
+    // null => query normalization disabled (TASK-BE-029): the raw query is embedded as-is.
+    private final QueryNormalizer queryNormalizer;
 
-    // MMR-disabled wiring (also used by tests): plain dense top-k.
+    // MMR-disabled wiring (also used by tests): plain dense top-k, no query normalization.
     public KnowledgeRetrievalService(VectorSearchPort vectorSearchPort) {
-        this(vectorSearchPort, null, RetrievalObserverPort.NOOP, 1);
+        this(vectorSearchPort, null, NoopRetrievalObserver.INSTANCE, 1, null);
     }
 
-    // MMR-enabled wiring (TASK-BE-028): over-fetch topK * fetchMultiplier dense candidates, then
-    // greedily re-select topK balancing relevance against redundancy so near-duplicate chunks stop
-    // evicting the answer chunk (BUG-003). fetchMultiplier is floored at 1 (no over-fetch).
+    // MMR-enabled wiring (TASK-BE-028) without query normalization (kept for existing tests).
     public KnowledgeRetrievalService(
             VectorSearchPort vectorSearchPort, MmrReranker mmrReranker,
             RetrievalObserverPort observer, int fetchMultiplier) {
+        this(vectorSearchPort, mmrReranker, observer, fetchMultiplier, null);
+    }
+
+    // Master wiring. mmrReranker=null keeps plain dense top-k (over-fetch topK*fetchMultiplier then
+    // greedily re-select topK when set, TASK-BE-028); queryNormalizer=null keeps the raw embedding
+    // query (strip a leading greeting before search when set, TASK-BE-029). fetchMultiplier is
+    // floored at 1 (no over-fetch).
+    public KnowledgeRetrievalService(
+            VectorSearchPort vectorSearchPort, MmrReranker mmrReranker,
+            RetrievalObserverPort observer, int fetchMultiplier, QueryNormalizer queryNormalizer) {
         this.vectorSearchPort = vectorSearchPort;
         this.mmrReranker = mmrReranker;
-        this.observer = observer != null ? observer : RetrievalObserverPort.NOOP;
+        this.observer = observer != null ? observer : NoopRetrievalObserver.INSTANCE;
         this.fetchMultiplier = Math.max(1, fetchMultiplier);
+        this.queryNormalizer = queryNormalizer;
     }
 
     @Override
@@ -41,14 +52,26 @@ public class KnowledgeRetrievalService implements KnowledgeRetrievalUseCase {
         }
         int finalK = effectiveTopK(topK);
         String normalizedDomain = normalizeDomain(domain);
+        String searchQuery = normalizeQuery(query, normalizedDomain);
         if (mmrReranker == null) {
-            return vectorSearchPort.search(query, normalizedDomain, finalK);
+            return vectorSearchPort.search(searchQuery, normalizedDomain, finalK);
         }
         int fetchK = finalK * fetchMultiplier;
-        List<KnowledgeChunk> candidates = vectorSearchPort.search(query, normalizedDomain, fetchK);
+        List<KnowledgeChunk> candidates = vectorSearchPort.search(searchQuery, normalizedDomain, fetchK);
         List<KnowledgeChunk> selected = mmrReranker.rerank(candidates, finalK);
         observer.mmrApplied(normalizedDomain, fetchK, candidates.size(), selected.size(), mmrReranker.lambda());
         return selected;
+    }
+
+    private String normalizeQuery(String query, String normalizedDomain) {
+        if (queryNormalizer == null) {
+            return query;
+        }
+        String rewritten = queryNormalizer.normalize(query);
+        if (!rewritten.equals(query)) {
+            observer.queryNormalized(normalizedDomain, query.length(), rewritten.length());
+        }
+        return rewritten;
     }
 
     private int effectiveTopK(int topK) {

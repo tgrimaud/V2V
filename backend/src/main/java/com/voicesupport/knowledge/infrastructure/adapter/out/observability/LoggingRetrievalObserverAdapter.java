@@ -18,6 +18,7 @@ public class LoggingRetrievalObserverAdapter implements RetrievalObserverPort {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingRetrievalObserverAdapter.class);
     private static final String SELECTED_SUMMARY = "voice_support.retrieval_mmr_selected";
+    private static final String NORMALIZED_COUNTER = "voice_support.retrieval_query_normalized";
 
     private final MeterRegistry registry;
 
@@ -32,5 +33,14 @@ public class LoggingRetrievalObserverAdapter implements RetrievalObserverPort {
                 .record(selectedCount);
         log.debug("[RETRIEVAL-MMR] op=mmr domain={} fetch_k={} candidates={} selected={} lambda={}",
                 domain == null ? "any" : domain, fetchK, candidateCount, selectedCount, lambda);
+    }
+
+    // TASK-BE-029: a leading greeting was stripped before embedding. Counts how often normalization
+    // fires (per domain) and logs the length delta only — never the raw query text (PII/no-content).
+    @Override
+    public void queryNormalized(String domain, int originalLength, int normalizedLength) {
+        registry.counter(NORMALIZED_COUNTER, "domain", domain == null ? "any" : domain).increment();
+        log.debug("[RETRIEVAL-NORMALIZE] op=greeting-strip domain={} original_len={} normalized_len={}",
+                domain == null ? "any" : domain, originalLength, normalizedLength);
     }
 }

@@ -114,4 +114,49 @@ class KnowledgeRetrievalServiceTest {
         // THEN the store receives the requested top-k unchanged (no over-fetch)
         assertEquals(5, vectorSearch.lastTopK);
     }
+
+    @Test
+    @DisplayName("with query normalization enabled, embeds the greeting-stripped query and observes it")
+    void queryNormalizationStripsGreetingBeforeSearch() {
+        // GIVEN a service wired with the query normalizer (no MMR)
+        FakeRetrievalObserverPort observer = new FakeRetrievalObserverPort();
+        KnowledgeRetrievalService normalizing = new KnowledgeRetrievalService(
+                vectorSearch, null, observer, 1, new QueryNormalizer());
+
+        // WHEN retrieving a greeting-prefixed question
+        normalizing.retrieve("Bonjour, internet est très lent chez moi.", "support", 4);
+
+        // THEN the vector store receives the query without the leading greeting
+        assertEquals("internet est très lent chez moi.", vectorSearch.lastQuery);
+        // AND the normalization is observed once with the length delta (no MMR call)
+        assertEquals(1, observer.normalizeCalls);
+        assertEquals("support", observer.lastNormalizeDomain);
+        assertEquals(0, observer.calls);
+    }
+
+    @Test
+    @DisplayName("with query normalization enabled, a greeting-free question is embedded unchanged and not observed")
+    void queryNormalizationLeavesPlainQuestionUntouched() {
+        // GIVEN a service wired with the query normalizer
+        FakeRetrievalObserverPort observer = new FakeRetrievalObserverPort();
+        KnowledgeRetrievalService normalizing = new KnowledgeRetrievalService(
+                vectorSearch, null, observer, 1, new QueryNormalizer());
+
+        // WHEN retrieving a question with no leading greeting
+        normalizing.retrieve("Ma connexion internet est très lente.", "support", 4);
+
+        // THEN the query is passed through verbatim and no normalization event fires
+        assertEquals("Ma connexion internet est très lente.", vectorSearch.lastQuery);
+        assertEquals(0, observer.normalizeCalls);
+    }
+
+    @Test
+    @DisplayName("with query normalization disabled (default service), the greeting is embedded as-is")
+    void queryNormalizationDisabledKeepsGreeting() {
+        // WHEN retrieving a greeting-prefixed question on the default (normalization-off) service
+        service.retrieve("Bonjour, internet est très lent chez moi.", "support", 4);
+
+        // THEN the raw query (greeting included) reaches the store
+        assertEquals("Bonjour, internet est très lent chez moi.", vectorSearch.lastQuery);
+    }
 }
