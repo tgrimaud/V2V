@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-015
 - **Title:** The batch one-shot voice turn (`/api/voice/turn`, served by `index.html`) returns only the **last** synthesized sentence instead of the full multi-sentence answer, because it sends `tts_response.wav` (last synthesis) rather than the accumulated `result.audio` (all sentences)
-- **Status:** Ready for adversarial review
+- **Status:** Fixed + deployed to pilot (v0.5.2) — awaiting user UI validation
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot, browser UI at `https://vip-ai4cc-voice-t01.prod.lan/`)
@@ -103,9 +103,17 @@ equals only the **last** sentence.
 - **residual risk:** low; the fix sends what the sink already accumulates. Requires a voice
   image rebuild + redeploy to activate.
 
+## Deployment record
+
+- **Release:** git tag `v0.5.2` on `04c5ac6` (bundles BUG-013 backend base-URL guard + BUG-015 full-answer audio). CI `images.yml` published `ghcr.io/tgrimaud/voice-support-voice:0.5.2` and `voice-support-backend:0.5.2` (2026-08-14).
+- **Voice tier:** both bridges recreated at `0.5.2`, container `healthy`, `HTTP 200` on each node's LAN IP:8090, LB VIP `https://vip-ai4cc-voice-t01.prod.lan/` returns `200`.
+  - `vla-ai4cc-t01`: deployed via `deploy.yml --limit voice` (image pulled + stack up).
+  - `vla-ai4cc-t02`: deployed manually (`.env` `IMAGE_TAG` bumped to `0.5.2`, `podman compose pull && up -d`) — see health-gate note below.
+- **Health-gate caveat (recurring):** the Ansible voice health probe targets `http://127.0.0.1:8090/`, which returns `000` on these root/rootless Podman hosts even though the container is `healthy` and the same port answers `200` on the host LAN IP. The gate false-negatived on t01 (after the stack was already up at 0.5.2) and would have aborted before t02 (`serial:1`), so t02 was completed manually. Follow-up: point `health_url` at the reachable host IP / container exec probe instead of loopback.
+
 ## QA Retest
 
-- **Retested by:** (pending — needs image rebuild + voice tier redeploy)
+- **Retested by:** (pending user UI validation on v0.5.2)
 - **Retest date:** —
 - **Scenarios rerun:** voice-agent unittest suite; live `/api/voice/turn` multi-sentence answer.
 - **Result:** —
