@@ -41,6 +41,7 @@
 - Infrastructure V1: [`architecture/infra-v1.md`](architecture/infra-v1.md)
 - Pilot deployment (eir-ai4cc-tst) environment: [`operations/deployment-eir-ai4cc-tst.md`](operations/deployment-eir-ai4cc-tst.md)
 - First-deploy runbook (zero-to-running pilot): [`operations/first-deploy-runbook.md`](operations/first-deploy-runbook.md)
+- Pilot voice access + WebRTC entry point/status: [`operations/pilot-voice-access.md`](operations/pilot-voice-access.md)
 - Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
 - Missing Galaxion inputs: [`integrations/galaxion/missing-inputs.md`](integrations/galaxion/missing-inputs.md)
 - Invoice PDF extraction JSON: [`integrations/galaxion/invoice-extraction-json.md`](integrations/galaxion/invoice-extraction-json.md)

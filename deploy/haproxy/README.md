@@ -22,6 +22,10 @@ Prodpriv-routable address, Prodpriv clients need **STUN/TURN** to reach the
 bridge's media (open input, out of scope for this ticket). Without a TURN relay,
 media will not establish for remote clients even though signaling succeeds.
 
+> Voice entry points (batch one-shot vs streaming WebRTC), how to verify signaling
+> live, and how to test/enable WebRTC media are documented in
+> [`docs/operations/pilot-voice-access.md`](../../docs/operations/pilot-voice-access.md).
+
 ## Files
 
 | File | Deploy to | Notes |
