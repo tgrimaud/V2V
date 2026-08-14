@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-015
 - **Title:** The batch one-shot voice turn (`/api/voice/turn`, served by `index.html`) returns only the **last** synthesized sentence instead of the full multi-sentence answer, because it sends `tts_response.wav` (last synthesis) rather than the accumulated `result.audio` (all sentences)
-- **Status:** Fixed + deployed to pilot (v0.5.2) — awaiting user UI validation
+- **Status:** Closed — validated by user on v0.5.2 (2026-08-14)
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot, browser UI at `https://vip-ai4cc-voice-t01.prod.lan/`)
@@ -113,14 +113,14 @@ equals only the **last** sentence.
 
 ## QA Retest
 
-- **Retested by:** (pending user UI validation on v0.5.2)
-- **Retest date:** —
-- **Scenarios rerun:** voice-agent unittest suite; live `/api/voice/turn` multi-sentence answer.
-- **Result:** —
-- **Retest evidence:** —
+- **Retested by:** User (pilot UI) + voice-agent automated suite.
+- **Retest date:** 2026-08-14
+- **Scenarios rerun:** live multi-sentence turn on `https://vip-ai4cc-voice-t01.prod.lan/` (`/` → `/api/voice/turn`); voice-agent `unittest` (500 passed) + `behave` (13 features / 36 scenarios / 169 steps passed) on v0.5.2 sources.
+- **Result:** PASS — the full multi-sentence answer is now spoken (no longer truncated to the last sentence).
+- **Retest evidence:** both pilot bridges on `0.5.2` (`healthy`, host-IP:8090 → 200, VIP → 200); green automated suites.
 
 ## Closure
 
-- **Closed by:** —
-- **Closed date:** —
-- **Closure reason:** —
+- **Closed by:** User validation (recorded by assistant)
+- **Closed date:** 2026-08-14
+- **Closure reason:** Fixed in `_full_turn_response` (send the sink-accumulated PCM as one WAV), released as `v0.5.2`, deployed to both pilot voice bridges, and validated end-to-end via the browser UI. Regression covered by `FullTurnResponseTest`.
