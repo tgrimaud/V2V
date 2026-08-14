@@ -228,27 +228,26 @@ promote/deploy/rollback: [`release-process.md`](release-process.md) (TASK-OPS-00
 
 ## PostgreSQL bootstrap
 
-Confirmed 2026-08-04: **PostgreSQL 18.4, single instance** on `vlb-ai4cc-t01`
-(`.102`), root access via `podpg`; the `vector` extension is available to install.
-DB name / app user are `voicesupport` (matches the backend defaults and the Ansible
-`db_url`/`db_username`); the app-user password is `vault_db_password` (ansible-vault).
-Run once as superuser:
+Confirmed 2026-08-04: **PostgreSQL 18.4** on `vlb-ai4cc-t01` (`.102`), root access via
+`podpg`; the `vector` extension is available to install. DB name / app user are
+`voicesupport` (matches the backend defaults and the Ansible `db_url`/`db_username`);
+the app-user password is `vault_db_password` (ansible-vault).
 
-```sql
-podpg
-psql
->> CREATE DATABASE voicesupport;
->> \c voicesupport
->> CREATE EXTENSION vector;                                   -- superuser
->> CREATE USER voicesupport WITH PASSWORD '<vault_db_password>';
->> GRANT ALL PRIVILEGES ON DATABASE voicesupport TO voicesupport;
->> GRANT ALL ON SCHEMA public TO voicesupport;                -- PG15+ locks public
-```
+The schema is owned by **Liquibase in the backend** (ADR-0041, TASK-INFRA-009), not
+Hibernate `ddl-auto` / Spring AI `initialize-schema` (both now off). Bootstrap is split by
+the connect-as-app-user constraint — the full, ordered commands live in the runbook
+[Step 4](first-deploy-runbook.md#step-4--bootstrap-postgresql-once):
 
-The backend runs with `ddl-auto: update` and `initialize-schema: true`, so the
-`vector_store` (768 dim) and JPA tables are created on first start by the app user
-(hence the `SCHEMA public` grant). Reveal the real password with
-`ansible-vault view group_vars/all/vault.yml` in `deploy/ansible/`.
+1. **psql pre-step (superuser)** — the only things Liquibase can't do: `CREATE DATABASE`,
+   `CREATE ROLE voicesupport LOGIN PASSWORD …`, `ALTER DATABASE … OWNER TO voicesupport`
+   (DB owner ⇒ `CREATE` on `public` on PG15+). The app-user password is set here only.
+2. **Bootstrap changelog (superuser, one-shot `podman run liquibase`)** — `CREATE EXTENSION
+   vector` + `uuid-ossp` + a defensive grant, tracked in its own changelog tables.
+3. **App changelog (startup, app user)** — `vector_store` (768 dim, reproducing Spring AI's
+   exact schema) + `kb_source_state`, created by the backend on first start (Step 6).
+
+Reveal the real password with `ansible-vault view group_vars/all/vault.yml` in
+`deploy/ansible/`.
 
 ## Open inputs needed
 

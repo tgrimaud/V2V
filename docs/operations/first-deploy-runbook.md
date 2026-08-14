@@ -118,9 +118,22 @@ target.
 
 ## Step 4 — Bootstrap PostgreSQL (once)
 
-PostgreSQL 18.4 runs on `vlb-ai4cc-t01` (`.102`) as a podman pod (`podpg`). Create
-the database, the `vector` extension (superuser) and the app user. Reveal the
-password with `ansible-vault view group_vars/all/vault.yml`.
+PostgreSQL 18.4 runs on `vlb-ai4cc-t01` (`.102`) as a podman pod (`podpg`). The schema
+is owned by **Liquibase in the backend** (ADR-0041, TASK-INFRA-009), so this step is now
+two deterministic parts instead of free-form SQL:
+
+- **4a — psql pre-step (superuser):** only what Liquibase fundamentally cannot do (it
+  connects *into* a DB *as* the app role): create the database, the login role, and make
+  the app user the **DB owner** (which grants it `CREATE` on `public` on PG15+). The app-user
+  password (`vault_db_password`, `ansible-vault view group_vars/all/vault.yml`) is set **here
+  only** — it never enters any Liquibase file.
+- **4b — bootstrap changelog (superuser, one-shot Liquibase container):** creates the
+  `vector` + `uuid-ossp` extensions and a defensive grant. Tracked in its **own** changelog
+  tables so it never collides with the app's runtime `databasechangelog`.
+- The app schema (`vector_store`, `kb_source_state`) is created later by the backend at
+  startup (Step 6), by the Liquibase **app** changelog running as the app user.
+
+**4a — database + role (psql, superuser):**
 
 ```bash
 ssh grimaud@vlb-ai4cc-t01.prod.lan
@@ -130,16 +143,50 @@ psql
 ```
 ```sql
 CREATE DATABASE voicesupport;
-\c voicesupport
-CREATE EXTENSION vector;                                   -- superuser only
-CREATE USER voicesupport WITH PASSWORD '<vault_db_password>';
-GRANT ALL PRIVILEGES ON DATABASE voicesupport TO voicesupport;
-GRANT ALL ON SCHEMA public TO voicesupport;                -- PG15+ locks public
+CREATE ROLE voicesupport LOGIN PASSWORD '<vault_db_password>';
+ALTER DATABASE voicesupport OWNER TO voicesupport;   -- DB owner => CREATE on public (PG15+)
 ```
 
-The backend runs `ddl-auto: update` + `initialize-schema: true`, so it creates the
-`vector_store` (768 dim) and JPA tables on first start — hence the `SCHEMA public`
-grant to the app user.
+**4b — extensions via the bootstrap changelog (one-shot Liquibase container on `.102`):**
+
+Copy the bootstrap changelog to the VM (it ships in the repo), then run the pinned
+Liquibase image against the local primary as a **superuser** (`postgres`). It uses dedicated
+tracking tables so a later app-user run is independent:
+
+```bash
+# from the control node checkout:
+scp -r backend/src/main/resources/db/changelog/bootstrap \
+    grimaud@vlb-ai4cc-t01.prod.lan:/tmp/liquibase-bootstrap
+# on vlb-ai4cc-t01 (sudo): pass the superuser password via env, never on the command line
+export LIQUIBASE_COMMAND_PASSWORD='<pg_superuser_password>'
+podman run --rm \
+  -e LIQUIBASE_COMMAND_PASSWORD \
+  -v /tmp/liquibase-bootstrap:/liquibase/changelog:ro,Z \
+  docker.io/liquibase/liquibase:4.29.2 \
+  --url="jdbc:postgresql://127.0.0.1:5432/voicesupport" \
+  --username=postgres \
+  --changelog-file=db.changelog-bootstrap.yaml \
+  --database-changelog-table-name=databasechangelog_bootstrap \
+  --database-changelog-lock-table-name=databasechangeloglock_bootstrap \
+  -Dapp_db_user=voicesupport \
+  update
+unset LIQUIBASE_COMMAND_PASSWORD
+```
+
+> **Password handling.** Pass the superuser password via `LIQUIBASE_COMMAND_PASSWORD` (env),
+> never as `--password=…` on the command line (visible in `ps`/shell history). Pin the image to
+> the patch tag matching the backend's `liquibase-core` (`4.29.2`), not a floating minor.
+>
+> **Superuser DSN.** The container connects over TCP, so it needs a superuser credential
+> reachable over TCP (the same superuser access this step always required, previously used
+> locally via `podpg`). If the primary only offers local peer auth for `postgres`, provide a
+> superuser role with a password (platform input) or, as a fallback, pipe the changelog's
+> generated SQL through the local `podpg` psql (`… update-sql` then `psql -f`). The container
+> path is the versioned, tracked default.
+
+The backend now runs `ddl-auto: none` + `initialize-schema: false`; on first start (Step 6)
+its Liquibase app changelog creates `vector_store` (768 dim) and `kb_source_state` as the
+app user — which is why 4a makes it the DB owner and 4b pre-creates the extensions.
 
 ## Step 5 — Deploy Redis
 
@@ -263,7 +310,8 @@ stays reproducible and rollback-addressable.
 |---------|--------------|-----|
 | `manifest ... not found` on pull | Used the git tag `v0.4.0` as the image tag | Deploy with `image_tag=0.4.0` (no `v`, see step 1) |
 | `docker login` denied at deploy | Missing/expired `vault_registry_token`, or `registry_login_required` false | Refresh the PAT (`read:packages`) in the vault; confirm `registry_login_required: true` |
-| Backend fails on first start (pgvector) | `CREATE EXTENSION vector` not run, or app user lacks `SCHEMA public` | Re-run step 4 as superuser; grant `SCHEMA public` to `voicesupport` |
+| Backend fails on first start (Liquibase / pgvector) | Step 4b extensions not created (`type "vector" does not exist` / `uuid_generate_v4()` missing), or the app user isn't DB owner so it can't create the schema / `databasechangelog` | Run Step 4b (bootstrap changelog) before Step 6; confirm 4a's `ALTER DATABASE … OWNER TO voicesupport` (or grant `CREATE ON SCHEMA public`) |
+| Liquibase `changelog … could not be found` at startup | App changelog missing from the image classpath | Confirm `db/changelog/db.changelog-master.yaml` is bundled (it is under `src/main/resources`); rebuild the image |
 | RAG answers are ungrounded / empty | First `POST /api/knowledge/sync` not run, or KB assets missing under `KB_HOST_PATH` | Confirm `knowledge-base/` + `articles.csv` on the host, re-run the sync |
 | `/actuator/health` flips DOWN | `REDIS_HEALTH_ENABLED=true` without a reachable Redis | Only enable it on the backend once Redis is deployed (step 5); default off |
 | `podman compose` "looking up compose provider failed" | Compose v2 provider not installed / `containers.conf` missing | Re-run `prereqs.yml` (installs the provider + writes `containers.conf`); check `compose_provider_url` reachability |

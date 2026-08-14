@@ -1,0 +1,49 @@
+# kb_source_state — the KB sync ledger (JPA entity KbSourceStateEntity, composite key
+# source_type + source_id). Matches the entity columns; created here instead of by Hibernate
+# ddl-auto (now `none`). Guarded MARK_RAN on a legacy dev DB where ddl-auto already created it.
+databaseChangeLog:
+  - changeSet:
+      id: 002-kb-source-state
+      author: voice-support
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: kb_source_state
+                schemaName: public
+      changes:
+        - createTable:
+            tableName: kb_source_state
+            schemaName: public
+            columns:
+              - column:
+                  name: source_type
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+                    primaryKeyName: pk_kb_source_state
+              - column:
+                  name: source_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+                    primaryKeyName: pk_kb_source_state
+              - column:
+                  name: content_hash
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: chunk_count
+                  type: int
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: kb_source_state
+            schemaName: public

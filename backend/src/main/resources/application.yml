@@ -17,12 +17,22 @@ spring:
       password: ${REDIS_PASSWORD:}
       timeout: ${REDIS_TIMEOUT:2s}
 
+  # Schema is owned by Liquibase (TASK-INFRA-009, ADR-0041), not Hibernate: ddl-auto is `none`
+  # (was `update`) so JPA maps onto the Liquibase-created kb_source_state without touching DDL.
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Liquibase runs the APP changelog at startup AS THE APP USER (vector_store + kb_source_state).
+  # The privileged bootstrap (CREATE EXTENSION / grants) is a separate superuser-run changelog
+  # (db/changelog/bootstrap/) executed once at deploy Step 4 — never at app startup. mvn test never
+  # runs Liquibase (no @SpringBootTest boots the context). Set LIQUIBASE_ENABLED=false to opt out.
+  liquibase:
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+    enabled: ${LIQUIBASE_ENABLED:true}
 
   ai:
     ollama:
@@ -50,7 +60,10 @@ spring:
         dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance
-        initialize-schema: true
+        # Schema owned by Liquibase (ADR-0041): Spring AI must NOT create vector_store nor attempt
+        # CREATE EXTENSION at startup (would fail for the unprivileged pilot app user). The Liquibase
+        # app changelog reproduces this exact schema (index-type/distance-type must stay in sync).
+        initialize-schema: false
 
 server:
   port: 8080

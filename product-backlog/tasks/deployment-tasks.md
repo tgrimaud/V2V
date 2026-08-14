@@ -1003,6 +1003,72 @@ Docker CE would fight the platform's standard runtime and its Postgres podman po
 
 ---
 
+## TASK-INFRA-009 - Manage the Postgres schema with Liquibase (versioned bootstrap)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0041 (Liquibase schema management + bootstrap boundary), ADR-0038 (§ schema init superseded), ADR-0039 (pgvector/embeddings)
+**Depends on:** TASK-INFRA-008 (podman runtime), TASK-OPS-008 (Postgres on `.102`), TASK-BE-003 (pgvector store), TASK-BE-021 (JPA ledger)
+**Classification:** V1 pilot deployment + backend persistence
+**Status:** In progress (branch `feat/sprint-11-remote-deployment`)
+**Priority:** High (blocks first-deploy Step 4 → Steps 6)
+**Branch:** `feat/sprint-11-remote-deployment`
+**Surfaced by:** First-deploy Step 4 review (2026-08-14) — the schema was created implicitly by
+Hibernate `ddl-auto: update` + Spring AI `initialize-schema: true`, and the privileged bootstrap
+was ad-hoc superuser SQL in the runbook. Neither is versioned/reproducible; the user asked to
+manage the Postgres bootstrap through Liquibase YAML shipped in the backend project.
+
+### Context
+
+The backend had no migration tool. `vector_store` (768-dim, HNSW cosine) was created by Spring AI's
+`initialize-schema` (which also ran `CREATE EXTENSION vector`/`uuid-ossp` — **superuser-only**, fine
+in dev where the app user is superuser, impossible on the pilot's Patroni where the app user is
+unprivileged) and `kb_source_state` by Hibernate `ddl-auto: update`. On the pilot this forced a
+manual superuser SQL step (`CREATE DATABASE`/`ROLE`/`EXTENSION`/`GRANT`) with no change tracking.
+
+Liquibase connects **into** a database **as the app user**, so three operations can never be done
+by app-startup Liquibase and must precede it: `CREATE DATABASE` (cannot create the DB it connects
+to; non-transactional), `CREATE ROLE …LOGIN` (the app connects **as** that role → must pre-exist),
+`CREATE EXTENSION vector`/`uuid-ossp` (superuser-only; the pilot app user is not superuser).
+
+### Decision (split, ADR-0041)
+
+- **App schema → Liquibase at startup (app user):** the backend owns `vector_store` (reproducing
+  Spring AI 1.0.0's exact DDL byte-for-byte: `id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  content text, metadata json, embedding vector(768)` + `spring_ai_vector_index` HNSW
+  `vector_cosine_ops`) and `kb_source_state`, guarded by `preConditions … not tableExists` /
+  `onFail: MARK_RAN` (no-op on legacy dev DBs already created by Spring AI). `ddl-auto: none`,
+  `initialize-schema: false`.
+- **Privileged bootstrap → a superuser Liquibase changelog (own tracking tables), run once at
+  Step 4** via a one-shot `podman run liquibase/liquibase` container on the data VM toward the
+  Patroni primary: `CREATE EXTENSION vector` + `uuid-ossp` + a defensive `GRANT` to the app user.
+- **Irreducible psql pre-step:** only `CREATE DATABASE voicesupport`, `CREATE ROLE voicesupport
+  LOGIN PASSWORD …`, `ALTER DATABASE … OWNER TO voicesupport` (secret `vault_db_password` stays
+  out of every Liquibase file — chosen boundary).
+- **Local dev:** the pgvector container creates `vector` + `uuid-ossp` via an init script
+  (`scripts/dev-db-init/`), replacing the extension creation Spring AI used to do.
+
+### Scope
+
+- Backend: add `liquibase-core` (BOM-managed); `db/changelog/db.changelog-master.yaml` +
+  `changes/001-vector-store.yaml` + `changes/002-kb-source-state.yaml`; bootstrap changelog
+  `db/changelog/bootstrap/db.changelog-bootstrap.yaml`; flip `ddl-auto`/`initialize-schema`; wire
+  `spring.liquibase`.
+- Dev: `scripts/dev-db-init/01-extensions.sql` mounted in `docker-compose.yml`.
+- Deploy/docs: rewrite runbook Step 4 (psql pre-step + one-shot Liquibase container), update the
+  deployment reference, ADR-0038 cross-ref, CLAUDE.md storage note.
+- Tests: changelog well-formedness + schema-parity assertions; `mvn test` regression (new dep).
+
+### Acceptance
+
+- `mvn test` green (offline; no `@SpringBootTest` boots the context, so Liquibase is inert in test).
+- On a fresh app DB, backend startup runs the app changelog and creates `vector_store` (identical
+  to Spring AI's schema) + `kb_source_state`; on a legacy dev DB the changesets MARK_RAN (no clash).
+- Step 4 bootstrap changelog creates the extensions with its own tracking tables; the app user
+  (DB owner) then creates the schema without superuser rights.
+- The app-user password never appears in any Liquibase changelog/property.
+
+---
+
 ## TASK-OPS-007 - Centralized observability for the pilot (turn the telemetry on)
 
 **Parent:** EPIC-012

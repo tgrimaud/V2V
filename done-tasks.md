@@ -851,3 +851,41 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `docs/architecture/adrs/{ADR-0037,ADR-0029}-*.md` — WEB-022 sign-off (levers default, gate kept 1.5 s OPEN)
 - `docs/{observability/voice-journey-timing.md, qa/streaming-voice-qa-report.md, product/v1-scope.md, operations/deployment-eir-ai4cc-tst.md}` — default-lever notes
 - `product-backlog/{tasks/web-voice-tasks.md, sprints/sprint-11-remote-deployment.md, backlog-index.md}` — statuses
+
+## 2026-08-14 — TASK-INFRA-009: Postgres schema management via Liquibase (versioned bootstrap)
+
+**Summary:**
+
+- Replaced the implicit schema bootstrap (Hibernate `ddl-auto: update` + Spring AI
+  `initialize-schema: true` + ad-hoc superuser SQL in the runbook) with **Liquibase YAML
+  changelogs shipped in the backend**. User-chosen split (opt2): app schema by Liquibase at
+  startup (app user); extension/grants by a **superuser bootstrap changelog** run once via a
+  one-shot `podman run liquibase` container; only `CREATE DATABASE`/`ROLE`/`ALTER … OWNER` stay a
+  psql pre-step (app-user secret stays out of every Liquibase file). ADR-0041.
+- **Key constraint documented**: Liquibase connects *into* a DB *as* the login role → it can never
+  create the DB it connects to, the role it logs in as, nor a superuser-only extension.
+- `vector_store` DDL reproduces **Spring AI 1.0.0 byte-for-byte** (extracted from the jar via
+  `javap -c`): `metadata json` (not jsonb), `embedding vector(768)`, `spring_ai_vector_index`
+  HNSW cosine, `uuid DEFAULT uuid_generate_v4()`. Guarded `not tableExists`/`MARK_RAN` for legacy
+  dev DBs. `ddl-auto: none`, `initialize-schema: false`.
+- **Dependency conflict fixed**: `liquibase-core 4.29.2` pulled `commons-io 2.16.1`, but
+  `commons-csv 1.14.1` needs ≥ 2.17 (`UnsynchronizedBufferedReader`) → pinned `commons-io 2.19.0`
+  in `dependencyManagement`. `mvn test` = **383 green** (378 + 5 new).
+- Local dev extensions moved to a pgvector init script (mounted in `docker-compose.yml`).
+- Adversarial code review: **93/100, QA gate Pass** (no blocking findings; 3 non-blocking
+  hardening items: no live apply-migration test, `--password` on CLI, floating liquibase image tag).
+- Not committed — awaiting user validation of the ticket (per delivery workflow).
+
+### Files changed
+- `backend/pom.xml` — add `liquibase-core`; pin `commons-io 2.19.0` (conflict)
+- `backend/src/main/resources/application.yml` — `ddl-auto: none`, `initialize-schema: false`, `spring.liquibase` block
+- `backend/src/main/resources/db/changelog/db.changelog-master.yaml` — app changelog (includes)
+- `backend/src/main/resources/db/changelog/changes/001-vector-store.yaml` — Spring AI exact DDL, guarded
+- `backend/src/main/resources/db/changelog/changes/002-kb-source-state.yaml` — JPA ledger table, guarded
+- `backend/src/main/resources/db/changelog/bootstrap/db.changelog-bootstrap.yaml` — superuser extensions + grants
+- `backend/src/test/java/com/voicesupport/schema/LiquibaseChangelogTest.java` — parse + DDL-parity + safety-invariant tests
+- `scripts/dev-db-init/01-extensions.sql` + `docker-compose.yml` — dev pgvector extension provisioning
+- `docs/architecture/adrs/ADR-0041-postgres-schema-management-with-liquibase.md` (+ ADR README, ADR-0038 supersede note)
+- `docs/operations/{first-deploy-runbook.md, deployment-eir-ai4cc-tst.md}` — Step 4 rewrite (4a psql / 4b container)
+- `CLAUDE.md` — storage note now Liquibase-owned
+- `product-backlog/{tasks/deployment-tasks.md, backlog-index.md, sprints/sprint-11-remote-deployment.md}` — TASK-INFRA-009
