@@ -41,7 +41,8 @@ from tts_synthesis.provider_factory import (  # noqa: E402
 from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
-from .egress import WebVoiceEgress  # noqa: E402
+from .egress import VoiceResponse, WebVoiceEgress, pcm_to_wav  # noqa: E402
+from .egress import _sample_rate_from_format  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
 from .error_response import SessionCapacityError, client_error_body  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
@@ -209,9 +210,14 @@ def build_handler(
                 _log_turn(telemetry)
                 self._send_json(502, _turn_tts_error(response, envelope))
                 return
+            # Send EVERY synthesized sentence, not just the last (BUG-015). With backend
+            # streaming on (default), the answer arrives as one TextFrame per sentence, so
+            # `tts_response` holds only the last synthesis while `result.audio` is the whole
+            # answer accumulated by the capture sink; build one WAV from the accumulated PCM.
+            full = _full_turn_response(result)
             send = Timer()
-            self._send_wav(response.wav, _answer_headers(transcript, result.answer_result))
-            processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
+            self._send_wav(full.wav, _answer_headers(transcript, result.answer_result))
+            processor.record_egress(full, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
 
         def _read_body(self) -> bytes | None:
@@ -277,6 +283,21 @@ def _turn_stt_error(transcript, envelope) -> dict[str, Any]:
     if transcript is None:
         return client_error_body("no_transcript", envelope.correlation_id)
     return client_error_body(transcript.error_code, transcript.correlation_id, transcript.outcome.value)
+
+
+def _full_turn_response(result) -> VoiceResponse:
+    """Wrap the whole-answer PCM accumulated at the capture sink into one WAV (BUG-015).
+
+    `result.tts_response` is the last synthesized sentence only (the batch TTS processor
+    overwrites it per `TextFrame`), while `result.audio` is every sentence in order. Send
+    the full audio; if nothing was accumulated (no sink frame), fall back to the last
+    synthesis so behaviour never regresses on the single-sentence / non-streaming path.
+    """
+    last = result.tts_response
+    if not result.audio:
+        return last
+    sample_rate = _sample_rate_from_format(last.result.audio_format)
+    return VoiceResponse(result=last.result, wav=pcm_to_wav(result.audio, sample_rate))
 
 
 def _turn_tts_error(response, envelope) -> dict[str, Any]:

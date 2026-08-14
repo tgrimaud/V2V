@@ -1,6 +1,7 @@
 """Tests for the in-memory batch pipeline with the backend answer step
 (TASK-WEB-005 ST-4; backend answer wired in TASK-WEB-003-D)."""
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -9,10 +10,20 @@ from types import SimpleNamespace
 VOICE_AGENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(VOICE_AGENT_ROOT))
 
-from conversation_backend import AnswerOutcome, AnswerRequest, AnswerResult, StubBackendAdapter  # noqa: E402
+from conversation_backend import (  # noqa: E402
+    CHUNK,
+    DONE,
+    AnswerOutcome,
+    AnswerRequest,
+    AnswerResult,
+    AnswerStreamEvent,
+    StubBackendAdapter,
+)
 from stt_validation.models import SttOutcome, TranscriptResult  # noqa: E402
 from tts_synthesis.models import SynthesisResult, TtsOutcome  # noqa: E402
 from voice_pipeline.pipeline import run_batch_turn  # noqa: E402
+from web_voice.egress import pcm_to_wav  # noqa: E402
+from web_voice.server import _full_turn_response  # noqa: E402
 
 
 def _transcript(outcome: SttOutcome, text: str = "") -> TranscriptResult:
@@ -128,6 +139,67 @@ class RunBatchTurnTest(unittest.IsolatedAsyncioTestCase):
         audio, _env, _tel, received_ms = ingress.calls[0]
         self.assertEqual(audio, b"\xaa\xbb")
         self.assertEqual(received_ms, 7.0)
+
+
+class _FakeStreamingBackend:
+    """Backend whose `answer_stream` yields one CHUNK per sentence, then a DONE with the
+    full text — mirrors the real guarded SSE stream so the batch pipeline synthesizes a
+    separate TTS frame per sentence (the BUG-015 scenario)."""
+
+    name = "fake-stream-backend"
+
+    def __init__(self, sentences: list[str]) -> None:
+        self._sentences = sentences
+
+    def answer_stream(self, request, control=None):
+        for sentence in self._sentences:
+            yield AnswerStreamEvent(kind=CHUNK, text=sentence)
+        yield AnswerStreamEvent(
+            kind=DONE, text=" ".join(self._sentences), confidence=0.9, grounded=True
+        )
+
+
+class FullTurnResponseTest(unittest.IsolatedAsyncioTestCase):
+    """BUG-015: the batch `/turn` must return every synthesized sentence, not just the last."""
+
+    def setUp(self) -> None:
+        # Force the streaming lever on for a deterministic multi-sentence path regardless of
+        # the ambient environment; restore it in tearDown.
+        self._prev = os.environ.get("VOICE_BACKEND_STREAM")
+        os.environ["VOICE_BACKEND_STREAM"] = "1"
+
+    def tearDown(self) -> None:
+        if self._prev is None:
+            os.environ.pop("VOICE_BACKEND_STREAM", None)
+        else:
+            os.environ["VOICE_BACKEND_STREAM"] = self._prev
+
+    async def test_streamed_answer_wraps_every_sentence_not_just_last(self) -> None:
+        # GIVEN a backend that streams three sentences through the batch pipeline
+        ingress = _FakeIngress(_transcript(SttOutcome.SUCCESS, text="facture"))
+        egress = _FakeEgress()
+        backend = _FakeStreamingBackend(["Phrase une.", "Phrase deux.", "Phrase trois."])
+        # WHEN a batch turn runs
+        result = await run_batch_turn(b"\x01", _envelope(), ingress=ingress, egress=egress, backend=backend)
+        # THEN the capture sink accumulated every sentence's PCM in order
+        self.assertEqual(
+            result.audio,
+            b"AUDIO:Phrase une." + b"AUDIO:Phrase deux." + b"AUDIO:Phrase trois.",
+        )
+        # AND tts_response holds only the LAST sentence (the pre-fix truncation source)
+        self.assertEqual(result.tts_response.result.audio, b"AUDIO:Phrase trois.")
+        # AND the turn response wraps the FULL accumulated audio, so no sentence is dropped
+        full = _full_turn_response(result)
+        self.assertEqual(full.wav, pcm_to_wav(result.audio, 16000))
+        self.assertIn(b"AUDIO:Phrase une.", full.wav)
+        self.assertIn(b"AUDIO:Phrase deux.", full.wav)
+
+    def test_full_turn_response_falls_back_to_last_when_sink_is_empty(self) -> None:
+        # GIVEN a result with no accumulated sink audio but a last synthesis present
+        last = SimpleNamespace(result=SimpleNamespace(audio_format="pcm_16000"), wav=b"WAV:last")
+        result = SimpleNamespace(audio=b"", tts_response=last)
+        # WHEN the full response is built THEN it falls back to the last synthesis unchanged
+        self.assertIs(_full_turn_response(result), last)
 
 
 if __name__ == "__main__":
