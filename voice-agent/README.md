@@ -320,7 +320,7 @@ curl -s -X POST http://localhost:8080/api/knowledge/sync
 
 # 3. Voice runtime on :8090, pointed at the real endpoint
 cd voice-agent
-export VOICE_BACKEND_URL=http://127.0.0.1:8080/api/conversation/converse
+export VOICE_BACKEND_URL=http://127.0.0.1:8080   # server base; the bridge appends /api/conversation/converse (BUG-013)
 export VOICE_BACKEND_API_KEY="$CONVERSATION_API_KEY"   # only if the backend sets one
 ./.venv/bin/python -m web_voice.server --provider gradium --backend http
 # open http://127.0.0.1:8090/ and speak, or drive one turn:

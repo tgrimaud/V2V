@@ -66,7 +66,7 @@ python3 -m web_voice.server --provider fixture   # offline plumbing check (no ke
 
 # Select the conversation backend (default is the offline stub; http targets VOICE_BACKEND_URL)
 python3 -m web_voice.server --provider fixture --backend stub
-VOICE_BACKEND_URL=http://127.0.0.1:8080/api/conversation/converse python3 -m web_voice.server --provider gradium --backend http
+VOICE_BACKEND_URL=http://127.0.0.1:8080 python3 -m web_voice.server --provider gradium --backend http
 
 # Select the runtime (default is pipecat; stdlib is the fallback/comparison path)
 python3 -m web_voice.server --provider fixture --runtime pipecat

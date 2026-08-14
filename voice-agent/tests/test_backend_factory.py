@@ -37,16 +37,32 @@ class BuildBackendTest(unittest.TestCase):
         self.assertIsInstance(build_backend("stub"), StubBackendAdapter)
 
     def test_http_is_built_from_environment(self) -> None:
-        # GIVEN the endpoint + key + timeout in the environment
-        os.environ[ENDPOINT_ENV_VAR] = "https://backend.internal/ask"
+        # GIVEN the backend *server base* URL + key + timeout in the environment
+        os.environ[ENDPOINT_ENV_VAR] = "https://backend.internal:8080"
         os.environ[API_KEY_ENV_VAR] = "sk-key"
         os.environ[TIMEOUT_ENV_VAR] = "3.5"
         # WHEN the http backend is built
         backend = build_backend("http")
-        # THEN the HTTP adapter is returned, configured from the environment
+        # THEN the adapter targets the converse endpoint appended to the server base
         self.assertIsInstance(backend, HttpBackendAdapter)
-        self.assertEqual(backend._url, "https://backend.internal/ask")
+        self.assertEqual(backend._url, "https://backend.internal:8080/api/conversation/converse")
         self.assertEqual(backend._timeout_s, 3.5)
+
+    def test_http_appends_converse_path_and_trims_trailing_slash(self) -> None:
+        # GIVEN a server base URL with a trailing slash
+        os.environ[ENDPOINT_ENV_VAR] = "http://192.168.0.11/"
+        # WHEN the http backend is built
+        backend = build_backend("http")
+        # THEN the trailing slash is dropped before the converse path is appended
+        self.assertEqual(backend._url, "http://192.168.0.11/api/conversation/converse")
+
+    def test_http_keeps_a_full_converse_url_unchanged(self) -> None:
+        # GIVEN a legacy full converse URL (backward compatibility)
+        os.environ[ENDPOINT_ENV_VAR] = "http://192.168.0.11/api/conversation/converse"
+        # WHEN the http backend is built
+        backend = build_backend("http")
+        # THEN it is kept as-is (idempotent), never doubled
+        self.assertEqual(backend._url, "http://192.168.0.11/api/conversation/converse")
 
     def test_http_requires_the_endpoint_url(self) -> None:
         # GIVEN no endpoint URL in the environment

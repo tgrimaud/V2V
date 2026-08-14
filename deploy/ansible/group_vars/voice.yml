@@ -19,9 +19,13 @@ firewall_allowed_sources:
   - "192.168.0.100/32"   # vlp-t01 HAProxy
   - "192.168.0.101/32"   # vlp-t02 HAProxy
 
-# Conversation backend (backend VIP .11).
+# Conversation backend. VOICE_BACKEND_URL is the backend *server base* URL (BUG-013):
+# the bridge appends /api/conversation/converse and derives the /converse-stream and
+# /warm-up siblings itself. HAProxy binds the backend VIP .11 on :80 (plain HTTP ->
+# backends :8080); it does NOT listen on :8080, so do not set :8080 here.
+# See deploy/haproxy/README.md.
 voice_backend: "http"
-voice_backend_url: "http://192.168.0.11:8080"
+voice_backend_url: "http://192.168.0.11"
 voice_backend_timeout_s: 30
 
 # Latency levers (pilot GO defaults, TASK-WEB-020/021).

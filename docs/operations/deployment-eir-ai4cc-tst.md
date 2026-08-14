@@ -199,7 +199,7 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `--host` / bind | `0.0.0.0` | default `127.0.0.1` (must change for remote) |
 | `--port` | `8090` | default `8090` |
 | `VOICE_BACKEND` | `http` | default `stub` |
-| `VOICE_BACKEND_URL` | `http://192.168.0.11:8080` (backend VIP) | required for `http` backend |
+| `VOICE_BACKEND_URL` | `http://192.168.0.11` (backend VIP server base; the bridge appends `/api/conversation/converse`) | required for `http` backend |
 | `VOICE_BACKEND_API_KEY` | from secrets | matches backend `CONVERSATION_API_KEY` |
 | `GRADIUM_API_KEY` | from secrets | STT/TTS (cloud) |
 | `VOICE_STUN` | STUN URLs (confirm) | Comma-separated; NAT discovery for Prodpriv clients |

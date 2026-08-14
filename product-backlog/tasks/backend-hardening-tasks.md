@@ -15,8 +15,59 @@ pilot, unless pulled in earlier.
 | TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `3dafffd`; adversarial **95/100** + QA **GO**) — built on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **336** green (+5 `CorrelationIdTest`, +1 MVC CR/LF-echo regression), ArchUnit OK. `docs/qa/task-be-022-auth-log-hardening-qa-report.md`. Merge on explicit user request only |
 | TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
 | TASK-BE-024 | Conversation-memory adapter hardening: sanitize the client-controlled `conversation_id` in degraded-path logs + pipeline the Redis append (RPUSH/LTRIM/PEXPIRE) into one round-trip | V1 security + latency hardening | TASK-BE-021, TASK-BE-022 | 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (2026-08-05) — low-severity findings of the Sprint 11 full adversarial review. `RedisConversationMemoryAdapter` now routes `conversationId` through `CorrelationId.sanitize` on all three degraded/skip log lines (log-injection close-out); `RedisConversationTurnStoreAdapter.appendTrimExpire` pipelines the three Redis ops into a single round-trip (hot turn path). `mvn test` **337** green (+1 CR/LF log-forge regression), ArchUnit OK. Merge on explicit user request only |
+| TASK-BE-026 | LLM provider fallback on upstream `503`/unavailable — try an alternate configured model before degrading | V1 resilience hardening | TASK-BE-012, TASK-BE-005 | Proposed (2026-08-14) — surfaced during pilot voice-journey validation: the whole `mistral-small` family returned `503 Service unavailable` (code 3831) on the Mistral cloud while `mistral-medium-2508` / `ministral-8b-latest` answered normally, taking the bot to the safe fallback for a model-specific outage |
 
 ---
+
+## TASK-BE-026 — LLM provider fallback on upstream 503 / unavailable
+
+**Parent:** EPIC-005 (Answer engine) — resilience hardening
+**Classification:** V1 resilience hardening
+**Status:** Proposed (2026-08-14)
+**Priority:** P2
+**Branch:** `task/TASK-BE-026-llm-fallback-model`
+**Surfaced by:** Pilot voice-journey validation (2026-08-14).
+
+### Context
+
+During pilot validation the LLM wording slice failed with
+`TransientAiException: 503 - Service unavailable` (Mistral code `3830`/`3831`) and, after
+retries, `UpstreamUnavailableException: LLM provider timed out after 8000 ms`. Direct
+Mistral calls confirmed it was **model-specific and cloud-side**: the whole
+`mistral-small` family (`-latest` and `-2603`) returned `503`, while
+`mistral-medium-2508` and `ministral-8b-latest` answered in ~0.3 s with the same valid
+key (`/v1/models` = 200, egress healthy). The pilot was unblocked only by manually
+switching `MISTRAL_CHAT_MODEL` to `ministral-8b-latest` on the backends.
+
+Today a single-model outage takes every turn to the safe fallback even though other
+Mistral models are up — an avoidable loss of the real billing explanation.
+
+### Scope
+
+- Configure an ordered list of chat models (primary + one/more fallbacks), provider-agnostic
+  (must not couple the domain to Mistral; respect the LLM port/adapter boundary).
+- On a retryable upstream failure (HTTP 5xx / `TransientAiException` / timeout) for the
+  primary model, try the next configured model **within the existing bounded LLM
+  executor + timeout budget** before degrading; never blow the per-turn latency budget.
+- Keep the safe-degrade path as the final fallback when all models fail.
+- Telemetry: record which model actually answered and mark a fallback event
+  (`llm_wording` slice: provider/model + a `fallback` flag/outcome), so QA and latency
+  analysis can see when the primary was down.
+- Config only — no default behaviour change when the primary is healthy.
+
+### Acceptance Criteria
+
+- [ ] With the primary model returning 503, a turn still returns a grounded answer from
+      the configured fallback model (no safe-fallback), within the latency budget.
+- [ ] With all configured models failing, the turn degrades safely (unchanged contract).
+- [ ] Telemetry exposes the answering model + a fallback indicator; correlation id preserved.
+- [ ] No coupling of the domain to a specific provider SDK; unit tests with fakes (no Mockito).
+- [ ] Docs updated (config keys + runbook note), ADR if the provider strategy changes shape.
+
+### Notes
+
+- Complements TASK-BE-012 (already maps provider faults to `ERR_UPSTREAM` + bounds the
+  executor/timeout). This adds a *try-another-model* step before the degrade.
 
 ## TASK-BE-012 — Backend REST error contract
 
