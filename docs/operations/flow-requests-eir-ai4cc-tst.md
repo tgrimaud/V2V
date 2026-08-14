@@ -10,6 +10,13 @@ Client sources are the two authorized ingress origins:
 All pilot VMs sit on the Prodpriv network (VLAN 2909); their Prod IPs are in
 [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#vm-inventory).
 
+> **Scope — external ingress only.** Inter-VM / service traffic runs on the tenant mesh
+> `192.168.0.0/24` (short names), which is **open between VMs, UDP included** (firewalld
+> inactive on the app VMs; verified by a VM↔VM UDP round-trip). It therefore needs **no**
+> flow request, and no internal flows are listed here — only external ingress from the two
+> client sources. See the network model in
+> [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#network-model--name-resolution).
+
 ## 1. Already requested (2026-08-13) — management + web signaling (TCP)
 
 Opened per the 2026-08-13 request; recorded here for completeness.
@@ -33,9 +40,11 @@ Opened per the 2026-08-13 request; recorded here for completeness.
 ## 2. NEW request — WebRTC media (audio), remote clients
 
 **Why:** the §1 flows are TCP-only. A browser voice turn negotiates the audio as
-**UDP RTP/SRTP** media, peer-to-peer between the client and the answering bridge. With
-remote clients behind NAT (Nice NAT, Wireguard) a **TURN relay** is required so the
-media has a single, firewallable, publicly reachable path. The voice runtime already
+**UDP RTP/SRTP** media, peer-to-peer between the client and the answering bridge. The
+mesh-level UDP openness is **VM↔VM only** — an external client crosses the filtered
+Prodpriv boundary and the bridge advertises only its private `192.168.0.x` ICE candidate,
+so it does not apply here. With remote clients behind NAT (Nice NAT, Wireguard) a **TURN
+relay** is required so the media has a single, firewallable, publicly reachable path. The voice runtime already
 consumes a TURN endpoint (`VOICE_TURN`/`VOICE_TURN_USERNAME`/`VOICE_TURN_CREDENTIAL` →
 browser `iceServers`); it needs the relay to exist and be reachable (open input #12).
 

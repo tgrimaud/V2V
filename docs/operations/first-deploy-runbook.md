@@ -234,6 +234,16 @@ billing question, and confirm an audible answer plus a coherent transcript (see 
 QA voice-turn checklist,
 [`docs/qa/`](../qa/)). This closes the acceptance criterion.
 
+> **Tier B — internal media pre-validation (no TURN).** The tenant mesh
+> `192.168.0.0/24` is open VM↔VM, **UDP included** (network model in
+> [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#network-model--name-resolution);
+> verified by a VM↔VM UDP round-trip). So the full WebRTC media path can be proven
+> **internally before the external gates**: run a headless WebRTC client on a mesh node
+> against a bridge over its **short name** (`vla-ai4cc-t0x` / `192.168.0.x`), which
+> exercises end-of-turn, STT/TTS and the audio round-trip **without** #4/#11/#12. The
+> **external** client turn still needs the TLS edge (#4), Prod→VIP NAT (#11) and the TURN
+> relay (#12).
+
 ## Rollback (known-good)
 
 Roll back by redeploying the previous good **image** tag — same path, same health

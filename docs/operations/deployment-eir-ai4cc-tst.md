@@ -117,6 +117,31 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Embeddings (`nomic-embed-text`) | `vla-t03`/`t04` (co-located) | podman (ollama sidecar) | CPU sidecar per backend VM (ADR-0039); 768 dim, model pulled at deploy |
 | Mistral (chat), Gradium (STT/TTS) | cloud | managed | Require controlled internet egress |
 
+## Network model & name resolution
+
+Each VM has a **single NIC on the tenant mesh `192.168.0.0/24`** (`eth0`); the Prod and
+Admin addresses are routed/NAT representations, not local interfaces. A hostname resolves
+to a **different address per suffix**, and reachability differs sharply:
+
+| Name form | Example → IP | Network | Reachability |
+|-----------|--------------|---------|--------------|
+| short (`vla-ai4cc-t02`) | `192.168.0.104` | tenant mesh `192.168.0.0/24` | **VM↔VM only — fully open, incl. UDP** (firewalld inactive on the app VMs; verified 2026-08-14 by a VM↔VM UDP round-trip on an ephemeral port) |
+| `*.prod.lan` | `10.195.56.240` (VLAN 2909) | Prodpriv (external) | via NAT/route; **filtered** — only the flows in [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md) are open |
+| `*.mt.lan` | `172.23.16.102` | Admin | management, routed |
+
+Consequences:
+
+- **Inter-VM / service traffic** (HAProxy VIP→tier, backend→Postgres/Redis/Ollama, the LB
+  admin socket) runs on the mesh via **short names / `192.168.0.x`** and needs **no
+  firewall flow request** — the mesh is open between VMs (UDP included).
+- **Control-node→VM SSH/Ansible** must use **`*.prod.lan`**: the `192.168.0.x` mesh is not
+  routable from outside, so the Ansible inventory stays on `.prod.lan` FQDNs.
+- **WebRTC media (UDP) is open only VM↔VM.** An **external** client (Prodpriv → voice VIP
+  `10.195.59.39`) crosses the filtered boundary and the bridge's only ICE candidate is its
+  private `192.168.0.x`, so **external clients still require the TURN relay (open input
+  #12)**. The mesh openness does **not** remove that blocker — it only enables an
+  **internal** VM↔VM voice-turn validation (headless client on a mesh node → bridge, no TURN).
+
 ## Port matrix
 
 | From | To | Port | Protocol | Purpose |
@@ -135,6 +160,13 @@ HA is split across two availability zones (costa-dc1 / fontvieille-dc3) per tier
 | Backend / voice VMs | `ghcr.io` + `pkg-containers.githubusercontent.com` | 443 | HTTPS | Deploy — image pulls (private GHCR, read-only token) |
 | Backend VMs | `registry.ollama.ai` | 443 | HTTPS | Deploy — one-time `nomic-embed-text` model pull (ADR-0039) |
 | Admin | all VMs | 22 | SSH | Ops (source range to confirm) |
+
+> **Flow-request scope (see the network model above).** Rows within the tenant mesh
+> (`192.168.0.x` — voice/backend VIP→tier, backend→Postgres/Redis/Ollama) are open VM↔VM
+> and need **no** flow request. Only the **external** rows require one: client→voice VIP
+> `:443/:80` (TCP) and WebRTC **media UDP via TURN** (open input #12). The egress rows are
+> provisioning/runtime internet access. Full external-flow detail:
+> [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md).
 
 ## Configuration per tier (environment variables)
 
