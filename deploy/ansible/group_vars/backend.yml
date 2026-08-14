@@ -48,7 +48,11 @@ redis_health_enabled: true
 kb_host_path: "{{ compose_root }}/backend/kb-assets"
 
 # JVM / resource sizing (4 vCPU / 8 GB VM, shared with the ollama sidecar).
-java_opts: "-XX:MaxRAMPercentage=75.0"
+# The embedding read timeout (voice-support.embedding.timeout-ms, default 5s) is sized for a
+# single per-query embedding at retrieval; the one-shot KB sync embeds a large batch in one
+# Ollama call on CPU and needs more headroom, so raise it here (Spring property override via
+# JAVA_OPTS). Runtime retrieval stays fast-fail-protected by voice-support.retrieval.timeout-ms.
+java_opts: "-XX:MaxRAMPercentage=75.0 -Dvoice-support.embedding.timeout-ms=120000"
 backend_cpus: "3.0"
 backend_memory: "5g"
 
