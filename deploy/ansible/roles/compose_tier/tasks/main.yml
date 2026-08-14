@@ -89,19 +89,11 @@
   when: tier in ['redis', 'backend']
 
 # Voice tier only: put the node back in rotation on each LB once healthy
-# (TASK-INFRA-007, delegated to the admin socket on every LB node).
-# Non-fatal like the drain: re-enabling is best-effort. If it can't reach an LB the
-# node stays 'drain' there (fails safe: no new calls to a node we couldn't confirm)
-# rather than aborting the deploy.
+# (TASK-INFRA-007). Included (NOT inline) so the delegated `loop` + `delegate_to:
+# "{{ item }}"` is only ever constructed on the voice tier. An inline delegated-loop
+# task templates `delegate_to` on every tier before `when` short-circuits, which
+# aborts the redis/backend play with "'item' is undefined" (voice_lb_socket_hosts is
+# undefined off the voice tier). Mirrors the drain include above.
 - name: "Re-enable the voice bridge in the load balancer"
-  ansible.builtin.shell:
-    cmd: "{{ voice_lb_enable_cmd }}"
-  delegate_to: "{{ item }}"
-  loop: "{{ voice_lb_socket_hosts }}"
-  when:
-    - tier == 'voice'
-    - voice_lb_enable_cmd | length > 0
-    - voice_lb_socket_hosts | length > 0
-  changed_when: true
-  ignore_unreachable: true
-  failed_when: false
+  ansible.builtin.include_tasks: lb_reenable.yml
+  when: tier == 'voice'
