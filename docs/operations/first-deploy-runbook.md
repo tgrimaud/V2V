@@ -163,16 +163,26 @@ podman run --rm \
   -e LIQUIBASE_COMMAND_PASSWORD \
   -v /tmp/liquibase-bootstrap:/liquibase/changelog:ro,Z \
   docker.io/liquibase/liquibase:4.29.2 \
+  --search-path=/liquibase/changelog \
   --url="jdbc:postgresql://127.0.0.1:5432/voicesupport" \
   --username=postgres \
   --changelog-file=db.changelog-bootstrap.yaml \
   --database-changelog-table-name=databasechangelog_bootstrap \
   --database-changelog-lock-table-name=databasechangeloglock_bootstrap \
-  -Dapp_db_user=voicesupport \
   update
 unset LIQUIBASE_COMMAND_PASSWORD
 ```
 
+> **Search path (required).** Liquibase resolves `--changelog-file` against `--search-path`,
+> which defaults to the image working dir (`/liquibase`), **not** the mounted `/liquibase/changelog`.
+> Omitting `--search-path=/liquibase/changelog` fails with `ChangeLogParseException:
+> db.changelog-bootstrap.yaml does not exist`. (Verified against `liquibase:4.29.2` in QA.)
+>
+> **App DB user.** The grant target defaults to `voicesupport` via a `property` in the changelog,
+> so no CLI parameter is needed. Do **not** pass `-Dapp_db_user=…` — the `4.29.x` CLI rejects it
+> with `Unexpected argument(s)`. To target a different role, edit the `property` value in
+> `db.changelog-bootstrap.yaml`.
+>
 > **Password handling.** Pass the superuser password via `LIQUIBASE_COMMAND_PASSWORD` (env),
 > never as `--password=…` on the command line (visible in `ps`/shell history). Pin the image to
 > the patch tag matching the backend's `liquibase-core` (`4.29.2`), not a floating minor.
@@ -312,6 +322,8 @@ stays reproducible and rollback-addressable.
 | `docker login` denied at deploy | Missing/expired `vault_registry_token`, or `registry_login_required` false | Refresh the PAT (`read:packages`) in the vault; confirm `registry_login_required: true` |
 | Backend fails on first start (Liquibase / pgvector) | Step 4b extensions not created (`type "vector" does not exist` / `uuid_generate_v4()` missing), or the app user isn't DB owner so it can't create the schema / `databasechangelog` | Run Step 4b (bootstrap changelog) before Step 6; confirm 4a's `ALTER DATABASE … OWNER TO voicesupport` (or grant `CREATE ON SCHEMA public`) |
 | Liquibase `changelog … could not be found` at startup | App changelog missing from the image classpath | Confirm `db/changelog/db.changelog-master.yaml` is bundled (it is under `src/main/resources`); rebuild the image |
+| Step 4b `ChangeLogParseException: db.changelog-bootstrap.yaml does not exist` | `--search-path` omitted — Liquibase resolves `--changelog-file` against `/liquibase`, not the mount | Add `--search-path=/liquibase/changelog` (as in the Step 4b command) |
+| Step 4b `Unexpected argument(s): -Dapp_db_user=…` | The `liquibase:4.29.x` CLI rejects `-D` changelog params | Drop it — `app_db_user` defaults to `voicesupport` via the changelog `property`; edit that value to change the target role |
 | RAG answers are ungrounded / empty | First `POST /api/knowledge/sync` not run, or KB assets missing under `KB_HOST_PATH` | Confirm `knowledge-base/` + `articles.csv` on the host, re-run the sync |
 | `/actuator/health` flips DOWN | `REDIS_HEALTH_ENABLED=true` without a reachable Redis | Only enable it on the backend once Redis is deployed (step 5); default off |
 | `podman compose` "looking up compose provider failed" | Compose v2 provider not installed / `containers.conf` missing | Re-run `prereqs.yml` (installs the provider + writes `containers.conf`); check `compose_provider_url` reachability |
