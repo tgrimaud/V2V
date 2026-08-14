@@ -48,8 +48,11 @@ services:
       KB_CSV_PATH: "${KB_CSV_PATH:-/app/kb-assets/articles.csv}"
       # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
       OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}"
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}"
+      # Valid localhost defaults (NOT empty): Spring Boot's OTLP tracing exporter is built
+      # whenever the endpoint is present and rejects an empty string ("Invalid endpoint")
+      # at startup. Export stays OFF via the enabled flag (metrics) + sampler 0.0 (traces).
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}"
       OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
       # --- JVM tuning without a rebuild (sized to share the 8 GB VM with ollama) ---
       JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
