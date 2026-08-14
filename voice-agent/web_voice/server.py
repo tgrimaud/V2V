@@ -88,6 +88,13 @@ def build_handler(
     processor: VoiceTurnProcessor, signaling: Any = None
 ) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
+        # Answer in HTTP/1.1 (the BaseHTTPRequestHandler default is HTTP/1.0). Behind the
+        # HAProxy TLS edge (alpn h2,http/1.1) a browser negotiates HTTP/2; HAProxy cannot
+        # mux an HTTP/1.0 backend response onto an h2 client and returns "Empty reply"
+        # (BUG-012). Every bodied response here sets Content-Length and the only bodiless
+        # response is 204, so HTTP/1.1 keep-alive has definite framing on all paths.
+        protocol_version = "HTTP/1.1"
+
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
             if path == "/favicon.ico":

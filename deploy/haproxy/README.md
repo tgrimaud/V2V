@@ -189,6 +189,17 @@ haproxy -c -f haproxy.cfg
 keepalived -t -f keepalived-vlp-t01.conf
 ```
 
+## Edge gotcha: HTTP/2 needs an HTTP/1.1 backend (BUG-012)
+
+The voice frontend advertises `alpn h2,http/1.1`, so browsers negotiate **HTTP/2**.
+HAProxy cannot mux an **HTTP/1.0** backend response onto an h2 client — it returns
+"Empty reply from server" (curl HTTP `000`), even though the same request over
+HTTP/1.1 returns `200`. The voice bridge's Python `BaseHTTPRequestHandler` defaults to
+HTTP/1.0, which surfaced this at the pilot edge. Fixed app-side by pinning
+`protocol_version = "HTTP/1.1"` on the bridge handler (BUG-012). If a backend ever
+serves HTTP/1.0 again, either fix the backend or drop `h2` from the `alpn` list on the
+`bind` (http/1.1-only is fine for WebRTC signaling + a static UI; media is UDP P2P).
+
 ## Open inputs (confirm with the platform team)
 
 - Network **interface name** in the Keepalived configs (`eth0` placeholder).
