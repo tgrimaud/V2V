@@ -957,6 +957,13 @@ after the pull). The backend KB `:ro` bind mount is relabelled **`:ro,Z`** (SELi
 on EL9 — mandatory under podman, backward-compatible with docker). `docker exec/run/inspect/cp`
 in `health.yml` and the backup scripts keep working through the shim. Runtime-affecting: deploy
 tooling only, no application code change.
+**Live validation (2026-08-14):** `prereqs.yml --limit 'redis:backend'` applied on
+`vlb-ai4cc-t02` + `vla-ai4cc-t03/t04` — `ok=9 changed=5 failed=0`, then idempotent
+(`changed=0`); `podman compose version` = **v5.4.0** (provider checksum verified),
+`podman.socket` **active**, `/etc/containers/containers.conf` rendered; firewalld tasks
+skipped (firewalld inactive on the VMs). Control-node `ansible.cfg` `stdout_callback`
+updated (the `community.general.yaml` callback was removed in v12 → `default` +
+`result_format=yaml`).
 **Priority:** High (blocks first-deploy Steps 3, 5, 6, 7)
 **Branch:** `feat/sprint-11-remote-deployment`
 **Surfaced by:** Step 0 first-deploy access (2026-08-13) — every app VM runs **podman 5.8.2**
