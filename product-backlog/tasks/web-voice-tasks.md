@@ -2546,3 +2546,302 @@ Scenario: The escalation handoff transport is decided
 - A **go/no-go recommendation** that updates ADR-0040 and feeds the Sprint 13 decision.
 - Throwaway prototype + Architect flow config referenced (not merged into the runtime).
 - Correlation-id propagation note (Genesys → OpenTelemetry).
+
+---
+
+# Sprint 12 — External Voice via Interim WebSocket Audio (Genesys-Ready)
+
+Delivery slices for **ADR-0043** (interim WebSocket audio transport). These implement
+Decision point 4 of **ADR-0042** (no TURN; a `wss` audio path is the external-reach
+lever) and are deliberately built behind reusable seams so the Sprint 14 **Genesys Audio
+Connector** work (ADR-0040, TASK-WEB-025) becomes a transport-adapter swap, not a
+greenfield build. Sprint file: `sprints/sprint-12-external-voice-websocket.md`.
+
+**Shared design invariant (enforced at review, all Sprint 12 tickets):** the internal
+audio boundary is **PCM16 / 16 kHz**; codec + sample-rate conversion live **inside each
+transport adapter** (never in the shared core); framing is **JSON control frames + binary
+PCM audio** (AudioHook-shaped); barge-in / end-of-turn / playback / call-end are an
+internal event vocabulary with a **pluggable source**.
+
+---
+
+## TASK-WEB-026 - WebSocket audio transport socle + framing (ADR-0043 design spike)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (this transport), ADR-0042 (no TURN, WS interim), ADR-0033
+(WebRTC same-subnet), ADR-0040 (Genesys AudioHook shape to align with)
+**Depends on:** — (first ticket of the sprint)
+**Classification:** V1 voice runtime — external-reach interim transport
+**Status:** Planned
+**Priority:** High (unblocks 027–031)
+**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (to create when work starts)
+
+### Context
+
+The external-browser WebRTC media plane has no path off the pilot subnet without TURN
+(ADR-0042); the WebSocket path carries audio inside one `wss` connection (client→server
+TCP/TLS) through the existing HAProxy edge — the same NAT-traversal property as Genesys
+Audio Connector. The stdlib `http.server` does not speak WebSocket, and pipecat's
+`SmallWebRTCRequestHandler` pulls FastAPI (which we avoid). This ticket picks the socket
+socle and fixes the wire framing.
+
+### Scope
+
+- Decide the WebSocket socle: pipecat `WebsocketServerTransport` (driven without FastAPI)
+  vs a hand-rolled `wss` upgrade on the stdlib server; run both on the **shared persistent
+  asyncio loop** (`web_voice/async_loop.py`), submitting coroutines with
+  `run_coroutine_threadsafe` (as WebRTC does).
+- Fix the **frame contract**: JSON control frames (open/close, language, barge-in,
+  playback-started/completed, call-end) + **binary PCM16/16 kHz** audio frames, modelled
+  on the AudioHook shape (not the exact schema).
+- Record the socle + framing decision in ADR-0043 (already drafted; update if the spike
+  changes it).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A wss connection is accepted without FastAPI and driven on the shared loop
+  Given the voice bridge started with the WebSocket transport enabled
+  When a browser opens a wss connection to the voice endpoint
+  Then the connection is accepted on the shared asyncio loop
+  And no FastAPI import is required for the path
+```
+
+```gherkin
+Scenario: The wire framing separates JSON control from binary audio
+  Given an open wss voice connection
+  When the client sends a JSON control frame and a binary PCM16/16 kHz audio frame
+  Then the server demultiplexes control vs audio deterministically
+  And the framing shape matches the AudioHook JSON-control + binary-audio model
+```
+
+### Out Of Scope
+
+- The Genesys AudioHook schema/auth/PCMU transcoding (Sprint 14, YAGNI).
+- Any WebRTC behaviour change.
+
+---
+
+## TASK-WEB-027 - Transport-agnostic session factory (capitalisation refactor)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (transport-agnostic seam), ADR-0022/0033 (WebRTC session),
+ADR-0040 (future Genesys adapter reuse)
+**Depends on:** TASK-WEB-026
+**Classification:** V1 voice runtime — refactor enabling multi-transport + Genesys reuse
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-027-transport-agnostic-session-factory` (to create when work starts)
+
+### Context
+
+The session-building logic (STT/TTS processors, farewell, egress probe, envelope,
+telemetry, `StreamingVoiceSession` assembly) currently lives **inside**
+`WebRtcSignalingService._build_session` / `_build_streaming_session`. That coupling is the
+only reason a second transport is "new work". Extracting it into a shared factory makes
+WebRTC, WebSocket and (later) Genesys thin transport adapters over one session core — the
+single biggest capitalisation lever for Sprint 14.
+
+### Scope
+
+- Extract a transport-agnostic session factory that takes a transport + envelope +
+  telemetry and returns a built `StreamingVoiceSession` (streaming + batch variants).
+- Re-point `WebRtcSignalingService` at the factory with **no behaviour change** (byte-for-
+  byte WebRTC path); the WebSocket transport (028/029/030) consumes the same factory.
+- Keep the internal audio boundary at **PCM16/16 kHz**; transport adapters own any
+  codec/sample-rate conversion.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: WebRTC behaviour is unchanged after extraction
+  Given the session factory extracted from WebRtcSignalingService
+  When the existing WebRTC + voice-agent test suite runs
+  Then all tests pass unchanged
+  And no session-building logic remains WebRTC-specific
+```
+
+```gherkin
+Scenario: A non-WebRTC transport builds a session through the same factory
+  Given a fake/stub transport implementing the transport port
+  When a session is built through the shared factory
+  Then the same StreamingVoiceSession assembly is produced (STT/TTS/telemetry/envelope)
+  And the internal audio boundary is PCM16/16 kHz
+```
+
+---
+
+## TASK-WEB-028 - Browser WebSocket voice client (ws.html + ws.js)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0033 (WebRTC page stays), US-019 (web voice journey)
+**Depends on:** TASK-WEB-026
+**Classification:** V1 voice runtime — external-reach client
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-028-browser-ws-voice-client` (to create when work starts)
+
+### Context
+
+The current pages are `/` (batch `/api/voice/turn`) and `/webrtc.html` (WebRTC). External
+users need a page whose media rides the `wss` path. Mic capture already exists as an
+AudioWorklet contract (PCM16/16 kHz) reused from the batch/WebRTC pages.
+
+### Scope
+
+- New page `ws.html` + `ws.js`: `getUserMedia` → AudioWorklet → **PCM16/16 kHz frames over
+  `wss`**; play the returned audio through the existing `pcm-worklet.js`.
+- Language selection sent on the open control frame (as the WebRTC path carries it).
+- Safe failure surfaces (auth, unreachable, no-speech, capacity 503) render a
+  user-visible non-invented message; never fabricate a transcript.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: An off-subnet browser completes a turn over the WebSocket path
+  Given the ws.html page loaded through the HAProxy edge from off the pilot subnet
+  When the user speaks a billing question and stops
+  Then the transcript and the spoken answer are received over the same wss connection
+  And no TURN/STUN was involved
+```
+
+```gherkin
+Scenario: A capacity refusal is surfaced, not silent
+  Given the bridge is at its session ceiling
+  When the browser opens a wss voice connection
+  Then the page shows a clear "try again shortly" message
+  And no fabricated transcript or answer is shown
+```
+
+---
+
+## TASK-WEB-029 - Barge-in / end-of-turn on the WebSocket path (pluggable signal seam)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (control-signal seam), ADR-0025 (barge-in + point-7
+amplitude gate), ADR-0040 (Genesys events feed the same seam later)
+**Depends on:** TASK-WEB-027
+**Classification:** V1 voice runtime — interruption on the WS path
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (to create when work starts)
+
+### Context
+
+The WebSocket path loses WebRTC's transport-integrated AEC; browser echo cancellation is
+weaker without a WebRTC render sink, so the ADR-0025 point-7 mitigation (raised amplitude
+threshold + N-frame sustained-onset confirmation, env-tunable) matters more here. The
+control-signal seam must be pluggable so Genesys protocol events can replace the detectors
+later without touching the session core.
+
+### Scope
+
+- Feed the internal barge-in / end-of-turn / playback / call-end events from the existing
+  **energy/amplitude detectors** on the WS path (reuse the 350 ms hold, `VOICE_BARGE_IN_*`).
+- Verify interruption cancels an in-flight streaming synthesis cleanly over `wss`
+  (`asyncio.CancelledError` handled + socket closed — the BUG the WebRTC path already fixed).
+- Name the internal events after Genesys semantics (`playback-started`/`-completed`,
+  `barge-in`, `bot-turn-response`) for a 1:1 mapping in Sprint 14.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Barge-in cuts the bot cleanly over WebSocket
+  Given the bot is speaking over a wss voice connection
+  When the customer starts speaking above the amplitude gate for the confirmation window
+  Then the in-flight synthesis is cancelled and playback stops
+  And the wss connection stays open for the customer's new turn
+```
+
+```gherkin
+Scenario: The signal source is pluggable
+  Given the pluggable control-signal seam
+  When a fake event source emits an end-of-turn signal
+  Then the session finalizes the turn without depending on the energy detector
+```
+
+---
+
+## TASK-WEB-030 - WebSocket capacity ceiling + per-slice observability
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0028 (per-slice OTel), TASK-WEB-024 (WebRTC ceiling)
+**Depends on:** TASK-WEB-027
+**Classification:** V1 voice runtime — runtime safety + observability (mandatory)
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (to create when work starts)
+
+### Context
+
+All sessions share one asyncio loop on small LB VMs, so the WebSocket path needs the same
+backpressure + observability as WebRTC (TASK-WEB-024): a session cap with a clean refusal,
+an active-session gauge, and the canonical per-slice spans under one correlation id.
+
+### Scope
+
+- Apply a session ceiling + backpressure to the WS path (reuse `VOICE_MAX_*`); offers past
+  the cap get a clean refusal (close code + message), never a crash.
+- Emit the active-session gauge + refusal event (WebRTC-equivalent metric names).
+- Emit the canonical per-slice spans (channel ingress → end-of-turn → STT → backend → TTS
+  first audio → channel egress) with **one correlation id per call**; OTLP-export opt-in.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: WebSocket sessions past the cap are refused cleanly
+  Given the WebSocket session ceiling is reached
+  When another browser opens a wss voice connection
+  Then it is refused with a clear close/error (no crash)
+  And an active-session gauge + refusal event are recorded
+```
+
+```gherkin
+Scenario: A WebSocket call emits the canonical per-slice spans
+  Given a completed wss voice turn
+  When its telemetry is dumped
+  Then every canonical journey slice is present under one correlation id
+  And a missing slice is marked measured=false, never omitted
+```
+
+---
+
+## TASK-WEB-031 - QA: WebSocket path functional + per-slice latency report
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0029 (mouth-to-ear gate), ADR-0028 (slice timing)
+**Depends on:** TASK-WEB-028, TASK-WEB-029, TASK-WEB-030
+**Classification:** V1 voice runtime — QA acceptance
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-031-ws-qa-latency` (to create when work starts)
+
+### Context
+
+Per the delivery workflow, QA validates functional intent + per-slice latency before the
+sprint branch is merge-ready. The WS path has two honest trade-offs to characterise: TCP
+head-of-line under loss, and weaker AEC than WebRTC.
+
+### Scope
+
+- Functional Gherkin/Behave coverage of the external WS voice journey (turn, barge-in,
+  capacity refusal, safe failure surfaces).
+- Per-slice p50/p95 latency report on the WS path vs the ADR-0029 gate (mouth-to-ear
+  p95 ≤ 1.5 s / time-to-first-audio p95 ≤ 1.2 s), with utterance length reported.
+- A degraded-behaviour note (TCP head-of-line, AEC without headphones) and a go/no-go on
+  the interim path.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The WebSocket path is scored against the latency gate
+  Given a set of external WebSocket voice turns
+  When the per-slice telemetry is aggregated
+  Then p50/p95 are reported per slice with utterance length
+  And the mouth-to-ear and time-to-first-audio p95 are scored against ADR-0029 with a go/no-go
+```
+
+### Required Evidence
+
+- QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
+- No raw audio, secrets or PII in logs.

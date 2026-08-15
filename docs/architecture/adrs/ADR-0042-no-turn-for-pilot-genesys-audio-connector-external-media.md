@@ -4,6 +4,13 @@
 
 Accepted (2026-08-14)
 
+> Update (2026-08-15): the interim WebSocket audio path (Decision point 4) is now a
+> **committed decision**, not a conditional lever — a concrete need for an external
+> browser voice demo before Genesys Audio Connector has been confirmed. It becomes the
+> content of the next sprint (Sprint 12) and is specified by ADR-0043. "No TURN for the
+> pilot" (points 1–3) is unchanged: the external path stays a client→server TCP/TLS
+> WebSocket through the existing HAProxy edge, so no STUN/TURN is provisioned.
+
 > Refines ADR-0033 (WebRTC as the single live web voice transport) and ADR-0040
 > (Genesys Audio Connector as the target V2V media plane). It does not change runtime
 > code; it fixes the media-plane strategy for the pilot so we do not provision TURN.
@@ -45,11 +52,15 @@ stream — it does **not** rely on browser-to-bridge WebRTC or on TURN at all.
    bidirectional AudioHook `wss://` stream that Genesys initiates to our runtime. Because
    Genesys reaches our endpoint over TLS/WebSocket (server-to-server, no browser NAT
    traversal), **no TURN relay is needed**.
-4. **Interim option:** if a browser-style external demo is needed before the Genesys
-   Audio Connector server exists, prefer a **WebSocket audio transport** to the bridge
-   (TCP/TLS, traverses the same HAProxy edge that already works) over standing up TURN.
-   This is an interim lever, not a second long-lived transport; it is only pursued if a
-   concrete pre-Genesys need appears.
+4. **Interim WebSocket audio path — now committed (Sprint 12, ADR-0043).** The external
+   browser voice path is a **WebSocket audio transport** to the bridge (TCP/TLS,
+   traverses the same HAProxy edge that already works) — chosen over standing up TURN.
+   Same NAT-traversal property as Genesys Audio Connector (a client→server TLS
+   connection carries the audio; no UDP peer-to-peer, no ICE, no STUN/TURN). It remains
+   an interim transport, not a second long-lived one: it is superseded by Genesys Audio
+   Connector (ADR-0040) for the target contact-centre path, and differs from it in
+   application protocol (our own PCM framing vs Genesys AudioHook) and in using TCP for
+   real-time media (jitter/head-of-line trade-off vs WebRTC/UDP on lossy links).
 
 The Java backend remains the source of truth for conversation, RAG, guardrails,
 escalation and memory (ADR-0001); Genesys stays the contact-centre system of record
@@ -79,8 +90,10 @@ escalation and memory (ADR-0001); Genesys stays the contact-centre system of rec
   closed UDP; would work inconsistently and still needs a public reflexive path.
 - **Keep pushing browser WebRTC as the external entry now:** rejected — silent-audio
   trap for external users; signalling succeeds while media fails.
-- **Stand up the WebSocket audio path immediately:** deferred — kept only as an interim
-  lever if a concrete pre-Genesys external demo is required.
+- **Stand up the WebSocket audio path immediately:** ~~deferred~~ **selected** (update
+  2026-08-15) — a concrete pre-Genesys external need was confirmed; specified by ADR-0043
+  and scheduled as Sprint 12. Preferred over TURN because it reuses the working TLS edge
+  and carries the NAT-traversal property of the target Genesys path.
 
 ## Related Documents
 

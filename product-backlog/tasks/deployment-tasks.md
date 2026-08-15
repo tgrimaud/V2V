@@ -1172,3 +1172,52 @@ the repo. One VM loss = data loss + outage, and there is no restore runbook.
 
 - HA (replica/Sentinel/cluster) is out of scope here — this ticket is durability, not
   zero-downtime. HA can be a later hardening if the pilot widens.
+
+---
+
+## TASK-INFRA-010 - HAProxy `wss` upgrade routing for the external WebSocket voice path
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (interim WebSocket audio transport), ADR-0042 (no TURN),
+ADR-0038 (pilot deployment), TASK-INFRA-002 (voice VIP `.10` TLS edge)
+**Depends on:** TASK-WEB-026 (framing/socle), TASK-INFRA-002 (existing voice VIP)
+**Classification:** V1 pilot deployment (edge wiring for Sprint 12)
+**Status:** 📋 Planned (Sprint 12)
+**Priority:** Medium
+**Branch:** `task/TASK-INFRA-010-haproxy-wss-voice` (to create when work starts)
+
+### Context
+
+The interim WebSocket audio path (ADR-0043) reaches an off-subnet browser as one long-lived
+`wss` connection through the existing voice VIP `.10` TLS edge (HAProxy, TASK-INFRA-002) —
+the same edge that already terminates the WebRTC signalling and the batch HTTP path. No
+TURN is provisioned (ADR-0042); media rides inside this TCP/TLS connection. HAProxy must
+handle the WebSocket `Upgrade` and keep the long-lived connection alive for the length of a
+call, and (since all sessions share one asyncio loop per bridge) keep a call pinned to one
+bridge.
+
+### Scope
+
+- Route the WebSocket voice endpoint through the voice VIP with `Connection: Upgrade`
+  handling (HTTP/1.1 at the edge, consistent with BUG-012's HTTP/1.1 decision).
+- Long-lived timeouts for the `wss` connection (tunnel/`timeout tunnel`) so a call is not
+  cut mid-conversation; keep the per-IP rate limiting (TASK-INFRA-004) at the edge.
+- Session affinity so a call's frames stay on the bridge that owns its asyncio session.
+- Update `deploy/haproxy/` config + README and the voice `.env` / Ansible `voice.env.j2`
+  wiring; keep `VOICE_STUN`/`VOICE_TURN` empty (no TURN).
+
+### Acceptance
+
+```gherkin
+Scenario: A wss voice connection survives a full call through the edge
+  Given HAProxy configured for the WebSocket voice endpoint on the voice VIP
+  When a browser opens a wss voice connection and holds a multi-turn conversation
+  Then the Upgrade succeeds and the connection stays open for the whole call
+  And the call's frames stay pinned to a single bridge
+```
+
+### Notes
+
+- `qa-validate-haproxy.sh` must stay green (incl. real `haproxy -c`); add a check for the
+  WebSocket route + tunnel timeout.
+- No TURN, no STUN — this is the whole point of the interim path (ADR-0042/0043).
