@@ -1217,3 +1217,61 @@ turn. No `resilience4j` in `pom.xml` today.
 
 - Deferred, not blocking: BE-025's timeouts remove the worst failure mode; retries/breaker are
   an availability improvement. Confirm the dependency (resilience4j) is acceptable before start.
+
+---
+
+## TASK-BE-030 - Graceful Redis degradation: degrade to in-process memory, don't outage
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0044 (pilot data-tier resilience), ADR-0008 / TASK-BE-021 (Redis memory), ADR-0028 (observability)
+**Depends on:** —
+**Classification:** V1 backend resilience — pilot SPOF blast-radius reduction
+**Status:** Planned (decided 2026-08-15, global-review decision #4)
+**Priority:** Medium-High
+**Branch:** `task/TASK-BE-030-graceful-redis-degradation` (to create when work starts)
+**Surfaced by:** 2026-08-15 global adversarial review, decision #4 — with `CONVERSATION_STORE=redis`
++ `REDIS_HEALTH_ENABLED=true`, a Redis outage flips `/actuator/health` DOWN, so HAProxy pulls
+**every** backend node → a full conversation outage from a **memory-only** dependency.
+
+### Context
+
+ADR-0044 accepts the single-instance Redis SPOF for the pilot but requires reducing its blast
+radius: a Redis outage must **degrade, not outage**. Today Redis is a hard readiness gate in
+`redis`-store mode; it must become a **non-fatal degraded** signal, with the backend falling
+back to in-process conversation memory and **staying in rotation**.
+
+### Scope
+
+- When Redis is unreachable in `redis`-store mode, **fall back to in-process conversation
+  memory** for the affected turns instead of failing the request.
+- **Decouple Redis health from readiness**: a Redis outage must **not** flip `/actuator/health`
+  to DOWN and pull the node from HAProxy. Redis reachability becomes a **degraded/observable**
+  indicator (metric + structured log + a distinct alertable signal), not a hard readiness fail.
+- Auto-recover: when Redis returns, shared memory resumes with no restart.
+- Keep the domain pure — the fallback/health-gating lives in the infrastructure store adapter +
+  config, not in the conversation domain.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Redis outage degrades instead of taking the backend out of rotation
+  Given the backend runs with CONVERSATION_STORE=redis
+  When Redis becomes unreachable
+  Then /actuator/health stays UP and the node remains in HAProxy rotation
+  And new turns are served from in-process conversation memory
+  And a distinct "conversation-memory degraded" signal is emitted (metric + log)
+```
+
+```gherkin
+Scenario: Shared memory resumes when Redis recovers
+  Given the backend degraded to in-process memory during a Redis outage
+  When Redis becomes reachable again
+  Then subsequent turns use Redis-backed shared memory again without a restart
+```
+
+### Notes / Accepted caveat
+
+- Per ADR-0044: with in-process fallback across two nodes and no session affinity, **multi-turn
+  context may be partially lost while Redis is down** — explicitly accepted over a full outage.
+- Tests: manual fakes (no Mockito), GIVEN/WHEN/THEN — Redis-down fallback, Redis-restored resume,
+  and the health indicator reporting degraded without failing readiness.
