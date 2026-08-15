@@ -110,6 +110,12 @@ def build_handler(
 
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
+            if path in (STT_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE) and self._is_chunked():
+                # Bodies are sized and capped via Content-Length; a chunked body has none, so
+                # _read_body would read it as empty (length 0) and it would look like an empty
+                # turn. Ask the client to send a Content-Length instead of failing silently (411).
+                self._send_json(411, {"error": "length_required"})
+                return
             if path == STT_ROUTE:
                 self._handle_stt()
             elif path == TTS_ROUTE:
@@ -219,6 +225,9 @@ def build_handler(
             self._send_wav(full.wav, _answer_headers(transcript, result.answer_result))
             processor.record_egress(full, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
+
+        def _is_chunked(self) -> bool:
+            return "chunked" in (self.headers.get("Transfer-Encoding", "") or "").lower()
 
         def _read_body(self) -> bytes | None:
             length = int(self.headers.get("Content-Length", "0") or "0")

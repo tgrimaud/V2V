@@ -271,9 +271,11 @@ standard invoice.
 Voice latency follows
 [`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md):
 the optimized voice journey aims for a first audible sentence around 700 ms, and
-the measurable pilot acceptance criterion is `time_to_first_audio` p95 below
-800 ms in a pre-warmed, co-located environment. This is not yet a contractual
-production SLO.
+the stub-era pilot acceptance criterion was `time_to_first_audio` p95 below
+800 ms in a pre-warmed, co-located environment — **revised for the real backend by
+[`ADR-0029`](../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s. This is not yet a
+contractual production SLO.
 
 The latency target must not lead to producing an unreliable explanation: if the
 business analysis requires more time, the bot must be able to produce a fast oral
@@ -339,7 +341,9 @@ V1 must therefore provide for:
   comparison, KB search, LLM first-token, TTS first-audio, and human agent
   transfer;
 - co-location in a private cloud of the critical components on the voice path
-  when the `time_to_first_audio` p95 below 800 ms pilot criterion must be met.
+  when the pilot latency criterion must be met (`time_to_first_audio` p95 below
+  800 ms in the stub era, **revised by ADR-0029** to mouth-to-ear p95 ≤ 1.5 s /
+  `time_to_first_audio` p95 ≤ 1.2 s for the real backend).
 
 Generic knowledge-base connectors such as Confluence, generic PDF ingestion, or
 database-backed KB sources are not V1 prerequisites. They remain post-MVP

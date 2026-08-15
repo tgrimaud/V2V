@@ -91,7 +91,13 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         GuardedSentenceEmitter emitter = new GuardedSentenceEmitter(
                 evidence, outputGuardrail, onChunk, bestScore(evidence), language);
         streamingGenerator.generate(question, evidence, history, language, emitter::accept);
-        return emitter.finish();
+        GeneratedAnswer answer = emitter.finish();
+        // Count a DEC-002 output block (or an empty low-confidence turn) on the streamed path too, so
+        // the most safety-critical event ("bot suppressed a fabricated amount") is observable (ADR-0034).
+        if (emitter.blockedVerdict() != null) {
+            telemetry.recordGuardrailBlock(emitter.blockedVerdict().name());
+        }
+        return answer;
     }
 
     private GeneratedAnswer emitFallback(AnswerLanguage language, GuardrailDecision decision, Consumer<String> onChunk) {

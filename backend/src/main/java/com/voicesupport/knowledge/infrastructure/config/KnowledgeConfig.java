@@ -95,7 +95,7 @@ public class KnowledgeConfig {
     @Bean
     public DomainClassifierPort domainClassifier(
             EmbeddingModel embeddingModel,
-            @Value("${voice-support.knowledge.classifier.threshold:0.5}") double threshold,
+            @Value("${voice-support.knowledge.classifier.threshold:0.55}") double threshold,
             @Value("${voice-support.knowledge.classifier.max-chars:2000}") int maxChars) {
         Map<String, String> anchors = Map.of(
                 "billing", "Billing, invoices, charges, payments, refunds, direct debit, bill amount, "

@@ -15,7 +15,7 @@ threads except the coroutine submission itself.
 
 import asyncio
 import threading
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from typing import Any, Coroutine
 
 
@@ -45,9 +45,20 @@ class BackgroundEventLoop:
         return self._loop
 
     def run(self, coro: Coroutine[Any, Any, Any], *, timeout: float | None = None) -> Any:
-        """Submit a coroutine and block until it returns (for request/response)."""
+        """Submit a coroutine and block until it returns (for request/response).
+
+        On timeout the coroutine is cancelled on the loop before re-raising: otherwise it keeps
+        running after the caller gave up, and any resource it reserved in a `finally` (e.g. a
+        WebRTC negotiation's `_pending` capacity slot) leaks until it finishes on its own — a
+        hung `connection.initialize` would hold that slot indefinitely (voice review V-M1)."""
         future: Future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=timeout)
+        try:
+            return future.result(timeout=timeout)
+        except FutureTimeoutError:
+            # cancel() on a run_coroutine_threadsafe future schedules cancellation of the wrapped
+            # task on the loop, so the coroutine's finally-blocks run and release its reservation.
+            future.cancel()
+            raise
 
     def spawn(self, coro: Coroutine[Any, Any, Any]) -> Future:
         """Submit a fire-and-forget coroutine (e.g. the long-lived session task)."""

@@ -131,6 +131,14 @@ class StreamingConversationServiceTest {
         assertFalse(chunks.contains("Le montant est 39,99 € ce mois."));
         assertFalse(answer.grounded());
         assertTrue(chunks.get(chunks.size() - 1).toLowerCase().contains("conseiller"));
+
+        // AND the mid-stream DEC-002 block is counted (ADR-0034); a mutant that drops the streamed
+        // recordGuardrailBlock (emitter.blockedVerdict) would leave no such meter to find.
+        double blocks = meterRegistry.get("voice_support.guardrail_block")
+                .tag("verdict", "ungrounded")
+                .counter()
+                .count();
+        assertEquals(1.0, blocks);
     }
 
     @Test

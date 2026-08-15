@@ -1,8 +1,10 @@
 # Development Guide
 
-> **Branch state (`feat/restart-from-scratch`, updated 2026-07-28, Sprint 9):** this
+> **Branch state (`feat/restart-from-scratch`, updated 2026-08-14, Sprint 11):** this
 > branch started as a restart (the old stack was removed, preserved on `main`) and
-> has since **rebuilt two runnable services from scratch**:
+> has since **rebuilt two runnable services from scratch**, added **Redis-backed
+> sessions** (`CONVERSATION_STORE=redis`, Sprint 11) and a **remote pilot deployment**
+> stack under `deploy/` (per-tier Compose, Ansible, HAProxy/Keepalived, OTLP collector):
 >
 > - **Python voice runtime** (`voice-agent/`, port `8090`): the full **voice-in →
 >   backend answer → voice-out** loop, both **batch** (`POST /api/voice/turn`) and
@@ -16,7 +18,9 @@
 >   (`POST /api/conversation/converse` / `/converse-stream` / `/answer` / `/retrieve`,
 >   **port 8080**, no `/ask`, `/ask-stream`, `/seed`, no query-time multi-agent
 >   routing in V1).
-> - **Infra:** `docker-compose.yml` (Postgres/pgvector on 5433 + Ollama).
+> - **Infra:** `docker-compose.yml` (Postgres/pgvector on 5433 + Ollama) for local
+>   dev; **Redis** for sessions is opt-in (`CONVERSATION_STORE=redis`); the pilot
+>   deployment packaging lives under `deploy/` (see `docs/operations/`).
 >
 > The "Working On This Branch" section below is accurate for this branch.
 > Everything from "## Target V1 Stack" onward is the **legacy `main` reference**
@@ -498,10 +502,12 @@ without any additional dependency. Each step emits a
 
 Per
 [`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
-the current pilot acceptance criterion is `time_to_first_audio` p95 < 800 ms in
-a pre-warmed, co-located environment. The ~700 ms value is an aspirational
-user-experience target; production SLOs remain deferred until ADR-0010
-observability and degraded-mode gates are met.
+the stub-era pilot acceptance criterion was `time_to_first_audio` p95 < 800 ms in
+a pre-warmed, co-located environment — **revised for the real backend by
+[`ADR-0029`](../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s. The ~700 ms value
+is an aspirational user-experience target; production SLOs remain deferred until
+ADR-0010 observability and degraded-mode gates are met.
 
 ### Capture and Aggregate a Baseline
 

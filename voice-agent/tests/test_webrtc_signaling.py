@@ -643,6 +643,39 @@ class WebRtcConcurrencyCeilingTest(unittest.IsolatedAsyncioTestCase):
             loop.stop()
 
 
+class BackgroundLoopTimeoutTest(unittest.TestCase):
+    """V-M1 regression: `run(timeout=...)` must cancel the coroutine on timeout so a slow
+    negotiation does not keep running (and hold its `_pending` capacity slot) after the caller
+    gave up. No WEBRTC needed — this exercises the loop's cancellation contract directly."""
+
+    def test_run_timeout_cancels_the_coroutine(self) -> None:
+        import threading
+        from concurrent.futures import TimeoutError as FutureTimeoutError
+
+        from web_voice.async_loop import BackgroundEventLoop
+
+        loop = BackgroundEventLoop()
+        loop.start()
+        released = threading.Event()
+
+        async def slow() -> None:
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                # Stands in for _new_session's `finally: self._pending -= 1`: only runs if the
+                # coroutine is actually cancelled. A mutant that drops future.cancel() on timeout
+                # leaves this unset (the sleep would run the full 10s).
+                released.set()
+                raise
+
+        try:
+            with self.assertRaises(FutureTimeoutError):
+                loop.run(slow(), timeout=0.05)
+            self.assertTrue(released.wait(timeout=2))
+        finally:
+            loop.stop()
+
+
 async def _set(event: asyncio.Event) -> None:
     event.set()
 

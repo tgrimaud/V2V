@@ -24,6 +24,10 @@ public class GuardedSentenceEmitter {
     private final StringBuilder voiced = new StringBuilder();
     private boolean blocked;
     private String fallbackMessage;
+    // Verdict of the block that produced a fallback (DEC-002 output block, or LOW_CONFIDENCE when
+    // nothing was voiced). Null on a grounded answer. The application service reads it to emit the
+    // guardrail-block telemetry without pulling observability infrastructure into the domain.
+    private GuardrailDecision.Verdict blockedVerdict;
 
     public GuardedSentenceEmitter(
             List<RetrievedEvidence> evidence,
@@ -59,6 +63,7 @@ public class GuardedSentenceEmitter {
             return GeneratedAnswer.fallback(fallbackMessage);
         }
         if (voiced.isEmpty()) {
+            blockedVerdict = GuardrailDecision.Verdict.LOW_CONFIDENCE;
             String message = GuardrailMessages.lowConfidence(language);
             onChunk.accept(message);
             return GeneratedAnswer.fallback(message);
@@ -74,10 +79,17 @@ public class GuardedSentenceEmitter {
         if (decision.blocked()) {
             blocked = true;
             fallbackMessage = decision.fallbackMessage();
+            blockedVerdict = decision.verdict();
             return;
         }
         onChunk.accept(sentence);
         appendVoiced(sentence);
+    }
+
+    // Non-null after finish() when the turn ended on a fallback (DEC-002 block or empty low-confidence),
+    // so the caller can record the guardrail-block metric on the streamed path.
+    public GuardrailDecision.Verdict blockedVerdict() {
+        return blockedVerdict;
     }
 
     private void appendVoiced(String sentence) {

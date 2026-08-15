@@ -441,7 +441,9 @@ sequenceDiagram
 sentence around **700ms** instead of ~2.2s in sequential mode. Per
 [`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md), this
 is an aspirational user-experience target; the measurable pilot criterion is
-`time_to_first_audio` p95 below 800 ms in a pre-warmed, co-located environment.
+`time_to_first_audio` p95 below 800 ms in a pre-warmed, co-located environment
+(the stub-era number, **revised by [`ADR-0029`](adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+for a real backend to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s).
 
 ### Legacy WebSocket Protocol (React Frontend ↔ Bridge)
 
@@ -644,7 +646,9 @@ identity.
 
 This table is a target budget, not a production SLO.
 [ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) defines
-the current measurable pilot criterion (`time_to_first_audio` p95 below 800 ms)
+the stub-era pilot criterion (`time_to_first_audio` p95 below 800 ms), **revised
+for a real backend by [ADR-0029](adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+(mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s),
 and keeps production SLO acceptance gated by
 [ADR-0010](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md):
 per-step/channel observability, dashboards, alerting, degraded modes,

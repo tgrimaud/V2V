@@ -296,9 +296,11 @@ channel/backend envelope described in the architecture.
 - The target voice journey must aim for a first audible answer under one second
   in a pre-warmed environment. Per
   [`ADR-0018`](../architecture/adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
-  the current measurable pilot criterion is `time_to_first_audio` p95 below
-  800 ms; production SLOs remain gated by observability and degraded-mode
-  readiness.
+  the stub-era pilot criterion was `time_to_first_audio` p95 below 800 ms,
+  **revised for the real backend by
+  [`ADR-0029`](../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+  to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s; production SLOs
+  remain gated by observability and degraded-mode readiness.
 - Text answers must be streamed when possible.
 - Critical components must limit unnecessary calls to external services.
 

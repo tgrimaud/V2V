@@ -321,9 +321,10 @@ the "one Postgres" simplicity.
   query expansion — or enrich the eval set with a variant that differs *only* by the greeting. This
   is the remaining concrete OQ-008 follow-up (query normalization and diversity are both exhausted).
 - The **EN gap is guardrail topicality (OFF_TOPIC over-block), out of OQ-008 scope** → tracked as
-  **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN
-  support **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction
-  split this would have been misattributed to retrieval (the BUG-003 trap).
+  **BUG-016** (was informally "BUG-009" before that number went to the Ansible deploy bug;
+  unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matched "wor**king**", fixed with word
+  boundaries 2026-08-14). EN support **content coverage** is a separate gap for Product. Without
+  the guardrail-vs-eviction split this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 

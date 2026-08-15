@@ -29,7 +29,10 @@ public class GlobalExceptionHandler {
     private static final String MSG_UPSTREAM = "A required service is temporarily unavailable. Please retry shortly.";
     private static final String MSG_INTERNAL = "An unexpected error occurred.";
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
+    // IllegalArgumentException is a caller error (e.g. an unknown knowledge sync source-type,
+    // KnowledgeSyncService), not a server fault — map it to 400 so it does not masquerade as ERR_INTERNAL.
+    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
+            IllegalArgumentException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
         log.warn("[ERROR] code={} correlation_id={} type={} reason={}",
                 ERR_400, CorrelationId.current(), ex.getClass().getSimpleName(), ex.getMessage());

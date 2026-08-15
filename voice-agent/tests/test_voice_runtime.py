@@ -234,6 +234,24 @@ class VoiceTurnEndpointTest(unittest.TestCase):
         self.assertEqual(provider, "stub-backend")
         self.assertTrue(correlation)
 
+    def test_turn_endpoint_rejects_a_chunked_body_with_411(self) -> None:
+        # GIVEN the server on the pipecat runtime
+        port = self._serve(PIPECAT)
+        conn = HTTPConnection("127.0.0.1", port, timeout=10)
+
+        # WHEN a body is streamed with no Content-Length (http.client uses Transfer-Encoding:
+        # chunked for a generator body) — which _read_body would otherwise read as an empty turn
+        def _chunks():
+            yield b"\x01\x02" * 50
+
+        conn.request("POST", TURN_ROUTE, body=_chunks())
+        response = conn.getresponse()
+        payload = response.read()
+        conn.close()
+        # THEN the server asks for a Content-Length (411) instead of silently treating it as empty
+        self.assertEqual(response.status, 411)
+        self.assertIn(b"length_required", payload)
+
     def test_turn_endpoint_speaks_a_degraded_wav_when_the_backend_fails(self) -> None:
         # GIVEN both runtimes wired to an unavailable backend (STT still succeeds)
         for runtime in (STDLIB, PIPECAT):

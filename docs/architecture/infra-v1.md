@@ -163,7 +163,10 @@ and
 [`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md),
 production voice SLOs are not accepted until observability covers every channel
 and pipeline step. The pilot validation target is `time_to_first_audio` p95
-below 800 ms in a pre-warmed, co-located environment.
+below 800 ms in a pre-warmed, co-located environment (the stub-era number,
+**revised for the real backend by
+[`ADR-0029`](adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s).
 
 Each conversation must make it possible to measure:
 

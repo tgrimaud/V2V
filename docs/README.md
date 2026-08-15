@@ -23,7 +23,9 @@
 | [`integrations/`](integrations/) | Architecture / backend / BSS | External system integration plans and contracts |
 | [`knowledge-base/`](knowledge-base/) | Content contributors / engineering | RAG knowledge base authoring and technical docs |
 | [`engineering/`](engineering/) | Developers | Development guide and implementation conventions |
-| [`operations/`](operations/) | Delivery / ops | Operational backlog and run-oriented follow-ups |
+| [`operations/`](operations/) | Delivery / ops | Deployment runbooks, release process, backup/restore, operational backlog |
+| [`qa/`](qa/) | QA / delivery | Functional + latency QA reports and pilot-readiness evidence per story |
+| [`observability/`](observability/) | Ops / SRE | OpenTelemetry/latency-slice observability notes for the pilot |
 
 ## Main Entry Points
 
@@ -49,4 +51,8 @@
 - Development guide: [`engineering/development-guide.md`](engineering/development-guide.md)
 - Development workflow: [`operations/development-workflow.md`](operations/development-workflow.md)
 - Release process (repeatable deploy/rollback, authored in Sprint 11): [`operations/release-process.md`](operations/release-process.md)
+- Backup / restore runbook (RPO/RTO, TASK-OPS-008): [`operations/backup-restore.md`](operations/backup-restore.md)
+- Pilot request flow (eir-ai4cc-tst): [`operations/flow-requests-eir-ai4cc-tst.md`](operations/flow-requests-eir-ai4cc-tst.md)
+- QA reports index: [`qa/`](qa/)
+- Observability notes: [`observability/`](observability/)
 - Operational backlog: [`operations/backlog.md`](operations/backlog.md)
