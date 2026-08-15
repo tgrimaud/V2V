@@ -1293,3 +1293,50 @@ Scenario: Shared memory resumes when Redis recovers
   context may be partially lost while Redis is down** — explicitly accepted over a full outage.
 - Tests: manual fakes (no Mockito), GIVEN/WHEN/THEN — Redis-down fallback, Redis-restored resume,
   and the health indicator reporting degraded without failing readiness.
+
+---
+
+## TASK-BE-031 - Data-minimization for cloud AI egress (processing inventory + retention + PII-in-logs)
+
+**Parent:** EPIC-009 (Trust, security and auditability)
+**Related decisions:** OQ-009 (residency/DPA), ADR-0039 (provider egress), ADR-0006 (Mistral), ADR-0023/0024 (Gradium)
+**Depends on:** —
+**Classification:** V1 privacy / compliance hardening — engineering follow-up to OQ-009
+**Status:** Planned (decided 2026-08-15, global-review decision #6)
+**Priority:** Medium
+**Branch:** `task/TASK-BE-031-data-minimization` (to create when work starts)
+**Surfaced by:** 2026-08-15 global adversarial review, decision #6 — no explicit data-processing
+posture for the two personal-data egress flows (customer audio → Gradium, turn text → Mistral).
+
+### Context
+
+OQ-009 tracks the **contractual** residency/DPA inputs (external: operator DPO + providers). This
+ticket covers the **engineering** side we control: minimize and inventory what personal data leaves
+the box, bound its retention, and confirm no PII lands in logs. Embeddings already stay local
+(ADR-0039).
+
+### Scope
+
+- **Processing inventory:** a short, versioned record of *what personal data* is sent to *which
+  processor* (customer audio → Gradium STT/TTS; turn text → Mistral chat), the purpose, and the
+  boundary (embeddings stay local). Live in `docs/` (e.g. a compliance/data-flow note).
+- **Retention:** confirm the conversation-memory retention (`CONVERSATION_MEMORY_TTL_SECONDS`) is
+  configurable and documented; ensure nothing persists customer audio/text beyond it.
+- **PII in logs:** confirm/enforce that raw audio, transcripts and turn text are **not** logged
+  (align with the existing sanitization); add a test/guard if a gap is found.
+- **Redaction where feasible:** evaluate lightweight redaction of obvious identifiers before the
+  Mistral text egress (note: audio to Gradium cannot be pre-redacted — STT needs the raw signal;
+  that flow is governed by the DPA in OQ-009, not by redaction).
+
+### Acceptance
+
+- A versioned data-processing inventory exists and is linked from OQ-009.
+- Retention is configurable + documented; no customer audio/text persists beyond it.
+- A test/guard confirms no raw audio/transcript/turn text in logs.
+- Any residual (e.g. text redaction feasibility) is documented with a recommendation.
+
+### Notes
+
+- Pure privacy/config/documentation hardening — no RAG or LLM behaviour change.
+- Does **not** unblock real-customer traffic on its own: the production gate stays OQ-009
+  (signed DPA + residency + training opt-out).
