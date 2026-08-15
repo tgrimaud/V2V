@@ -964,11 +964,29 @@ Delivered on `task/TASK-BE-022-auth-log-hardening`:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** Proposed (2026-08-04) — **ticket only, deferred**. Created from finding **#4** of the
-2026-08-04 backend adversarial review.
+**Status:** ✅ Ready / Scheduled (mechanism decided 2026-08-15, global-review decision #5).
+The trigger condition is now **met**: since Sprint 11 the backend answers off-box on the
+backend VIP `.11:80` (VM↔VM on `192.168.0.0/24`), so `/v3/api-docs`, `/swagger-ui**` and
+`/actuator/metrics` are anonymously reachable on the internal subnet. Do **before** broadening
+exposure (external channels / Genesys); **not** P1 — exposure is internal-subnet only (no public
+route reaches the backend; the `.10:443` edge routes to the voice bridges, not the backend).
 **Priority:** Medium
+**Branch:** `task/TASK-BE-023-restrict-ops-surface` (to create when work starts)
 **Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100), non-blocking
-finding #4.
+finding #4; re-scoped 2026-08-15 once the backend went off-localhost.
+
+### Decision (2026-08-15) — chosen mechanism: combined
+
+Record here (no separate ADR needed, per the AC below):
+
+1. **Actuator:** publicly expose **`health,info` only**; **gate `metrics`** (and any future
+   `prometheus`) — via management exposure config, not anonymously readable. Keep
+   **`/actuator/health` open** for container/orchestrator + HAProxy probes.
+2. **API docs:** gate `/swagger-ui**` + `/v3/api-docs**` (+ `.yaml`) behind the **existing
+   `x-api-key`** (`ApiKeyAuthInterceptor` extension) **when a key is configured**.
+3. **Env-driven posture:** open on the **localhost pilot / QA** profile (no key), **closed by
+   default** otherwise — consistent with the BE-021 `REDIS_HEALTH_ENABLED` precedent. So the
+   pilot + QA smoke stay frictionless while any keyed/non-localhost deployment is closed.
 **Relates to:** TASK-BE-016 (springdoc / Swagger UI + `/v3/api-docs`), TASK-BE-019 (the
 `x-api-key` gate + `ApiKeyGuard`/interceptor to reuse), TASK-BE-021 (the `REDIS_HEALTH_ENABLED`
 actuator gating precedent), ADR-0010 (contracts + security before real channels).
