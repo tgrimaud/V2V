@@ -2553,7 +2553,7 @@ Scenario: The escalation handoff transport is decided
 
 Delivery slices for **ADR-0043** (interim WebSocket audio transport). These implement
 Decision point 4 of **ADR-0042** (no TURN; a `wss` audio path is the external-reach
-lever) and are deliberately built behind reusable seams so the Sprint 14 **Genesys Audio
+lever) and are deliberately built behind reusable seams so the Sprint 13 **Genesys Audio
 Connector** work (ADR-0040, TASK-WEB-025) becomes a transport-adapter swap, not a
 greenfield build. Sprint file: `sprints/sprint-12-external-voice-websocket.md`.
 
@@ -2617,7 +2617,7 @@ Scenario: The wire framing separates JSON control from binary audio
 
 ### Out Of Scope
 
-- The Genesys AudioHook schema/auth/PCMU transcoding (Sprint 14, YAGNI).
+- The Genesys AudioHook schema/auth/PCMU transcoding (Sprint 13, YAGNI).
 - Any WebRTC behaviour change.
 
 ---
@@ -2640,7 +2640,7 @@ telemetry, `StreamingVoiceSession` assembly) currently lives **inside**
 `WebRtcSignalingService._build_session` / `_build_streaming_session`. That coupling is the
 only reason a second transport is "new work". Extracting it into a shared factory makes
 WebRTC, WebSocket and (later) Genesys thin transport adapters over one session core — the
-single biggest capitalisation lever for Sprint 14.
+single biggest capitalisation lever for Sprint 13.
 
 ### Scope
 
@@ -2741,7 +2741,7 @@ later without touching the session core.
 - Verify interruption cancels an in-flight streaming synthesis cleanly over `wss`
   (`asyncio.CancelledError` handled + socket closed — the BUG the WebRTC path already fixed).
 - Name the internal events after Genesys semantics (`playback-started`/`-completed`,
-  `barge-in`, `bot-turn-response`) for a 1:1 mapping in Sprint 14.
+  `barge-in`, `bot-turn-response`) for a 1:1 mapping in Sprint 13.
 
 ### Acceptance Criteria
 

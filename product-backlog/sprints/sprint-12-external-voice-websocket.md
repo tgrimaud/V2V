@@ -32,30 +32,31 @@ sprint branch merges only on the user's explicit request.
 
 ## Roadmap Context
 
-> **Re-sequencing note (2026-08-15):** the tentative roadmap previously earmarked
-> Sprint 12 for billing/identity and Sprint 13 for telephony/Genesys. Inserting the
-> external-voice WebSocket transport as Sprint 12 shifts those **tentative** slots by
-> one (billing/identity → Sprint 13, Genesys telephony/handoff → Sprint 14). This is a
-> product-priority change and is flagged for user confirmation; the billing EPICs
-> (EPIC-002/003/004) are **not** dropped, only resequenced.
+> **Re-sequencing note (2026-08-15, user-clarified):** the sprint order is **12 =
+> WebSocket voice, 13 = Genesys, 14 = billing**. Inserting the external-voice WebSocket
+> transport as Sprint 12 keeps **Genesys at Sprint 13** (its existing slot) and pushes
+> **billing/identity to Sprint 14**. Genesys before billing is deliberate: the ADR-0043
+> transport seams built here feed Genesys Audio Connector directly, so doing Genesys next
+> capitalises while the design is fresh. The billing EPICs (EPIC-002/003/004) are **not**
+> dropped, only resequenced.
 
 | Sprint | Theme | State |
 |---|---|---|
 | Sprint 10 | Pilot-readiness latency & perceived latency | ✅ Done (closed 2026-07-31) |
 | Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | 🚧 In progress |
 | **Sprint 12** | **External voice via interim WebSocket audio (Genesys-ready)** | 📋 Planned (defined 2026-08-15) |
-| Sprint 13 (tentative, was 12) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
-| Sprint 14 (tentative, was 13) | Telephony channel (US-018) + Genesys Audio Connector + advisor handoff (EPIC-007/012) | Planned — gated by OQ-006 |
+| Sprint 13 (tentative) | Telephony channel (US-018) + Genesys Audio Connector + advisor handoff (EPIC-007/012) | Planned — gated by OQ-006 |
+| Sprint 14 (tentative, was 12) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
 ## Why now (state that justifies the sprint)
 
 - The pilot currently has **no external customer voice path**: on-subnet WebRTC and
   the batch `/api/voice/turn` demo work, but an off-subnet browser gets silent audio
-  (ADR-0042). External stakeholders cannot try the bot before Genesys (Sprint 14).
+  (ADR-0042). External stakeholders cannot try the bot before Genesys (Sprint 13).
 - Standing up TURN for public WebRTC is **throwaway infra** the target (Genesys Audio
   Connector) replaces (ADR-0042). A WebSocket path avoids TURN entirely and reuses the
   working HAProxy TLS edge.
-- Building the WebSocket transport **now, behind reusable seams**, turns the Sprint 14
+- Building the WebSocket transport **now, behind reusable seams**, turns the Sprint 13
   Genesys integration from a greenfield build into a transport-adapter swap — the
   session core, socket/demux, telemetry, correlation and capacity layers are shared
   (ADR-0043).
@@ -87,16 +88,16 @@ Full ticket details live in `tasks/web-voice-tasks.md` (TASK-WEB-026…031) and
       leaks into the shared core (Genesys PCMU/L16-8 kHz transcoding fits in an adapter).
 - [ ] Barge-in/end-of-turn/playback/call-end are an **internal event vocabulary** with a
       **pluggable source**, named after Genesys semantics for a 1:1 mapping.
-- [ ] The AudioHook **schema/auth/codec is NOT built** here (deferred to Sprint 14 — YAGNI).
+- [ ] The AudioHook **schema/auth/codec is NOT built** here (deferred to Sprint 13 — YAGNI).
 
 ## Out Of Scope
 
 - **TURN / STUN provisioning** — explicitly rejected (ADR-0042); the WebSocket path
   removes the need for it.
 - **The Genesys AudioHook protocol** (schema, handshake, auth, PCMU/L16 transcoding,
-  Architect flow) — Sprint 14, gated by OQ-006; only the reusable seams are built now.
+  Architect flow) — Sprint 13, gated by OQ-006; only the reusable seams are built now.
 - **Billing/identity, BSS/PDF evidence, deterministic comparison** — resequenced to
-  Sprint 13.
+  Sprint 14.
 - **Any change to what the bot says** — DEC-002 grounding stays enforced; this sprint
   changes *how external audio reaches the runtime*, not answer content.
 - **WebRTC replacement** — WebRTC stays the same-subnet/dev live transport (ADR-0033);
@@ -115,6 +116,6 @@ Full ticket details live in `tasks/web-voice-tasks.md` (TASK-WEB-026…031) and
 - A QA report records functional pass + per-slice p50/p95 vs ADR-0029 and documents the
   TCP/AEC degraded behaviour (TASK-WEB-031).
 - The **Genesys-readiness checklist** above is satisfied and confirmed at adversarial
-  review — the Sprint 14 Genesys Audio Connector is reachable as a transport-adapter swap.
+  review — the Sprint 13 Genesys Audio Connector is reachable as a transport-adapter swap.
 - Each ticket passes adversarial review ≥ 90% then QA before the branch is merge-ready.
   Merge only on the user's explicit request.
