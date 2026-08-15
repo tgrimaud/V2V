@@ -24,6 +24,12 @@ centralized aggregation from TASK-OPS-007). No pilot SLO is claimed until that l
 captured. Revising the number was explicitly considered and **rejected** here (the market
 data in this ADR shows > 1.5 s breaks deals); the bar holds and the engineering path closes it.
 
+**Follow-up (2026-08-15, global-review decision #2):** the reference mouth-to-ear
+measurement — a single **warm, co-located WebRTC + real backend (`--backend http`)** session
+that replaces the current ~1.54 s *projection* — is now ticketed as **TASK-WEB-032** (High).
+The stale `< 800 ms` references in the Sprint-7 `docs/qa/answer-engine-qa-report.md` were
+annotated as superseded by this ADR the same day. OQ-005 already records this gate as decided.
+
 ## Context
 
 ADR-0018 set the pilot acceptance criterion at `time_to_first_audio` **p95 < 800 ms**.

@@ -2845,3 +2845,54 @@ Scenario: The WebSocket path is scored against the latency gate
 
 - QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
 - No raw audio, secrets or PII in logs.
+
+---
+
+## TASK-WEB-032 - Reference mouth-to-ear measurement: warm WebRTC + real backend (ADR-0029 gate evidence)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing), OQ-005
+**Depends on:** TASK-WEB-014 (mouth-to-ear instrumentation, done)
+**Classification:** V1 voice runtime — QA / latency evidence
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-032-m2e-reference-measurement` (to create when work starts)
+
+### Context
+
+The pilot latency gate was revised by ADR-0029 to **mouth-to-ear `voice_to_first_audio`
+p95 ≤ 1.5 s** (primary) + **`time_to_first_audio` p95 ≤ 1.2 s** (engineering sub-target),
+retiring the stub-era ADR-0018 `< 800 ms` number. But the current number in the repo is a
+**projection** (`time_to_first_audio` p95 ≈ 1.54 s, composed from a measured backend slice +
+the gated Sprint-6 STT/TTS baseline) and the only mouth-to-ear figure on record is TASK-WEB-022's
+**cold** p95 ≈ 2142 ms. ADR-0029 is explicit: **no pilot SLO is claimed until a single warm,
+co-located WebRTC session with the real backend is measured end to end.** This ticket captures
+that reference measurement so the gate has real evidence instead of a projection.
+
+### Scope
+
+- Capture a **warm, co-located** sample of streaming **WebRTC** turns on the **web** channel
+  with `--backend http` (real RAG + Mistral), using `voice-agent/scripts/streaming_latency_report.py`.
+- Report **per-slice p50/p95/p99** (end-of-turn hold, STT, backend_first_token, tts_first_audio,
+  channel_egress) and the **composite mouth-to-ear `voice_to_first_audio` p95** as a single measured
+  distribution (not a projection), with utterance length alongside each figure.
+- Score the result against the ADR-0029 gate (m2e p95 ≤ 1.5 s / time-to-first-audio p95 ≤ 1.2 s)
+  and record a go/no-go. Exclude barge-in / incomplete turns per OQ-005 (never counted as fast turns).
+- If NO-GO, name the dominant slice + the concrete lever (LLM first-token is the known lever).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A single warm WebRTC session produces the mouth-to-ear reference number
+  Given a warm, co-located WebRTC web run against the real backend (--backend http)
+  When streaming_latency_report.py aggregates the per-slice telemetry
+  Then voice_to_first_audio p95 is reported as one measured distribution (not a projection)
+  And it is scored against the ADR-0029 1.5 s gate with an explicit go/no-go
+  And each figure carries its utterance length and excludes barge-in/incomplete turns
+```
+
+### Required Evidence
+
+- QA/latency report under `docs/qa/` with the measured per-slice + composite p50/p95/p99.
+- The run configuration (warm, co-located, live Gradium STT/TTS, `--backend http`) stated explicitly.
+- No raw audio, secrets or PII in logs.

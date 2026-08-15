@@ -1,5 +1,14 @@
 # QA Functional And Latency Report — Java Answer Engine (Sprint 7 close, TASK-BE-010)
 
+> **Latency-gate note (2026-08-15):** every `time_to_first_audio p95 < 800 ms`
+> reference below is the **stub-era ADR-0018 gate, now retired**. It was
+> **superseded by [ADR-0029](../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+> (mouth-to-ear `voice_to_first_audio` p95 ≤ 1.5 s primary + `time_to_first_audio`
+> p95 ≤ 1.2 s engineering sub-target). The "NO-GO" verdicts in this dated report are
+> against the **retired 800 ms** number, not the current gate. The current gate is
+> **not yet validated by a single warm WebRTC session** — that measurement is
+> ticketed as **TASK-WEB-032** and no pilot SLO is claimed until it lands (ADR-0029).
+
 **Ticket:** TASK-BE-010 — QA functional + latency report + adversarial review
 **Branch:** `task/TASK-BE-010-qa-latency`
 **Stories / tickets validated:** BE-004 (RAG + guardrails), BE-005 (LLM wording),

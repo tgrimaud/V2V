@@ -187,6 +187,7 @@ channel) remain `Draft` only for want of a formal product re-acceptance pass.
 | TASK-WEB-030 | WebSocket capacity ceiling + backpressure + canonical per-slice OpenTelemetry (one correlation id/call) | V1 voice runtime — safety + observability | 📋 Planned (Sprint 12). EPIC-006 / ADR-0043 / ADR-0028 / TASK-WEB-024 — `tasks/web-voice-tasks.md` | Medium |
 | TASK-WEB-031 | QA: WebSocket path functional coverage + per-slice p50/p95 latency report vs ADR-0029 + degraded-behaviour note (TCP head-of-line, weaker AEC) | V1 voice runtime — QA acceptance | 📋 Planned (Sprint 12). EPIC-006 / ADR-0043 / ADR-0029 / ADR-0028 — `tasks/web-voice-tasks.md`, `docs/qa/` | Medium |
 | TASK-INFRA-010 | HAProxy `wss` upgrade routing for the external WebSocket voice path (Connection: upgrade, long-lived tunnel timeouts, call affinity, no TURN) | V1 pilot deployment — edge wiring | 📋 Planned (Sprint 12). EPIC-006 / ADR-0043 / ADR-0042 / ADR-0038 / TASK-INFRA-002 — `tasks/deployment-tasks.md` | Medium |
+| TASK-WEB-032 | Reference mouth-to-ear measurement: warm co-located WebRTC + real backend (`--backend http`) single-session p95 vs ADR-0029 gate — replaces the ~1.54 s projection; no pilot SLO claimed until it lands | V1 voice runtime — QA / latency evidence | 📋 Planned (decision #2 of the 2026-08-15 global-review loop). EPIC-006 / ADR-0029 / ADR-0028 / OQ-005 / TASK-WEB-014 — `tasks/web-voice-tasks.md`, `docs/qa/` | High |
 
 ## Planned Sprints
 
