@@ -4,14 +4,14 @@
 
 - **Bug ID:** BUG-014
 - **Title:** After a container/network restart the backend can no longer resolve the `ollama` service name (`UnknownHostException: ollama`, then a 10s connect timeout), so RAG retrieval fails with `ERR_UPSTREAM` until the compose project network is recreated
-- **Status:** New
+- **Status:** Scheduled — durable fix decided (2026-08-15), P1, next dev action
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot voice-journey validation)
 - **Detected date:** 2026-08-14
 - **Related user story:** TASK-DEPLOY-001 (backend tier compose) / ADR-0039 (embeddings placement)
 - **Related epic:** EPIC-012 (V1 pilot deployment)
-- **Branch:** worked around live on the pilot; fix pending on a dedicated ticket branch
+- **Branch:** worked around live on the pilot; durable fix on `fix/BUG-014-ollama-dns-durable` (to create at implementation start — before Sprint 12)
 - **Owner:** Backend / deployment developer
 
 ## Problem Statement
@@ -85,6 +85,35 @@ inside the backend container worked (`CONNECT_OK`, `HTTP/1.0 200`).
 - **live workaround applied:** `podman compose down && up` on `t03`/`t04` (RAG restored).
 - **residual risk:** until a durable fix lands, document "on backend restart, run
   `down && up`, not just `--force-recreate`" in the runbook.
+
+## Chosen Fix Approach (decided 2026-08-15, global-review decision #3)
+
+**Decision:** take `aardvark-dns` out of the critical path rather than trying to make
+compose DNS survive churn. Since ADR-0039 runs Ollama as a **per-VM CPU sidecar**, the
+backend does not need service discovery to find it — a stable, restart-independent path
+is both simpler and more robust. Three coordinated changes:
+
+1. **Stable reachability (primary fix).** Point the backend at Ollama over a path that
+   does not depend on aardvark-dns rebuilding after churn. Preferred: reach Ollama on the
+   **host** (published `:11434` on the VM) via a fixed address, or pin a **static IP on a
+   stable user-defined network + `extra_hosts: "ollama:<ip>"`** so the `ollama` name always
+   resolves regardless of network recreation. `--force-recreate backend` must then restore
+   RAG without a `down && up`.
+2. **Embedding reachability in readiness/health.** Extend the deep `/actuator/health`
+   (already DB + Redis) with an **embedding-hop indicator** so a broken Ollama path returns
+   503 and HAProxy pulls the node out of rotation — instead of staying green while
+   conversation is broken. Align the indicator with the retrieval slice outcome.
+3. **JVM DNS + retry hardening.** Cap the JVM **negative DNS TTL**
+   (`networkaddress.cache.negative.ttl`) so a transient `UnknownHostException` is not cached
+   for the process lifetime, and add a bounded retry on the embedding call so a single stale
+   lookup self-heals instead of failing the turn.
+
+**Timing:** dedicated P1 fix on `fix/BUG-014-ollama-dns-durable`, **before Sprint 12**
+(pilot-blocking reliability). Standard loop: implement → adversarial review ≥ 90% → QA
+retest on the pilot (restart → `converse` 200, no manual `down && up`).
+
+**Runbook (interim, until the fix lands):** on backend restart run `podman compose down && up`
+(recreates `backend_default` + refreshes aardvark-dns), **not** just `--force-recreate`.
 
 ## Closure
 
