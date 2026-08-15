@@ -228,7 +228,7 @@ rolling `serial: 1`). The image does **not** bundle the knowledge base, so trigg
 the first RAG sync to populate pgvector:
 
 ```bash
-curl -fsS -X POST http://192.168.0.11:8080/api/knowledge/sync    # via the backend VIP
+curl -fsS -X POST http://192.168.0.11/api/knowledge/sync    # via the backend VIP (.11:80)
 ```
 
 Verify health on both nodes and the VIP:
@@ -236,7 +236,7 @@ Verify health on both nodes and the VIP:
 ```bash
 curl -fsS http://192.168.0.105:8080/api/health      # t03
 curl -fsS http://192.168.0.106:8080/api/health      # t04
-curl -fsS http://192.168.0.11:8080/actuator/health  # VIP -> {"status":"UP"}
+curl -fsS http://192.168.0.11/actuator/health  # VIP (.11:80) -> {"status":"UP"}
 ```
 
 ## Step 7 — Deploy the voice bridge
@@ -275,7 +275,7 @@ and needs a STUN/TURN relay (**#12**) — the runtime is already wired for it
 pgvector, embeddings sidecar, RAG and Mistral chat all work end to end:
 
 ```bash
-curl -fsS -X POST http://192.168.0.11:8080/api/conversation/converse \
+curl -fsS -X POST http://192.168.0.11/api/conversation/converse \
   -H 'content-type: application/json' \
   -H 'x-api-key: <vault_conversation_api_key>' \
   -d '{"transcript":"Pourquoi ma facture a augmenté ce mois-ci ?","conversation_id":"smoke-1","channel":"smoke","language":"fr"}'

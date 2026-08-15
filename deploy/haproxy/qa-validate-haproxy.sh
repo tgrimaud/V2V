@@ -43,7 +43,7 @@ else bad "haproxy -c: config is INVALID"; fi
 
 # --- 2. haproxy.cfg structural invariants -------------------------------------
 grep -Eq 'bind 192\.168\.0\.10:443 ssl crt' "$CFG"        && ok "voice frontend binds .10:443 with TLS" || bad "voice TLS bind missing"
-grep -Eq 'bind 192\.168\.0\.11:8080' "$CFG"               && ok "backend frontend binds .11:8080"       || bad "backend bind missing"
+grep -Eq 'bind 192\.168\.0\.11:80$' "$CFG"                && ok "backend frontend binds .11:80"         || bad "backend bind missing"
 grep -q '192.168.0.103:8090' "$CFG" && grep -q '192.168.0.104:8090' "$CFG" && ok "voice backend targets both bridges :8090" || bad "voice backend targets wrong"
 grep -q '192.168.0.105:8080' "$CFG" && grep -q '192.168.0.106:8080' "$CFG" && ok "backend backend targets both nodes :8080"  || bad "backend targets wrong"
 grep -q 'http-check send meth GET uri /$' "$CFG"          && ok "voice health check GET /"              || bad "voice health check missing"

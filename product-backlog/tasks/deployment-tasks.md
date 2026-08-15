@@ -400,7 +400,7 @@ here — but that surface still fronts the bridges and deserves a burst ceiling.
 - Add a per-source-IP stick-table on the **voice** frontend tracking `conn_rate` +
   `http_req_rate` (10s windows); reject connection-rate bursts at accept and deny
   request-rate bursts with **429**, before the bridges.
-- Keep the **internal** backend frontend (`.11:8080`, LB→backend only) unrate-limited.
+- Keep the **internal** backend frontend (`.11:80`, LB→backend only) unrate-limited.
 - Pilot-tuned thresholds (generous for a browser), documented as tunable; media never
   affected.
 

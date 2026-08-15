@@ -12,7 +12,7 @@ Keepalived (VRRP).
 | VIP | Bind | Role | Backends | Health check |
 |-----|------|------|----------|--------------|
 | Voice `.10` | `:443` (TLS) | TLS edge + L7 LB for WebRTC **signaling** + web UI | `vla-t01/t02:8090` | `GET /` → 200 |
-| Backend `.11` | `:8080` | internal L7 LB for the conversation API | `vla-t03/t04:8080` | `GET /actuator/health` → 200 (deep: DB + Redis) |
+| Backend `.11` | `:80` | internal L7 LB for the conversation API | `vla-t03/t04:8080` | `GET /actuator/health` → 200 (deep: DB + Redis) |
 
 **HAProxy does NOT carry WebRTC media.** The SDP offer (`POST
 /api/voice/webrtc/offer`) and the UI go through HAProxy over HTTPS; the actual
@@ -44,7 +44,7 @@ HAProxy after rotation (`systemctl reload haproxy`).
 ## Host prerequisites
 
 - **`net.ipv4.ip_nonlocal_bind=1`** on both LB nodes. HAProxy binds the VIP
-  addresses (`.10:443`, `.11:8080`) but the backup node does not hold the VIP, so
+  addresses (`.10:443`, `.11:80`) but the backup node does not hold the VIP, so
   without non-local bind HAProxy fails to start there. Set it persistently:
   ```bash
   echo 'net.ipv4.ip_nonlocal_bind=1' | sudo tee /etc/sysctl.d/90-haproxy.conf
@@ -145,7 +145,7 @@ http-request deny deny_status 429 if { sc0_http_req_rate gt 100 }  # >100 reqs /
   proxied), so a call's audio is never rate-limited by this.
 - The thresholds are **pilot defaults** (generous for a browser loading many page
   assets); tune them once live traffic shape is known. The internal backend
-  frontend (`.11:8080`, LB→backend only) is intentionally **not** rate-limited.
+  frontend (`.11:80`, LB→backend only) is intentionally **not** rate-limited.
 - A rejected request returns `429`; a connection-rate breach is dropped at accept.
 
 ## Voice draining hook (wires TASK-OPS-002)

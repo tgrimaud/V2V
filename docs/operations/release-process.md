@@ -103,14 +103,14 @@ manual model step is needed. The image does not bundle the knowledge base, so
 after the first backend deploy trigger the sync to populate pgvector:
 
 ```bash
-curl -fsS -X POST http://192.168.0.11:8080/api/knowledge/sync
+curl -fsS -X POST http://192.168.0.11/api/knowledge/sync
 ```
 
 (or wait for the scheduler). Subsequent deploys keep the existing index.
 
 ## Verify
 
-- **Backend**: `curl -fsS http://192.168.0.11:8080/actuator/health` → `{"status":"UP"}`
+- **Backend**: `curl -fsS http://192.168.0.11/actuator/health` → `{"status":"UP"}` (VIP `.11:80`)
   on both t03/t04 (and via the VIP `.11`).
 - **Voice**: `curl -fsS http://<voice-host>:8090/` → 200 on both t01/t02.
 - **Redis**: `docker exec voice-support-redis redis-cli -a <pwd> ping` → `PONG`.

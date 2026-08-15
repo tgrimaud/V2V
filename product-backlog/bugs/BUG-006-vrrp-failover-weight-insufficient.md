@@ -18,7 +18,7 @@
 
 When HAProxy stops on the active load-balancer node, the VIP is **not** failed over
 to the standby. The VIP stays on the node whose HAProxy is dead, so traffic to the
-voice edge (`.10:443`) and the backend VIP (`.11:8080`) is blackholed instead of
+voice edge (`.10:443`) and the backend VIP (`.11:80`) is blackholed instead of
 being served by the healthy peer.
 
 ## Environment

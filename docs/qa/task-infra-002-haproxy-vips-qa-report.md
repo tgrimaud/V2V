@@ -59,7 +59,7 @@ Feature: VIP load balancing, TLS edge and failover
 | Area | Checks | Result |
 |------|--------|--------|
 | HAProxy config parse | `haproxy -c` (Docker `haproxy:2.8` + temp cert) | PASS |
-| HAProxy binds | voice `.10:443` TLS, backend `.11:8080` | PASS |
+| HAProxy binds | voice `.10:443` TLS, backend `.11:80` (corrected 2026-08-15: was documented `:8080`; live bind verified `:80`, aligns with BUG-013) | PASS |
 | Backend pools | voice→`.103/.104:8090`, backend→`.105/.106:8080`, `check` on all | PASS |
 | Health checks | voice `GET /`, backend `GET /api/health` | PASS |
 | TLS floor | `ssl-min-ver TLSv1.2` | PASS |
