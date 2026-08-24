@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-014
 - **Title:** After a container/network restart the backend can no longer resolve the `ollama` service name (`UnknownHostException: ollama`, then a 10s connect timeout), so RAG retrieval fails with `ERR_UPSTREAM` until the compose project network is recreated
-- **Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-24) on `fix/BUG-014-ollama-dns-durable` (off `feat/sprint-11-remote-deployment`) — merge-ready (awaiting the user's explicit merge); live pilot restart retest deferred to the gated live-deploy window (open input #1). Backend `mvn test` **399** green (+7), ArchUnit OK; compose `qa-validate.sh` **25/25**; ansible `qa-validate-ansible.sh` **69/69**. [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md).
+- **Status:** ✅ **Closed** — adversarial review 93/100 (Pass) + functional QA GO + **live pilot retest PASSED (2026-08-24)**. Merged to `feat/restart-from-scratch` (`f153257` → sprint close `6bf8de2`); image `sha-6bf8de2` deployed to backend tier t03+t04. **Live-verified:** `/etc/hosts` pin `10.123.0.11 ollama`, resolution off aardvark-dns, backend container churn (`--force-recreate --no-deps`) → `converse` **200** grounded with **no `UnknownHostException`/`ERR_UPSTREAM`**, and `/actuator/health` **503↔200** on ollama stop/start (embedding-hop gate). Backend `mvn test` **399** green (+7), ArchUnit OK; compose `qa-validate.sh` **25/25**; ansible `qa-validate-ansible.sh` **69/69**. [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot voice-journey validation)
@@ -78,7 +78,8 @@ inside the backend container worked (`CONNECT_OK`, `HTTP/1.0 200`).
       Gated ON only on the pilot backend tier (`EMBEDDING_HEALTH_ENABLED`).
 - [x] Deterministic verification captured — compose `qa-validate.sh` locks the static-IP +
       extra_hosts + embedding-readiness invariants (25/25); unit tests cover UP/DOWN + retry +
-      DNS hardening. Live restart → `converse` 200 retest on the pilot deferred (open input #1).
+      DNS hardening. Live restart → `converse` 200 retest on the pilot **PASSED 2026-08-24**
+      (image `sha-6bf8de2` on t03+t04; churn survived, health-gate DOWN/UP verified).
 - [x] OpenTelemetry: the retrieval slice already records `outcome` (success/timeout/error); a
       DNS/connect failure now also surfaces as a distinct, alertable `/actuator/health` DOWN
       (the `embedding` indicator carries the failing exception class, PII-safe).

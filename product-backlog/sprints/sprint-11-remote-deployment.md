@@ -36,9 +36,12 @@ matching), **TASK-WEB-032/033/034** (m2e reference measurement, STT partial-sema
 `/api/voice/turn` JSON+base64 contract). Finally **BUG-014** (durable Ollama-DNS reachability:
 static IP + `extra_hosts`, embedding-hop `/actuator/health`, JVM negative-DNS-TTL=0 + bounded
 connect-scoped retry) was implemented, reviewed (93/100) and QA-GO'd, then merged (2026-08-24,
-`--no-ff` `f153257`). Only the **network-gated live re-tests** remain deferred (open input #1):
-HAProxy/Keepalived live VIP/TLS/VRRP, live restart→converse for BUG-014, and the live latency
-re-measure (TASK-WEB-022 residual → TASK-STT-014/TASK-BE-020). Integrated backend `mvn test` **399**
+`--no-ff` `f153257`). **BUG-014's durable fix was live-retested on the pilot 2026-08-24** (backend tier t03+t04
+redeployed to image `sha-6bf8de2`; container churn survived — `converse` 200 with no
+`UnknownHostException` — and the embedding-hop `/actuator/health` gate flipped 503↔200 on
+ollama stop/start). The remaining **network-gated live re-tests** stay deferred (open input #1):
+HAProxy/Keepalived live VIP/TLS/VRRP and the live latency re-measure (TASK-WEB-022 residual →
+TASK-STT-014/TASK-BE-020). Integrated backend `mvn test` **399**
 green, ArchUnit OK; compose `qa-validate.sh` **25/25**; CI workflows **22/22**; Ansible
 `qa-validate-ansible.sh` **69/69**; HAProxy/Keepalived **33/33** (incl. real `haproxy -c`); prereqs
 **21/21**.
@@ -137,7 +140,7 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 | TASK-DOC-003 | Keep deployment docs in sync as tickets land + author the operational first-deploy runbook (checklist, DB `CREATE EXTENSION vector`, smoke test) | Docs | ✅ Implemented — new `docs/operations/first-deploy-runbook.md` (zero-to-running) + image-tag accuracy fix (git `vX.Y.Z` → image `X.Y.Z`); adversarial 93/100 (Pass); QA GO 15/15 + OPS-002 33/33 regression ([report](../../docs/qa/task-doc-003-deployment-docs-qa-report.md)); ✅ merge-ready (live run deferred, #1) |
 | TASK-INFRA-008 | Adapt the deploy to the **podman** runtime (Option B) — VMs run podman 5.8.2 + `podman-docker` shim, no Docker CE / no compose provider, SELinux Enforcing | Provision (runtime alignment) | ✅ Implemented (2026-08-13) — `host_prereqs` drops Docker CE, installs the Compose v2 binary as podman's **compose provider** (+ `containers.conf`/`nodocker`, rootful `podman.socket`); `compose_cmd → "podman compose"`; `compose_tier` login via `podman`; backend KB mount `:ro → :ro,Z`. Surfaced by Step 0 access; ADR-0038 addendum (2026-08-13); live validation folded into tier-A smoke |
 | TASK-INFRA-009 | Manage the Postgres schema with **Liquibase** (versioned bootstrap) — replace implicit `ddl-auto: update` + Spring AI `initialize-schema` + ad-hoc superuser SQL | Provision + backend persistence | ✅ Merged into sprint-11 (ADR-0041 Accepted) — **app changelog** (`vector_store` = Spring AI 1.0.0's exact DDL + `kb_source_state`, guarded `not tableExists`) at startup as app user (`ddl-auto: none`, `initialize-schema: false`); **bootstrap changelog** (extensions + grants) once at Step 4 via one-shot `podman run liquibase` (own tracking tables); `CREATE DATABASE`/`ROLE`/`ALTER … OWNER` stay psql; dev extensions via `scripts/dev-db-init/`; `commons-io` pinned 2.19.0. ADR-0041 |
-| BUG-014 | Durable Ollama-DNS reachability for the backend tier (was: `UnknownHostException: ollama` after container/network churn → `ERR_UPSTREAM` until `down && up`) | Fix (backend + deploy) | ✅ Merged into sprint-11 (2026-08-24, `--no-ff` `f153257`; adversarial 93/100 + QA GO) — static IP + `extra_hosts` (aardvark-dns out of the critical path) + embedding-hop `/actuator/health` indicator + JVM negative-DNS-TTL=0 & bounded connect-scoped retry. Backend `mvn test` **399** green, compose **25/25**, ansible **69/69**. Live restart→converse retest deferred (open input #1). [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md) |
+| BUG-014 | Durable Ollama-DNS reachability for the backend tier (was: `UnknownHostException: ollama` after container/network churn → `ERR_UPSTREAM` until `down && up`) | Fix (backend + deploy) | ✅ Merged into sprint-11 (2026-08-24, `--no-ff` `f153257`; adversarial 93/100 + QA GO) — static IP + `extra_hosts` (aardvark-dns out of the critical path) + embedding-hop `/actuator/health` indicator + JVM negative-DNS-TTL=0 & bounded connect-scoped retry. Backend `mvn test` **399** green, compose **25/25**, ansible **69/69**. **Live pilot retest PASSED 2026-08-24** (image `sha-6bf8de2` on t03+t04; churn → converse 200, health-gate 503↔200). [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md) |
 
 Full ticket details live in `tasks/deployment-tasks.md`.
 
