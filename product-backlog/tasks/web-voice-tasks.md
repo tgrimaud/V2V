@@ -2572,9 +2572,21 @@ internal event vocabulary with a **pluggable source**.
 (WebRTC same-subnet), ADR-0040 (Genesys AudioHook shape to align with)
 **Depends on:** — (first ticket of the sprint)
 **Classification:** V1 voice runtime — external-reach interim transport
-**Status:** Planned
+**Status:** 🚧 Implemented (2026-08-24) — dev tests green; pending adversarial review ≥90% + QA
 **Priority:** High (unblocks 027–031)
-**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (to create when work starts)
+**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (off `feat/sprint-12-external-voice-websocket`)
+
+**Spike outcome (2026-08-24):** pipecat `SingleClientWebsocketServerTransport`
+(`pipecat.transports.websocket.server`, built on `websockets.asyncio.server.serve`) is the
+socle — **no FastAPI** (isolated in `websocket.fastapi`, never imported) and **no new
+dependency** (`websockets` already ships for Gradium TTS). The hand-rolled `wss`-on-stdlib
+alternative is unnecessary. Framing lives in the pipecat serializer seam
+(`web_voice/websocket_framing.py::WebSocketAudioSerializer`): binary → `InputAudioRawFrame`
+PCM16/16 kHz, text → JSON control; control vocabulary mirrors Genesys AudioHook semantics
+(`open`/`opened`, `close`/`closed`, `barge_in`, `language`, `ping`/`pong`, `call_end`) so the
+Sprint 13 Genesys adapter reuses the demux. Socle guard + builder in
+`web_voice/websocket_support.py`. **Tests:** 17 framing + 5 socle; full voice-agent suite **526**
+green. ADR-0043 "Spike Outcome" section records the confirmation.
 
 ### Context
 
