@@ -20,13 +20,13 @@ binary audio" — the same shape we build here.
 
 ## Status
 
-**Status:** 📋 **Planned** (defined 2026-08-15). Starts after Sprint 11 closes.
+**Status:** 🚧 **In progress** (started 2026-08-24, after Sprint 11 closed 2026-08-24).
 Decision #1 of the 2026-08-15 global-review decision loop (posture **B**:
 interim WebSocket audio path) recorded in ADR-0042 (update) and specified by
 ADR-0043.
 
-**Sprint branch:** `feat/sprint-12-external-voice-websocket` (to fork from
-`feat/restart-from-scratch` at sprint start). Two-level branch model as before:
+**Sprint branch:** `feat/sprint-12-external-voice-websocket` (forked from
+`feat/restart-from-scratch` at sprint start, 2026-08-24). Two-level branch model as before:
 ticket branches fork from and merge back into the sprint branch (`--no-ff`); the
 sprint branch merges only on the user's explicit request.
 
@@ -43,8 +43,8 @@ sprint branch merges only on the user's explicit request.
 | Sprint | Theme | State |
 |---|---|---|
 | Sprint 10 | Pilot-readiness latency & perceived latency | ✅ Done (closed 2026-07-31) |
-| Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | 🚧 In progress |
-| **Sprint 12** | **External voice via interim WebSocket audio (Genesys-ready)** | 📋 Planned (defined 2026-08-15) |
+| Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | ✅ Done (closed 2026-08-24) |
+| **Sprint 12** | **External voice via interim WebSocket audio (Genesys-ready)** | 🚧 In progress (started 2026-08-24) |
 | Sprint 13 (tentative) | Telephony channel (US-018) + Genesys Audio Connector + advisor handoff (EPIC-007/012) | Planned — gated by OQ-006 |
 | Sprint 14 (tentative, was 12) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
