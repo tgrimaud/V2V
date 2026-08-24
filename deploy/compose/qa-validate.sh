@@ -40,6 +40,12 @@ have "$B" "CONVERSATION_STORE"      && ok "backend wires CONVERSATION_STORE"    
 have "$B" "REDIS_HOST"              && ok "backend wires REDIS_HOST"                   || ko "REDIS_HOST missing"
 have "$B" "memory:"                 && ok "backend resource limit set"                 || ko "backend resource limit missing"
 have "$B" "restart: unless-stopped" && ok "backend restart policy set"                 || ko "backend restart policy missing"
+# BUG-014: ollama name pinned via /etc/hosts (extra_hosts) on a static IP + user-defined
+# network, and the embedding hop is part of readiness so a broken ollama path drains the node.
+# `docker compose config` canonicalizes extra_hosts to "name=ip".
+have "$B" "ollama=10.123.0.11"      && ok "backend pins ollama to a static IP (extra_hosts)"  || ko "BUG-014 extra_hosts pin missing"
+have "$B" "ipv4_address"            && ok "ollama has a static IP on the user-defined network" || ko "BUG-014 ollama static IP missing"
+have "$B" "EMBEDDING_HEALTH_ENABLED" && ok "backend wires embedding-hop readiness"             || ko "BUG-014 embedding health flag missing"
 
 echo "== voice invariants =="
 V="$(render voice)"

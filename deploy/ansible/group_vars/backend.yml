@@ -31,6 +31,15 @@ ollama_embedding_model: "nomic-embed-text"
 ollama_image_tag: "0.5.4"
 ollama_cpus: "1.0"
 ollama_memory: "2g"
+# BUG-014: pin the ollama sidecar to a static IP on a stable user-defined network and
+# resolve the "ollama" name via /etc/hosts (extra_hosts) so it survives container/network
+# churn without a `down && up`. ollama_static_ip must be inside backend_net_subnet; the
+# default subnet avoids podman's 10.89.0.0/16 pool (override if it collides on the VM).
+ollama_static_ip: "10.123.0.11"
+backend_net_subnet: "10.123.0.0/24"
+# Deep readiness includes the embedding hop: /actuator/health returns 503 when ollama is
+# unreachable so HAProxy drains the node (true on this tier; ollama is present).
+embedding_health_enabled: true
 
 # Chat LLM (Mistral cloud).
 llm_provider: "mistral-api"

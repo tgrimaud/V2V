@@ -20,15 +20,19 @@ import com.voicesupport.knowledge.domain.service.TextChunker;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.EmbeddingDomainClassifierAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.classifier.KeywordAudienceClassifierAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.csv.CsvArticleConnector;
+import com.voicesupport.knowledge.infrastructure.adapter.out.health.OllamaEmbeddingHealthAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.markdown.MarkdownFolderConnector;
 import com.voicesupport.knowledge.infrastructure.adapter.out.persistence.JpaKnowledgeSourceStateAdapter;
 import com.voicesupport.knowledge.infrastructure.adapter.out.persistence.KbSourceStateRepository;
 import com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore.PgVectorStoreAdapter;
+import com.voicesupport.shared.http.RetryingClientHttpRequestInterceptor;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,16 +56,35 @@ public class KnowledgeConfig {
             @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${spring.ai.ollama.embedding.model:nomic-embed-text}") String model,
             @Value("${voice-support.embedding.timeout-ms:5000}") long timeoutMs,
-            @Value("${voice-support.embedding.connect-timeout-ms:3000}") long connectMs) {
+            @Value("${voice-support.embedding.connect-timeout-ms:3000}") long connectMs,
+            @Value("${voice-support.embedding.max-attempts:2}") int maxAttempts) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) connectMs);
         factory.setReadTimeout((int) timeoutMs);
+        // BUG-014: a bounded retry so a single stale DNS lookup during container/network churn
+        // re-resolves on the retry (negative DNS TTL is 0) instead of failing the retrieval.
         OllamaApi ollamaApi = OllamaApi.builder().baseUrl(baseUrl)
-                .restClientBuilder(RestClient.builder().requestFactory(factory)).build();
+                .restClientBuilder(RestClient.builder().requestFactory(factory)
+                        .requestInterceptor(new RetryingClientHttpRequestInterceptor(maxAttempts)))
+                .build();
         return OllamaEmbeddingModel.builder()
                 .ollamaApi(ollamaApi)
                 .defaultOptions(OllamaOptions.builder().model(model).build())
                 .build();
+    }
+
+    // BUG-014: embedding-hop reachability contributed to the aggregated /actuator/health so a
+    // broken Ollama path drains the node at the LB. OFF by default (@ConditionalOnProperty) —
+    // local/dev/memory runs have no Ollama; the pilot backend tier sets EMBEDDING_HEALTH_ENABLED
+    // -> voice-support.embedding.health.enabled=true. Method name ends "HealthIndicator" so the
+    // aggregated health key is "embedding".
+    @Bean
+    @ConditionalOnProperty(name = "voice-support.embedding.health.enabled", havingValue = "true")
+    public HealthIndicator embeddingHealthIndicator(
+            @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
+            @Value("${voice-support.embedding.health.connect-timeout-ms:2000}") long connectMs,
+            @Value("${voice-support.embedding.health.read-timeout-ms:2000}") long readMs) {
+        return OllamaEmbeddingHealthAdapter.http(baseUrl, connectMs, readMs);
     }
 
     // Single adapter instance exposed as both the write port (VectorStorePort) and the
