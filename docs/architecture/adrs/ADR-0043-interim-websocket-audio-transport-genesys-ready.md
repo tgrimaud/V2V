@@ -96,6 +96,30 @@ The socle spike **confirms this decision without changing it**. Concrete finding
   session/ingress/egress probes). This socle ticket adds the library layer only and runs
   no live turn, so it introduces no new runtime span in isolation.
 
+## Factory Outcome (2026-08-24, TASK-WEB-027)
+
+The capitalisation refactor (spine point 3) is **done**. Session assembly is extracted
+into `SessionFactory` (`web_voice/session_factory.py`): it takes an already-built
+transport + call envelope + telemetry and returns the built `StreamingVoiceSession`
+(STT/TTS processors, end-of-call farewell, channel-egress probe, per-language provider
+selection, streaming vs batch), plus the env-tunable config it needs (farewell, barge-in,
+end-of-turn hold, STT prewarm) and `DEFAULT_SAMPLE_RATE`.
+
+- `WebRtcSignalingService` now owns only its **WebRTC transport build** (`_build_transport`)
+  and delegates the rest to `self._factory.build_session(...)`. It re-exports the moved
+  config symbols so backward-compat imports keep working. WebRTC behaviour is
+  **byte-for-byte** — the full `tests/test_webrtc_signaling.py` passes unchanged (three
+  tests that poked private building helpers were re-pointed at the factory, same
+  assertions).
+- A **non-WebRTC stub transport** builds the identical session through the factory
+  (`tests/test_session_factory.py`): streaming path wires the streaming STT/TTS processors
+  + farewell in the pre-answer seam; batch path builds the utterance aggregator at the
+  **PCM16/16 kHz** internal boundary. Any codec/sample-rate conversion stays inside each
+  transport adapter, never in the factory (spine point / this ADR's audio-boundary rule).
+- The WebSocket transport (TASK-WEB-028/029) and the future Genesys Audio Connector
+  (ADR-0040) now consume this one seam; the per-slice OpenTelemetry spans are still emitted
+  by the existing session/ingress/egress probes when a transport is wired in and run live.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's
