@@ -1349,7 +1349,7 @@ the box, bound its retention, and confirm no PII lands in logs. Embeddings alrea
 **Related decisions:** DEC-002 (never voice an ungrounded amount), ADR-0014 (guardrails)
 **Depends on:** —
 **Classification:** V1 safety hardening — DEC-002 output guardrail
-**Status:** 🚧 Implemented (2026-08-15, global-review decision #7) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
 **Priority:** Medium
 **Surfaced by:** 2026-08-15 global adversarial review, decision #7 — `OutputGuardrail.canonical()`
 stripped every non-digit (`[^0-9]`), so `€1.50` and `€150` both became `"150"`: a fabricated

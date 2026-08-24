@@ -2905,7 +2905,7 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 **Related decisions:** STT-013 spike (delta semantics live-validated), ADR-0028 (observability)
 **Depends on:** —
 **Classification:** V1 voice runtime — observability / robustness
-**Status:** 🚧 Implemented (2026-08-15, global-review decision #8) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
 **Priority:** Low-Medium
 **Surfaced by:** 2026-08-15 global adversarial review, decision #8.
 
@@ -2946,7 +2946,7 @@ corrupt a legitimate delta with repeated words).
 **Related decisions:** TASK-WEB-006 (client-safe error body), TASK-WEB-016 (OpenAPI), ADR-0021 (degraded)
 **Depends on:** —
 **Classification:** V1 voice runtime — HTTP contract / robustness
-**Status:** 🚧 Implemented (2026-08-15, global-review decision #9) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
 **Priority:** Medium
 **Surfaced by:** 2026-08-15 global adversarial review, decision #9.
 
