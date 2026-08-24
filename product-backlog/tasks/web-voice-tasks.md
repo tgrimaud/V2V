@@ -2704,7 +2704,7 @@ Scenario: A non-WebRTC transport builds a session through the same factory
 **Related decisions:** ADR-0043, ADR-0033 (WebRTC page stays), US-019 (web voice journey)
 **Depends on:** TASK-WEB-026, TASK-WEB-027
 **Classification:** V1 voice runtime — external-reach client
-**Status:** ✅ Merge-ready (implemented; adversarial **93/100 Pass**; QA GO) — pending user merge request
+**Status:** ✅ **User-validated (live, 2026-08-24)** — implemented; adversarial **93/100 Pass**; QA GO; live client validated (open→opened, WS 1013 refusal, binary ingest, browser mic turn). Merge-ready — pending user merge request
 **Priority:** High
 **Branch:** `task/TASK-WEB-028-browser-ws-voice-client`
 

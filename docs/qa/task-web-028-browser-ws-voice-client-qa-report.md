@@ -62,6 +62,17 @@
 - **Required fixes before pilot:** set `allowed_origins` at the edge (INFRA-010); live
   functional + latency validation (WEB-031) before any external SLO claim.
 
+## Live Client Validation (2026-08-24)
+Run against a live server (`--provider gradium --backend stub --websocket on`, WS on 8091):
+- **Plumbing (real socket, not fakes):** `ws://…:8091/?language=en` → sent `open` → received
+  `{"type":"opened"}`; a **2nd concurrent** connection was closed with **WS 1013**
+  (`"Server already has a connected client"`, AC#2); a binary PCM16 burst was ingested with the
+  socket staying `OPEN` and no fabricated output. Same result on the `fixture` and `gradium`
+  servers.
+- **Browser mic turn:** `http://127.0.0.1:8090/ws.html` → Connect → mic → `Live` → spoken French
+  turn → Gradium STT → stub answer → Gradium TTS played back; capacity refusal surfaced on a 2nd
+  tab; Hang up released the session. **Validated by the user.**
+
 ## Test Evidence
 - Unit: `tests/test_websocket_signaling.py` (8) green. Full suite **538** green (530 baseline + 8 new).
 - Behave: `features/websocket_voice_client.feature` (3 scenarios / 12 steps) green; full suite
