@@ -2779,9 +2779,9 @@ Implemented on the WEB-026 socle + WEB-027 factory (no bespoke socket/session co
 amplitude gate), ADR-0040 (Genesys events feed the same seam later)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — interruption on the WS path
-**Status:** Planned
+**Status:** ✅ Implemented — pending adversarial review + QA GO, then user merge request
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (to create when work starts)
+**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2816,6 +2816,42 @@ Scenario: The signal source is pluggable
   When a fake event source emits an end-of-turn signal
   Then the session finalizes the turn without depending on the energy detector
 ```
+
+### Outcome (2026-08-24)
+
+- **Pluggable control-signal seam (new, transport-agnostic).** `web_voice/control_signals.py`
+  adds a Genesys-named vocabulary (`ControlSignalType`: `barge_in`, `end_of_turn`, `call_end`,
+  `playback_started`, `playback_completed`), a `ControlSignal` dataclass, a `ControlSignalSource`
+  port (async `signals()` + `close()`), and an `EndOfTurnSignalFrame` control frame.
+  `web_voice/control_signal_processor.py` adds `ControlSignalProcessor`, a front-of-pipeline
+  `FrameProcessor` that maps signals to pipeline actions: `barge_in → broadcast_interruption()`,
+  `end_of_turn → EndOfTurnSignalFrame` downstream, `call_end → injected end_call(signal) or a
+  graceful EndFrame`; it also emits Genesys-named `voice.control_signal` telemetry for the
+  transport's playback lifecycle (`BotStarted/StoppedSpeakingFrame`).
+- **Pluggable without touching the core.** `SessionFactory` gains an optional
+  `control_signal_source_factory(envelope) -> ControlSignalSource | None`; the processor is wired
+  at the **front of the streaming pipeline** (`pre_stt`) on both WebRTC and WS. With **no source**
+  (default) it is a transparent pass-through — the energy/amplitude detectors inside
+  `StreamingSttProcessor` stay authoritative (350 ms hold, `VOICE_BARGE_IN_*` unchanged). A
+  fake/Genesys/WS-client source can drive barge-in and end-of-turn **without** the energy detector.
+- **AC #2 (pluggable EOT).** `StreamingSttProcessor` finalizes the open turn on an
+  `EndOfTurnSignalFrame` (`_finalize_from_control`, `SIGNAL_CONTROL_EOT`), reusing the same
+  `_finalize` path as the detector — proven by a fake source emitting `end_of_turn` with **no
+  trailing silence** producing a final transcript. Safe no-op when no session is open.
+- **AC #1 (barge-in cut).** Barge-in over the seam calls `broadcast_interruption()`; Pipecat
+  cancels the in-flight `StreamingTtsProcessor` synthesis (`asyncio.CancelledError` → `tts.interrupted`
+  + best-effort `aclose()`, TASK-WEB-008) and flushes the output transport, so playback stops and
+  the connection stays open for the next turn. The transport-agnostic core already carried this on
+  WS (WEB-028); WEB-029 adds the pluggable trigger + proves the cut via the seam.
+- **Tests.** `tests/test_control_signal_processor.py` (9: dispatch mapping incl. injected `end_call`,
+  Genesys-named telemetry, source-driven barge-in/EOT through a running pipeline, transparent
+  pass-through) + 2 STT finalize tests (`test_streaming_stt_processor.py`) +
+  `features/websocket_control_signals.feature` (2 scenarios). **549 unit + 16 features/44
+  scenarios/201 steps green.**
+- **Deferred (residual):** a live `wss` barge-in / mouth-to-ear verification (real socket + mic)
+  is out of unit/Behave scope → **TASK-WEB-031**. Wiring the seam's `call_end`/farewell to the WS
+  drain teardown is scoped with WS lifecycle in **TASK-WEB-030** (the processor supports
+  `set_end_call` today; default is a graceful `EndFrame`).
 
 ---
 

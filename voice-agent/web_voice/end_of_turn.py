@@ -37,6 +37,10 @@ DEFAULT_AMPLITUDE_THRESHOLD = 1000
 
 SIGNAL_SILENCE_WINDOW = "silence_window"
 SIGNAL_CLIENT_STOP = "client_stop"
+# Control-plane end-of-turn (TASK-WEB-029): the turn is finalized by a pluggable control
+# signal (WS client / Genesys protocol / tests) rather than the energy detector's silence
+# window. No measured slice_ms — it is not a silence-window measurement.
+SIGNAL_CONTROL_EOT = "control_end_of_turn"
 
 # OpenTelemetry span name for the end_of_turn slice, consumed by
 # stt_validation.pipeline_timing so US-036 measures the slice.

@@ -154,6 +154,32 @@ socle and the WEB-027 factory (no bespoke socket/session code):
   full canonical per-slice spans + active-session gauge + rich capacity ceiling are
   TASK-WEB-030, and live mouth-to-ear latency is TASK-WEB-031.
 
+## Control-Signal Seam Outcome (2026-08-24, TASK-WEB-029)
+
+Point 4 of the Decision is now **implemented** as a transport-agnostic seam (the energy
+detectors stay authoritative on the browser paths; the seam only *adds* a pluggable source):
+
+- **Vocabulary + port** — `web_voice/control_signals.py`: `ControlSignalType` named after
+  Genesys AudioHook semantics (`barge_in`, `end_of_turn`, `call_end`, `playback_started`,
+  `playback_completed`), a `ControlSignal` dataclass, a `ControlSignalSource` port (async
+  `signals()` + `close()`), and an `EndOfTurnSignalFrame` control frame.
+- **Processor** — `web_voice/control_signal_processor.py` (`ControlSignalProcessor`): a
+  front-of-pipeline `FrameProcessor` wired at `pre_stt` on WebRTC **and** WebSocket via
+  `SessionFactory`. It maps `barge_in → broadcast_interruption()` (Pipecat cancels the in-flight
+  `StreamingTtsProcessor` synthesis + flushes the output transport, so playback stops and the
+  socket stays open for the next turn), `end_of_turn → EndOfTurnSignalFrame` downstream (STT
+  finalizes the open turn via `_finalize_from_control`, independent of the energy detector),
+  and `call_end → injected end_call(signal)` (same seam the farewell processor uses) **or** a
+  graceful `EndFrame`. It also emits Genesys-named `voice.control_signal` telemetry from the
+  transport's `BotStarted/StoppedSpeakingFrame` playback lifecycle.
+- **Pluggability** — `SessionFactory(control_signal_source_factory=...)` injects a per-call
+  source; **default `None` = transparent pass-through** (energy detectors + 350 ms hold +
+  `VOICE_BARGE_IN_*` unchanged). Sprint 13's Genesys adapter supplies a real source that feeds
+  the *same* seam — no session-core change. Covered by `tests/test_control_signal_processor.py`
+  + `features/websocket_control_signals.feature` (source-driven barge-in/EOT with no energy
+  detector). A live `wss` barge-in / mouth-to-ear check stays TASK-WEB-031; wiring `call_end`
+  to the WS drain teardown is TASK-WEB-030.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's

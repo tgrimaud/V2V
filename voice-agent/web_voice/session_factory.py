@@ -14,8 +14,10 @@ lives inside each transport adapter, never here (ADR-0043 point 3).
 
 import logging
 import os
-from typing import Any
+from typing import Any, Callable
 
+from .control_signal_processor import ControlSignalProcessor
+from .control_signals import ControlSignalSource
 from .call_end_farewell import (
     DEFAULT_CLOSING_MESSAGE,
     DEFAULT_CONFIRM_PROMPT,
@@ -177,12 +179,19 @@ class SessionFactory:
         streaming_tts_provider: Any = None,
         streaming_providers_by_language: dict[str, Any] | None = None,
         streaming_tts_providers_by_language: dict[str, Any] | None = None,
+        control_signal_source_factory: Callable[[Any], ControlSignalSource | None] | None = None,
     ) -> None:
         self._ingress = ingress
         self._egress = egress
         self._backend = backend
         self._streaming_provider = streaming_provider
         self._streaming_tts_provider = streaming_tts_provider
+        # Optional per-call pluggable control-signal source (TASK-WEB-029, ADR-0040): a callable
+        # (envelope -> ControlSignalSource | None) so barge-in / end-of-turn / call-end can be
+        # driven by WS-client or Genesys protocol events, not just the energy detectors. None
+        # (default) -> the energy detectors inside StreamingSttProcessor stay authoritative and
+        # the control processor is a transparent pass-through.
+        self._control_signal_source_factory = control_signal_source_factory
         self._streaming_providers_by_language = {
             key.lower(): value for key, value in (streaming_providers_by_language or {}).items()
         }
@@ -252,6 +261,7 @@ class SessionFactory:
             prewarm=_stt_prewarm_enabled(),
         )
         farewell = self._build_farewell_processor(envelope, telemetry)
+        control = self._build_control_signal_processor(envelope, telemetry)
         session = StreamingVoiceSession(
             transport,
             ingress=self._ingress,
@@ -259,6 +269,11 @@ class SessionFactory:
             envelope=envelope,
             backend=self._backend,
             telemetry=telemetry,
+            # Pluggable control-signal seam (TASK-WEB-029, ADR-0043/0040): front-of-pipeline
+            # entry point that raises barge-in / end-of-turn / call-end from a pluggable source
+            # (WS client / Genesys), and emits Genesys-named playback telemetry. Transparent
+            # pass-through when no source is injected.
+            pre_stt=[control],
             # The streaming STT processor consumes continuous audio, owns end-of-turn
             # detection + its span and emits the final transcript itself.
             stt_processor=stt,
@@ -269,6 +284,18 @@ class SessionFactory:
             pre_output=[self._build_egress_probe(envelope, telemetry)],
         )
         return session, farewell
+
+    def _build_control_signal_processor(self, envelope, telemetry) -> ControlSignalProcessor:
+        source = (
+            self._control_signal_source_factory(envelope)
+            if self._control_signal_source_factory is not None
+            else None
+        )
+        return ControlSignalProcessor(
+            telemetry=telemetry,
+            correlation_id=getattr(envelope, "correlation_id", None),
+            source=source,
+        )
 
     def _build_farewell_processor(self, envelope, telemetry) -> Any:
         """End-of-call farewell processor for the session, or None when disabled."""
