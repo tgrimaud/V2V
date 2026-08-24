@@ -41,7 +41,18 @@ redeployed to image `sha-6bf8de2`; container churn survived — `converse` 200 w
 `UnknownHostException` — and the embedding-hop `/actuator/health` gate flipped 503↔200 on
 ollama stop/start). The remaining **network-gated live re-tests** stay deferred (open input #1):
 HAProxy/Keepalived live VIP/TLS/VRRP and the live latency re-measure (TASK-WEB-022 residual →
-TASK-STT-014/TASK-BE-020). Integrated backend `mvn test` **399**
+TASK-STT-014/TASK-BE-020).
+
+### Deferred live re-tests — to do (⏸ not now)
+
+Tracked below; **we will not run these now** (gated by LB-host access / platform). Each maps to
+an existing ticket — no new ticket needed.
+
+| # | Live re-test | Why deferred | Ticket(s) |
+|---|--------------|--------------|-----------|
+| 1 | **VRRP failover** on HAProxy process death (`systemctl stop haproxy` on the master → VIP moves to backup, no blackhole) | needs access to the `lb` hosts (vlp-t01/t02, platform-managed) | [BUG-006](../bugs/BUG-006-vrrp-failover-weight-insufficient.md) (weight fix, pending live retest) · TASK-INFRA-002 |
+| 2 | **Live VIP/TLS edge** smoke through the voice `.10` + backend `.11` VIPs (real cert/FQDN, HAProxy `haproxy -c` already green offline) | TLS cert + FQDN + LB apply are platform gates (open inputs #4/#10) | TASK-INFRA-002 |
+| 3 | **Live mouth-to-ear latency re-measure** vs ADR-0029 (1.5 s) with levers 1+2 at their new defaults, to close or revise the gate | needs a live pilot call pass; offline residual ≈ 640 ms known | TASK-WEB-022 (residual) → TASK-STT-014 (STT finalize tail) + TASK-BE-020 (first-vetted-sentence) | Integrated backend `mvn test` **399**
 green, ArchUnit OK; compose `qa-validate.sh` **25/25**; CI workflows **22/22**; Ansible
 `qa-validate-ansible.sh` **69/69**; HAProxy/Keepalived **33/33** (incl. real `haproxy -c`); prereqs
 **21/21**.
