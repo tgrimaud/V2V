@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-014
 - **Title:** After a container/network restart the backend can no longer resolve the `ollama` service name (`UnknownHostException: ollama`, then a 10s connect timeout), so RAG retrieval fails with `ERR_UPSTREAM` until the compose project network is recreated
-- **Status:** Scheduled — durable fix decided (2026-08-15), P1, next dev action
+- **Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-24) on `fix/BUG-014-ollama-dns-durable` (off `feat/sprint-11-remote-deployment`) — merge-ready (awaiting the user's explicit merge); live pilot restart retest deferred to the gated live-deploy window (open input #1). Backend `mvn test` **399** green (+7), ArchUnit OK; compose `qa-validate.sh` **25/25**; ansible `qa-validate-ansible.sh` **69/69**. [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot voice-journey validation)
@@ -67,15 +67,41 @@ inside the backend container worked (`CONNECT_OK`, `HTTP/1.0 200`).
 
 ## Acceptance Criteria For Fix
 
-- [ ] The backend reliably reaches Ollama across container restarts without a manual
-      network teardown (candidate fixes: pin an alias/`extra_hosts`, `depends_on` +
-      restart ordering, a stable network, or host networking for the Ollama hop).
-- [ ] A readiness/health signal reflects embedding reachability so a broken Ollama hop
-      does not pass as healthy (align with the retrieval slice).
-- [ ] Deterministic reproduction + verification steps captured (restart → converse 200).
-- [ ] OpenTelemetry: retrieval slice already records `outcome`; confirm a DNS/connect
-      failure is a distinct, alertable signal.
+- [x] The backend reliably reaches Ollama across container restarts without a manual
+      network teardown — the `ollama` name is pinned via `extra_hosts: "ollama:<static-ip>"`
+      on the backend + a static `ipv4_address` on a user-defined network (`backend_net`).
+      `/etc/hosts` wins over DNS (nsswitch), so resolution no longer depends on aardvark-dns
+      rebuilding; `--force-recreate backend` re-writes `/etc/hosts` and restores RAG.
+- [x] A readiness/health signal reflects embedding reachability — `OllamaEmbeddingHealthAdapter`
+      contributes an `embedding` indicator to the aggregated `/actuator/health` (deep health,
+      TASK-INFRA-007), returning DOWN so HAProxy drains the node when the Ollama hop is broken.
+      Gated ON only on the pilot backend tier (`EMBEDDING_HEALTH_ENABLED`).
+- [x] Deterministic verification captured — compose `qa-validate.sh` locks the static-IP +
+      extra_hosts + embedding-readiness invariants (25/25); unit tests cover UP/DOWN + retry +
+      DNS hardening. Live restart → `converse` 200 retest on the pilot deferred (open input #1).
+- [x] OpenTelemetry: the retrieval slice already records `outcome` (success/timeout/error); a
+      DNS/connect failure now also surfaces as a distinct, alertable `/actuator/health` DOWN
+      (the `embedding` indicator carries the failing exception class, PII-safe).
 - [ ] Adversarial review ≥ 90%; QA retest passes on the pilot.
+
+## Fix Implementation (2026-08-24)
+
+Three coordinated changes, matching the decided approach:
+
+1. **Stable reachability (primary).** `deploy/compose/backend/docker-compose.yml`: a
+   user-defined `backend_net` (pinned subnet, default `10.123.0.0/24` — outside podman's
+   `10.89.0.0/16` pool), the `ollama` sidecar bound to a static `ipv4_address`
+   (`OLLAMA_STATIC_IP`, default `10.123.0.11`), and the backend given
+   `extra_hosts: ["ollama:${OLLAMA_STATIC_IP}"]`. `OLLAMA_BASE_URL=http://ollama:11434`
+   is unchanged — the name now resolves via `/etc/hosts`, independent of aardvark-dns.
+   Mirrored in `.env.example`, `group_vars/backend.yml`, `backend.env.j2`.
+2. **Embedding reachability in readiness.** `OllamaEmbeddingHealthAdapter` (a `HealthIndicator`
+   probing `GET /api/tags` with short timeouts), registered via `@ConditionalOnProperty`
+   (`voice-support.embedding.health.enabled`) so it is inert locally and ON in the pilot.
+3. **JVM DNS + retry hardening.** `VoiceSupportApplication.hardenDnsCaching()` sets
+   `networkaddress.cache.negative.ttl=0` (no negative-DNS caching), and the embedding
+   `RestClient` gets a bounded `RetryingClientHttpRequestInterceptor`
+   (`voice-support.embedding.max-attempts`, default 2) so a single stale lookup self-heals.
 
 ## Developer Notes
 
@@ -112,8 +138,10 @@ is both simpler and more robust. Three coordinated changes:
 (pilot-blocking reliability). Standard loop: implement → adversarial review ≥ 90% → QA
 retest on the pilot (restart → `converse` 200, no manual `down && up`).
 
-**Runbook (interim, until the fix lands):** on backend restart run `podman compose down && up`
-(recreates `backend_default` + refreshes aardvark-dns), **not** just `--force-recreate`.
+**Runbook (interim, until the fix is deployed):** on backend restart run `podman compose down && up`
+(recreates `backend_default` + refreshes aardvark-dns), **not** just `--force-recreate`. Once the
+durable fix (static-IP `extra_hosts`) is deployed on the pilot, `--force-recreate backend` alone
+restores RAG and this interim step is no longer needed.
 
 ## Closure
 

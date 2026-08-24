@@ -262,6 +262,18 @@ voice-support:
   embedding:
     timeout-ms: ${EMBEDDING_TIMEOUT_MS:5000}
     connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
+    # BUG-014: bounded attempts on the embedding HTTP call. A single stale DNS lookup during
+    # container/network churn re-resolves on the retry (negative DNS TTL is 0) instead of failing
+    # the turn. 2 = one retry; 1 disables. Embedding is a side-effect-free read, so retry is safe.
+    max-attempts: ${EMBEDDING_MAX_ATTEMPTS:2}
+    # BUG-014: embedding-hop reachability contributed to /actuator/health so a broken Ollama path
+    # drains the node at HAProxy (TASK-INFRA-007 deep health). OFF by default (local/dev/memory
+    # have no Ollama); the pilot backend tier sets EMBEDDING_HEALTH_ENABLED=true. The probe is a
+    # cheap GET /api/tags (DNS + TCP + liveness) with its own short timeouts.
+    health:
+      enabled: ${EMBEDDING_HEALTH_ENABLED:false}
+      connect-timeout-ms: ${EMBEDDING_HEALTH_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${EMBEDDING_HEALTH_READ_TIMEOUT_MS:2000}
   # Overall retrieval budget (TASK-BE-025) for the outbound RETRIEVAL seam: bounds the whole
   # retrieve() call (query embedding + pgvector similaritySearch) so a slow/locked DB query fails
   # fast into the sanitized 503 with a `timeout` outcome instead of holding the request/SSE worker.

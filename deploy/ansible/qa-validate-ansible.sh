@@ -117,7 +117,9 @@ grep -Eq "^voice_lb_socket_hosts: \[\]" "$VOICE_VARS" && ok "LB drain defaults t
 # Even if an operator enables it, the delegated hooks must be non-fatal (degrade to grace).
 grep -q "ignore_unreachable: true" roles/compose_tier/tasks/drain.yml && grep -q "failed_when: false" roles/compose_tier/tasks/drain.yml \
   && ok "drain hook is non-fatal (ignore_unreachable + failed_when:false)" || bad "drain hook can abort the deploy"
-grep -q "ignore_unreachable: true" roles/compose_tier/tasks/main.yml && grep -q "failed_when: false" roles/compose_tier/tasks/main.yml \
+# The re-enable hook was extracted into lb_reenable.yml (TASK-INFRA-007) so the delegated
+# loop is only built on the voice tier; the non-fatal flags now live there, not in main.yml.
+grep -q "ignore_unreachable: true" roles/compose_tier/tasks/lb_reenable.yml && grep -q "failed_when: false" roles/compose_tier/tasks/lb_reenable.yml \
   && ok "re-enable hook is non-fatal (ignore_unreachable + failed_when:false)" || bad "re-enable hook can abort the deploy"
 
 # --- 8. Health verification ----------------------------------------------------
@@ -134,12 +136,13 @@ grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "art
 
 # --- 10. Registry credential hygiene (TASK-OPS-004) ---------------------------
 # The role logs in before the pull; it must also log out afterwards so the token
-# does not linger in ~/.docker/config.json, and both must be gated + no_log.
+# does not linger in the registry auth file, and both must be gated + no_log.
+# Runtime is podman on the EL9 VMs (TASK-INFRA-008), so the commands are `podman login/logout`.
 ROLE_MAIN="roles/compose_tier/tasks/main.yml"
-awk '/docker login/{login=NR} /docker logout/{logout=NR} END{exit !(login && logout && logout>login)}' "$ROLE_MAIN" \
-  && ok "registry logout runs after login (drops cached credentials)" || bad "no docker logout after the pull"
-grep -q "docker logout {{ registry }}" "$ROLE_MAIN" \
-  && grep -A4 "docker logout" "$ROLE_MAIN" | grep -q "registry_login_required | bool" \
+awk '/podman login/{login=NR} /podman logout/{logout=NR} END{exit !(login && logout && logout>login)}' "$ROLE_MAIN" \
+  && ok "registry logout runs after login (drops cached credentials)" || bad "no podman logout after the pull"
+grep -q "podman logout {{ registry }}" "$ROLE_MAIN" \
+  && grep -A4 "podman logout" "$ROLE_MAIN" | grep -q "registry_login_required | bool" \
   && ok "logout gated on registry_login_required" || bad "logout not gated on registry_login_required"
 
 # --- 11. Data backup/restore wiring (TASK-OPS-008) ----------------------------

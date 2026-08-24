@@ -56,6 +56,19 @@ services:
       OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
       # --- JVM tuning without a rebuild (sized to share the 8 GB VM with ollama) ---
       JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
+      # Deep readiness includes the embedding hop (BUG-014): a broken ollama path returns
+      # /actuator/health DOWN so HAProxy pulls the node instead of staying green while RAG
+      # is offline. OFF by default (local/dev/memory runs have no ollama); ON in the pilot .env.
+      EMBEDDING_HEALTH_ENABLED: "${EMBEDDING_HEALTH_ENABLED:-true}"
+    # BUG-014: pin the ollama name to a static IP on a stable user-defined network via
+    # /etc/hosts (extra_hosts). Name resolution then no longer depends on aardvark-dns
+    # rebuilding after container/network churn — `--force-recreate backend` restores RAG
+    # without a full `down && up`. /etc/hosts wins over DNS (nsswitch: files before dns),
+    # so OLLAMA_BASE_URL=http://ollama:11434 keeps working unchanged.
+    extra_hosts:
+      - "ollama:${OLLAMA_STATIC_IP:-10.123.0.11}"
+    networks:
+      - backend_net
     # Wait for the embeddings sidecar to be up (model pull happens at deploy time).
     depends_on:
       ollama:
@@ -97,6 +110,11 @@ services:
     # Internal only: reachable from the backend over the compose network, never published.
     expose:
       - "11434"
+    # BUG-014: fixed IP on the stable user-defined network so the backend's extra_hosts
+    # entry (ollama:<ip>) always matches, even after the project network is recreated.
+    networks:
+      backend_net:
+        ipv4_address: "${OLLAMA_STATIC_IP:-10.123.0.11}"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
@@ -118,3 +136,14 @@ services:
 
 volumes:
   ollama-models:
+
+# BUG-014: an explicit user-defined bridge network with a pinned subnet. The static
+# ollama IP (OLLAMA_STATIC_IP) must fall inside BACKEND_NET_SUBNET. Default subnet is
+# outside podman's default 10.89.0.0/16 pool to avoid a collision; override both in the
+# .env if they clash with an existing network on the VM.
+networks:
+  backend_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "${BACKEND_NET_SUBNET:-10.123.0.0/24}"
