@@ -4,7 +4,7 @@ Serves the mic-capture page and exposes the voice endpoints:
 - `POST /api/voice/stt`  PCM16 mono 16 kHz audio in -> transcript JSON out.
 - `POST /api/voice/tts`  `?text=` in -> WAV audio out.
 - `POST /api/voice/turn` PCM16 audio in -> full STT -> backend answer -> TTS loop ->
-  WAV out (transcript + answer text returned as `X-Voice-*` headers).
+  JSON out: transcript + answer text + answer audio as base64 WAV (Decision #9).
 
 The runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
 the server drives a `VoiceTurnProcessor` seam, so the stdlib and Pipecat runtimes
@@ -13,6 +13,7 @@ coexist and produce identical output. The STT/TTS provider is selected with
 """
 
 import argparse
+import base64
 import json
 import os
 import socketserver
@@ -20,7 +21,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -222,7 +223,7 @@ def build_handler(
             # answer accumulated by the capture sink; build one WAV from the accumulated PCM.
             full = _full_turn_response(result)
             send = Timer()
-            self._send_wav(full.wav, _answer_headers(transcript, result.answer_result))
+            self._send_json(200, _turn_success_body(transcript, result.answer_result, full.wav))
             processor.record_egress(full, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
 
@@ -317,27 +318,31 @@ def _turn_tts_error(response, envelope) -> dict[str, Any]:
     return client_error_body(result.error_code, result.correlation_id, result.outcome.value)
 
 
-def _answer_headers(transcript, answer) -> dict[str, str]:
-    """Expose the transcript + spoken answer to the same client on a `/turn` reply.
+def _turn_success_body(transcript, answer, wav: bytes) -> dict[str, Any]:
+    """Single JSON `/turn` success reply (Decision #9): audio as base64 with its metadata.
 
-    The `/turn` body is the answer WAV; these headers let the page still show what was
-    asked and what is being said, plus the correlation id, without a second request.
-    Text is percent-encoded (UTF-8) so accented characters are header-safe; it is sent
-    only to the requesting client and never written to server logs.
+    Replaces the previous `audio/wav` body + `X-Voice-*` / `X-Answer-*` headers. The transcript
+    and spoken answer are unbounded, accented customer text; percent-encoded into headers they
+    could exceed proxy header-size limits on long answers (truncation / 502) and leak into proxy
+    access logs. A JSON body has no such size cap, keeps the reply shape uniform with the 502
+    error body, and — since `/turn` already returns the whole WAV at once (streaming is the
+    WebRTC path) — base64 buffering is a non-issue here. `degraded_reason` stays a stable,
+    non-sensitive code (e.g. `backend_unavailable`) so the client/QA still see why a safe
+    fallback was spoken (TASK-WEB-003-F).
     """
-    headers: dict[str, str] = {}
-    if transcript is not None:
-        headers["X-Correlation-Id"] = transcript.correlation_id
-        headers["X-Voice-Transcript"] = quote(transcript.transcript)
+    body: dict[str, Any] = {
+        "correlation_id": transcript.correlation_id,
+        "transcript": transcript.transcript,
+        "audio_base64": base64.b64encode(wav).decode("ascii"),
+        "audio_format": "wav",
+    }
     if answer is not None:
-        headers["X-Voice-Answer"] = quote(answer.text)
-        headers["X-Answer-Provider"] = answer.provider
-        headers["X-Answer-Outcome"] = answer.outcome.value
-        # Degraded reason is a stable, non-sensitive code (e.g. backend_unavailable)
-        # so the client/QA can see *why* a safe fallback was spoken (TASK-WEB-003-F).
+        body["answer"] = answer.text
+        body["provider"] = answer.provider
+        body["outcome"] = answer.outcome.value
         if answer.degraded_reason:
-            headers["X-Answer-Degraded-Reason"] = answer.degraded_reason
-    return headers
+            body["degraded_reason"] = answer.degraded_reason
+    return body
 
 
 def _envelope_from_query(query: str) -> ChannelEnvelope:

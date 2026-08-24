@@ -103,12 +103,14 @@ paths:
       summary: Full Voice2Voice loop (STT → backend answer → TTS)
       description: >-
         Runs `STT → backend answer → TTS` in one call. The body is raw PCM16 audio; the
-        200 body is the spoken answer WAV, with the transcript and answer text returned
-        as `X-Voice-*` response headers (sent only to the requesting client, never
-        logged). Degraded mode (backend unavailable / low confidence / empty answer)
-        still returns 200 with a safe spoken fallback and `X-Answer-Outcome: degraded`
-        plus a sanitized `X-Answer-Degraded-Reason`; it fails closed with a 502 JSON
-        body only when no audio can be produced.
+        200 body is a single JSON object carrying the transcript, the spoken answer text,
+        the answer metadata and the answer audio as base64 WAV (`audio_base64`). This
+        keeps the reply shape uniform with the 502 error body and avoids putting unbounded,
+        accented customer text into response headers (proxy header-size limits + access-log
+        leakage). Degraded mode (backend unavailable / low confidence / empty answer) still
+        returns 200 with a safe spoken fallback and `outcome: degraded` plus a sanitized
+        `degraded_reason`; it fails closed with a 502 JSON body only when no audio can be
+        produced.
       parameters:
         - $ref: '#/components/parameters/ConversationId'
         - $ref: '#/components/parameters/SessionId'
@@ -122,39 +124,11 @@ paths:
               $ref: '#/components/schemas/Pcm16Audio'
       responses:
         '200':
-          description: Spoken answer (WAV). May be a safe degraded fallback.
-          headers:
-            X-Correlation-Id:
-              description: Correlation id for the turn.
-              schema:
-                type: string
-            X-Voice-Transcript:
-              description: The transcript (percent-encoded UTF-8).
-              schema:
-                type: string
-            X-Voice-Answer:
-              description: The spoken answer text (percent-encoded UTF-8).
-              schema:
-                type: string
-            X-Answer-Provider:
-              description: Backend that answered.
-              schema:
-                type: string
-                enum: [stub-backend, http-backend]
-            X-Answer-Outcome:
-              description: Whether the answer is a normal success or a safe degraded fallback.
-              schema:
-                type: string
-                enum: [success, degraded]
-            X-Answer-Degraded-Reason:
-              description: Present only when degraded — why the safe fallback was spoken.
-              schema:
-                type: string
-                enum: [backend_unavailable, low_confidence, empty_answer]
+          description: Spoken answer as JSON (transcript, answer, metadata, base64 WAV). May be a safe degraded fallback.
           content:
-            audio/wav:
+            application/json:
               schema:
-                $ref: '#/components/schemas/WavAudio'
+                $ref: '#/components/schemas/TurnSuccessBody'
         '413':
           $ref: '#/components/responses/AudioTooLarge'
         '502':
@@ -290,6 +264,40 @@ components:
       type: string
       format: binary
       description: WAV audio (PCM16 mono + 44-byte header, Content-Type audio/wav).
+    TurnSuccessBody:
+      type: object
+      description: >-
+        Successful `/api/voice/turn` reply. The answer audio travels as base64 WAV in
+        `audio_base64` alongside the transcript and answer metadata (Decision #9) —
+        uniform with the 502 error body and free of proxy header-size / access-log
+        constraints. May carry a safe degraded fallback (`outcome: degraded`).
+      properties:
+        correlation_id:
+          type: string
+        transcript:
+          type: string
+          example: bonjour pourquoi ma facture augmente
+        answer:
+          type: string
+          description: The spoken answer text.
+          example: Votre facture augmente à cause d'une proration.
+        provider:
+          type: string
+          enum: [stub-backend, http-backend]
+        outcome:
+          type: string
+          enum: [success, degraded]
+        degraded_reason:
+          type: string
+          description: Present only when degraded — why the safe fallback was spoken.
+          enum: [backend_unavailable, low_confidence, empty_answer]
+        audio_format:
+          type: string
+          enum: [wav]
+        audio_base64:
+          type: string
+          description: The spoken answer as base64-encoded WAV (PCM16 mono + 44-byte header).
+      required: [correlation_id, transcript, audio_base64, audio_format]
     SttSuccess:
       type: object
       description: Successful STT result.

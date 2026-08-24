@@ -2937,3 +2937,41 @@ corrupt a legitimate delta with repeated words).
 
 - A sustained non-zero `voice.stt.partial_semantics_drift` in production is the trigger to
   revisit the finalization (switch to replace-on-cumulative or consume a consolidated `end_text`).
+
+---
+
+## TASK-WEB-034 - `/api/voice/turn` reply as JSON (base64 audio) instead of WAV body + `X-Voice-*` headers
+
+**Parent:** EPIC-006
+**Related decisions:** TASK-WEB-006 (client-safe error body), TASK-WEB-016 (OpenAPI), ADR-0021 (degraded)
+**Depends on:** —
+**Classification:** V1 voice runtime — HTTP contract / robustness
+**Status:** 🚧 Implemented (2026-08-15, global-review decision #9) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Priority:** Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #9.
+
+### Context
+
+The batch `/api/voice/turn` returned `200 audio/wav` (the answer) with the transcript + spoken
+answer percent-encoded into `X-Voice-*` / `X-Answer-*` response headers, while errors returned
+JSON. Three problems: (1) transcript + answer are unbounded, accented customer text → percent-encoded
+in headers they can exceed proxy header-size limits on long answers (truncation / 502);
+(2) that customer text in headers is typically written to proxy access logs (PII); (3) success vs
+error had two different response shapes. `/turn` is the batch/fallback path (live voice is WebRTC),
+and it already returns the whole WAV at once, so base64 buffering is a non-issue here.
+
+### What was implemented
+
+- `/api/voice/turn` **200** now returns a single JSON object
+  `{ correlation_id, transcript, answer, provider, outcome, degraded_reason?, audio_format, audio_base64 }`
+  — uniform with the 502 error body, no header-size cap, no customer text in headers/logs.
+- Updated across the four surfaces: `web_voice/server.py` (`_turn_success_body`, drop `_answer_headers`
+  + unused `quote`), `web_voice/static/app.js` (parse JSON + `base64ToArrayBuffer`), `web_voice/openapi.yaml`
+  (`TurnSuccessBody` schema), `docs/architecture/voice-runtime-http-contract.md` (+ dev guide, README).
+- `/tts` keeps its raw `audio/wav` body (bounded, no free-text metadata); only `/turn` changed.
+
+### Acceptance (met)
+
+- `test_voice_runtime.py` updated to parse the JSON body + decode base64 WAV (RIFF/WAVE).
+  voice-agent **504 unit tests green** + behave **13 features / 36 scenarios / 169 steps green**.
+- OpenAPI still describes every endpoint (behave openapi scenario green).

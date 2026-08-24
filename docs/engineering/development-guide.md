@@ -83,8 +83,8 @@ python3 scripts/ab_parity.py --iterations 20
 
 Endpoints (voice runtime, port `8090`): `POST /api/voice/stt` (PCM16 in →
 transcript JSON), `POST /api/voice/tts` (`?text=` → WAV), `POST /api/voice/turn`
-(PCM16 in → full STT → backend answer → TTS → WAV in one call, transcript + spoken
-answer returned as `X-Voice-*` headers), `POST /api/voice/webrtc/offer` (streaming
+(PCM16 in → full STT → backend answer → TTS in one call, returning a JSON body with
+the transcript, spoken answer and answer audio as base64 WAV), `POST /api/voice/webrtc/offer` (streaming
 live loop), and `GET /api/voice/openapi.yaml` (OpenAPI spec). The batch endpoints
 keep the same contract on both runtimes.
 

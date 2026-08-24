@@ -1,12 +1,12 @@
 """Tests for the voice runtime seam + /api/voice/turn endpoint (TASK-WEB-005, ST-6)."""
 
+import base64
 import json
 import sys
 import threading
 import unittest
 from http.client import HTTPConnection
 from pathlib import Path
-from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -193,46 +193,47 @@ class VoiceTurnEndpointTest(unittest.TestCase):
         conn.close()
         return response.status, content_type, payload
 
+    @staticmethod
+    def _decode_turn_wav(payload: bytes) -> bytes:
+        """Decode the base64 WAV from a `/turn` success JSON body (Decision #9)."""
+        return base64.b64decode(json.loads(payload)["audio_base64"])
+
     def test_turn_endpoint_returns_wav_on_pipecat_runtime(self) -> None:
         # GIVEN the server on the pipecat runtime
         port = self._serve(PIPECAT)
         # WHEN a phrase is posted to the full-pipeline endpoint
         status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-        # THEN a playable WAV is returned
+        # THEN a JSON body carrying a playable base64 WAV is returned
         self.assertEqual(status, 200)
-        self.assertEqual(content_type, "audio/wav")
-        self.assertEqual(payload[:4], b"RIFF")
-        self.assertEqual(payload[8:12], b"WAVE")
+        self.assertEqual(content_type, "application/json")
+        wav = self._decode_turn_wav(payload)
+        self.assertEqual(wav[:4], b"RIFF")
+        self.assertEqual(wav[8:12], b"WAVE")
 
     def test_turn_endpoint_returns_identical_wav_across_runtimes(self) -> None:
         # GIVEN the server on each runtime
         stdlib_port = self._serve(STDLIB)
         pipecat_port = self._serve(PIPECAT)
         # WHEN the same phrase is posted to each
-        _s1, _c1, stdlib_wav = self._post_turn(stdlib_port, b"\x03\x04" * 200)
-        _s2, _c2, pipecat_wav = self._post_turn(pipecat_port, b"\x03\x04" * 200)
+        _s1, _c1, stdlib_payload = self._post_turn(stdlib_port, b"\x03\x04" * 200)
+        _s2, _c2, pipecat_payload = self._post_turn(pipecat_port, b"\x03\x04" * 200)
         # THEN both runtimes produce byte-identical audio
-        self.assertEqual(stdlib_wav, pipecat_wav)
+        self.assertEqual(self._decode_turn_wav(stdlib_payload), self._decode_turn_wav(pipecat_payload))
 
-    def test_turn_endpoint_exposes_transcript_and_answer_headers(self) -> None:
+    def test_turn_endpoint_exposes_transcript_and_answer_in_json_body(self) -> None:
         # GIVEN the server on the pipecat runtime (stub STT transcribes "bonjour")
         port = self._serve(PIPECAT)
-        conn = HTTPConnection("127.0.0.1", port, timeout=10)
-        conn.request("POST", TURN_ROUTE, body=b"\x01\x02" * 200)
-        response = conn.getresponse()
-        response.read()
-        # WHEN the reply headers are read
-        transcript = unquote(response.getheader("X-Voice-Transcript") or "")
-        answer = unquote(response.getheader("X-Voice-Answer") or "")
-        provider = response.getheader("X-Answer-Provider")
-        correlation = response.getheader("X-Correlation-Id")
-        conn.close()
+        # WHEN the JSON reply body is read
+        status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
+        data = json.loads(payload)
         # THEN the transcript, spoken answer and provider are exposed to the client
-        self.assertEqual(transcript, "bonjour")
-        self.assertTrue(answer)
-        self.assertNotEqual(answer, transcript)  # the reply is the answer, not an echo
-        self.assertEqual(provider, "stub-backend")
-        self.assertTrue(correlation)
+        self.assertEqual(status, 200)
+        self.assertEqual(content_type, "application/json")
+        self.assertEqual(data["transcript"], "bonjour")
+        self.assertTrue(data["answer"])
+        self.assertNotEqual(data["answer"], data["transcript"])  # the reply is the answer, not an echo
+        self.assertEqual(data["provider"], "stub-backend")
+        self.assertTrue(data["correlation_id"])
 
     def test_turn_endpoint_rejects_a_chunked_body_with_411(self) -> None:
         # GIVEN the server on the pipecat runtime
@@ -261,16 +262,15 @@ class VoiceTurnEndpointTest(unittest.TestCase):
                 conn.request("POST", TURN_ROUTE, body=b"\x01\x02" * 200)
                 response = conn.getresponse()
                 payload = response.read()
-                outcome = response.getheader("X-Answer-Outcome")
-                reason = response.getheader("X-Answer-Degraded-Reason")
-                answer = unquote(response.getheader("X-Voice-Answer") or "")
                 conn.close()
+                data = json.loads(payload)
+                wav = base64.b64decode(data["audio_base64"])
                 # THEN the turn still returns a spoken WAV (never a 502) flagged degraded
                 self.assertEqual(response.status, 200)
-                self.assertEqual(payload[:4], b"RIFF")
-                self.assertEqual(outcome, "degraded")
-                self.assertEqual(reason, "backend_unavailable")
-                self.assertEqual(answer, DEGRADED_FALLBACK_TEXT)
+                self.assertEqual(wav[:4], b"RIFF")
+                self.assertEqual(data["outcome"], "degraded")
+                self.assertEqual(data["degraded_reason"], "backend_unavailable")
+                self.assertEqual(data["answer"], DEGRADED_FALLBACK_TEXT)
 
     def test_turn_endpoint_fails_closed_with_json_when_stt_fails(self) -> None:
         # GIVEN both runtimes wired to an STT provider that fails

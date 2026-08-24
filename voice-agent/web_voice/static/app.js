@@ -3,7 +3,7 @@
 // Gradium web/PCM input contract: mono, 16 kHz, signed 16-bit little-endian.
 const TARGET_SAMPLE_RATE = 16000;
 // Full server-side loop: audio in -> STT -> backend answer -> TTS -> WAV out.
-// The transcript and spoken answer come back as X-Voice-* response headers.
+// The transcript, spoken answer and answer audio (base64 WAV) come back in one JSON body.
 const TURN_ENDPOINT = "/api/voice/turn";
 
 const recordButton = document.getElementById("record");
@@ -106,34 +106,33 @@ async function sendAudio(pcmBuffer) {
   }
 
   const contentType = response.headers.get("Content-Type") || "";
-  if (!response.ok || !contentType.includes("audio/wav")) {
+  if (!response.ok || !contentType.includes("application/json")) {
     await renderTurnError(response);
     return;
   }
 
-  renderTurnMeta(response.headers);
-  await playReply(await response.arrayBuffer(), started);
+  const data = await response.json();
+  renderTurnMeta(data);
+  await playReply(base64ToArrayBuffer(data.audio_base64 || ""), started);
 }
 
-// The /turn reply carries the transcript and the spoken answer as headers so the
-// page can show both alongside playing the answer audio.
-function renderTurnMeta(headers) {
-  const transcript = decodeHeader(headers.get("X-Voice-Transcript"));
-  const answer = decodeHeader(headers.get("X-Voice-Answer"));
+// The /turn reply is a single JSON object carrying the transcript, the spoken answer
+// and the answer audio (base64 WAV) so the page can show both alongside playing it.
+function renderTurnMeta(data) {
+  const transcript = data.transcript || "";
+  const answer = data.answer || "";
   transcriptEl.className = "transcript";
   transcriptEl.textContent = transcript || "(no transcript)";
   const parts = [];
   if (answer) parts.push("answer: <code>" + escapeHtml(answer) + "</code>");
-  const provider = headers.get("X-Answer-Provider");
-  if (provider) parts.push("backend: <code>" + escapeHtml(provider) + "</code>");
+  if (data.provider) parts.push("backend: <code>" + escapeHtml(data.provider) + "</code>");
   // A degraded turn still speaks a safe fallback; flag it so the user knows the
   // backend could not answer confidently (TASK-WEB-003-F).
-  if ((headers.get("X-Answer-Outcome") || "") === "degraded") {
-    const reason = headers.get("X-Answer-Degraded-Reason") || "degraded";
+  if ((data.outcome || "") === "degraded") {
+    const reason = data.degraded_reason || "degraded";
     parts.push("<span class=\"degraded\">degraded: " + escapeHtml(reason) + "</span>");
   }
-  const corr = headers.get("X-Correlation-Id");
-  if (corr) parts.push("corr: <code>" + escapeHtml(corr) + "</code>");
+  if (data.correlation_id) parts.push("corr: <code>" + escapeHtml(data.correlation_id) + "</code>");
   metaEl.innerHTML = parts.join(" · ");
 }
 
@@ -159,13 +158,15 @@ function renderError(code, reason) {
   metaEl.innerHTML = "error code: <code>" + escapeHtml(code) + "</code>";
 }
 
-function decodeHeader(value) {
-  if (!value) return "";
-  try {
-    return decodeURIComponent(value);
-  } catch (_e) {
-    return value;
+// Decode the base64 WAV from the /turn JSON reply into an ArrayBuffer for playback.
+function base64ToArrayBuffer(b64) {
+  if (!b64) return new ArrayBuffer(0);
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
+  return bytes.buffer;
 }
 
 // Stop and release the currently playing reply, if any. Emptying/replacing the

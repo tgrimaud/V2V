@@ -188,18 +188,25 @@ invents no audio.
 Runs `STT → backend answer → TTS` in one call (the answering loop, TASK-WEB-003-D).
 
 - **Request:** body = PCM16 audio bytes; query = optional envelope ids.
-- **200:** `audio/wav` body = the **spoken answer**, plus response headers:
+- **200 (`application/json`):** a single object carrying the answer audio as base64 WAV
+  alongside its metadata (Decision #9, 2026-08-15). This replaces the previous
+  `audio/wav` body + `X-Voice-*` / `X-Answer-*` header design: the transcript and spoken
+  answer are unbounded, accented customer text, and percent-encoded into headers they
+  could exceed proxy header-size limits on long answers (truncation / 502) and leak into
+  proxy access logs. A JSON body has no such cap and keeps the reply shape uniform with the
+  502 error body; since `/turn` already returns the whole WAV at once (streaming is the
+  WebRTC path), base64 buffering is a non-issue here.
 
-| Header | Meaning |
+| Field | Meaning |
 |---|---|
-| `X-Correlation-Id` | Correlation id for the turn |
-| `X-Voice-Transcript` | The transcript (percent-encoded UTF-8) |
-| `X-Voice-Answer` | The spoken answer text (percent-encoded UTF-8) |
-| `X-Answer-Provider` | Backend that answered (`stub-backend` / `http-backend`) |
-| `X-Answer-Outcome` | `success` or `degraded` |
-| `X-Answer-Degraded-Reason` | Present only when degraded: `backend_unavailable` / `low_confidence` / `empty_answer` |
-
-Headers are sent only to the requesting client and never written to server logs.
+| `correlation_id` | Correlation id for the turn |
+| `transcript` | The transcript (plain UTF-8) |
+| `answer` | The spoken answer text (plain UTF-8) |
+| `provider` | Backend that answered (`stub-backend` / `http-backend`) |
+| `outcome` | `success` or `degraded` |
+| `degraded_reason` | Present only when degraded: `backend_unavailable` / `low_confidence` / `empty_answer` |
+| `audio_format` | `wav` |
+| `audio_base64` | The spoken answer as base64-encoded WAV (PCM16 mono + 44-byte header) |
 
 - **502 (JSON), fails closed** when the loop cannot produce audio — the client-safe
   error body (`outcome`, `error_code`, `correlation_id`, `message`), never raw
@@ -211,9 +218,9 @@ Headers are sent only to the requesting client and never written to server logs.
 
 When the backend is unavailable, not confident, or returns an empty answer, the
 turn does **not** fail: it speaks a **safe fallback** (no invented billing
-content, DEC-002) and returns **200** with `X-Answer-Outcome: degraded` and a
-sanitized `X-Answer-Degraded-Reason`. Only an empty transcript (nothing to answer)
-stays silent by design. See ADR-0021.
+content, DEC-002) and returns **200** with `outcome: degraded` and a sanitized
+`degraded_reason`. Only an empty transcript (nothing to answer) stays silent by
+design. See ADR-0021.
 
 ## `POST /api/voice/webrtc/offer` — streaming WebRTC signaling (Sprint 6)
 
