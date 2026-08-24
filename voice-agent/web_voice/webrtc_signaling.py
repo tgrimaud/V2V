@@ -16,45 +16,28 @@ starts flowing once the pipeline `StartFrame` triggers `connection.connect()`.
 """
 
 import json
-import logging
 import os
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
-_logger = logging.getLogger(__name__)
-# Warn at most once per process when the end-of-turn hold override is clamped to the
-# safe floor, so an operator sees the effective value without per-connection spam.
-_silence_clamp_warned = False
-
 from voice_common.otel_export import export_recorder
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
-from .call_end_farewell import (
-    DEFAULT_CLOSING_MESSAGE,
-    DEFAULT_CONFIRM_PROMPT,
-    DEFAULT_CONFIRM_TIMEOUT_S,
-    CallEndFarewellProcessor,
-)
-from .channel_egress_probe import ChannelEgressProbe
-from .closing_intent import (
-    DEFAULT_CLOSING_PHRASES,
-    DEFAULT_DONE_PHRASES,
-    ClosingIntentDetector,
-)
 from .egress import WebVoiceEgress
-from .end_of_turn import MIN_SAFE_SILENCE_WINDOW_MS
 from .envelope import ChannelEnvelope
 from .error_response import SessionCapacityError
 from .ingress import WebVoiceIngress
+from .session_factory import (  # noqa: F401 - re-exported for backward-compat test imports
+    DEFAULT_SAMPLE_RATE,
+    PILOT_END_OF_TURN_SILENCE_MS,
+    SessionFactory,
+    _farewell_config,
+    _silence_window_config,
+)
 from .streaming_runtime import StreamingVoiceSession
-from .streaming_stt_processor import StreamingSttProcessor
-from .streaming_tts_processor import StreamingTtsProcessor
-from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
-
-DEFAULT_SAMPLE_RATE = 16000
 
 # Concurrency ceiling for live WebRTC sessions (TASK-WEB-024). All sessions share one
 # asyncio loop on a `ThreadingHTTPServer`, and the pilot LB VMs are 1 vCPU, so unbounded
@@ -76,97 +59,6 @@ REASON_CUSTOMER_FAREWELL = "customer_farewell"
 REASON_CLIENT_STOP = "client_stop"
 REASON_CLIENT_DROP = "client_drop"
 
-_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
-
-
-def _farewell_config() -> dict[str, Any]:
-    """Resolve the env-tunable end-of-call farewell settings (TASK-WEB-010, ADR-0035).
-
-    Mirrors the barge-in env pattern: bad values fall back to the defaults rather than
-    crashing a call. `VOICE_FAREWELL_ENABLED=0` disables the feature entirely (the
-    pre-existing manual-hangup behaviour then applies).
-    """
-    enabled = os.environ.get("VOICE_FAREWELL_ENABLED", "1").strip().lower() not in _FALSE_VALUES
-    return {
-        "enabled": enabled,
-        "prompt": os.environ.get("VOICE_FAREWELL_PROMPT", DEFAULT_CONFIRM_PROMPT),
-        "closing": os.environ.get("VOICE_FAREWELL_CLOSING", DEFAULT_CLOSING_MESSAGE),
-        "timeout_s": _float_env("VOICE_FAREWELL_CONFIRM_TIMEOUT_S", DEFAULT_CONFIRM_TIMEOUT_S),
-        "closing_phrases": _phrase_env("VOICE_FAREWELL_PHRASES", DEFAULT_CLOSING_PHRASES),
-        "done_phrases": _phrase_env("VOICE_FAREWELL_DONE_PHRASES", DEFAULT_DONE_PHRASES),
-    }
-
-
-def _float_env(env_var: str, default: float) -> float:
-    raw = os.environ.get(env_var)
-    if raw is None:
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        return default
-    return value if value > 0 else default
-
-
-def _phrase_env(env_var: str, default: tuple[str, ...]) -> tuple[str, ...]:
-    raw = os.environ.get(env_var)
-    if raw is None:
-        return default
-    phrases = tuple(part.strip() for part in raw.split(",") if part.strip())
-    return phrases or default
-
-
-def _barge_in_config() -> dict[str, int]:
-    """Read the optional anti-echo barge-in overrides from the environment.
-
-    Returns only the keys that are set so the `StreamingSttProcessor` defaults apply
-    otherwise. Invalid values are ignored (defaults win) rather than crashing a call.
-    """
-    config: dict[str, int] = {}
-    for env_var, kwarg in (
-        ("VOICE_BARGE_IN_THRESHOLD", "barge_in_amplitude_threshold"),
-        ("VOICE_BARGE_IN_FRAMES", "barge_in_confirm_frames"),
-    ):
-        raw = os.environ.get(env_var)
-        if raw is None:
-            continue
-        try:
-            config[kwarg] = int(raw)
-        except ValueError:
-            continue
-    return config
-
-
-# TASK-WEB-022 (lever 3): the tuned end-of-turn hold is the pilot RUNTIME default. The live
-# before/after pass (2026-07-29, real backend) measured 350 ms with a 0/10 premature-cut rate
-# (vs 500 ms), so the streaming runtime holds 350 ms by default while the detector library
-# default (`DEFAULT_SILENCE_WINDOW_MS`, 500 ms) stays untouched for batch/fixture callers.
-PILOT_END_OF_TURN_SILENCE_MS = 350.0
-
-
-def _silence_window_config() -> dict[str, float]:
-    """Resolve the end-of-turn hold for the streaming runtime (TASK-WEB-015/022 lever 3).
-
-    Defaults to the validated tuned hold (`PILOT_END_OF_TURN_SILENCE_MS`, 350 ms).
-    `VOICE_END_OF_TURN_SILENCE_MS` overrides it: a value below `MIN_SAFE_SILENCE_WINDOW_MS`
-    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop into
-    constant premature cuts; unset or invalid -> the pilot default applies.
-    """
-    raw = os.environ.get("VOICE_END_OF_TURN_SILENCE_MS")
-    if raw is None:
-        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
-    try:
-        value = float(raw)
-    except ValueError:
-        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
-    if value <= 0:
-        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
-    if value < MIN_SAFE_SILENCE_WINDOW_MS:
-        _warn_silence_clamp_once(value)
-        return {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS}
-    return {"silence_window_ms": value}
-
-
 def _max_sessions_config() -> int:
     """Resolve the live WebRTC session cap (TASK-WEB-024).
 
@@ -182,41 +74,6 @@ def _max_sessions_config() -> int:
     except ValueError:
         return DEFAULT_MAX_WEBRTC_SESSIONS
     return value if value > 0 else DEFAULT_MAX_WEBRTC_SESSIONS
-
-
-def _stt_prewarm_enabled() -> bool:
-    """Whether to pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2).
-
-    OFF by default (opt-in) pending a live validation of Gradium's idle-socket behaviour:
-    if the ASR server drops a pre-opened socket while it waits for the first utterance, the
-    spare would be stale at speech time and turn 1 would degrade (worse than a cold open).
-    `acquire()` only recovers from an open *failure*, not from a stale-but-opened session,
-    so this stays opt-in (`VOICE_STT_PREWARM=1`) until the live turn-1 sample confirms it is
-    safe. The connect-time backend warm-up (the larger, side-effect-free win) stays on.
-
-    TASK-WEB-022 decision: this is the ONE latency lever deliberately kept OFF by default —
-    levers 1 (`VOICE_BACKEND_STREAM`) and 3 (end-of-turn hold) are now default-on because
-    their live before/after showed a strict win with no regression, whereas STT pre-warm's
-    turn-1 safety is unvalidated and its failure mode degrades the first turn. Enable it only
-    with a live turn-1 sample confirming a `voice.stt.prewarm` `hit` (not a stale `fallback`).
-    """
-    raw = os.environ.get("VOICE_STT_PREWARM")
-    if raw is None:
-        return False
-    return raw.strip().lower() in ("1", "true", "yes", "on")
-
-
-def _warn_silence_clamp_once(requested: float) -> None:
-    """Warn (once per process) that a below-floor end-of-turn hold was clamped."""
-    global _silence_clamp_warned
-    if _silence_clamp_warned:
-        return
-    _silence_clamp_warned = True
-    _logger.warning(
-        "VOICE_END_OF_TURN_SILENCE_MS=%.0f is below the safe floor; clamped to %.0f ms",
-        requested,
-        MIN_SAFE_SILENCE_WINDOW_MS,
-    )
 
 
 @dataclass
@@ -274,29 +131,25 @@ class WebRtcSignalingService:
             raise RuntimeError(
                 f"WebRTC runtime unavailable ({support.missing}). {support.install_hint}"
             )
-        self._ingress = ingress
-        self._egress = egress
-        self._backend = backend
         self._loop = loop
         self._ice_servers = ice_servers or []
         self._telemetry_factory = telemetry_factory
         self._log = log
-        # When set (TASK-STT-010), each session uses the streaming STT processor
-        # (partials during speech, low-latency finalize) instead of the batch
-        # utterance aggregator + one-shot transcription.
-        self._streaming_provider = streaming_provider
-        # When set (TASK-WEB-004), each session uses the streaming TTS processor
-        # (incremental playback on the first chunk) instead of the batch TTS
-        # processor. Independent of the STT mode, so it applies to both paths.
-        self._streaming_tts_provider = streaming_tts_provider
-        # US-042: per-session streaming providers keyed by language ("fr"/"en"). Empty ->
-        # the single default streaming provider is used for every session.
-        self._streaming_providers_by_language = {
-            key.lower(): value for key, value in (streaming_providers_by_language or {}).items()
-        }
-        self._streaming_tts_providers_by_language = {
-            key.lower(): value for key, value in (streaming_tts_providers_by_language or {}).items()
-        }
+        # Session assembly is transport-agnostic (TASK-WEB-027, ADR-0043): the factory
+        # builds the StreamingVoiceSession (STT/TTS/farewell/egress + streaming vs batch)
+        # for any transport. WebRTC only builds its own transport (see `_build_transport`)
+        # and delegates the rest; the WebSocket path (TASK-WEB-028) and the future Genesys
+        # adapter reuse the same factory. Provider selection (incl. per-language, US-042)
+        # now lives in the factory.
+        self._factory = SessionFactory(
+            ingress=ingress,
+            egress=egress,
+            backend=backend,
+            streaming_provider=streaming_provider,
+            streaming_tts_provider=streaming_tts_provider,
+            streaming_providers_by_language=streaming_providers_by_language,
+            streaming_tts_providers_by_language=streaming_tts_providers_by_language,
+        )
         self._sessions: dict[str, _Session] = {}
         # Concurrency ceiling (TASK-WEB-024): refuse new offers past this many live sessions.
         self._max_sessions = max_sessions if max_sessions is not None else _max_sessions_config()
@@ -313,14 +166,6 @@ class WebRtcSignalingService:
     def active_sessions(self) -> int:
         """Number of live WebRTC sessions (the active-session gauge value)."""
         return len(self._sessions)
-
-    def _streaming_provider_for(self, envelope: ChannelEnvelope) -> Any:
-        language = (getattr(envelope, "language", None) or "").lower()
-        return self._streaming_providers_by_language.get(language, self._streaming_provider)
-
-    def _streaming_tts_provider_for(self, envelope: ChannelEnvelope) -> Any:
-        language = (getattr(envelope, "language", None) or "").lower()
-        return self._streaming_tts_providers_by_language.get(language, self._streaming_tts_provider)
 
     def handle_offer(self, body: dict, *, timeout: float = 30.0) -> dict:
         """Blocking offer→answer for the HTTP handler (runs on the background loop)."""
@@ -360,7 +205,8 @@ class WebRtcSignalingService:
             # session envelope -> forces the backend answer language and selects the voice.
             envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
             telemetry = self._telemetry_factory()
-            session, farewell = self._build_session(connection, envelope, telemetry)
+            transport = self._build_transport(connection)
+            session, farewell = self._factory.build_session(transport, envelope, telemetry)
             record = _Session(connection, session, envelope, telemetry, farewell=farewell)
             self._register_cleanup(connection)
             self._sessions[connection.pc_id] = record
@@ -413,118 +259,6 @@ class WebRtcSignalingService:
             await self._on_farewell(record, signal)
 
         record.farewell.set_end_call(_end_call)
-
-    def _build_session(self, connection, envelope, telemetry) -> tuple[StreamingVoiceSession, Any]:
-        transport = self._build_transport(connection)
-        tts_processor = self._build_tts_processor(envelope, telemetry)
-        if self._streaming_provider is not None:
-            return self._build_streaming_session(transport, envelope, telemetry, tts_processor)
-        return self._build_batch_session(transport, envelope, telemetry, tts_processor), None
-
-    def _build_egress_probe(self, envelope, telemetry) -> ChannelEgressProbe:
-        """Runtime channel-egress probe for the WebRTC transport (TASK-WEB-014):
-        measures the first audio frame's hand-off to `transport.output()` so the
-        CHANNEL_EGRESS slice is measured on the streaming path (not batch-HTTP only)
-        and the mouth-to-ear composite folds it in. Provider label mirrors the active
-        TTS provider so the egress span carries a meaningful provider attribute."""
-        provider = self._streaming_tts_provider_for(envelope)
-        provider_name = getattr(provider, "name", None) or "gradium-tts"
-        return ChannelEgressProbe(envelope, telemetry, provider_name=provider_name)
-
-    def _build_tts_processor(self, envelope, telemetry):
-        """Streaming TTS processor for the session, or None (batch TTS fallback)."""
-        if self._streaming_tts_provider is None:
-            return None
-        provider = self._streaming_tts_provider_for(envelope)
-        return StreamingTtsProcessor(
-            provider,
-            envelope,
-            telemetry,
-            provider_name=provider.name,
-        )
-
-    def _build_streaming_session(
-        self, transport, envelope, telemetry, tts_processor
-    ) -> tuple[StreamingVoiceSession, Any]:
-        provider = self._streaming_provider_for(envelope)
-        stt = StreamingSttProcessor(
-            provider,
-            envelope,
-            telemetry,
-            provider_name=provider.name,
-            # Anti-echo barge-in gate, tunable without a code change (TASK-WEB-008): raise
-            # VOICE_BARGE_IN_THRESHOLD on echoey speaker setups so the bot's own residual
-            # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset
-            # count. Unset -> the processor defaults apply.
-            **_barge_in_config(),
-            # End-of-turn hold, tunable without a code change (TASK-WEB-015 lever 3):
-            # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
-            # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
-            **_silence_window_config(),
-            # Pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2);
-            # opt-in via VOICE_STT_PREWARM=1 (off by default pending live idle-socket
-            # validation — see _stt_prewarm_enabled).
-            prewarm=_stt_prewarm_enabled(),
-        )
-        farewell = self._build_farewell_processor(envelope, telemetry)
-        session = StreamingVoiceSession(
-            transport,
-            ingress=self._ingress,
-            egress=self._egress,
-            envelope=envelope,
-            backend=self._backend,
-            telemetry=telemetry,
-            # The streaming STT processor consumes continuous audio, owns end-of-turn
-            # detection + its span and emits the final transcript itself.
-            stt_processor=stt,
-            tts_processor=tts_processor,
-            # Conversational end-of-call (TASK-WEB-010): inspects the final transcript
-            # between STT and the answer step, before the backend is asked.
-            pre_answer=[farewell] if farewell is not None else [],
-            pre_output=[self._build_egress_probe(envelope, telemetry)],
-        )
-        return session, farewell
-
-    def _build_farewell_processor(self, envelope, telemetry) -> Any:
-        """End-of-call farewell processor for the session, or None when disabled."""
-        config = _farewell_config()
-        if not config["enabled"]:
-            return None
-        detector = ClosingIntentDetector(
-            closing_phrases=config["closing_phrases"], done_phrases=config["done_phrases"]
-        )
-        return CallEndFarewellProcessor(
-            detector,
-            envelope,
-            telemetry,
-            confirm_prompt=config["prompt"],
-            closing_message=config["closing"],
-            confirm_timeout_s=config["timeout_s"],
-        )
-
-    def _build_batch_session(
-        self, transport, envelope, telemetry, tts_processor
-    ) -> StreamingVoiceSession:
-        aggregator = UtteranceAggregator(
-            sample_rate_hz=DEFAULT_SAMPLE_RATE,
-            telemetry=telemetry,
-            envelope=envelope,
-            provider_name=self._ingress.provider_name,
-        )
-        return StreamingVoiceSession(
-            transport,
-            ingress=self._ingress,
-            egress=self._egress,
-            envelope=envelope,
-            backend=self._backend,
-            telemetry=telemetry,
-            pre_stt=[aggregator],
-            # The aggregator owns incremental end-of-turn detection + its span on the
-            # streaming path, so the batch detector in the ingress is skipped here.
-            stt_detects_end_of_turn=False,
-            tts_processor=tts_processor,
-            pre_output=[self._build_egress_probe(envelope, telemetry)],
-        )
 
     def _build_transport(self, connection):
         from pipecat.transports.base_transport import TransportParams
