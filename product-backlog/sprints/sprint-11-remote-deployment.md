@@ -23,7 +23,29 @@ deferred: per the 2026-08-03 decision, **billing/identity → Sprint 12** and
 
 ## Status
 
-**Status:** 🚧 **In progress** (started 2026-08-03; defined 2026-08-03). Merged into the sprint
+**Status:** ✅ **Done (closed 2026-08-24)**. All Sprint 11 tickets and the full-adversarial-review
+follow-ups are implemented and merged into the sprint branch, including **TASK-INFRA-008** (podman
+runtime) and **TASK-INFRA-009** (Liquibase schema). The stack was **deployed live to the pilot
+(v0.5.2) and user-validated** — the end-to-end web Voice2Voice smoke ran on the eir-ai4cc-tst VMs;
+**BUG-013** (backend base-URL), **BUG-015** (batch multi-sentence answer) and **BUG-009** (ansible
+non-voice tier) were fixed and closed during that live pass. The **2026-08-15 global-review decision
+loop (#1–#9)** also landed on this branch: ADR-0042 update + **ADR-0043** (interim WebSocket audio
+transport design, → Sprint 12), **ADR-0044** (pilot data-tier SPOF acceptance), **TASK-BE-030/031**
+(graceful Redis degradation + data minimization), **TASK-BE-032** (DEC-002 locale-aware amount
+matching), **TASK-WEB-032/033/034** (m2e reference measurement, STT partial-semantics drift guard,
+`/api/voice/turn` JSON+base64 contract). Finally **BUG-014** (durable Ollama-DNS reachability:
+static IP + `extra_hosts`, embedding-hop `/actuator/health`, JVM negative-DNS-TTL=0 + bounded
+connect-scoped retry) was implemented, reviewed (93/100) and QA-GO'd, then merged (2026-08-24,
+`--no-ff` `f153257`). Only the **network-gated live re-tests** remain deferred (open input #1):
+HAProxy/Keepalived live VIP/TLS/VRRP, live restart→converse for BUG-014, and the live latency
+re-measure (TASK-WEB-022 residual → TASK-STT-014/TASK-BE-020). Integrated backend `mvn test` **399**
+green, ArchUnit OK; compose `qa-validate.sh` **25/25**; CI workflows **22/22**; Ansible
+`qa-validate-ansible.sh` **69/69**; HAProxy/Keepalived **33/33** (incl. real `haproxy -c`); prereqs
+**21/21**.
+
+<details><summary>Historical in-progress notes (pre-closure)</summary>
+
+Merged into the sprint
 branch so far (2026-08-04): **TASK-DEPLOY-001**, **TASK-DEPLOY-002**, **TASK-BE-021**,
 **TASK-INFRA-001**, **TASK-OPS-001**, **TASK-OPS-002** and **TASK-BE-022** (all
 adversarial + QA passed); integrated `mvn test` **336** green, ArchUnit OK; compose
@@ -40,6 +62,8 @@ Several infrastructure inputs are still open (egress, embeddings placement, TLS,
 registry, secrets store, SSH ranges) — captured in
 `docs/operations/deployment-eir-ai4cc-tst.md` (Open inputs) and gated behind
 TASK-INFRA-003 / TASK-INFRA-002 rather than guessed.
+
+</details>
 
 **Scope extended (2026-08-05):** after the original tickets landed, a **full
 adversarial review of the whole application** (code + docs) was run and persisted
@@ -69,9 +93,10 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 |---|---|---|
 | Sprint 9 | Hardening / assainissement | ✅ Done (2026-07-28) |
 | Sprint 10 | Pilot-readiness latency & perceived latency | ✅ Done (closed 2026-07-31) |
-| **Sprint 11** | **Remote deployment & release readiness (eir-ai4cc-tst)** | 🚧 Planned (defined 2026-08-03) |
-| Sprint 12 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
-| Sprint 13 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
+| **Sprint 11** | **Remote deployment & release readiness (eir-ai4cc-tst)** | ✅ Done (closed 2026-08-24) |
+| Sprint 12 | External voice via interim WebSocket audio (Genesys-ready) (EPIC-006) | 📋 Planned (defined 2026-08-15) — ADR-0043 |
+| Sprint 13 (tentative) | Telephony channel (US-018) + Genesys Audio Connector + advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
+| Sprint 14 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
 ## Why now (state that justifies the sprint)
 
@@ -111,7 +136,8 @@ generic target `docs/architecture/infra-v1.md`; ticket details
 | TASK-OPS-003 | Ansible host prerequisites: install Docker Engine + compose v2 plugin (Rocky EL9) + tier-aware firewalld, before deploy (the compose_tier role assumes Docker exists) | Provision | ✅ Implemented — `host_prereqs` role + `prereqs.yml`; adversarial 92/100 (Pass; podman/runc conflict fixed); QA GO 21/21 + OPS-002 33/33 ([report](../../docs/qa/task-ops-003-docker-host-prereqs-qa-report.md)); ✅ **Merged into sprint-11** (2026-08-05, `--no-ff` `a1dacab`; live run deferred, #1) |
 | TASK-DOC-003 | Keep deployment docs in sync as tickets land + author the operational first-deploy runbook (checklist, DB `CREATE EXTENSION vector`, smoke test) | Docs | ✅ Implemented — new `docs/operations/first-deploy-runbook.md` (zero-to-running) + image-tag accuracy fix (git `vX.Y.Z` → image `X.Y.Z`); adversarial 93/100 (Pass); QA GO 15/15 + OPS-002 33/33 regression ([report](../../docs/qa/task-doc-003-deployment-docs-qa-report.md)); ✅ merge-ready (live run deferred, #1) |
 | TASK-INFRA-008 | Adapt the deploy to the **podman** runtime (Option B) — VMs run podman 5.8.2 + `podman-docker` shim, no Docker CE / no compose provider, SELinux Enforcing | Provision (runtime alignment) | ✅ Implemented (2026-08-13) — `host_prereqs` drops Docker CE, installs the Compose v2 binary as podman's **compose provider** (+ `containers.conf`/`nodocker`, rootful `podman.socket`); `compose_cmd → "podman compose"`; `compose_tier` login via `podman`; backend KB mount `:ro → :ro,Z`. Surfaced by Step 0 access; ADR-0038 addendum (2026-08-13); live validation folded into tier-A smoke |
-| TASK-INFRA-009 | Manage the Postgres schema with **Liquibase** (versioned bootstrap) — replace implicit `ddl-auto: update` + Spring AI `initialize-schema` + ad-hoc superuser SQL | Provision + backend persistence | In progress (2026-08-14) — **app changelog** (`vector_store` = Spring AI 1.0.0's exact DDL + `kb_source_state`, guarded `not tableExists`) at startup as app user (`ddl-auto: none`, `initialize-schema: false`); **bootstrap changelog** (extensions + grants) once at Step 4 via one-shot `podman run liquibase` (own tracking tables); `CREATE DATABASE`/`ROLE`/`ALTER … OWNER` stay psql; dev extensions via `scripts/dev-db-init/`; `commons-io` pinned 2.19.0; `mvn test` 383 green. ADR-0041 |
+| TASK-INFRA-009 | Manage the Postgres schema with **Liquibase** (versioned bootstrap) — replace implicit `ddl-auto: update` + Spring AI `initialize-schema` + ad-hoc superuser SQL | Provision + backend persistence | ✅ Merged into sprint-11 (ADR-0041 Accepted) — **app changelog** (`vector_store` = Spring AI 1.0.0's exact DDL + `kb_source_state`, guarded `not tableExists`) at startup as app user (`ddl-auto: none`, `initialize-schema: false`); **bootstrap changelog** (extensions + grants) once at Step 4 via one-shot `podman run liquibase` (own tracking tables); `CREATE DATABASE`/`ROLE`/`ALTER … OWNER` stay psql; dev extensions via `scripts/dev-db-init/`; `commons-io` pinned 2.19.0. ADR-0041 |
+| BUG-014 | Durable Ollama-DNS reachability for the backend tier (was: `UnknownHostException: ollama` after container/network churn → `ERR_UPSTREAM` until `down && up`) | Fix (backend + deploy) | ✅ Merged into sprint-11 (2026-08-24, `--no-ff` `f153257`; adversarial 93/100 + QA GO) — static IP + `extra_hosts` (aardvark-dns out of the critical path) + embedding-hop `/actuator/health` indicator + JVM negative-DNS-TTL=0 & bounded connect-scoped retry. Backend `mvn test` **399** green, compose **25/25**, ansible **69/69**. Live restart→converse retest deferred (open input #1). [QA report](../../docs/qa/bug-014-ollama-dns-durable-qa-report.md) |
 
 Full ticket details live in `tasks/deployment-tasks.md`.
 

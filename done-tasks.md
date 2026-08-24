@@ -889,3 +889,42 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `docs/operations/{first-deploy-runbook.md, deployment-eir-ai4cc-tst.md}` — Step 4 rewrite (4a psql / 4b container)
 - `CLAUDE.md` — storage note now Liquibase-owned
 - `product-backlog/{tasks/deployment-tasks.md, backlog-index.md, sprints/sprint-11-remote-deployment.md}` — TASK-INFRA-009
+
+## 2026-08-24 — Sprint 11 closed (Remote deployment & release readiness, eir-ai4cc-tst)
+
+**Summary:**
+
+- **Sprint 11 (EPIC-012) closed** and merged `feat/sprint-11-remote-deployment` →
+  `feat/restart-from-scratch` (`--no-ff`). The two-service web Voice2Voice stack went from
+  "runs on a laptop" to a repeatable pilot release on eir-ai4cc-tst.
+- **Delivered + merged:** Docker images (TASK-DEPLOY-001/002), Redis-backed shared conversation
+  memory (TASK-BE-021), per-tier docker-compose stacks (TASK-INFRA-001), HAProxy/Keepalived VIPs
+  (TASK-INFRA-002), embeddings placement decision ADR-0039 (TASK-INFRA-003), GitHub Actions CI
+  (TASK-OPS-001), Ansible deploy + release/rollback runbook (TASK-OPS-002/003), auth/log hardening
+  (TASK-BE-022/024), podman runtime alignment (TASK-INFRA-008), Liquibase schema (TASK-INFRA-009,
+  ADR-0041), plus the full-adversarial-review follow-up set (TASK-DOC-004/005, TASK-INFRA-006/007,
+  TASK-OPS-007/008, TASK-WEB-022/023/024, TASK-BE-025, BUG-006/007/008).
+- **Live pilot deploy v0.5.2, user-validated:** end-to-end web Voice2Voice ran on the pilot VMs;
+  **BUG-013** (backend base-URL), **BUG-015** (batch multi-sentence answer) and **BUG-009**
+  (ansible non-voice tier) were fixed and closed during the live pass.
+- **2026-08-15 global-review decision loop (#1–#9)** landed on the branch: ADR-0042 update +
+  **ADR-0043** (interim WebSocket audio transport design → Sprint 12), **ADR-0044** (pilot
+  data-tier SPOF acceptance), **TASK-BE-030/031** (graceful Redis degradation + data
+  minimization), **TASK-BE-032** (DEC-002 locale-aware amount matching), **TASK-WEB-032/033/034**
+  (m2e reference measurement, STT partial-semantics drift guard, `/api/voice/turn` JSON+base64
+  contract). Downstream order resequenced: **Sprint 12 = external voice WebSocket, 13 = Genesys,
+  14 = billing/identity**.
+- **BUG-014 (durable Ollama-DNS reachability)** implemented + adversarial 93/100 + QA GO, merged
+  2026-08-24 (`f153257`): static IP + `extra_hosts` (aardvark-dns out of the RAG critical path),
+  embedding-hop `/actuator/health` indicator, JVM negative-DNS-TTL=0 + bounded connect-scoped retry.
+- **Deferred (network-gated, open input #1):** live HAProxy/Keepalived VIP/TLS/VRRP validation,
+  live restart→converse retest for BUG-014, and the live latency re-measure (TASK-WEB-022 residual
+  → TASK-STT-014 / TASK-BE-020).
+- **Closure checks:** backend `mvn test` **399** green + ArchUnit OK; compose `qa-validate.sh`
+  **25/25**; CI workflows **22/22**; Ansible `qa-validate-ansible.sh` **69/69**; HAProxy/Keepalived
+  **33/33** (incl. real `haproxy -c`); prereqs **21/21**.
+
+### Files changed
+- `product-backlog/sprints/sprint-11-remote-deployment.md` — Status → ✅ Done (closed 2026-08-24), roadmap + INFRA-009/BUG-014 rows
+- `product-backlog/backlog-index.md` — Sprint registry row → ✅ Done; BUG-014 row
+- `done-tasks.md` — this closure entry
