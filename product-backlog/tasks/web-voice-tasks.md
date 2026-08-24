@@ -2572,7 +2572,7 @@ internal event vocabulary with a **pluggable source**.
 (WebRTC same-subnet), ADR-0040 (Genesys AudioHook shape to align with)
 **Depends on:** — (first ticket of the sprint)
 **Classification:** V1 voice runtime — external-reach interim transport
-**Status:** ✅ Merge-ready (2026-08-24) — adversarial review **94/100 Pass** + QA **GO** ([report](../../docs/qa/task-web-026-websocket-socle-qa-report.md)); merge into `feat/sprint-12-external-voice-websocket` on explicit user request only
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24, `--no-ff` `f6e4214`) — adversarial review **94/100 Pass** + QA **GO** ([report](../../docs/qa/task-web-026-websocket-socle-qa-report.md))
 **Priority:** High (unblocks 027–031)
 **Branch:** `task/TASK-WEB-026-websocket-audio-socle` (off `feat/sprint-12-external-voice-websocket`)
 
