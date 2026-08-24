@@ -158,6 +158,22 @@ class OutputGuardrailTest {
     }
 
     @Test
+    @DisplayName("a lone separator grouping 3 trailing digits is read as thousands (documented heuristic)")
+    void loneSeparatorThreeDigitsIsThousands() {
+        // GIVEN evidence with a dot-grouped thousands amount 1.234 €
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Le forfait pro est facturé 1.234 € par an.", "billing-faq#7", "billing", 0.8));
+
+        // WHEN the answer states the same value without grouping (1234 €)
+        GuardrailDecision decision = guardrail.check(
+                "Ce forfait revient à 1234 € par an.", evidence, AnswerLanguage.FRENCH);
+
+        // THEN it passes: "1.234" is read as thousands (EUR:1234.00), matching "1234"
+        assertFalse(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
+    @Test
     @DisplayName("an English-decided turn yields an English hand-off message")
     void englishFallback() {
         // GIVEN evidence with no amount and an English question

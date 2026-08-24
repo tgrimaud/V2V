@@ -62,7 +62,7 @@ public class OutputGuardrail {
         Matcher matcher = CURRENCY_AMOUNT.matcher(text);
         return matcher.results()
                 .map(result -> canonical(result.group()))
-                .filter(digits -> !digits.isEmpty())
+                .filter(key -> !key.isEmpty())
                 .collect(Collectors.toSet());
     }
 

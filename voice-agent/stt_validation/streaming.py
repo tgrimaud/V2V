@@ -264,13 +264,16 @@ class GradiumStreamingSession:
             return
         previous = self._parts[-1]
         if len(text) > len(previous) and text.startswith(previous):
+            # Log once per session (a real cumulative provider would trip every partial after
+            # the first — one warning is enough to alert; the count carries the full magnitude).
+            if self._cumulative_drift == 0:
+                _LOGGER.warning(
+                    "streaming STT partial looks cumulative (possible protocol drift); "
+                    "partials_so_far=%d partial_chars=%d",
+                    len(self._parts),
+                    len(text),
+                )
             self._cumulative_drift += 1
-            _LOGGER.warning(
-                "streaming STT partial looks cumulative (possible protocol drift); "
-                "partials_so_far=%d partial_chars=%d",
-                len(self._parts),
-                len(text),
-            )
 
     def _fail(self, error: StreamingSttError) -> None:
         self._error = error
