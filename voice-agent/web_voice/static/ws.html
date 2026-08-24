@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web Voice Chat — WebSocket streaming (TASK-WEB-028)</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --error: #f87171;
+        --ok: #4ade80;
+        --warn: #fbbf24;
+      }
+      * { box-sizing: border-box; }
+      .sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0);
+        white-space: nowrap; border: 0;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        width: min(640px, 92vw);
+        background: var(--panel);
+        border-radius: 16px;
+        padding: 28px 32px 32px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 4px; }
+      p.subtitle { margin: 0 0 24px; color: var(--muted); font-size: 0.9rem; }
+      .controls { display: flex; gap: 12px; align-items: center; }
+      select {
+        font: inherit;
+        border-radius: 10px;
+        padding: 11px 12px;
+        background: rgba(148, 163, 184, 0.12);
+        color: var(--text);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        cursor: pointer;
+      }
+      button {
+        font: inherit;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #04263a;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.stop { background: var(--error); color: #3b0a0a; }
+      .status { margin-top: 20px; font-size: 0.9rem; color: var(--muted); }
+      .status .dot {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        background: var(--muted); margin-right: 8px; vertical-align: middle;
+      }
+      .status.live .dot { background: var(--ok); }
+      .status.error .dot { background: var(--error); }
+      .status.busy .dot { background: var(--warn); }
+      code { color: var(--accent); word-break: break-all; }
+      .meta { margin-top: 14px; font-size: 0.9rem; color: var(--text); }
+      .meta .big { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+      .hint { margin-top: 16px; font-size: 0.8rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Voice2Voice — WebSocket streaming</h1>
+      <p class="subtitle">
+        Full-duplex mic + speaker over one <code>wss</code> connection (TASK-WEB-028,
+        ADR-0043 interim transport — no TURN). Speak a question, pause, and the bot
+        answers over the same socket.
+      </p>
+      <div class="controls">
+        <button id="connect">Connect</button>
+        <button id="disconnect" class="stop" disabled>Hang up</button>
+        <label for="language" class="sr-only">Language</label>
+        <select id="language" title="Conversation language">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <p class="status" id="status"><span class="dot"></span><span id="statusText">Idle</span></p>
+      <p class="meta" id="meta">
+        Response time: <span class="big" id="latency">—</span>
+        <span id="latencyStats"></span>
+      </p>
+      <p class="hint">
+        Endpoint: <code id="wsurl">—</code><br />
+        Correlation id: <code id="corr">—</code><br />
+        Interim: the pilot runs one conversation at a time (a second connection is
+        refused — try again shortly) and answers in the server language (French-first).
+        Use headphones — the bot's own audio can otherwise re-enter the mic.
+      </p>
+    </main>
+    <script src="ws.js"></script>
+  </body>
+</html>

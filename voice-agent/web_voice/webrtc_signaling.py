@@ -15,13 +15,10 @@ every turn in a call share **one correlation id** (AC of TASK-WEB-007). Media on
 starts flowing once the pipeline `StartFrame` triggers `connection.connect()`.
 """
 
-import json
 import os
-import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from voice_common.otel_export import export_recorder
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
@@ -29,6 +26,7 @@ from .egress import WebVoiceEgress
 from .envelope import ChannelEnvelope
 from .error_response import SessionCapacityError
 from .ingress import WebVoiceIngress
+from .session_telemetry import log_telemetry
 from .session_factory import (  # noqa: F401 - re-exported for backward-compat test imports
     DEFAULT_SAMPLE_RATE,
     PILOT_END_OF_TURN_SILENCE_MS,
@@ -91,20 +89,10 @@ class _Session:
     end_reason: str | None = None
 
 
-def _log_telemetry(telemetry: TelemetryRecorder) -> None:
-    payload = {
-        "spans": [span.__dict__ for span in telemetry.spans()],
-        "events": [event.__dict__ for event in telemetry.events()],
-        "metrics": [metric.__dict__ for metric in telemetry.metrics()],
-    }
-    # flush=True: the per-call telemetry dump is the only latency/QA evidence for a
-    # streaming call (no HTTP response per turn). When stderr is redirected to a file
-    # it is block-buffered, so without an explicit flush the dump can sit unwritten
-    # until the process exits — losing the evidence for TASK-WEB-009 measurement.
-    print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
-    # Additive OTLP export (TASK-OBS-001): no-op unless OTEL_EXPORTER_OTLP_ENDPOINT /
-    # VOICE_OTEL_EXPORT is set; never raises, so the stderr evidence above is authoritative.
-    export_recorder(telemetry)
+# Canonical per-call telemetry dump, shared with the WebSocket path (TASK-WEB-028). Kept as
+# a module-level name here so existing tests importing `webrtc_signaling._log_telemetry` and
+# the default `log=_log_telemetry` argument below keep working unchanged.
+_log_telemetry = log_telemetry
 
 
 class WebRtcSignalingService:
