@@ -56,6 +56,14 @@ class WebSocketSocleBuildTest(unittest.TestCase):
         transport = build_websocket_audio_transport("127.0.0.1", 8091, serializer=serializer)
         self.assertIsNotNone(transport)
 
+    def test_origin_allowlist_seam_is_honoured_when_provided(self):
+        # GIVEN an explicit anti-CSWSH Origin allowlist (edge-hardening seam)
+        origins = ["https://voice.example.test"]
+        # WHEN the socle transport is built with it
+        transport = build_websocket_audio_transport("127.0.0.1", 8091, allowed_origins=origins)
+        # THEN the allowlist is carried on the transport params
+        self.assertEqual(transport._params.allowed_origins, origins)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -69,19 +69,27 @@ def build_websocket_audio_transport(
     *,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     serializer: WebSocketAudioSerializer | None = None,
+    allowed_origins: list[str] | None = None,
 ):
     """Construct the browser WebSocket audio transport socle (no FastAPI).
 
     Bidirectional PCM16/16 kHz audio with the AudioHook-shaped framing serializer.
     Callers start/stop it by adding it to a pipeline that runs on the shared loop.
+
+    `allowed_origins` is the Origin-header allowlist (anti-CSWSH). This socle exposes
+    the seam; the effective external allowlist is set when the path is wired to the
+    HAProxy edge (TASK-INFRA-010 / TASK-WEB-030). ``None`` keeps pipecat's default
+    (``PIPECAT_ALLOWED_ORIGINS`` env, empty = allow all) so dev/loopback still works.
     """
     transport_cls, params_cls = load_websocket_transport_classes()
-    params = params_cls(
-        audio_in_enabled=True,
-        audio_out_enabled=True,
-        audio_in_sample_rate=sample_rate,
-        audio_out_sample_rate=sample_rate,
-        add_wav_header=False,
-        serializer=serializer or WebSocketAudioSerializer(),
-    )
-    return transport_cls(params=params, host=host, port=port)
+    kwargs = {
+        "audio_in_enabled": True,
+        "audio_out_enabled": True,
+        "audio_in_sample_rate": sample_rate,
+        "audio_out_sample_rate": sample_rate,
+        "add_wav_header": False,
+        "serializer": serializer or WebSocketAudioSerializer(),
+    }
+    if allowed_origins is not None:
+        kwargs["allowed_origins"] = allowed_origins
+    return transport_cls(params=params_cls(**kwargs), host=host, port=port)
