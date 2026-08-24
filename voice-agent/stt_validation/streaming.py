@@ -16,8 +16,11 @@ untouched for fixtures/offline dev.
 import asyncio
 import base64
 import json
+import logging
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Protocol, runtime_checkable
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "default"
 DEFAULT_LANGUAGE = "fr"
@@ -160,6 +163,7 @@ class GradiumStreamingSession:
         self._done = asyncio.Event()
         self._flush_id = 0
         self._receiver: asyncio.Task | None = None
+        self._cumulative_drift = 0
 
     async def start(self) -> None:
         await self._ws.send(json.dumps(self._setup))
@@ -238,8 +242,35 @@ class GradiumStreamingSession:
     def _add_partial(self, message: dict) -> None:
         text = str(message.get("text", ""))
         if text:
+            self._note_semantics_drift(text)
             self._parts.append(text)
             self._pending.append(PartialTranscript(text, message.get("start_s")))
+
+    @property
+    def cumulative_drift_count(self) -> int:
+        """Partials this turn that looked cumulative rather than delta (protocol-drift signal)."""
+        return self._cumulative_drift
+
+    # Delta semantics is live-validated (STT-013 spike): each `text` is an incremental fragment,
+    # the final transcript is `" ".join(parts)` with zero word loss. If a partial instead extends
+    # the *previous* partial (cumulative full-hypothesis growth), the provider protocol may have
+    # drifted, which append+join would silently duplicate. We only emit a drift *signal* (count +
+    # a warning that never carries the transcript — PII) and keep the validated delta behavior
+    # unchanged, so a real drift is observable before it corrupts output. A genuine cumulative
+    # provider trips this on every partial after the first (a strong, consistent signal); an
+    # occasional delta false positive is harmless because nothing is mutated.
+    def _note_semantics_drift(self, text: str) -> None:
+        if not self._parts:
+            return
+        previous = self._parts[-1]
+        if len(text) > len(previous) and text.startswith(previous):
+            self._cumulative_drift += 1
+            _LOGGER.warning(
+                "streaming STT partial looks cumulative (possible protocol drift); "
+                "partials_so_far=%d partial_chars=%d",
+                len(self._parts),
+                len(text),
+            )
 
     def _fail(self, error: StreamingSttError) -> None:
         self._error = error

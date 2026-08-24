@@ -2896,3 +2896,44 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 - QA/latency report under `docs/qa/` with the measured per-slice + composite p50/p95/p99.
 - The run configuration (warm, co-located, live Gradium STT/TTS, `--backend http`) stated explicitly.
 - No raw audio, secrets or PII in logs.
+
+---
+
+## TASK-WEB-033 - Streaming-STT partial-semantics drift guard (delta validated; observe don't mutate)
+
+**Parent:** EPIC-006
+**Related decisions:** STT-013 spike (delta semantics live-validated), ADR-0028 (observability)
+**Depends on:** —
+**Classification:** V1 voice runtime — observability / robustness
+**Status:** 🚧 Implemented (2026-08-15, global-review decision #8) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Priority:** Low-Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #8.
+
+### Context
+
+`GradiumStreamingSession` treats each `text` message as a **delta** fragment (append + `" ".join`).
+The STT-013 spike validated this against the **live** Gradium API (real captured messages, zero
+word loss), so delta is not an unverified assumption. The residual risk is a **future protocol
+drift** to cumulative (full-hypothesis) partials — which append+join would silently duplicate —
+with no runtime signal. Decision #8: **observe, do not mutate** (a heuristic auto-switch could
+corrupt a legitimate delta with repeated words).
+
+### What was implemented
+
+- `GradiumStreamingSession` counts partials that look cumulative (a partial that extends the
+  *previous* one: `startswith(prev)` and longer) and logs a **warning that never carries the
+  transcript** (PII-safe: only counts/lengths). The validated **delta behavior is unchanged**.
+- `StreamingSttProcessor` reads the per-turn count (protocol-safe `getattr`) and emits
+  `voice.stt.partial_semantics_drift` event + `.count` metric when non-zero, so a genuine drift
+  (which trips on every partial after the first) is a strong, alertable signal.
+
+### Acceptance (met)
+
+- Delta partials → drift count 0, final = joined delta. Cumulative-looking partials → flagged
+  (count > 0) **without** mutating the transcript (documents the observe-don't-mutate contract).
+- `./.venv/bin/python -m unittest discover tests` **504 green** (+2). No transcript/PII in logs.
+
+### Notes
+
+- A sustained non-zero `voice.stt.partial_semantics_drift` in production is the trigger to
+  revisit the finalization (switch to replace-on-cumulative or consume a consolidated `end_text`).

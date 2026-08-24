@@ -237,6 +237,35 @@ class StreamingSttProviderTest(unittest.IsolatedAsyncioTestCase):
         # THEN end_of_stream is still an accepted terminal (safe fallback)
         self.assertEqual(final, FinalTranscript("bonjour"))
 
+    async def test_delta_partials_report_no_cumulative_drift(self):
+        # GIVEN normal delta partials (disjoint fragments) — the live-validated semantics
+        frames = [
+            {"type": "text", "text": "bonjour"},
+            {"type": "text", "text": "le monde"},
+            {"type": "end_of_stream"},
+        ]
+        _, session = await _open(frames)
+        _, final = await _collect(session)
+        # THEN nothing is flagged as cumulative and the final is the joined delta
+        self.assertEqual(session.cumulative_drift_count, 0)
+        self.assertEqual(final, FinalTranscript("bonjour le monde"))
+
+    async def test_cumulative_partials_flagged_without_mutating_delta_behavior(self):
+        # GIVEN partials that grow the *previous* one (cumulative full-hypothesis drift)
+        frames = [
+            {"type": "text", "text": "bonjour"},
+            {"type": "text", "text": "bonjour le"},
+            {"type": "text", "text": "bonjour le monde"},
+            {"type": "end_of_stream"},
+        ]
+        _, session = await _open(frames)
+        _, final = await _collect(session)
+        # THEN each partial after the first is flagged as a drift signal (2 of 3)...
+        self.assertEqual(session.cumulative_drift_count, 2)
+        # ...but the validated delta behavior is UNCHANGED (append+join, not de-duplicated):
+        # the observability guard signals drift, it never mutates the transcript.
+        self.assertEqual(final, FinalTranscript("bonjour bonjour le bonjour le monde"))
+
     async def test_empty_api_key_rejected(self):
         # GIVEN no API key
         with self.assertRaises(ValueError):

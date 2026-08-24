@@ -63,6 +63,12 @@ STT_REQUEST_SPAN = "stt.request"
 STT_DEGRADED_SPOKEN_EVENT = "voice.stt.degraded_spoken"
 STT_DEGRADED_SPOKEN_METRIC = "voice.stt.degraded_spoken.count"
 STT_DEGRADED_REASON = "stt_finalize_failed"
+# Streaming-STT partial-semantics drift (TASK-WEB-033): delta partials are live-validated
+# (STT-013); this signal fires if a session counted partials that looked cumulative, so a
+# provider protocol drift (which append+join would silently duplicate) is observable before it
+# corrupts a transcript. Signal only — the session never mutates its validated delta behavior.
+STT_PARTIAL_DRIFT_EVENT = "voice.stt.partial_semantics_drift"
+STT_PARTIAL_DRIFT_METRIC = "voice.stt.partial_semantics_drift.count"
 # Barge-in observability (TASK-WEB-008): emitted when speech onset while the bot is
 # speaking triggers an interruption of the spoken answer.
 BARGE_IN_EVENT = "voice.barge_in.detected"
@@ -284,8 +290,29 @@ class StreamingSttProcessor(FrameProcessor):
             await self._speak_degraded_fallback(direction)
             return
         await self._emit_partials(session, direction)
+        self._emit_partial_semantics_drift(session)
         await session.aclose()
         await self._emit_final(final, tail.elapsed_ms(), direction)
+
+    def _emit_partial_semantics_drift(self, session: Any) -> None:
+        """Surface a streaming-STT partial-semantics drift signal (TASK-WEB-033).
+
+        Delta partials are live-validated (STT-013); if the session counted partials that
+        looked cumulative, the provider protocol may have drifted (append+join would then
+        duplicate). Emit an observable signal only — the session never mutates its delta
+        behavior. Protocol-safe via getattr so a non-Gradium session without the counter
+        is a no-op. No transcript is emitted (PII).
+        """
+        drift = getattr(session, "cumulative_drift_count", 0)
+        if not drift or self._telemetry is None or self._envelope is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+        }
+        self._telemetry.record(STT_PARTIAL_DRIFT_EVENT, cumulative_partials=drift, **attrs)
+        self._telemetry.metric(STT_PARTIAL_DRIFT_METRIC, drift, **attrs)
 
     async def _emit_final(self, final: FinalTranscript, tail_ms: float, direction: FrameDirection) -> None:
         transcript = final.text.strip()
