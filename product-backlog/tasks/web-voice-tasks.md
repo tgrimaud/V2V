@@ -2779,7 +2779,7 @@ Implemented on the WEB-026 socle + WEB-027 factory (no bespoke socket/session co
 amplitude gate), ADR-0040 (Genesys events feed the same seam later)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — interruption on the WS path
-**Status:** ✅ Implemented — pending adversarial review + QA GO, then user merge request
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24, `--no-ff` `d67bccd`) — adversarial **93/100 Pass**; QA GO. 549 unit + 16/44/201 behave green.
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (off `feat/sprint-12-external-voice-websocket`)
 
