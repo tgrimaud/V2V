@@ -2641,9 +2641,9 @@ Scenario: The wire framing separates JSON control from binary audio
 ADR-0040 (future Genesys adapter reuse)
 **Depends on:** TASK-WEB-026
 **Classification:** V1 voice runtime — refactor enabling multi-transport + Genesys reuse
-**Status:** ✅ Merge-ready (2026-08-24) — adversarial review **95/100 Pass** + QA **GO**
-([report](../../docs/qa/task-web-027-session-factory-qa-report.md)); merge into
-`feat/sprint-12-external-voice-websocket` on explicit user request only
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24,
+`--no-ff` `9026577`) — adversarial review **95/100 Pass** + QA **GO**
+([report](../../docs/qa/task-web-027-session-factory-qa-report.md))
 **Priority:** High
 **Branch:** `task/TASK-WEB-027-transport-agnostic-session-factory`
 
