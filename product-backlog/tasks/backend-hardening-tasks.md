@@ -1340,3 +1340,49 @@ the box, bound its retention, and confirm no PII lands in logs. Embeddings alrea
 - Pure privacy/config/documentation hardening — no RAG or LLM behaviour change.
 - Does **not** unblock real-customer traffic on its own: the production gate stays OQ-009
   (signed DPA + residency + training opt-out).
+
+---
+
+## TASK-BE-032 - DEC-002 amount matching: locale-aware normalization (close the digit-collision bypass)
+
+**Parent:** EPIC-009 (Trust, security and auditability) / DEC-002
+**Related decisions:** DEC-002 (never voice an ungrounded amount), ADR-0014 (guardrails)
+**Depends on:** —
+**Classification:** V1 safety hardening — DEC-002 output guardrail
+**Status:** 🚧 Implemented (2026-08-15, global-review decision #7) on `feat/sprint-11-remote-deployment` — pending adversarial review + QA
+**Priority:** Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #7 — `OutputGuardrail.canonical()`
+stripped every non-digit (`[^0-9]`), so `€1.50` and `€150` both became `"150"`: a fabricated
+amount could match a grounded one of a different magnitude/format (a **DEC-002 bypass**), and the
+same amount in two locales did **not** match.
+
+### Context
+
+The DEC-002 output guardrail blocks any currency amount in the answer that is not present in the
+retrieved evidence. Its amount key was digit-only, which both over-matched across magnitudes
+(bypass) and under-matched across locales. The bypass is latent today (BSS/PDF amount evidence is
+gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
+
+### What was implemented
+
+- `OutputGuardrail` now canonicalizes each amount to **`<currency-class>:<value@2dp>`**:
+  - **Currency class** from the symbol/word (`€`/`eur`/`euro` → EUR, `$`/`usd`/`dollar` → USD,
+    `£`/`gbp` → GBP, `cent` → CENT, else `?`).
+  - **Locale-aware value parsing** to `BigDecimal`: both separators → the rightmost is the decimal
+    one; a lone separator is decimal only when unique and grouping 1-2 trailing digits (`1,50`),
+    otherwise a thousands separator (`1,500`, `1.234.567`). Ambiguity resolves toward **not merging**
+    distinct-looking values (guardrail errs on the safe/block side).
+- Result: `€1.50` (EUR:1.50) no longer collides with `€150` (EUR:150.00); `1.234,56 €` matches
+  `€1,234.56` (EUR:1234.56); same digits in a different currency do not match.
+
+### Acceptance (met)
+
+- New tests: digit-collision blocked, cross-locale match passes, cross-currency does not match.
+- `mvn -o test` **391 green** (+3), ArchUnit OK. Domain stays pure (no Spring, no new dependency).
+
+### Notes / residuals
+
+- Heuristic edge (documented): a lone separator grouping exactly 3 trailing digits (`€1.234`) is
+  treated as thousands (1234), not `1.234`. Acceptable for currency amounts; revisit if BSS evidence
+  shows 3-decimal currencies. This is the natural point to confirm the definitive rounding/currency
+  policy once BSS/PDF amounts are wired (OQ-003/004).
