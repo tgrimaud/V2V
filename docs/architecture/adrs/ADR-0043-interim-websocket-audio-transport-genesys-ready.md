@@ -120,6 +120,40 @@ end-of-turn hold, STT prewarm) and `DEFAULT_SAMPLE_RATE`.
   (ADR-0040) now consume this one seam; the per-slice OpenTelemetry spans are still emitted
   by the existing session/ingress/egress probes when a transport is wired in and run live.
 
+## Client Outcome (2026-08-24, TASK-WEB-028)
+
+The interim browser client + its server wiring are **done**, built entirely on the WEB-026
+socle and the WEB-027 factory (no bespoke socket/session code):
+
+- **Server** — `web_voice/websocket_signaling.py` (`WebSocketSignalingService`): builds the
+  socle transport via `build_websocket_audio_transport(...)`, assembles the session through
+  the shared `SessionFactory`, and runs it on the shared `BackgroundEventLoop`. Wired into
+  `server.py main()` behind `--websocket {auto,on,off}` on a dedicated port (`VOICE_WS_PORT`,
+  default **8091**), sharing the WebRTC loop when present. The canonical per-call telemetry
+  dump is extracted into `web_voice/session_telemetry.py` and shared with the WebRTC path
+  (identical evidence shape across transports).
+- **Client** — `static/ws.html` + `static/ws.js`: `getUserMedia` → existing `pcm-worklet.js`
+  → PCM16/16 kHz binary frames over `wss`; bot audio is played by scheduling 16 kHz
+  `AudioBuffer`s back-to-back (the context resamples — no upsampling worklet needed);
+  `barge_in`/`call_end` control frames stop playback / end the call. A second concurrent
+  connection is refused by the single-client socle with WS close **1013**, surfaced as a
+  clear "server busy — try again" message (AC#2); failures never fabricate a transcript.
+- **Language: no pre-media declaration step (the key interim constraint).** Unlike the batch
+  path (`?language=` per HTTP turn) and WebRTC (language in the SDP offer body), the
+  single-client `wss` transport **binds then accepts** and the `ChannelEnvelope` is frozen at
+  build time, so a per-connection language (WS URL query or `open` control frame) arrives
+  *after* provider selection is locked. Interim decision: the effective STT/TTS/answer
+  language is the **server default** (`VOICE_WS_LANGUAGE`, `None` = backend auto-detect,
+  pilot fr-first); the client's declared language is captured for **telemetry/correlation**
+  only (`voice.ws.client_connected.declared_language`). Full dynamic per-call fr/en selection
+  is **deferred** — candidates: a **listener-per-language** topology (one port per language,
+  language known at build) or a **pre-media signaling hook** before the pipeline is built.
+  Tracked as an open question; revisited with TASK-WEB-030 (capacity + per-slice observability).
+- **Interim observability.** `voice.ws.session_started` / `client_connected` /
+  `client_disconnected` events carry the correlation id + declared/effective language; the
+  full canonical per-slice spans + active-session gauge + rich capacity ceiling are
+  TASK-WEB-030, and live mouth-to-ear latency is TASK-WEB-031.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's

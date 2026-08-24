@@ -2702,11 +2702,11 @@ Scenario: A non-WebRTC transport builds a session through the same factory
 
 **Parent:** EPIC-006
 **Related decisions:** ADR-0043, ADR-0033 (WebRTC page stays), US-019 (web voice journey)
-**Depends on:** TASK-WEB-026
+**Depends on:** TASK-WEB-026, TASK-WEB-027
 **Classification:** V1 voice runtime — external-reach client
-**Status:** Planned
+**Status:** ✅ Merge-ready (implemented; adversarial **93/100 Pass**; QA GO) — pending user merge request
 **Priority:** High
-**Branch:** `task/TASK-WEB-028-browser-ws-voice-client` (to create when work starts)
+**Branch:** `task/TASK-WEB-028-browser-ws-voice-client`
 
 ### Context
 
@@ -2739,6 +2739,36 @@ Scenario: A capacity refusal is surfaced, not silent
   Then the page shows a clear "try again shortly" message
   And no fabricated transcript or answer is shown
 ```
+
+### Outcome (2026-08-24)
+
+Implemented on the WEB-026 socle + WEB-027 factory (no bespoke socket/session code):
+
+- **Server** `web_voice/websocket_signaling.py` (`WebSocketSignalingService`): builds the
+  socle transport (`build_websocket_audio_transport`), assembles the session via the shared
+  `SessionFactory`, runs it on the shared `BackgroundEventLoop`. Wired in `server.py main()`
+  behind `--websocket {auto,on,off}` on `VOICE_WS_PORT` (default **8091**), sharing the WebRTC
+  loop when present. Per-call telemetry dump extracted to `web_voice/session_telemetry.py`
+  (shared with WebRTC; identical evidence shape).
+- **Client** `static/ws.html` + `static/ws.js`: `getUserMedia` → `pcm-worklet.js` → PCM16/16k
+  binary frames over `wss`; scheduled 16 kHz `AudioBuffer` playback; `open`/`barge_in`/
+  `call_end` framing matches the server serializer; a 2nd concurrent connection is refused by
+  the single-client socle with WS **1013**, surfaced as "server busy — try again" (AC#2); no
+  fabricated transcript on any failure branch.
+- **Interim language decision (ADR-0043 Client Outcome):** the single-client `wss` transport
+  binds-then-accepts and the envelope is frozen at build time, so there is **no pre-media
+  language-declaration step** like batch (`?language=` per turn) or WebRTC (SDP offer body).
+  The effective STT/TTS/answer language is the **server default** (`VOICE_WS_LANGUAGE`, None =
+  backend auto-detect, pilot fr-first); the client's declared language (WS URL query + `open`
+  frame) is captured for **telemetry/correlation** only. Full dynamic per-call fr/en selection
+  is **deferred** (candidate: listener-per-language or a pre-media signaling hook) — OQ, revisit
+  with TASK-WEB-030.
+- **Tests:** `tests/test_websocket_signaling.py` (8) + `features/websocket_voice_client.feature`
+  (3 scenarios / 12 steps). Full regression **538 unit** + **15 features / 42 scenarios / 192
+  steps** green. Adversarial **93/100 Pass**; QA **GO**
+  (`docs/qa/task-web-028-browser-ws-voice-client-qa-report.md`).
+- **Follow-ups:** barge-in/end-of-turn seam = WEB-029; capacity gauge + per-slice p50/p95/p99 +
+  `allowed_origins` at the edge = WEB-030 / INFRA-010; live latency = WEB-031.
 
 ---
 
