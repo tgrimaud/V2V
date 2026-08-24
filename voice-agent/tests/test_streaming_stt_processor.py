@@ -38,6 +38,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  #
 from conversation_backend import DEGRADED_FALLBACK_TEXT  # noqa: E402
 from stt_validation.streaming import FinalTranscript, PartialTranscript, StreamingSttError  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
+from web_voice.control_signals import EndOfTurnSignalFrame  # noqa: E402
 from web_voice.end_of_turn import (  # noqa: E402
     DEFAULT_AMPLITUDE_THRESHOLD,
     END_OF_TURN_SPAN,
@@ -294,6 +295,34 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider.open_count, 0)
         self.assertEqual(sink.finals, [])
         self.assertEqual(sink.interims, [])
+
+    async def test_control_end_of_turn_finalizes_without_energy_detector(self):
+        # GIVEN an open turn (speech only, NO trailing-silence window) — the energy detector
+        # would keep buffering — and a control-plane end-of-turn from a pluggable source
+        # (TASK-WEB-029 AC#2)
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        provider = FakeProvider(session)
+        processor = _processor(provider)
+        frames = [_speech_frame()] * 3 + [EndOfTurnSignalFrame()]
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN the turn is finalized by the control signal alone: one final transcript,
+        # session finished and closed — no silence window required
+        self.assertEqual(provider.open_count, 1)
+        self.assertEqual(sink.finals, ["bonjour"])
+        self.assertEqual(processor.final_count, 1)
+        self.assertTrue(session.finished)
+        self.assertTrue(session.closed)
+
+    async def test_control_end_of_turn_is_a_noop_without_an_open_session(self):
+        # GIVEN no speech has opened a session yet
+        provider = FakeProvider(FakeSession([], ""))
+        processor = _processor(provider)
+        # WHEN a control end-of-turn arrives before any audio
+        sink = await _drive(processor, [EndOfTurnSignalFrame()])
+        # THEN it is a safe no-op: no session opened, no final transcript fabricated
+        self.assertEqual(provider.open_count, 0)
+        self.assertEqual(sink.finals, [])
 
     async def test_sub_minimum_click_is_discarded(self):
         # GIVEN a single short click (below min_utterance) then silence

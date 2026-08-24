@@ -42,12 +42,14 @@ from stt_validation.streaming import FinalTranscript, StreamingSttError
 from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import Timer
 
+from .control_signals import EndOfTurnSignalFrame
 from .end_of_turn import (
     DEFAULT_AMPLITUDE_THRESHOLD,
     DEFAULT_MIN_UTTERANCE_MS,
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_SILENCE_WINDOW_MS,
     END_OF_TURN_SPAN,
+    SIGNAL_CONTROL_EOT,
     EndOfTurnResult,
     StreamingEndOfTurnDetector,
     _pcm16_samples,
@@ -185,8 +187,25 @@ class StreamingSttProcessor(FrameProcessor):
             self._barge_in_confirm_count = 0
             self._barge_in_fired = False
             await self.push_frame(frame, direction)
+        elif isinstance(frame, EndOfTurnSignalFrame):
+            # Control-plane end-of-turn (TASK-WEB-029): a pluggable source (WS client /
+            # Genesys / tests) finalizes the open turn now, independent of the energy
+            # detector's silence window. Consumed here (not forwarded) as the STT stage owns
+            # the turn's streaming session.
+            await self._finalize_from_control(direction)
         else:
             await self.push_frame(frame, direction)
+
+    async def _finalize_from_control(self, direction: FrameDirection) -> None:
+        """Finalize the current streaming session on an external control end-of-turn.
+
+        No-op when no session is open (a control end-of-turn before any speech has nothing to
+        flush). Reuses the same `_finalize` path as the detector-driven end-of-turn, so the
+        final transcript reaches the answer stage without depending on the energy detector."""
+        if self._session is None:
+            return
+        detection = EndOfTurnResult(True, SIGNAL_CONTROL_EOT, None, 0.0, None)
+        await self._finalize(detection, direction)
 
     async def _on_audio(self, frame: InputAudioRawFrame, direction: FrameDirection) -> None:
         decision = self._detector.observe(frame.audio)
