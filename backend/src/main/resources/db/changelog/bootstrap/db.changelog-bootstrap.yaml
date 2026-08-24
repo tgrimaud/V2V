@@ -1,0 +1,43 @@
+# Privileged bootstrap changelog (TASK-INFRA-009, ADR-0041).
+# NOT part of the app-startup changelog. Run ONCE at deploy Step 4 by a one-shot Liquibase
+# container with SUPERUSER credentials against the Patroni primary, with its OWN tracking tables so
+# it never collides with the app user's default databasechangelog:
+#
+#   export LIQUIBASE_COMMAND_PASSWORD='<pg_superuser_password>'   # never --password=… on the CLI
+#   podman run --rm -e LIQUIBASE_COMMAND_PASSWORD \
+#     -v <this-dir>:/liquibase/changelog:ro,Z docker.io/liquibase/liquibase:4.29.2 \
+#     --search-path=/liquibase/changelog \
+#     --url="jdbc:postgresql://<primary>:5432/voicesupport" --username=postgres \
+#     --changelog-file=db.changelog-bootstrap.yaml \
+#     --database-changelog-table-name=databasechangelog_bootstrap \
+#     --database-changelog-lock-table-name=databasechangeloglock_bootstrap \
+#     update
+#
+# --search-path is REQUIRED: Liquibase resolves --changelog-file against it (default /liquibase,
+# not the mount) → without it: "ChangeLogParseException: ... does not exist". Do NOT pass
+# -Dapp_db_user=… (the 4.29.x CLI rejects it: "Unexpected argument(s)"); app_db_user defaults
+# below. Both verified against liquibase:4.29.2 in QA (TASK-INFRA-009).
+#
+# `vector` is not a trusted extension → superuser only. `uuid-ossp` backs the vector_store
+# `uuid_generate_v4()` default. The app-user password is NEVER passed here (created in the psql
+# pre-step); only the app-user NAME is a parameter for the defensive grant.
+databaseChangeLog:
+  - property:
+      name: app_db_user
+      value: voicesupport
+  - changeSet:
+      id: bootstrap-001-extensions
+      author: voice-support
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ;
+            sql: >-
+              CREATE EXTENSION IF NOT EXISTS vector;
+              CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  - changeSet:
+      id: bootstrap-002-grants
+      author: voice-support
+      changes:
+        - sql:
+            sql: GRANT ALL ON SCHEMA public TO ${app_db_user};

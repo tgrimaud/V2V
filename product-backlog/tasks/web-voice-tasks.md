@@ -2294,6 +2294,168 @@ Scenario: Warm-up never leaks a session or blocks the first turn
 
 ---
 
+## TASK-WEB-022 - Latency gate remediation (meet ADR-0029 or revise it)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0029 (pilot latency criterion), ADR-0018, ADR-0037
+**Depends on:** TASK-WEB-015/020 (latency levers), TASK-OPS-007 (measurement)
+**Classification:** V1 pilot readiness (latency gate)
+**Status:** ✅ Implemented (2026-08-06, branch `task/TASK-WEB-022-latency-gate-remediation`) —
+Product/Architecture sign-off resolved the two decisions this ticket gated on: **(1) flip the
+validated levers to their code defaults** so a default run uses the fast path (closing the
+review's "pilot runs slower than measured" gap), and **(2) keep the ADR-0029 gate at m2e p95
+≤ 1.5 s** (revision rejected — market data: > 1.5 s breaks deals). Code: `VOICE_BACKEND_STREAM`
+default → **ON** (`voice_pipeline/answer.py`, Live Lever-1 strict win, DEC-002 5/5); streaming
+end-of-turn hold default → **350 ms** (`PILOT_END_OF_TURN_SILENCE_MS` in
+`web_voice/webrtc_signaling.py`; detector library default stays 500 ms for batch/fixture);
+backend warm-up stays **ON**; **STT pre-warm stays OFF** (unvalidated Gradium idle-socket —
+documented as the one lever kept dark). Deploy config already carried these values
+(`group_vars/voice.yml`, `.env.example` refreshed). Gate remains **FAILED** by ~640 ms
+(combined cold m2e p95 ≈ 2142 ms); the residual is handed to **TASK-STT-014** (STT
+finalize-tail) + **TASK-BE-020** (first-sentence backend generation) plus a **live
+re-measurement** on the tst collector (needs TASK-OPS-007 aggregation + platform open inputs).
+No pilot SLO claimed until that live p95 exists. Docs: ADR-0037 + ADR-0029 status notes,
+`voice-journey-timing.md`, `streaming-voice-qa-report.md` (TASK-WEB-022 section), v1-scope +
+deployment env tables. QA: voice-agent 476 unittest + 169 behave green; `git diff --check`
+clean; no Ansible-validated surface changed (only comment lines in `.env.example`).
+Runtime-affecting: default behaviour of the streaming path + end-of-turn hold (instrumentation
+unchanged). **Live gate re-measurement remains deferred** (platform-blocked).
+**Priority:** High
+**Branch:** `task/TASK-WEB-022-latency-gate-remediation`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`) — the ADR-0029 gate
+(p95 mouth-to-ear ≤ 1.5 s) is **FAILED** (backlog records p95 ≈ 2142 ms) and the two latency
+levers **ship OFF by default**.
+
+### Context
+
+`VOICE_BACKEND_STREAM` defaults false (`voice_pipeline/answer.py:70-79`) and STT pre-warm is
+opt-in (`webrtc_signaling.py:148-161`), so a default pilot run is *slower* than the measured
+2142 ms. The gate was not met when Sprint 10 closed "on scope." Either the levers become the
+default and we re-measure, or a revised, signed-off gate is recorded.
+
+### Scope
+
+- Validate the STT idle-socket behaviour that pre-warm depends on (the reason it's OFF), then
+  enable pre-warm + `VOICE_BACKEND_STREAM` by default if safe.
+- Re-measure p95 mouth-to-ear + time-to-first-audio on a live real-backend run (needs
+  TASK-OPS-007 aggregation + open-input closure for a real call).
+- If ≤ 1.5 s is not reachable, produce a revised gate proposal (with rationale: cloud LLM +
+  cloud STT/TTS + browser egress) for Product/Architecture sign-off and update ADR-0029.
+
+### Acceptance
+
+- Levers enabled by default (or an explicit reason recorded) and a fresh p95 sample vs the
+  gate; ADR-0029 either passes or is formally revised with sign-off.
+- The latency QA report + `voice-journey-timing.md` reflect the new numbers.
+
+---
+
+## TASK-WEB-023 - Streaming provider protocols (break the Gradium lock on the hot path)
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0002 (Pipecat + Gradium), ADR-0023/0024 (streaming STT/TTS)
+**Depends on:** —
+**Classification:** V1 modularity / provider replaceability
+**Status:** ✅ Implemented (2026-08-07, branch `task/TASK-WEB-023-streaming-provider-protocols`)
+**Priority:** Low
+**Branch:** `task/TASK-WEB-023-streaming-provider-protocols`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — batch STT/TTS are
+behind clean ports, but the **streaming** (latency-critical) path is built only for Gradium
+(`web_voice/server.py:351-363`), so the least-replaceable path is the hot one.
+
+### Context
+
+`SttProvider`/`TtsProvider` batch protocols are clean and faked in tests, but streaming
+sessions are duck-typed around the Gradium WS protocol; a non-Gradium provider forces batch
+fallback or `None`. This contradicts the provider-agnostic product goal on the one path where
+latency matters most.
+
+### Scope
+
+- Define explicit `StreamingSttProvider` / `StreamingTtsProvider` protocols (open→session,
+  push audio/text, receive partials/audio, close) with the Gradium impls conforming.
+- Route `server.py` streaming selection through a factory keyed on provider, not a hard
+  `== GRADIUM` check.
+- Add a fake streaming provider for tests to prove the seam.
+
+### Acceptance
+
+- A fake streaming provider drives the WebRTC path in tests without Gradium; the Gradium impl
+  is one conforming implementation; architecture-separation tests updated.
+
+### Implementation (2026-08-07)
+
+- **Protocols:** added `runtime_checkable` `StreamingSttProvider`/`StreamingSttSession`
+  (`stt_validation/streaming.py`) and `StreamingTtsProvider`/`StreamingTtsSession`
+  (`tts_synthesis/streaming.py`) as the explicit streaming seam; the Gradium streaming
+  impls conform (proven by `isinstance` conformance tests).
+- **Registries:** both `provider_factory.py` modules now hold a per-provider streaming
+  builder registry with `register_streaming_provider()`, `streaming_provider_names()`,
+  `supports_streaming()` and a registry-keyed `build_streaming_provider()`. Gradium is
+  registered as the default streaming builder; the fixture provider stays batch-only.
+- **Server selection:** `web_voice/server.py` streaming selection keys off
+  `supports_streaming(args.provider)` instead of the scattered `args.provider != GRADIUM`
+  checks; batch-only providers fall back to the batch aggregator.
+- **Exports:** new protocols + registry helpers exported from both package `__init__`.
+- **Tests:** `tests/test_streaming_provider_protocols.py` — protocol conformance (Gradium +
+  a non-Gradium fake), factory registry behaviour, and server streaming selection driven by
+  a registered fake vendor with no Gradium branch and no network.
+- **Not runtime-affecting** in the observability sense: pure structural seam, no new
+  latency slice or telemetry span; existing streaming spans keep firing unchanged.
+
+**QA:** 484 unittest, 13 features / 36 scenarios / 169 behave steps green.
+
+---
+
+## TASK-WEB-024 - WebRTC concurrency ceiling + drop the per-turn asyncio.run batch path
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0022 (WebRTC transport), ADR-0033
+**Depends on:** —
+**Classification:** V1 voice runtime scalability (deferred)
+**Status:** ✅ Implemented (2026-08-07, branch `task/TASK-WEB-024-webrtc-backpressure`) —
+(1) **concurrency ceiling + backpressure**: `WebRtcSignalingService` caps live sessions at
+`VOICE_MAX_WEBRTC_SESSIONS` (code default 8, env-tunable, safe on bad input); a new offer past
+the cap is refused *before* any WebRTC allocation with a `SessionCapacityError` that the HTTP
+layer turns into a clean **503 + `Retry-After`** (renegotiations of existing sessions are never
+capped). (2) **active-session gauge**: `voice.webrtc.active_sessions` metric on accept/close +
+a `voice.webrtc.session_rejected` event on refusal, exported via OTLP (root-span attrs/events).
+(3) **batch path**: `PipecatTurnProcessor` now reuses one lazily-created persistent
+`BackgroundEventLoop` (`run_coroutine_threadsafe`) instead of `asyncio.run(...)` per HTTP turn;
+`close()` stops a self-owned loop on shutdown. QA: voice-agent **487** unittest (+11:
+cap-config parsing, cap rejection + refusal telemetry, discard gauge, live WebRTC ceiling,
+HTTP 503/502 translation, batch loop reuse/ownership) + **169** behave, `qa-validate-ansible.sh`
+**69/69** (key parity holds with the new `VOICE_MAX_WEBRTC_SESSIONS`). Runtime-affecting: adds
+the active-session gauge + refusal event (observability mandate met). Pending review/merge.
+**Priority:** Low
+**Branch:** `task/TASK-WEB-024-webrtc-backpressure`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — unbounded WebRTC
+sessions on one asyncio loop + a `ThreadingHTTPServer`, and the Pipecat batch HTTP path spins
+a new event loop per turn.
+
+### Context
+
+`_sessions` has no cap (`web_voice/webrtc_signaling.py:254`); all sessions share one
+`BackgroundEventLoop` (`async_loop.py`); the batch `--runtime pipecat` path does
+`asyncio.run(...)` per HTTP turn (`web_voice/runtime.py:111-131`). No load/stress test exists,
+and LB VMs are 1 vCPU. Under concurrent calls this is a scaling and latency risk.
+
+### Scope
+
+- Add a session cap + explicit backpressure (reject/queue) on new WebRTC sessions with a
+  clear client error; expose an active-session gauge.
+- Reuse a shared loop for the batch HTTP path (as WebRTC already does) or retire that path if
+  unused in the pilot.
+- Add a basic concurrency/load test.
+
+### Acceptance
+
+- New sessions beyond the cap are rejected/queued cleanly (no crash); active-session metric
+  emitted; a load test documents the ceiling; batch path no longer creates a loop per turn.
+
+---
+
 ## TASK-WEB-025 - Genesys Audio Connector feasibility spike (investigation only)
 
 **Parent:** EPIC-012
@@ -2384,3 +2546,432 @@ Scenario: The escalation handoff transport is decided
 - A **go/no-go recommendation** that updates ADR-0040 and feeds the Sprint 13 decision.
 - Throwaway prototype + Architect flow config referenced (not merged into the runtime).
 - Correlation-id propagation note (Genesys → OpenTelemetry).
+
+---
+
+# Sprint 12 — External Voice via Interim WebSocket Audio (Genesys-Ready)
+
+Delivery slices for **ADR-0043** (interim WebSocket audio transport). These implement
+Decision point 4 of **ADR-0042** (no TURN; a `wss` audio path is the external-reach
+lever) and are deliberately built behind reusable seams so the Sprint 13 **Genesys Audio
+Connector** work (ADR-0040, TASK-WEB-025) becomes a transport-adapter swap, not a
+greenfield build. Sprint file: `sprints/sprint-12-external-voice-websocket.md`.
+
+**Shared design invariant (enforced at review, all Sprint 12 tickets):** the internal
+audio boundary is **PCM16 / 16 kHz**; codec + sample-rate conversion live **inside each
+transport adapter** (never in the shared core); framing is **JSON control frames + binary
+PCM audio** (AudioHook-shaped); barge-in / end-of-turn / playback / call-end are an
+internal event vocabulary with a **pluggable source**.
+
+---
+
+## TASK-WEB-026 - WebSocket audio transport socle + framing (ADR-0043 design spike)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (this transport), ADR-0042 (no TURN, WS interim), ADR-0033
+(WebRTC same-subnet), ADR-0040 (Genesys AudioHook shape to align with)
+**Depends on:** — (first ticket of the sprint)
+**Classification:** V1 voice runtime — external-reach interim transport
+**Status:** Planned
+**Priority:** High (unblocks 027–031)
+**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (to create when work starts)
+
+### Context
+
+The external-browser WebRTC media plane has no path off the pilot subnet without TURN
+(ADR-0042); the WebSocket path carries audio inside one `wss` connection (client→server
+TCP/TLS) through the existing HAProxy edge — the same NAT-traversal property as Genesys
+Audio Connector. The stdlib `http.server` does not speak WebSocket, and pipecat's
+`SmallWebRTCRequestHandler` pulls FastAPI (which we avoid). This ticket picks the socket
+socle and fixes the wire framing.
+
+### Scope
+
+- Decide the WebSocket socle: pipecat `WebsocketServerTransport` (driven without FastAPI)
+  vs a hand-rolled `wss` upgrade on the stdlib server; run both on the **shared persistent
+  asyncio loop** (`web_voice/async_loop.py`), submitting coroutines with
+  `run_coroutine_threadsafe` (as WebRTC does).
+- Fix the **frame contract**: JSON control frames (open/close, language, barge-in,
+  playback-started/completed, call-end) + **binary PCM16/16 kHz** audio frames, modelled
+  on the AudioHook shape (not the exact schema).
+- Record the socle + framing decision in ADR-0043 (already drafted; update if the spike
+  changes it).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A wss connection is accepted without FastAPI and driven on the shared loop
+  Given the voice bridge started with the WebSocket transport enabled
+  When a browser opens a wss connection to the voice endpoint
+  Then the connection is accepted on the shared asyncio loop
+  And no FastAPI import is required for the path
+```
+
+```gherkin
+Scenario: The wire framing separates JSON control from binary audio
+  Given an open wss voice connection
+  When the client sends a JSON control frame and a binary PCM16/16 kHz audio frame
+  Then the server demultiplexes control vs audio deterministically
+  And the framing shape matches the AudioHook JSON-control + binary-audio model
+```
+
+### Out Of Scope
+
+- The Genesys AudioHook schema/auth/PCMU transcoding (Sprint 13, YAGNI).
+- Any WebRTC behaviour change.
+
+---
+
+## TASK-WEB-027 - Transport-agnostic session factory (capitalisation refactor)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (transport-agnostic seam), ADR-0022/0033 (WebRTC session),
+ADR-0040 (future Genesys adapter reuse)
+**Depends on:** TASK-WEB-026
+**Classification:** V1 voice runtime — refactor enabling multi-transport + Genesys reuse
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-027-transport-agnostic-session-factory` (to create when work starts)
+
+### Context
+
+The session-building logic (STT/TTS processors, farewell, egress probe, envelope,
+telemetry, `StreamingVoiceSession` assembly) currently lives **inside**
+`WebRtcSignalingService._build_session` / `_build_streaming_session`. That coupling is the
+only reason a second transport is "new work". Extracting it into a shared factory makes
+WebRTC, WebSocket and (later) Genesys thin transport adapters over one session core — the
+single biggest capitalisation lever for Sprint 13.
+
+### Scope
+
+- Extract a transport-agnostic session factory that takes a transport + envelope +
+  telemetry and returns a built `StreamingVoiceSession` (streaming + batch variants).
+- Re-point `WebRtcSignalingService` at the factory with **no behaviour change** (byte-for-
+  byte WebRTC path); the WebSocket transport (028/029/030) consumes the same factory.
+- Keep the internal audio boundary at **PCM16/16 kHz**; transport adapters own any
+  codec/sample-rate conversion.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: WebRTC behaviour is unchanged after extraction
+  Given the session factory extracted from WebRtcSignalingService
+  When the existing WebRTC + voice-agent test suite runs
+  Then all tests pass unchanged
+  And no session-building logic remains WebRTC-specific
+```
+
+```gherkin
+Scenario: A non-WebRTC transport builds a session through the same factory
+  Given a fake/stub transport implementing the transport port
+  When a session is built through the shared factory
+  Then the same StreamingVoiceSession assembly is produced (STT/TTS/telemetry/envelope)
+  And the internal audio boundary is PCM16/16 kHz
+```
+
+---
+
+## TASK-WEB-028 - Browser WebSocket voice client (ws.html + ws.js)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0033 (WebRTC page stays), US-019 (web voice journey)
+**Depends on:** TASK-WEB-026
+**Classification:** V1 voice runtime — external-reach client
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-028-browser-ws-voice-client` (to create when work starts)
+
+### Context
+
+The current pages are `/` (batch `/api/voice/turn`) and `/webrtc.html` (WebRTC). External
+users need a page whose media rides the `wss` path. Mic capture already exists as an
+AudioWorklet contract (PCM16/16 kHz) reused from the batch/WebRTC pages.
+
+### Scope
+
+- New page `ws.html` + `ws.js`: `getUserMedia` → AudioWorklet → **PCM16/16 kHz frames over
+  `wss`**; play the returned audio through the existing `pcm-worklet.js`.
+- Language selection sent on the open control frame (as the WebRTC path carries it).
+- Safe failure surfaces (auth, unreachable, no-speech, capacity 503) render a
+  user-visible non-invented message; never fabricate a transcript.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: An off-subnet browser completes a turn over the WebSocket path
+  Given the ws.html page loaded through the HAProxy edge from off the pilot subnet
+  When the user speaks a billing question and stops
+  Then the transcript and the spoken answer are received over the same wss connection
+  And no TURN/STUN was involved
+```
+
+```gherkin
+Scenario: A capacity refusal is surfaced, not silent
+  Given the bridge is at its session ceiling
+  When the browser opens a wss voice connection
+  Then the page shows a clear "try again shortly" message
+  And no fabricated transcript or answer is shown
+```
+
+---
+
+## TASK-WEB-029 - Barge-in / end-of-turn on the WebSocket path (pluggable signal seam)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043 (control-signal seam), ADR-0025 (barge-in + point-7
+amplitude gate), ADR-0040 (Genesys events feed the same seam later)
+**Depends on:** TASK-WEB-027
+**Classification:** V1 voice runtime — interruption on the WS path
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (to create when work starts)
+
+### Context
+
+The WebSocket path loses WebRTC's transport-integrated AEC; browser echo cancellation is
+weaker without a WebRTC render sink, so the ADR-0025 point-7 mitigation (raised amplitude
+threshold + N-frame sustained-onset confirmation, env-tunable) matters more here. The
+control-signal seam must be pluggable so Genesys protocol events can replace the detectors
+later without touching the session core.
+
+### Scope
+
+- Feed the internal barge-in / end-of-turn / playback / call-end events from the existing
+  **energy/amplitude detectors** on the WS path (reuse the 350 ms hold, `VOICE_BARGE_IN_*`).
+- Verify interruption cancels an in-flight streaming synthesis cleanly over `wss`
+  (`asyncio.CancelledError` handled + socket closed — the BUG the WebRTC path already fixed).
+- Name the internal events after Genesys semantics (`playback-started`/`-completed`,
+  `barge-in`, `bot-turn-response`) for a 1:1 mapping in Sprint 13.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Barge-in cuts the bot cleanly over WebSocket
+  Given the bot is speaking over a wss voice connection
+  When the customer starts speaking above the amplitude gate for the confirmation window
+  Then the in-flight synthesis is cancelled and playback stops
+  And the wss connection stays open for the customer's new turn
+```
+
+```gherkin
+Scenario: The signal source is pluggable
+  Given the pluggable control-signal seam
+  When a fake event source emits an end-of-turn signal
+  Then the session finalizes the turn without depending on the energy detector
+```
+
+---
+
+## TASK-WEB-030 - WebSocket capacity ceiling + per-slice observability
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0028 (per-slice OTel), TASK-WEB-024 (WebRTC ceiling)
+**Depends on:** TASK-WEB-027
+**Classification:** V1 voice runtime — runtime safety + observability (mandatory)
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (to create when work starts)
+
+### Context
+
+All sessions share one asyncio loop on small LB VMs, so the WebSocket path needs the same
+backpressure + observability as WebRTC (TASK-WEB-024): a session cap with a clean refusal,
+an active-session gauge, and the canonical per-slice spans under one correlation id.
+
+### Scope
+
+- Apply a session ceiling + backpressure to the WS path (reuse `VOICE_MAX_*`); offers past
+  the cap get a clean refusal (close code + message), never a crash.
+- Emit the active-session gauge + refusal event (WebRTC-equivalent metric names).
+- Emit the canonical per-slice spans (channel ingress → end-of-turn → STT → backend → TTS
+  first audio → channel egress) with **one correlation id per call**; OTLP-export opt-in.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: WebSocket sessions past the cap are refused cleanly
+  Given the WebSocket session ceiling is reached
+  When another browser opens a wss voice connection
+  Then it is refused with a clear close/error (no crash)
+  And an active-session gauge + refusal event are recorded
+```
+
+```gherkin
+Scenario: A WebSocket call emits the canonical per-slice spans
+  Given a completed wss voice turn
+  When its telemetry is dumped
+  Then every canonical journey slice is present under one correlation id
+  And a missing slice is marked measured=false, never omitted
+```
+
+---
+
+## TASK-WEB-031 - QA: WebSocket path functional + per-slice latency report
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0043, ADR-0029 (mouth-to-ear gate), ADR-0028 (slice timing)
+**Depends on:** TASK-WEB-028, TASK-WEB-029, TASK-WEB-030
+**Classification:** V1 voice runtime — QA acceptance
+**Status:** Planned
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-031-ws-qa-latency` (to create when work starts)
+
+### Context
+
+Per the delivery workflow, QA validates functional intent + per-slice latency before the
+sprint branch is merge-ready. The WS path has two honest trade-offs to characterise: TCP
+head-of-line under loss, and weaker AEC than WebRTC.
+
+### Scope
+
+- Functional Gherkin/Behave coverage of the external WS voice journey (turn, barge-in,
+  capacity refusal, safe failure surfaces).
+- Per-slice p50/p95 latency report on the WS path vs the ADR-0029 gate (mouth-to-ear
+  p95 ≤ 1.5 s / time-to-first-audio p95 ≤ 1.2 s), with utterance length reported.
+- A degraded-behaviour note (TCP head-of-line, AEC without headphones) and a go/no-go on
+  the interim path.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: The WebSocket path is scored against the latency gate
+  Given a set of external WebSocket voice turns
+  When the per-slice telemetry is aggregated
+  Then p50/p95 are reported per slice with utterance length
+  And the mouth-to-ear and time-to-first-audio p95 are scored against ADR-0029 with a go/no-go
+```
+
+### Required Evidence
+
+- QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
+- No raw audio, secrets or PII in logs.
+
+---
+
+## TASK-WEB-032 - Reference mouth-to-ear measurement: warm WebRTC + real backend (ADR-0029 gate evidence)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing), OQ-005
+**Depends on:** TASK-WEB-014 (mouth-to-ear instrumentation, done)
+**Classification:** V1 voice runtime — QA / latency evidence
+**Status:** Planned
+**Priority:** High
+**Branch:** `task/TASK-WEB-032-m2e-reference-measurement` (to create when work starts)
+
+### Context
+
+The pilot latency gate was revised by ADR-0029 to **mouth-to-ear `voice_to_first_audio`
+p95 ≤ 1.5 s** (primary) + **`time_to_first_audio` p95 ≤ 1.2 s** (engineering sub-target),
+retiring the stub-era ADR-0018 `< 800 ms` number. But the current number in the repo is a
+**projection** (`time_to_first_audio` p95 ≈ 1.54 s, composed from a measured backend slice +
+the gated Sprint-6 STT/TTS baseline) and the only mouth-to-ear figure on record is TASK-WEB-022's
+**cold** p95 ≈ 2142 ms. ADR-0029 is explicit: **no pilot SLO is claimed until a single warm,
+co-located WebRTC session with the real backend is measured end to end.** This ticket captures
+that reference measurement so the gate has real evidence instead of a projection.
+
+### Scope
+
+- Capture a **warm, co-located** sample of streaming **WebRTC** turns on the **web** channel
+  with `--backend http` (real RAG + Mistral), using `voice-agent/scripts/streaming_latency_report.py`.
+- Report **per-slice p50/p95/p99** (end-of-turn hold, STT, backend_first_token, tts_first_audio,
+  channel_egress) and the **composite mouth-to-ear `voice_to_first_audio` p95** as a single measured
+  distribution (not a projection), with utterance length alongside each figure.
+- Score the result against the ADR-0029 gate (m2e p95 ≤ 1.5 s / time-to-first-audio p95 ≤ 1.2 s)
+  and record a go/no-go. Exclude barge-in / incomplete turns per OQ-005 (never counted as fast turns).
+- If NO-GO, name the dominant slice + the concrete lever (LLM first-token is the known lever).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A single warm WebRTC session produces the mouth-to-ear reference number
+  Given a warm, co-located WebRTC web run against the real backend (--backend http)
+  When streaming_latency_report.py aggregates the per-slice telemetry
+  Then voice_to_first_audio p95 is reported as one measured distribution (not a projection)
+  And it is scored against the ADR-0029 1.5 s gate with an explicit go/no-go
+  And each figure carries its utterance length and excludes barge-in/incomplete turns
+```
+
+### Required Evidence
+
+- QA/latency report under `docs/qa/` with the measured per-slice + composite p50/p95/p99.
+- The run configuration (warm, co-located, live Gradium STT/TTS, `--backend http`) stated explicitly.
+- No raw audio, secrets or PII in logs.
+
+---
+
+## TASK-WEB-033 - Streaming-STT partial-semantics drift guard (delta validated; observe don't mutate)
+
+**Parent:** EPIC-006
+**Related decisions:** STT-013 spike (delta semantics live-validated), ADR-0028 (observability)
+**Depends on:** —
+**Classification:** V1 voice runtime — observability / robustness
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
+**Priority:** Low-Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #8.
+
+### Context
+
+`GradiumStreamingSession` treats each `text` message as a **delta** fragment (append + `" ".join`).
+The STT-013 spike validated this against the **live** Gradium API (real captured messages, zero
+word loss), so delta is not an unverified assumption. The residual risk is a **future protocol
+drift** to cumulative (full-hypothesis) partials — which append+join would silently duplicate —
+with no runtime signal. Decision #8: **observe, do not mutate** (a heuristic auto-switch could
+corrupt a legitimate delta with repeated words).
+
+### What was implemented
+
+- `GradiumStreamingSession` counts partials that look cumulative (a partial that extends the
+  *previous* one: `startswith(prev)` and longer) and logs a **warning that never carries the
+  transcript** (PII-safe: only counts/lengths). The validated **delta behavior is unchanged**.
+- `StreamingSttProcessor` reads the per-turn count (protocol-safe `getattr`) and emits
+  `voice.stt.partial_semantics_drift` event + `.count` metric when non-zero, so a genuine drift
+  (which trips on every partial after the first) is a strong, alertable signal.
+
+### Acceptance (met)
+
+- Delta partials → drift count 0, final = joined delta. Cumulative-looking partials → flagged
+  (count > 0) **without** mutating the transcript (documents the observe-don't-mutate contract).
+- `./.venv/bin/python -m unittest discover tests` **504 green** (+2). No transcript/PII in logs.
+
+### Notes
+
+- A sustained non-zero `voice.stt.partial_semantics_drift` in production is the trigger to
+  revisit the finalization (switch to replace-on-cumulative or consume a consolidated `end_text`).
+
+---
+
+## TASK-WEB-034 - `/api/voice/turn` reply as JSON (base64 audio) instead of WAV body + `X-Voice-*` headers
+
+**Parent:** EPIC-006
+**Related decisions:** TASK-WEB-006 (client-safe error body), TASK-WEB-016 (OpenAPI), ADR-0021 (degraded)
+**Depends on:** —
+**Classification:** V1 voice runtime — HTTP contract / robustness
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
+**Priority:** Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #9.
+
+### Context
+
+The batch `/api/voice/turn` returned `200 audio/wav` (the answer) with the transcript + spoken
+answer percent-encoded into `X-Voice-*` / `X-Answer-*` response headers, while errors returned
+JSON. Three problems: (1) transcript + answer are unbounded, accented customer text → percent-encoded
+in headers they can exceed proxy header-size limits on long answers (truncation / 502);
+(2) that customer text in headers is typically written to proxy access logs (PII); (3) success vs
+error had two different response shapes. `/turn` is the batch/fallback path (live voice is WebRTC),
+and it already returns the whole WAV at once, so base64 buffering is a non-issue here.
+
+### What was implemented
+
+- `/api/voice/turn` **200** now returns a single JSON object
+  `{ correlation_id, transcript, answer, provider, outcome, degraded_reason?, audio_format, audio_base64 }`
+  — uniform with the 502 error body, no header-size cap, no customer text in headers/logs.
+- Updated across the four surfaces: `web_voice/server.py` (`_turn_success_body`, drop `_answer_headers`
+  + unused `quote`), `web_voice/static/app.js` (parse JSON + `base64ToArrayBuffer`), `web_voice/openapi.yaml`
+  (`TurnSuccessBody` schema), `docs/architecture/voice-runtime-http-contract.md` (+ dev guide, README).
+- `/tts` keeps its raw `audio/wav` body (bounded, no free-text metadata); only `/turn` changed.
+
+### Acceptance (met)
+
+- `test_voice_runtime.py` updated to parse the JSON body + decode base64 WAV (RIFF/WAVE).
+  voice-agent **504 unit tests green** + behave **13 features / 36 scenarios / 169 steps green**.
+- OpenAPI still describes every endpoint (behave openapi scenario green).

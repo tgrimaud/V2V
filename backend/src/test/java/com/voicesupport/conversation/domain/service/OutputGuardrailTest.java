@@ -110,6 +110,70 @@ class OutputGuardrailTest {
     }
 
     @Test
+    @DisplayName("a fabricated amount that digit-collides with a grounded one is still blocked (DEC-002 bypass fix)")
+    void digitCollisionBlocked() {
+        // GIVEN evidence stating 150 € (canonical EUR:150.00)
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Le forfait est facturé 150 € par mois.", "billing-faq#4", "billing", 0.8));
+
+        // WHEN the answer voices 1,50 € — which the old digit-only key collapsed to the same "150"
+        GuardrailDecision decision = guardrail.check(
+                "Votre remise est de 1,50 € ce mois-ci.", evidence, AnswerLanguage.FRENCH);
+
+        // THEN it is blocked as ungrounded (1.50 != 150.00)
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.UNGROUNDED, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("the same amount in a different locale format matches the grounded evidence")
+    void crossLocaleAmountMatches() {
+        // GIVEN evidence with a French-formatted grouped+decimal amount 1.234,56 €
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Le total annuel est de 1.234,56 € pour cette offre.", "billing-faq#5", "billing", 0.8));
+
+        // WHEN the answer repeats it in English format €1,234.56
+        GuardrailDecision decision = guardrail.check(
+                "Le total annuel s'élève à €1,234.56.", evidence, AnswerLanguage.FRENCH);
+
+        // THEN it passes: both normalize to EUR:1234.56
+        assertFalse(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("the same digits in a different currency do not match (currency class is part of the key)")
+    void differentCurrencyDoesNotMatch() {
+        // GIVEN evidence stating 50 € (EUR:50.00)
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Les frais de mise en service sont de 50 €.", "billing-faq#6", "billing", 0.8));
+
+        // WHEN the answer voices $50 (USD:50.00)
+        GuardrailDecision decision = guardrail.check(
+                "The setup fee is $50.", evidence, AnswerLanguage.ENGLISH);
+
+        // THEN it is blocked: same digits, different currency class
+        assertTrue(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.UNGROUNDED, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("a lone separator grouping 3 trailing digits is read as thousands (documented heuristic)")
+    void loneSeparatorThreeDigitsIsThousands() {
+        // GIVEN evidence with a dot-grouped thousands amount 1.234 €
+        List<RetrievedEvidence> evidence = List.of(
+                new RetrievedEvidence("Le forfait pro est facturé 1.234 € par an.", "billing-faq#7", "billing", 0.8));
+
+        // WHEN the answer states the same value without grouping (1234 €)
+        GuardrailDecision decision = guardrail.check(
+                "Ce forfait revient à 1234 € par an.", evidence, AnswerLanguage.FRENCH);
+
+        // THEN it passes: "1.234" is read as thousands (EUR:1234.00), matching "1234"
+        assertFalse(decision.blocked());
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
+    @Test
     @DisplayName("an English-decided turn yields an English hand-off message")
     void englishFallback() {
         // GIVEN evidence with no amount and an English question

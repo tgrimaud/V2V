@@ -4,6 +4,10 @@
 
 Accepted
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
+> `BssBillingPort` or BSS adapter exists in `backend/src/main` yet (grep-verified).
+> This governs the future billing V1 work (Sprint 12+, gated by OQ-003).
+
 ## Context
 
 The operator BSS is composed of multiple services. V1 cannot block on full

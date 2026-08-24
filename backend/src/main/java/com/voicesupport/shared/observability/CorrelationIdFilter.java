@@ -38,6 +38,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     }
 
     private String resolve(String headerValue) {
-        return headerValue == null || headerValue.isBlank() ? UUID.randomUUID().toString() : headerValue.trim();
+        String clean = CorrelationId.sanitize(headerValue);
+        return clean == null || clean.isBlank() ? UUID.randomUUID().toString() : clean;
     }
 }

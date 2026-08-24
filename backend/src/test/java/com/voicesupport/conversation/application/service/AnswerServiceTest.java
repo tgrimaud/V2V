@@ -91,6 +91,14 @@ class AnswerServiceTest {
         assertFalse(answer.grounded());
         assertNull(answer.confidence());
         assertTrue(answer.text().toLowerCase().contains("conseiller"));
+
+        // AND the DEC-002 output block is counted so QA/Ops can observe suppression of a fabricated
+        // amount; a mutant that drops the recordGuardrailBlock call on the output path leaves no meter.
+        double blocks = meterRegistry.get("voice_support.guardrail_block")
+                .tag("verdict", "ungrounded")
+                .counter()
+                .count();
+        assertEquals(1.0, blocks);
     }
 
     @Test

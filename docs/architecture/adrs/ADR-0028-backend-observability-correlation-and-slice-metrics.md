@@ -166,8 +166,8 @@ never removed.
   so offline runs and the test suite are unaffected.
 - **Cross-service.** The shared `correlation_id` remains the join key on both sides
   (attribute on spans, MDC in logs). Full **W3C `traceparent`** propagation on the
-  runtime → backend HTTP call (one trace id end to end) is the remaining step of the
-  full-export path and is deferred with option (a) validation.
+  runtime → backend HTTP call (one trace id end to end) was the remaining step of the
+  full-export path; it is now **implemented** — see the TASK-OPS-007 addendum below.
 
 ### 3. Local collector recipe (opt-in)
 
@@ -180,7 +180,31 @@ env vars to flip export on for both services. It is **not** wired into any defau
 - **Validated offline:** export is inert by default (backend suite + startup unchanged;
   voice suite unchanged); the voice translation `TelemetryRecorder → OTel spans` is unit
   tested with an in-memory span exporter (no network).
-- **Deferred (needs a running collector, option a full validation):** a single voice
-  turn producing one **correlated trace** across runtime and backend exported to the
-  collector, and `traceparent` propagation on the HTTP hop. Tracked as the remainder of
-  TASK-OBS-001 / the mandatory-export trigger.
+- **Deferred (needs a running collector, live validation):** observing a single voice
+  turn as one **correlated trace** across runtime and backend *in the collector UI*. The
+  `traceparent` propagation itself is implemented and unit-tested offline (TASK-OPS-007
+  addendum); only the live end-to-end capture on the tst collector remains.
+
+## Addendum (TASK-OPS-007) — centralized pilot collector + W3C traceparent
+
+Extends this ADR from an opt-in local recipe to a **centralized pilot pipeline**, without
+changing the default-off posture or the offline test guarantees.
+
+- **One collector + a store.** `deploy/observability/docker-compose.otel.yml` now also runs
+  **Prometheus** (scraping the collector's `:8889` exporter, 15d retention), so slice
+  percentiles (`voice_support_slice_*`, p50/p95/p99 by slice/channel/provider/outcome)
+  aggregate in one queryable place across both tiers.
+- **W3C `traceparent` end to end.** `voice_common/trace_context.py` derives a deterministic
+  trace id + span id from the turn's `correlation_id` (BLAKE2b, pure function).
+  `http_backend` injects `traceparent: 00-<trace>-<span>-01` on the HTTP hop; the backend
+  (default W3C propagation + ParentBased sampler) continues that trace id, and
+  `otel_export` opens the `voice.turn` root span under the same derived context. Result: a
+  voice turn and its backend spans share one trace id. The `01` sampled flag keeps a
+  voice-initiated call even under a low backend sampling ratio. Unit-tested offline
+  (`tests/test_trace_context.py`, `test_otel_export.py`, `test_http_backend.py`).
+- **Enablement is one variable.** Ansible `otel_collector_endpoint` (empty ⇒ OFF) drives
+  both `backend.env.j2` and `voice.env.j2`; `otel_traces_sampler_arg` (default `1.0` for the
+  pilot) applies only when export is on. Export stays async/best-effort — a down collector
+  never blocks a turn.
+- **Still deferred:** the live capture on the tst collector host (host placement is a
+  platform input; see `docs/operations/deployment-eir-ai4cc-tst.md`).

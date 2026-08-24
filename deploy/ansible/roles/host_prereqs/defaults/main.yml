@@ -1,0 +1,17 @@
+---
+# Container runtime provisioning knobs (TASK-INFRA-008 / ADR-0038 addendum 2026-08-13).
+# The tst VMs are podman-native (podman 5.x + podman-docker shim, no Docker CE); compose
+# runs via `podman compose`, which delegates to the Docker Compose v2 binary installed
+# here as podman's compose provider.
+
+# Docker Compose v2 provider binary. Point compose_provider_url at an internal mirror for
+# an air-gapped prod and keep version + checksum in lock-step (verify on bump with
+# `curl -fsSL <url>.sha256`). An empty compose_provider_checksum disables verification.
+compose_provider_version: "v5.4.0"
+compose_provider_arch: "x86_64"
+compose_provider_url: "https://github.com/docker/compose/releases/download/{{ compose_provider_version }}/docker-compose-linux-{{ compose_provider_arch }}"
+compose_provider_checksum: "sha256:837fd1d35bf6a494f41b5b5988269a7be79de337cf1a1a6ff0e45ab51bb4e9be"
+
+# podman searches docker cli-plugin paths for the provider; install it here.
+compose_provider_dir: "/usr/local/lib/docker/cli-plugins"
+compose_provider_path: "{{ compose_provider_dir }}/docker-compose"

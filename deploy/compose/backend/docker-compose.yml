@@ -1,0 +1,149 @@
+# Backend Java conversation service - tst deploy stack (TASK-INFRA-001, ADR-0038).
+# Runs the TASK-DEPLOY-001 image on vla-ai4cc-t03/t04 (.105/.106), one instance per
+# VM, behind the internal backend VIP .11 (HAProxy - TASK-INFRA-002).
+#
+# All values come from a sibling ".env" rendered by Ansible from secrets
+# (TASK-OPS-002) - never commit a real .env. See .env.example for the contract.
+# External dependencies (Postgres .102, Redis .107) live on other tiers, so this
+# stack has no depends_on: it only points at them via env.
+
+services:
+  backend:
+    image: "${BACKEND_IMAGE:?set BACKEND_IMAGE to the registry path}:${IMAGE_TAG:-latest}"
+    container_name: voice-support-backend
+    restart: unless-stopped
+    # Published on the host so the backend VIP (.11) can load-balance t03/t04.
+    ports:
+      - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8080}:8080"
+    environment:
+      # --- Persistence (Postgres .102 + pgvector, 768 dim) ---
+      DB_URL: "${DB_URL}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      # --- Embeddings (Ollama nomic-embed-text, 768 dim) - CPU sidecar per ADR-0039 ---
+      # Default points at the co-located ollama sidecar below (compose service DNS).
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://ollama:11434}"
+      OLLAMA_EMBEDDING_MODEL: "${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
+      # --- Chat LLM (Mistral cloud) ---
+      LLM_PROVIDER: "${LLM_PROVIDER:-mistral-api}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY}"
+      MISTRAL_CHAT_MODEL: "${MISTRAL_CHAT_MODEL:-mistral-small-latest}"
+      # --- API gate (must be non-empty in tst; matches the voice bridge key) ---
+      CONVERSATION_API_KEY: "${CONVERSATION_API_KEY}"
+      # --- Shared conversation memory (Redis .107 - ADR-0008 / TASK-BE-021) ---
+      CONVERSATION_STORE: "${CONVERSATION_STORE:-redis}"
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_TIMEOUT: "${REDIS_TIMEOUT:-2s}"
+      CONVERSATION_MEMORY_TTL_SECONDS: "${CONVERSATION_MEMORY_TTL_SECONDS:-3600}"
+      # Only safe where Redis is actually reachable; leaving it true in memory mode
+      # flips /actuator/health to DOWN (TASK-BE-021 review).
+      REDIS_HEALTH_ENABLED: "${REDIS_HEALTH_ENABLED:-true}"
+      # --- Knowledge base sources (mounted read-only, see volumes below) ---
+      # The image ships only the jar, so the KB assets are provided at deploy time
+      # under KB_HOST_PATH and synced into pgvector on first run (POST /api/knowledge/sync
+      # or the scheduler). Paths point inside the mounted directory.
+      KB_MARKDOWN_PATH: "${KB_MARKDOWN_PATH:-/app/kb-assets/knowledge-base}"
+      KB_CSV_PATH: "${KB_CSV_PATH:-/app/kb-assets/articles.csv}"
+      # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
+      OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
+      # Valid localhost defaults (NOT empty): Spring Boot's OTLP tracing exporter is built
+      # whenever the endpoint is present and rejects an empty string ("Invalid endpoint")
+      # at startup. Export stays OFF via the enabled flag (metrics) + sampler 0.0 (traces).
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}"
+      OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
+      # --- JVM tuning without a rebuild (sized to share the 8 GB VM with ollama) ---
+      JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
+      # Deep readiness includes the embedding hop (BUG-014): a broken ollama path returns
+      # /actuator/health DOWN so HAProxy pulls the node instead of staying green while RAG
+      # is offline. OFF by default (local/dev/memory runs have no ollama); ON in the pilot .env.
+      EMBEDDING_HEALTH_ENABLED: "${EMBEDDING_HEALTH_ENABLED:-true}"
+    # BUG-014: pin the ollama name to a static IP on a stable user-defined network via
+    # /etc/hosts (extra_hosts). Name resolution then no longer depends on aardvark-dns
+    # rebuilding after container/network churn — `--force-recreate backend` restores RAG
+    # without a full `down && up`. /etc/hosts wins over DNS (nsswitch: files before dns),
+    # so OLLAMA_BASE_URL=http://ollama:11434 keeps working unchanged.
+    extra_hosts:
+      - "ollama:${OLLAMA_STATIC_IP:-10.123.0.11}"
+    networks:
+      - backend_net
+    # Wait for the embeddings sidecar to be up (model pull happens at deploy time).
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # Mirror the image HEALTHCHECK so compose surfaces readiness (curl ships in the image).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    # Sized to share the vla-t03/t04 flavor (4 vCPU / 8 GB) with the ollama sidecar.
+    deploy:
+      resources:
+        limits:
+          cpus: "${BACKEND_CPUS:-3.0}"
+          memory: "${BACKEND_MEMORY:-5g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # KB assets provided at deploy time (Ansible drops knowledge-base/ + articles.csv
+    # under KB_HOST_PATH). Read-only, directory bind mount (safe if absent: the runtime
+    # creates an empty dir and the KB sync simply finds nothing until populated).
+    # `,Z` relabels the mount for SELinux (Enforcing on the EL9 VMs) so podman can read
+    # it without an AVC denial (TASK-INFRA-008); backward-compatible with Docker.
+    volumes:
+      - "${KB_HOST_PATH:-./kb-assets}:/app/kb-assets:ro,Z"
+
+  # Embeddings sidecar (ADR-0039): Ollama nomic-embed-text on CPU, co-located on
+  # each backend VM. Keeps embeddings 768-dim (no vector_store recreation) and
+  # local (no cloud egress for RAG). The model is pulled at deploy time
+  # (Ansible: docker compose exec ollama ollama pull) into the named volume.
+  ollama:
+    image: "ollama/ollama:${OLLAMA_IMAGE_TAG:-0.5.4}"
+    container_name: voice-support-ollama
+    restart: unless-stopped
+    # Internal only: reachable from the backend over the compose network, never published.
+    expose:
+      - "11434"
+    # BUG-014: fixed IP on the stable user-defined network so the backend's extra_hosts
+    # entry (ollama:<ip>) always matches, even after the project network is recreated.
+    networks:
+      backend_net:
+        ipv4_address: "${OLLAMA_STATIC_IP:-10.123.0.11}"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "${OLLAMA_CPUS:-1.0}"
+          memory: "${OLLAMA_MEMORY:-2g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    volumes:
+      - "ollama-models:/root/.ollama"
+
+volumes:
+  ollama-models:
+
+# BUG-014: an explicit user-defined bridge network with a pinned subnet. The static
+# ollama IP (OLLAMA_STATIC_IP) must fall inside BACKEND_NET_SUBNET. Default subnet is
+# outside podman's default 10.89.0.0/16 pool to avoid a collision; override both in the
+# .env if they clash with an existing network on the VM.
+networks:
+  backend_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "${BACKEND_NET_SUBNET:-10.123.0.0/24}"

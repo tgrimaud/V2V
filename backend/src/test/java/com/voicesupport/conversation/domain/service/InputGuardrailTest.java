@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +41,32 @@ class InputGuardrailTest {
         assertTrue(decision.blocked(), "should block: " + question);
         assertEquals(GuardrailDecision.Verdict.OFF_TOPIC, decision.verdict());
         assertNotNull(decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "My wifi is not working",
+            "I'm having trouble booking an engineer visit",
+            "My broadband keeps looking for a signal",
+            "Is there an outage in my parking area?"
+    })
+    @DisplayName("BUG-016: legitimate EN support turns are NOT off-topic-blocked by the royalty pattern")
+    void passes_en_support_turns_that_contain_royalty_substrings(String question) {
+        // The bare king/roi/queen OFF_TOPIC tokens used to match inside working/booking/looking/
+        // parking (a BUG-001-class substring over-block that ran BEFORE retrieval). With word
+        // boundaries these reach retrieval; a mutant dropping the \b matches "king" again.
+        GuardrailDecision decision = guardrail.check(question, false, AnswerLanguage.ENGLISH);
+
+        assertNotEquals(GuardrailDecision.Verdict.OFF_TOPIC, decision.verdict(),
+                "should not be off-topic-blocked: " + question);
+    }
+
+    @Test
+    @DisplayName("BUG-016: a genuine royalty question is still blocked as off-topic (boundary kept)")
+    void still_blocks_a_genuine_royalty_question() {
+        GuardrailDecision decision = guardrail.check("Who is the king of England?", false, AnswerLanguage.ENGLISH);
+
+        assertEquals(GuardrailDecision.Verdict.OFF_TOPIC, decision.verdict());
     }
 
     @ParameterizedTest

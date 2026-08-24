@@ -1,0 +1,22 @@
+# CI test gate (TASK-OPS-001, ADR-0038). Runs the shared test suite on every PR and
+# on mainline pushes. Feature/ticket branches are covered by their PR (push is scoped
+# to the mainline to avoid duplicate PR+push runs). No secrets are used here.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/restart-from-scratch
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml

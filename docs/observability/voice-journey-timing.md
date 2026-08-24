@@ -90,6 +90,31 @@ nothing flows downstream. Selected with `server --tts-mode streaming` (Gradium o
 default); `--tts-mode batch` keeps the batch processor. See ADR-0024 and
 `docs/qa/web-004-streaming-tts-qa.md`.
 
+**`tts_first_audio` is a success-only distribution (BUG-008).** The
+`voice.tts.first_audio` span is emitted **only when audio actually played**: the
+failure and unavailable paths carry no first-audio sample, so they emit no span (the
+elapsed time is reported as `elapsed_ms` on the `tts.failure` / `tts.unavailable`
+event instead — mirroring the interrupted path, which puts elapsed on `tts.interrupted`
+and only emits the span if a first chunk really played). On top of that emission
+discipline, `voice_common.pipeline_timing` applies an **outcome filter**: a
+`voice.tts.first_audio` span whose `outcome` is not `success` (e.g. `interrupted`) is
+excluded from the `tts_first_audio` slice distribution, so a barge-in's real
+time-to-first-audio never skews the success p95/p99 used against the ADR-0029 gate.
+
+**Metric definition and its deliberate trade-off (what this p95 means).** Read
+`tts_first_audio` as *"time-to-first-audio of **completed (uninterrupted, successful)**
+turns"*, not of every turn that produced audio. This is intentional (BUG-008 acceptance:
+failure/interrupted/unavailable must not contribute) so the ADR-0029 gate is judged on the
+normal answer path rather than on aborted turns. The trade-off is explicit: a first-audio
+slowdown that manifests **only** on barge-in turns will **not** surface in this p95. The
+interrupted sample is **not lost** — the emitter still records a real
+`voice.tts.first_audio` span with `outcome=interrupted` (and `tts.interrupted.elapsed_ms`);
+it is simply kept out of the SLO distribution. To inspect first-audio latency on barge-in
+turns, query the `voice.tts.first_audio` spans filtered to `outcome=interrupted` directly
+rather than reading the aggregated slice. Counting interrupted turns in the slice was
+considered and rejected here to honour the BUG-008 contract; revisit only by re-opening that
+decision, not by silently widening the filter.
+
 ### Streaming loop composite: `time_to_first_audio` (TASK-WEB-009)
 
 ADR-0018 defines the pilot acceptance metric `time_to_first_audio` as the latency
@@ -302,6 +327,16 @@ inside the session-to-session noise. Lever 3 is a safe tuned default
 is the job of levers 1 (backend SSE first-sentence → TTS) and 2 (connect-time warm-up). The
 full pilot pass is written up in
 [`streaming-voice-qa-report.md`](../qa/streaming-voice-qa-report.md#live-pilot-pass--real-backend-mouth-to-ear--lever-3-beforeafter-2026-07-29).
+
+**Default levers as of TASK-WEB-022 (2026-08-06).** The validated levers are now the code
+defaults so a default run uses the fast path (the review's "pilot runs slower than measured"
+gap is closed): `VOICE_BACKEND_STREAM` **ON** (lever 1, strict-win first-sentence streaming),
+the streaming runtime end-of-turn hold **350 ms** (lever 3, `PILOT_END_OF_TURN_SILENCE_MS` in
+`web_voice/webrtc_signaling.py`; the detector library default `DEFAULT_SILENCE_WINDOW_MS`
+stays 500 ms for batch/fixture callers), backend warm-up **ON** (lever 2). **STT pre-warm
+stays OFF** (unvalidated Gradium idle-socket). The ADR-0029 gate is still FAILED by ~640 ms
+even with levers 1+2 (combined cold m2e p95 ≈ 2142 ms); the residual is handed to
+TASK-STT-014 + TASK-BE-020 and a live re-measurement — the gate number stays 1.5 s.
 
 The `backend_first_token` slice is measured for both the `stub` and `http`
 backends (the span comes from `voice_pipeline/answer.py` on the blocking path and from

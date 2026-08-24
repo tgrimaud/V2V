@@ -14,6 +14,9 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # TASK-INFRA-009 / ADR-0041: create `vector` + `uuid-ossp` on first init (empty volume), since
+      # Spring AI initialize-schema is now off and Liquibase (app user) can't create extensions.
+      - ./scripts/dev-db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U voicesupport"]
       interval: 5s

@@ -8,6 +8,28 @@ latency **taxonomy** and measurement method remain in force) and resolves
 [OQ-005](../../../product-backlog/open-questions/v1-open-questions.md#oq-005---pilot-latency-acceptance-context).
 Reaffirms [ADR-0012](ADR-0012-modular-voice-pipeline-over-realtime-api.md).
 
+## Status update — TASK-WEB-022 (2026-08-06): gate unchanged at 1.5 s, OPEN
+
+The pilot gate **stays at mouth-to-ear p95 ≤ 1.5 s** (no number change, Product/Architecture
+sign-off 2026-08-06). It is **currently FAILED**: the last combined live pass (levers 1+2,
+cold) recorded m2e p95 ≈ **2142 ms** (margin −642 ms). TASK-WEB-022 resolved the "levers ship
+OFF" half of the finding by flipping the **validated** levers to their code defaults —
+`VOICE_BACKEND_STREAM` ON (strict-win first-sentence streaming), end-of-turn hold 350 ms
+(0/10 false-cut live), backend warm-up ON — so a default pilot run is no longer *slower* than
+the measured numbers. **STT pre-warm stays OFF** (unvalidated idle-socket). Closing the
+residual ~640 ms is **not** a defaults problem: it is handed to **TASK-STT-014** (STT
+finalize-tail) + **TASK-BE-020** (first-sentence backend generation), then a **live
+re-measurement** on the tst collector (blocked on the platform open inputs — TLS/TURN/NAT +
+centralized aggregation from TASK-OPS-007). No pilot SLO is claimed until that live p95 is
+captured. Revising the number was explicitly considered and **rejected** here (the market
+data in this ADR shows > 1.5 s breaks deals); the bar holds and the engineering path closes it.
+
+**Follow-up (2026-08-15, global-review decision #2):** the reference mouth-to-ear
+measurement — a single **warm, co-located WebRTC + real backend (`--backend http`)** session
+that replaces the current ~1.54 s *projection* — is now ticketed as **TASK-WEB-032** (High).
+The stale `< 800 ms` references in the Sprint-7 `docs/qa/answer-engine-qa-report.md` were
+annotated as superseded by this ADR the same day. OQ-005 already records this gate as decided.
+
 ## Context
 
 ADR-0018 set the pilot acceptance criterion at `time_to_first_audio` **p95 < 800 ms**.

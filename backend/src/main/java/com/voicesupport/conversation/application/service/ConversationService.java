@@ -12,8 +12,20 @@ import java.util.List;
 // Stateful conversation orchestration (TASK-BE-006): loads the prior turns for a
 // conversation, runs the BE-005 answer pipeline with that history placed in the system
 // message (current turn excluded — avoids the greeting/duplication bugs in project
-// history), then records the completed turn. Retrieval spans all domains (V1 has no
-// domain classifier here); the answer stays grounded and DEC-002-safe by construction.
+// history), then records the completed turn.
+//
+// BUG-007: retrieval is passed a null domain ON PURPOSE, so the voice/text path searches
+// ALL domains (billing|support|commercial|general). This is the correct behaviour for the
+// current single-pipeline product: there is no runtime classifier of the incoming QUESTION
+// here (ADR-0015 multi-agent routing is NOT implemented on this branch). Note the
+// DomainClassifierPort (ADR-0030) tags KB articles by domain at INGESTION time — it does not
+// classify the runtime query — so no reliable per-question domain can be supplied; forcing one
+// would need a query router and could DROP relevant chunks on a misclassification. Per-domain
+// scoping stays available on /answer and /retrieve where the caller provides the domain. The
+// audience fail-closed filter (ADR-0034, customer-only) and grounding/confidence guardrails
+// still apply, so the answer stays DEC-002-safe by construction. The retrieval-precision
+// trade-off of cross-domain search is tracked in OQ-008. Revisit only if/when a runtime query
+// classifier is introduced.
 public class ConversationService implements ConverseUseCase {
 
     private final AnswerQuestionUseCase answerQuestionUseCase;

@@ -321,9 +321,10 @@ the "one Postgres" simplicity.
   query expansion — or enrich the eval set with a variant that differs *only* by the greeting. This
   is the remaining concrete OQ-008 follow-up (query normalization and diversity are both exhausted).
 - The **EN gap is guardrail topicality (OFF_TOPIC over-block), out of OQ-008 scope** → tracked as
-  **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matches "wor**king**"). EN
-  support **content coverage** is a separate gap for Product. Without the guardrail-vs-eviction
-  split this would have been misattributed to retrieval (the BUG-003 trap).
+  **BUG-016** (was informally "BUG-009" before that number went to the Ansible deploy bug;
+  unbounded `king`/`roi`/`queen` OFF_TOPIC pattern matched "wor**king**", fixed with word
+  boundaries 2026-08-14). EN support **content coverage** is a separate gap for Product. Without
+  the guardrail-vs-eviction split this would have been misattributed to retrieval (the BUG-003 trap).
 
 ### Notes
 
@@ -331,3 +332,59 @@ the "one Postgres" simplicity.
   swap is feasible without touching the domain.
 - Do **not** couple this to BUG-003: BUG-003 is fixed on pgvector (chunking); this OQ is
   the follow-up on retrieval-quality strategy and possible engine change.
+
+---
+
+## OQ-009 - Data Residency And DPA For Cloud AI Processors (Mistral Chat + Gradium STT/TTS)
+
+**Status:** Open (raised 2026-08-15, global-review decision #6) — **external input**
+(operator DPO + provider contracts). Framed as a **production gate**, not a pilot blocker
+while the pilot runs on non-production / test data.
+**Owner:** Product / Legal (operator DPO) + Architecture
+**Impacts:** EPIC-009 (trust, security, auditability), ADR-0039 (provider egress), ADR-0006
+(Mistral chat), ADR-0023/0024 (Gradium STT/TTS), TASK-BE-031 (data-minimization follow-up)
+
+### Question
+
+Under what data-protection terms may **customer personal data** be sent to the cloud AI
+processors, and what residency / retention / training guarantees are required before any
+**real** customer traffic? Two egress flows carry personal data off-box:
+
+- **Customer voice audio → Gradium** (STT + TTS), and
+- **Customer turn text → Mistral** (chat / wording).
+
+(Embeddings stay local on the VM per ADR-0039 — no RAG egress. The KB is operator content,
+not customer PII.)
+
+### Why It Matters
+
+For a Telecom/ISP billing assistant, voice audio and turn text are **personal data** (and can
+reveal account, billing and identity details). Sending them to cloud processors without a
+signed DPA, an EU/agreed residency guarantee, a no-training assurance and a defined retention
+is a **GDPR/compliance exposure**. `infra-v1.md` already flags that a strong sovereignty/residency
+constraint would push toward a self-hosted GPU pool; `cahier-des-charges-fonctionnel.md` lists a
+GDPR incident category and a configurable session retention, and notes studying self-hosting for
+sovereignty. None of this is yet backed by an explicit provider-processing posture.
+
+### Needed Decision (external inputs to obtain)
+
+- **DPA** signed with Mistral and with Gradium (GDPR Art. 28 processor terms), with a
+  **sub-processor** list.
+- **Data residency**: confirmed processing region (EU) or an explicit accepted deviation.
+- **Training opt-out**: written assurance that customer audio/text is **not** used to train
+  provider models.
+- **Retention**: provider-side retention of submitted audio/text (ideally zero/ephemeral) and
+  our own configurable retention aligned with it.
+- **Pilot guardrail**: the eir-ai4cc-tst pilot must **not** process real customer PII until the
+  above are confirmed — use test personas / synthetic data. This must be stated in the deployment
+  doc.
+- **If residency is denied**: fall back to the `infra-v1.md` self-hosted GPU lever (sovereign
+  STT/TTS/LLM) — larger cost/latency trade-off, decided separately.
+
+### Notes
+
+- Engineering follow-up (what we control now) is tracked as **TASK-BE-031**: a data-processing
+  inventory (what personal data goes to which processor), PII redaction before egress where
+  feasible, configurable retention, and confirming no raw audio/PII in logs.
+- This OQ is about **contractual/residency posture** (external), distinct from the transport
+  security of the ops surface (TASK-BE-023) and the egress *reachability* policy (ADR-0039).

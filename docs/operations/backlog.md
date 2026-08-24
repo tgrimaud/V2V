@@ -190,9 +190,10 @@ live in [`product-backlog/`](../../product-backlog/). The canonical V1 scope is
 
 - **Classification:** V1 pilot gate
 - **Status:** To do
-- **Product links:** EPIC-009, ADR-0018
-- **Objective:** verify `time_to_first_audio` p95 below 800 ms in the accepted
-  pre-warmed, co-located pilot context.
+- **Product links:** EPIC-009, ADR-0018 (criterion revised by ADR-0029)
+- **Objective:** verify the pilot latency criterion in the accepted pre-warmed,
+  co-located context — stub-era `time_to_first_audio` p95 below 800 ms, **revised
+  by ADR-0029** to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s.
 - **To cover:** real streaming STT behavior, first LLM/backend response,
   first TTS audio, network time and spoken acknowledgement behavior for long BSS
   analysis.

@@ -809,3 +809,122 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/tasks/{web-voice-tasks.md, backend-hardening-tasks.md}` — WEB-021 / BE-017
   merged status
 - `done-tasks.md` — this entry
+
+## 2026-08-06 — Sprint 11: centralized observability (OPS-007) + latency-lever defaults (WEB-022)
+
+**Summary:**
+
+- **TASK-OPS-007 — centralized pilot observability.** Voice→backend spans previously
+  landed in **separate traces** because the voice runtime records telemetry and exports
+  **post-hoc** (no live OTel context during the HTTP call). Fix: derive a **deterministic**
+  W3C `traceparent` from the `correlation_id` (pure BLAKE2b → 128-bit trace + 64-bit span,
+  new `voice_common/trace_context.py`), inject it on the backend hop, and anchor the exported
+  `voice.turn` root under the **same** derived context; children now parent to the root via
+  `set_span_in_context(root)` so a turn is one span tree. Backend continues the trace via
+  `micrometer-tracing-bridge-otel` (default W3C propagation + **ParentBased** sampler — the
+  `01` sampled flag survives a low probability arg). Shipped an **opt-in** collector+Prometheus
+  stack (`deploy/observability/docker-compose.otel.yml`, `prometheus.yml`, scrapes the
+  collector `:8889`, UI `:9090`) enabled by **one** Ansible variable `otel_collector_endpoint`
+  (empty ⇒ export OFF on both tiers).
+- **TASK-WEB-022 — latency-gate remediation / sign-off.** Product/Architecture decisions:
+  (1) **flip the validated levers to code defaults** so a default pilot run uses the fast path —
+  `VOICE_BACKEND_STREAM` default **ON** (lever 1), end-of-turn hold default **350 ms** (lever 3),
+  backend warm-up ON (lever 2); **STT pre-warm stays OFF** (unvalidated Gradium idle-socket).
+  (2) **Keep the ADR-0029 gate at m2e p95 ≤ 1.5 s** (revision rejected — >1.5 s breaks deals per
+  market data); it stays **OPEN**, still FAILED by ~640 ms (p95 ≈ 2142 ms combined cold), residual
+  handed to **TASK-STT-014** + **TASK-BE-020** + a live re-measure (blocked on platform access).
+  The runtime default lives in `_silence_window_config()` (350 ms), the detector library constant
+  stays 500 ms for batch/fixture; `backend_stream_enabled()` env parsing inverted to fail-safe.
+- Both tickets **merged into `feat/sprint-11-remote-deployment`** (fast-forward) and **WEB-022
+  user-validated on the live local stack** (backend + voice-agent + Postgres + Ollama, WebRTC at
+  `http://127.0.0.1:8090/webrtc.html`; "ca marche plutôt bien").
+
+### Files changed
+- `voice-agent/voice_common/trace_context.py` — deterministic BLAKE2b `derive_trace_ids` / `derive_traceparent`
+- `voice-agent/conversation_backend/http_backend.py` — inject `traceparent` on the backend hop
+- `voice-agent/voice_common/otel_export.py` — `_parent_context()` root anchoring + child parenting
+- `voice-agent/voice_pipeline/answer.py` — `backend_stream_enabled()` default ON (fail-safe parse)
+- `voice-agent/web_voice/webrtc_signaling.py` — `PILOT_END_OF_TURN_SILENCE_MS = 350.0` default
+- `voice-agent/tests/test_webrtc_signaling.py` — expect the 350 ms pilot default
+- `deploy/observability/{docker-compose.otel.yml, prometheus.yml}` — opt-in collector + Prometheus
+- `deploy/ansible/group_vars/all/vars.yml` + `roles/compose_tier/templates/{backend,voice}.env.j2` — `otel_collector_endpoint` wiring
+- `docs/architecture/adrs/{ADR-0037,ADR-0029}-*.md` — WEB-022 sign-off (levers default, gate kept 1.5 s OPEN)
+- `docs/{observability/voice-journey-timing.md, qa/streaming-voice-qa-report.md, product/v1-scope.md, operations/deployment-eir-ai4cc-tst.md}` — default-lever notes
+- `product-backlog/{tasks/web-voice-tasks.md, sprints/sprint-11-remote-deployment.md, backlog-index.md}` — statuses
+
+## 2026-08-14 — TASK-INFRA-009: Postgres schema management via Liquibase (versioned bootstrap)
+
+**Summary:**
+
+- Replaced the implicit schema bootstrap (Hibernate `ddl-auto: update` + Spring AI
+  `initialize-schema: true` + ad-hoc superuser SQL in the runbook) with **Liquibase YAML
+  changelogs shipped in the backend**. User-chosen split (opt2): app schema by Liquibase at
+  startup (app user); extension/grants by a **superuser bootstrap changelog** run once via a
+  one-shot `podman run liquibase` container; only `CREATE DATABASE`/`ROLE`/`ALTER … OWNER` stay a
+  psql pre-step (app-user secret stays out of every Liquibase file). ADR-0041.
+- **Key constraint documented**: Liquibase connects *into* a DB *as* the login role → it can never
+  create the DB it connects to, the role it logs in as, nor a superuser-only extension.
+- `vector_store` DDL reproduces **Spring AI 1.0.0 byte-for-byte** (extracted from the jar via
+  `javap -c`): `metadata json` (not jsonb), `embedding vector(768)`, `spring_ai_vector_index`
+  HNSW cosine, `uuid DEFAULT uuid_generate_v4()`. Guarded `not tableExists`/`MARK_RAN` for legacy
+  dev DBs. `ddl-auto: none`, `initialize-schema: false`.
+- **Dependency conflict fixed**: `liquibase-core 4.29.2` pulled `commons-io 2.16.1`, but
+  `commons-csv 1.14.1` needs ≥ 2.17 (`UnsynchronizedBufferedReader`) → pinned `commons-io 2.19.0`
+  in `dependencyManagement`. `mvn test` = **383 green** (378 + 5 new).
+- Local dev extensions moved to a pgvector init script (mounted in `docker-compose.yml`).
+- Adversarial code review: **93/100, QA gate Pass** (no blocking findings; 3 non-blocking
+  hardening items: no live apply-migration test, `--password` on CLI, floating liquibase image tag).
+- Not committed — awaiting user validation of the ticket (per delivery workflow).
+
+### Files changed
+- `backend/pom.xml` — add `liquibase-core`; pin `commons-io 2.19.0` (conflict)
+- `backend/src/main/resources/application.yml` — `ddl-auto: none`, `initialize-schema: false`, `spring.liquibase` block
+- `backend/src/main/resources/db/changelog/db.changelog-master.yaml` — app changelog (includes)
+- `backend/src/main/resources/db/changelog/changes/001-vector-store.yaml` — Spring AI exact DDL, guarded
+- `backend/src/main/resources/db/changelog/changes/002-kb-source-state.yaml` — JPA ledger table, guarded
+- `backend/src/main/resources/db/changelog/bootstrap/db.changelog-bootstrap.yaml` — superuser extensions + grants
+- `backend/src/test/java/com/voicesupport/schema/LiquibaseChangelogTest.java` — parse + DDL-parity + safety-invariant tests
+- `scripts/dev-db-init/01-extensions.sql` + `docker-compose.yml` — dev pgvector extension provisioning
+- `docs/architecture/adrs/ADR-0041-postgres-schema-management-with-liquibase.md` (+ ADR README, ADR-0038 supersede note)
+- `docs/operations/{first-deploy-runbook.md, deployment-eir-ai4cc-tst.md}` — Step 4 rewrite (4a psql / 4b container)
+- `CLAUDE.md` — storage note now Liquibase-owned
+- `product-backlog/{tasks/deployment-tasks.md, backlog-index.md, sprints/sprint-11-remote-deployment.md}` — TASK-INFRA-009
+
+## 2026-08-24 — Sprint 11 closed (Remote deployment & release readiness, eir-ai4cc-tst)
+
+**Summary:**
+
+- **Sprint 11 (EPIC-012) closed** and merged `feat/sprint-11-remote-deployment` →
+  `feat/restart-from-scratch` (`--no-ff`). The two-service web Voice2Voice stack went from
+  "runs on a laptop" to a repeatable pilot release on eir-ai4cc-tst.
+- **Delivered + merged:** Docker images (TASK-DEPLOY-001/002), Redis-backed shared conversation
+  memory (TASK-BE-021), per-tier docker-compose stacks (TASK-INFRA-001), HAProxy/Keepalived VIPs
+  (TASK-INFRA-002), embeddings placement decision ADR-0039 (TASK-INFRA-003), GitHub Actions CI
+  (TASK-OPS-001), Ansible deploy + release/rollback runbook (TASK-OPS-002/003), auth/log hardening
+  (TASK-BE-022/024), podman runtime alignment (TASK-INFRA-008), Liquibase schema (TASK-INFRA-009,
+  ADR-0041), plus the full-adversarial-review follow-up set (TASK-DOC-004/005, TASK-INFRA-006/007,
+  TASK-OPS-007/008, TASK-WEB-022/023/024, TASK-BE-025, BUG-006/007/008).
+- **Live pilot deploy v0.5.2, user-validated:** end-to-end web Voice2Voice ran on the pilot VMs;
+  **BUG-013** (backend base-URL), **BUG-015** (batch multi-sentence answer) and **BUG-009**
+  (ansible non-voice tier) were fixed and closed during the live pass.
+- **2026-08-15 global-review decision loop (#1–#9)** landed on the branch: ADR-0042 update +
+  **ADR-0043** (interim WebSocket audio transport design → Sprint 12), **ADR-0044** (pilot
+  data-tier SPOF acceptance), **TASK-BE-030/031** (graceful Redis degradation + data
+  minimization), **TASK-BE-032** (DEC-002 locale-aware amount matching), **TASK-WEB-032/033/034**
+  (m2e reference measurement, STT partial-semantics drift guard, `/api/voice/turn` JSON+base64
+  contract). Downstream order resequenced: **Sprint 12 = external voice WebSocket, 13 = Genesys,
+  14 = billing/identity**.
+- **BUG-014 (durable Ollama-DNS reachability)** implemented + adversarial 93/100 + QA GO, merged
+  2026-08-24 (`f153257`): static IP + `extra_hosts` (aardvark-dns out of the RAG critical path),
+  embedding-hop `/actuator/health` indicator, JVM negative-DNS-TTL=0 + bounded connect-scoped retry.
+- **Deferred (network-gated, open input #1):** live HAProxy/Keepalived VIP/TLS/VRRP validation,
+  live restart→converse retest for BUG-014, and the live latency re-measure (TASK-WEB-022 residual
+  → TASK-STT-014 / TASK-BE-020).
+- **Closure checks:** backend `mvn test` **399** green + ArchUnit OK; compose `qa-validate.sh`
+  **25/25**; CI workflows **22/22**; Ansible `qa-validate-ansible.sh` **69/69**; HAProxy/Keepalived
+  **33/33** (incl. real `haproxy -c`); prereqs **21/21**.
+
+### Files changed
+- `product-backlog/sprints/sprint-11-remote-deployment.md` — Status → ✅ Done (closed 2026-08-24), roadmap + INFRA-009/BUG-014 rows
+- `product-backlog/backlog-index.md` — Sprint registry row → ✅ Done; BUG-014 row
+- `done-tasks.md` — this closure entry

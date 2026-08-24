@@ -12,8 +12,62 @@ pilot, unless pulled in earlier.
 | TASK-BE-018 | Concise voice-first answers — cap answer length to cut TTS synthesis time (latency lever) | V1 answer quality / latency | TASK-BE-005 | ✅ Merged into `feat/restart-from-scratch` (2026-07-23, ff `f5467c4..e662f79`) — adversarial 92/100 + QA **Go** (live A/B: answer chars p50 −33 %/p95 −63 %, `llm_wording` p50 −30 %/p95 −34 %, 0 regression); `mvn test` 229 green |
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
 | TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) |
+| TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `3dafffd`; adversarial **95/100** + QA **GO**) — built on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **336** green (+5 `CorrelationIdTest`, +1 MVC CR/LF-echo regression), ArchUnit OK. `docs/qa/task-be-022-auth-log-hardening-qa-report.md`. Merge on explicit user request only |
+| TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
+| TASK-BE-024 | Conversation-memory adapter hardening: sanitize the client-controlled `conversation_id` in degraded-path logs + pipeline the Redis append (RPUSH/LTRIM/PEXPIRE) into one round-trip | V1 security + latency hardening | TASK-BE-021, TASK-BE-022 | 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (2026-08-05) — low-severity findings of the Sprint 11 full adversarial review. `RedisConversationMemoryAdapter` now routes `conversationId` through `CorrelationId.sanitize` on all three degraded/skip log lines (log-injection close-out); `RedisConversationTurnStoreAdapter.appendTrimExpire` pipelines the three Redis ops into a single round-trip (hot turn path). `mvn test` **337** green (+1 CR/LF log-forge regression), ArchUnit OK. Merge on explicit user request only |
+| TASK-BE-026 | LLM provider fallback on upstream `503`/unavailable — try an alternate configured model before degrading | V1 resilience hardening | TASK-BE-012, TASK-BE-005 | Proposed (2026-08-14) — surfaced during pilot voice-journey validation: the whole `mistral-small` family returned `503 Service unavailable` (code 3831) on the Mistral cloud while `mistral-medium-2508` / `ministral-8b-latest` answered normally, taking the bot to the safe fallback for a model-specific outage |
 
 ---
+
+## TASK-BE-026 — LLM provider fallback on upstream 503 / unavailable
+
+**Parent:** EPIC-005 (Answer engine) — resilience hardening
+**Classification:** V1 resilience hardening
+**Status:** Proposed (2026-08-14)
+**Priority:** P2
+**Branch:** `task/TASK-BE-026-llm-fallback-model`
+**Surfaced by:** Pilot voice-journey validation (2026-08-14).
+
+### Context
+
+During pilot validation the LLM wording slice failed with
+`TransientAiException: 503 - Service unavailable` (Mistral code `3830`/`3831`) and, after
+retries, `UpstreamUnavailableException: LLM provider timed out after 8000 ms`. Direct
+Mistral calls confirmed it was **model-specific and cloud-side**: the whole
+`mistral-small` family (`-latest` and `-2603`) returned `503`, while
+`mistral-medium-2508` and `ministral-8b-latest` answered in ~0.3 s with the same valid
+key (`/v1/models` = 200, egress healthy). The pilot was unblocked only by manually
+switching `MISTRAL_CHAT_MODEL` to `ministral-8b-latest` on the backends.
+
+Today a single-model outage takes every turn to the safe fallback even though other
+Mistral models are up — an avoidable loss of the real billing explanation.
+
+### Scope
+
+- Configure an ordered list of chat models (primary + one/more fallbacks), provider-agnostic
+  (must not couple the domain to Mistral; respect the LLM port/adapter boundary).
+- On a retryable upstream failure (HTTP 5xx / `TransientAiException` / timeout) for the
+  primary model, try the next configured model **within the existing bounded LLM
+  executor + timeout budget** before degrading; never blow the per-turn latency budget.
+- Keep the safe-degrade path as the final fallback when all models fail.
+- Telemetry: record which model actually answered and mark a fallback event
+  (`llm_wording` slice: provider/model + a `fallback` flag/outcome), so QA and latency
+  analysis can see when the primary was down.
+- Config only — no default behaviour change when the primary is healthy.
+
+### Acceptance Criteria
+
+- [ ] With the primary model returning 503, a turn still returns a grounded answer from
+      the configured fallback model (no safe-fallback), within the latency budget.
+- [ ] With all configured models failing, the turn degrades safely (unchanged contract).
+- [ ] Telemetry exposes the answering model + a fallback indicator; correlation id preserved.
+- [ ] No coupling of the domain to a specific provider SDK; unit tests with fakes (no Mockito).
+- [ ] Docs updated (config keys + runbook note), ADR if the provider strategy changes shape.
+
+### Notes
+
+- Complements TASK-BE-012 (already maps provider faults to `ERR_UPSTREAM` + bounds the
+  executor/timeout). This adds a *try-another-model* step before the degrade.
 
 ## TASK-BE-012 — Backend REST error contract
 
@@ -798,3 +852,537 @@ slice that spikes to ~2042 ms on a cold turn without warm-up.
 - DEC-002 preserved: contract test still proves no chunk is emitted before vetting; grounded /
   blocked-sentence behaviour unchanged. `mvn test` green + ArchUnit OK; no secret / raw
   provider text leak in telemetry.
+
+---
+
+## TASK-BE-022 — Constant-Time API-Key Gate Unification + Client-Field Log/Header Sanitization
+
+**Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
+**Classification:** V1 security hardening
+**Status:** ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` merge
+`3dafffd`) on user request — adversarial review **95/100** (Pass, no blocking) + QA **GO**
+(`docs/qa/task-be-022-auth-log-hardening-qa-report.md`). Built on
+`task/TASK-BE-022-auth-log-hardening` (branched from `feat/restart-from-scratch`); rides back to
+`feat/restart-from-scratch` at Sprint 11 closure. Post-merge `mvn test` **336** green, ArchUnit OK.
+**Priority:** Medium
+**Branch:** `task/TASK-BE-022-auth-log-hardening`
+**Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100) — non-blocking
+findings **#1** (timing side-channel / auth-gate inconsistency) and **#3** (log injection via
+client-controlled fields).
+**Relates to:** TASK-BE-019 (introduced `ApiKeyGuard` with the constant-time compare and the
+central interceptor), TASK-BE-009 (`CorrelationId` / MDC observability), ADR-0021 (the
+`/converse` shared-secret gate).
+
+### Context
+
+The 2026-08-04 review found two residual low/medium issues left over from the BE-019 hardening:
+
+- **#1 — timing side-channel + gate triplication.** BE-019 fixed the compare inside
+  `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, constant-time) and routed the four
+  knowledge/read endpoints through it via `ApiKeyAuthInterceptor`. But `ConverseController` and
+  `ConverseStreamController` kept their **own inline** `authorized()` using
+  `apiKey.equals(providedKey)` — a `String.equals` that short-circuits on the first differing
+  byte, re-introducing the exact byte-by-byte timing leak on the two highest-traffic endpoints,
+  and leaving **three** copies of the shared-secret rule.
+- **#3 — log injection via client-controlled fields.** `correlation_id` and `channel` arrive in
+  the `/converse` request body (and `X-Correlation-Id` in the header) and were placed into the
+  MDC, echoed on the response header, and logged verbatim. A crafted CR/LF value could forge
+  extra log lines (`[CONVERSE] channel=admin grounded=true …`) or split the response header
+  (HTTP response splitting).
+
+### Objective
+
+One definition of "authorized" (constant-time) across every gated endpoint, and a single
+choke-point that neutralizes any client-controlled correlation id / channel before it reaches a
+log, the MDC, or a response header — without changing the pilot's open-when-no-key semantics.
+
+### Scope
+
+- Route `/converse` and `/converse-stream` through `ApiKeyGuard.authorized` (delete both inline
+  `authorized()` methods); keep the existing empty-body 401 behaviour.
+- Add `CorrelationId.sanitize(String)` (strip `Character.isISOControl` chars, cap length) and
+  apply it wherever a client value enters the MDC / a log / a response header:
+  `CorrelationId.set` / `setChannel`, `CorrelationIdFilter.resolve` (inbound header),
+  `ConverseStreamController.resolveCorrelationId` (echoed header + worker MDC), and the
+  `[CONVERSE]` / `[CONVERSE-STREAM]` turn logs.
+
+### Acceptance
+
+- No endpoint uses `String.equals` for the api-key compare; all delegate to the constant-time
+  `ApiKeyGuard`. Pilot semantics unchanged (empty key = open, configured key enforced).
+- A `correlation_id` / `channel` / `X-Correlation-Id` carrying CR/LF cannot inject a second log
+  line nor a second response-header value; an oversized value is bounded.
+- `mvn test` + ArchUnit green, with a focused test pinning the sanitization contract.
+
+### Implementation notes (2026-08-04)
+
+Delivered on `task/TASK-BE-022-auth-log-hardening`:
+
+- **#1 — constant-time unification.** `ConverseController` and `ConverseStreamController` now
+  hold an `ApiKeyGuard` (built from `voice-support.conversation.api-key`) and call
+  `apiKeyGuard.authorized(providedKey)`; the inline `authorized()` methods (`apiKey.equals(...)`)
+  are removed. `ApiKeyGuard` (constant-time `MessageDigest.isEqual`, from BE-019) is now the
+  **single** shared-secret rule across `/converse`, `/converse-stream` and the interceptor-gated
+  knowledge/read endpoints.
+- **#3 — sanitization choke-point.** New `CorrelationId.sanitize(String)` strips every
+  `Character.isISOControl` char (CR/LF/TAB/…) and caps the result at **200** chars (returns
+  `null` for `null` so callers keep their blank handling). Applied in `CorrelationId.set` /
+  `setChannel` (before `MDC.put`), `CorrelationIdFilter.resolve` (inbound `X-Correlation-Id`),
+  `ConverseStreamController.resolveCorrelationId` (value echoed on the response header +
+  re-established in the worker MDC), and the `nullSafe(...)` used by both `[CONVERSE]` and
+  `[CONVERSE-STREAM]` turn logs. All existing MDC-derived structured logs
+  (`[TELEMETRY]`/`[PROMPT]`/`[GUARDRAIL]`/`[LANGUAGE]`) inherit the sanitized value for free.
+- **Not runtime-behaviour-changing beyond hardening:** no functional/latency change (auth outcome
+  and correlation-id continuity are preserved for well-formed inputs); the constant-time compare
+  is sub-ms, no new pipeline slice. Existing BE-009 telemetry unchanged.
+- **Tests (`mvn test` 335 green, +5):** new `CorrelationIdTest` pins CR/LF stripping, the 200-char
+  cap, null/blank handling, and `set`/`setChannel` sanitizing into the MDC. Existing
+  `CorrelationIdFilterTest`, `ConverseControllerApiKeyTest`, `ConverseStreamControllerAuthTest`
+  and the full slice/BDD suites stay green (behaviour-preserving for normal ids), ArchUnit OK.
+
+### Review & QA (2026-08-04)
+
+- **Adversarial code review: 95/100 — QA gate Pass, no blocking findings.** Non-blocking notes:
+  (1) `ApiKeyAuthInterceptor` (BE-019) logs `request.getRequestURI()` unsanitized — quasi-nil
+  (percent-encoded URI, container-rejected control chars), out of BE-022 scope; (2) the response
+  -header echo sanitization was proven by unit reasoning but not yet by an HTTP-level test → closed
+  in QA (see below).
+- **QA functional: GO** (`docs/qa/task-be-022-auth-log-hardening-qa-report.md`). Added
+  `ConverseControllerTest.sanitizesMaliciousCorrelationIdHeader` — an end-to-end `@WebMvcTest`
+  posting `correlation_id="corr\r\nInjected: 1"` and asserting the echoed `X-Correlation-Id`
+  response header is the single clean value `corrInjected: 1` (drives the real servlet filter chain
+  + controller). Auth accept/reject non-regression via `ConverseControllerApiKeyTest` /
+  `ConverseStreamControllerAuthTest`; sanitize contract via `CorrelationIdTest`.
+- **Latency: N/A** — transport-layer hardening, not a measured ADR-0018 slice; the compare +
+  sanitize are sub-ms and a rejected request short-circuits before the use case.
+- **Live smoke deferred** (deterministic hardening independent of DB/LLM; the header echo is
+  already exercised through the real MVC stack). `mvn test` **336** green, ArchUnit OK.
+
+---
+
+## TASK-BE-023 — Restrict The Unauthenticated Ops Surface Before Non-Localhost Exposure
+
+**Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
+**Classification:** V1 security hardening
+**Status:** ✅ Ready / Scheduled (mechanism decided 2026-08-15, global-review decision #5).
+The trigger condition is now **met**: since Sprint 11 the backend answers off-box on the
+backend VIP `.11:80` (VM↔VM on `192.168.0.0/24`), so `/v3/api-docs`, `/swagger-ui**` and
+`/actuator/metrics` are anonymously reachable on the internal subnet. Do **before** broadening
+exposure (external channels / Genesys); **not** P1 — exposure is internal-subnet only (no public
+route reaches the backend; the `.10:443` edge routes to the voice bridges, not the backend).
+**Priority:** Medium
+**Branch:** `task/TASK-BE-023-restrict-ops-surface` (to create when work starts)
+**Surfaced by:** full backend adversarial review 2026-08-04 (in-session, 91/100), non-blocking
+finding #4; re-scoped 2026-08-15 once the backend went off-localhost.
+
+### Decision (2026-08-15) — chosen mechanism: combined
+
+Record here (no separate ADR needed, per the AC below):
+
+1. **Actuator:** publicly expose **`health,info` only**; **gate `metrics`** (and any future
+   `prometheus`) — via management exposure config, not anonymously readable. Keep
+   **`/actuator/health` open** for container/orchestrator + HAProxy probes.
+2. **API docs:** gate `/swagger-ui**` + `/v3/api-docs**` (+ `.yaml`) behind the **existing
+   `x-api-key`** (`ApiKeyAuthInterceptor` extension) **when a key is configured**.
+3. **Env-driven posture:** open on the **localhost pilot / QA** profile (no key), **closed by
+   default** otherwise — consistent with the BE-021 `REDIS_HEALTH_ENABLED` precedent. So the
+   pilot + QA smoke stay frictionless while any keyed/non-localhost deployment is closed.
+**Relates to:** TASK-BE-016 (springdoc / Swagger UI + `/v3/api-docs`), TASK-BE-019 (the
+`x-api-key` gate + `ApiKeyGuard`/interceptor to reuse), TASK-BE-021 (the `REDIS_HEALTH_ENABLED`
+actuator gating precedent), ADR-0010 (contracts + security before real channels).
+
+### Context
+
+BE-019 deliberately kept the operational/documentation surface open so the localhost pilot and
+QA smoke tests keep working: `/swagger-ui**`, `/v3/api-docs` (+ `.yaml`), and the Actuator
+endpoints exposed in `application.yml` (`health,info,metrics`) answer **without** any
+`x-api-key`. The BE-019 live smoke explicitly confirmed `v3/api-docs` → 200 and `actuator/health`
+→ 200 as *intended* non-over-gating. This is fine on a strictly localhost pilot, but the moment
+the backend is reachable off-box (the Sprint 11 remote-deployment direction), an anonymous caller
+can enumerate the full API contract (`/v3/api-docs`) and read operational metrics
+(`/actuator/metrics`), which is an information-disclosure + recon surface.
+
+### Objective
+
+Ensure the API-documentation and operational endpoints are **not anonymously reachable** on any
+non-localhost deployment, while keeping the localhost pilot + QA flow frictionless.
+
+### Scope (to design, not yet decided)
+
+- Decide the mechanism (record a short ADR note): options include
+  - gating `/swagger-ui**` + `/v3/api-docs**` behind the same `x-api-key`
+    (`ApiKeyAuthInterceptor` extension) when a key is configured;
+  - restricting Actuator to `health,info` publicly and gating `metrics` (and any future
+    `prometheus`) — or binding the Actuator to a separate management port / localhost;
+  - environment-driven exposure (open on the localhost pilot profile, closed by default
+    otherwise), consistent with the BE-021 `REDIS_HEALTH_ENABLED` precedent.
+- Keep `/actuator/health` reachable for container/orchestrator liveness (do not break the deploy
+  probe).
+- Preserve the pilot: with no key / localhost, the docs + metrics stay reachable for QA.
+
+### Acceptance
+
+- With a key configured (non-localhost posture), anonymous `GET /v3/api-docs`,
+  `/swagger-ui/index.html` and `/actuator/metrics` are rejected (sanitized 401/403 or not
+  exposed), while `/actuator/health` stays reachable for probes.
+- The localhost pilot + QA smoke path is documented and still works.
+- `@WebMvcTest` / integration tests cover the gated vs open matrix; `mvn test` + ArchUnit green;
+  the decision is recorded (ADR note or in this ticket).
+
+### Notes
+
+- Pure transport / configuration hardening — no domain, RAG or LLM change.
+- Coordinate with the remote-deployment work (Sprint 11): this is the natural gate to close
+  *before* the backend answers on a non-loopback interface.
+
+---
+
+## TASK-BE-024 — Conversation-Memory Adapter Hardening (Log Sanitization + Pipelined Append)
+
+**Parent:** EPIC-009 (Trust, security and auditability) + EPIC-010 (pilot latency) — cross-cutting
+hardening of the Redis-backed conversation memory.
+**Classification:** V1 security + latency hardening
+**Status:** 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (branched from
+`feat/sprint-11-remote-deployment`, 2026-08-05). `mvn test` **337** green (+1), ArchUnit OK.
+Merge on explicit user request only.
+**Priority:** Low
+**Branch:** `task/TASK-BE-024-conversation-memory-hardening`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — two low-severity,
+non-blocking findings on the `TASK-BE-021` Redis memory adapter.
+**Relates to:** TASK-BE-021 (Redis-backed conversation memory / ADR-0008), TASK-BE-022
+(`CorrelationId.sanitize` choke-point, the same log-injection defense reused here).
+
+### Context
+
+The Sprint 11 review flagged two residual issues on the Redis conversation-memory adapter:
+
+- **Log injection (low).** `RedisConversationMemoryAdapter` logs the **client-controlled**
+  `conversationId` verbatim on its three degraded/skip paths (`op=read`/`op=write` on a Redis
+  outage, and `op=read outcome=skip` on a corrupt entry). A crafted CR/LF value in the
+  `/converse` body could forge a second, attacker-authored log line — the exact vector
+  TASK-BE-022 closed for `correlation_id`/`channel`, but this field was not routed through the
+  same sanitizer.
+- **Three round-trips on the hot path (low).** `RedisConversationTurnStoreAdapter.appendTrimExpire`
+  issued RPUSH, LTRIM and EXPIRE as **three separate** Redis calls, i.e. three network
+  round-trips on every persisted turn — avoidable latency on the conversation hot path.
+
+### Objective
+
+Neutralize the client-controlled id before it reaches a log line, and cut the per-turn Redis
+cost to a single round-trip, without changing the memory semantics (bounded history + sliding
+idle TTL, graceful degradation to empty history on outage).
+
+### Scope
+
+- Route `conversationId` through `CorrelationId.sanitize(...)` on the three degraded/skip log
+  statements in `RedisConversationMemoryAdapter` (strip ISO control chars, cap length).
+- Pipeline RPUSH → LTRIM → PEXPIRE in `RedisConversationTurnStoreAdapter.appendTrimExpire`
+  (`StringRedisTemplate.executePipelined`) so the append pays one round-trip; preserve command
+  order (bound to `maxItems`, refresh the idle TTL) and full TTL precision (PEXPIRE, millis).
+
+### Acceptance
+
+- A `conversation_id` carrying CR/LF cannot inject a second log line on any degraded/skip path;
+  the raw id text is preserved on a single sanitized line (regression test).
+- The append still bounds the list to `maxItems` and refreshes the sliding TTL, now in one
+  Redis round-trip.
+- `mvn test` + ArchUnit green.
+
+### Implementation notes (2026-08-05)
+
+- **Log sanitization.** `RedisConversationMemoryAdapter` imports
+  `com.voicesupport.shared.observability.CorrelationId` (allowed cross-cutting shared util per
+  `ContextBoundaryTest`) and adds a private `forLog(conversationId)` = `CorrelationId.sanitize`.
+  All three `log.warn(...)` calls now pass `forLog(conversationId)`; the throwable arg is
+  unchanged so the stack is still logged server-side.
+- **Pipelined append.** `RedisConversationTurnStoreAdapter.appendTrimExpire` now runs
+  `executePipelined((RedisCallback) connection -> { listCommands().rPush; listCommands().lTrim;
+  keyCommands().pExpire; return null; })`. Key/value are UTF-8 bytes (matching the
+  `StringRedisTemplate` UTF-8 serializers); PEXPIRE(millis) preserves the exact `Duration`
+  precision the previous `expire(ttl)` used. `range()` is unchanged.
+- **Tests (`mvn test` 337 green, +1):** `RedisConversationMemoryAdapterTest`
+  `degradedReadLogSanitizesConversationId` attaches a Logback `ListAppender` and asserts a
+  CR/LF-laced id produces no injected newline/CR in the formatted log line while the id text is
+  preserved on one line. The pipelined store keeps all existing memory-adapter behaviour tests
+  green (the manual `FakeConversationTurnStore` implements the port directly, unaffected by the
+  real pipelining); `RedisConversationTurnStoreAdapter` stays live-Redis-only, as before.
+- **Runtime-affecting:** the sanitized log preserves the existing structured fields; no new
+  metric/slice (the append is faster, same observable outcome). Live smoke deferred (needs a real
+  Redis; the behaviour is deterministic and unit-covered for the log path).
+
+---
+
+## TASK-BE-025 - Bound the streaming LLM call + embedding/pgvector client with timeouts
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0006 (Mistral chat + Ollama embeddings), ADR-0013 (SSE streaming)
+**Depends on:** —
+**Classification:** V1 backend robustness hardening
+**Status:** 🚧 Implemented on `task/TASK-BE-025-upstream-timeouts` (branched from
+`feat/sprint-11-remote-deployment`, 2026-08-05). `mvn test` **340** green (+3), ArchUnit OK.
+Merge on explicit user request only.
+**Priority:** High
+**Branch:** `task/TASK-BE-025-upstream-timeouts`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05,
+`docs/architecture/reviews/full-adversarial-review-2026-08-05.md`).
+
+### Context
+
+The sync generation path wraps the provider call with an executor + HTTP read timeout
+(`AbstractChatClientAnswerAdapter.java:90-104`), but the **streaming** path calls
+`streamContent()` with **no call-level timeout** (`:122-139`) — a hung Mistral/Ollama stream
+ties up an SSE worker until the 60s emitter timeout (`ConverseStreamController.java:37`).
+Separately, the **embedding** client is a bare Spring AI `EmbeddingModel` with no custom HTTP
+timeout (`KnowledgeConfig.java:66`, `InProcKnowledgeRetrievalAdapter.java:24-27`), so a
+slow/down Ollama during `similaritySearch` relies on Spring defaults before
+`GlobalExceptionHandler` maps to 503.
+
+### Scope
+
+- Add a bounded timeout on the streaming generation call (first-token and/or overall stream
+  budget) that fails fast into the existing degraded/`ERR_UPSTREAM` path.
+- Configure an explicit HTTP timeout on the embedding client (and the pgvector query path if
+  separately configurable), env/`application.yml`-driven like the LLM timeouts.
+- Tests: fake a slow streaming provider + a slow embedding client and assert fail-fast within
+  budget (no worker hang), with the sanitized outcome preserved.
+
+### Acceptance
+
+- A hung streaming LLM aborts within a configured budget, not at the 60s emitter timeout.
+- A slow embedding/pgvector call fails fast within a configured budget.
+- Unit tests cover both timeouts; existing 337 tests stay green; ArchUnit OK.
+- Telemetry outcome (`timeout`/`upstream_unavailable`) is emitted on both paths.
+
+### Implementation notes (2026-08-05)
+
+Delivered on `task/TASK-BE-025-upstream-timeouts`:
+
+- **Streaming LLM budget.** `AbstractChatClientAnswerAdapter` gains a `streamTimeoutMs` ctor arg;
+  `streamContent()` applies `Flux.timeout(Duration.ofMillis(streamTimeoutMs))` (Reactor
+  inter-signal timeout — bounds time-to-first-token *and* the gap between tokens) before
+  `.toStream()`. A stall trips a `TimeoutException` that the blocking bridge surfaces as a
+  `RuntimeException`; the streaming `generate(...)` catch scans the cause chain (`isTimeout`) and
+  degrades to `UpstreamUnavailableException` → the existing sanitized `ERR_UPSTREAM` path, well
+  before the 60 s emitter timeout. Recorded as a distinct `outcome=timeout` on the `llm_wording`
+  slice so a hung provider never pollutes the success p95. `<= 0` disables. Config
+  `voice-support.llm.stream-timeout-ms` (`LLM_STREAM_TIMEOUT_MS`, default **10000**), wired through
+  `LlmConfig` into both `MistralAnswerAdapter` and `OllamaAnswerAdapter`.
+- **Embedding client timeout.** The Ollama embedding auto-config built an `OllamaApi` on a
+  timeout-less RestClient, so a slow Ollama stalled every `similaritySearch` (embedding precedes
+  the pgvector query) on Spring defaults. `KnowledgeConfig` now defines an explicit
+  `OllamaEmbeddingModel` bean (auto-config backs off via `@ConditionalOnMissingBean`) built on a
+  `SimpleClientHttpRequestFactory` with read + connect timeouts. Stays Ollama `nomic-embed-text`
+  (768d). Config `voice-support.embedding.timeout-ms` (`EMBEDDING_TIMEOUT_MS`, default **5000**) +
+  `connect-timeout-ms` (default **3000**).
+- **Retrieval (pgvector) budget** (adversarial-review follow-up, 2026-08-05 — closes the AC
+  "a slow embedding/**pgvector** call fails fast"). `InProcKnowledgeRetrievalAdapter` now bounds the
+  whole `retrieve()` call (query embedding + `similaritySearch` SQL) with a wall-clock budget via a
+  bounded executor (mirrors the LLM sync pool): `future.get(budget)` frees the request/SSE worker
+  and records a distinct `outcome=timeout` on the `retrieval` slice, degrading to the sanitized
+  `ERR_UPSTREAM`. Config `voice-support.retrieval.timeout-ms` (`RETRIEVAL_TIMEOUT_MS`, default
+  **6000**, kept above the 5 s embedding budget), `<= 0` disables. **Residual:** JDBC ignores
+  interrupt, so the abandoned SQL keeps running on a daemon thread until Postgres returns — a true
+  DB-side cancel (`statement_timeout`/`socketTimeout` on the vector-store connection, shared with KB
+  sync inserts) is a tracked follow-up (BE-026 resilience). This removes the worker hang, which is
+  the acceptance criterion.
+- **Tests (`mvn test` 342 green):** `ChatClientStreamTimeoutTest` drives the real adapter over a
+  fake `ChatModel` — a never-emitting stream aborts within budget as `timeout` with no token
+  forwarded; a first-token-then-stall aborts as `timeout` after forwarding the first token; a
+  completed stream is forwarded normally with no false timeout. `InProcKnowledgeRetrievalAdapterTest`
+  adds a slow-retrieval case (fails fast within budget, records `timeout`, no `success`) + a
+  within-budget success case. Existing adapter/BDD constructions updated for the new ctor args;
+  ArchUnit OK.
+- **Runtime-affecting:** adds a `timeout` outcome on the `voice_support.slice` `llm_wording` and
+  `retrieval` timers (BE-009 telemetry); no new slice. Live smoke deferred (deterministic,
+  unit-covered; needs a real hung provider/DB to exercise end-to-end).
+
+---
+
+## TASK-BE-026 - Resilience: bounded retries on idempotent reads + LLM circuit breaker
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0006, ADR-0028
+**Depends on:** TASK-BE-025 (timeouts first)
+**Classification:** V1 backend resilience (deferred)
+**Status:** Proposed — deferred (do after BE-025; adds a dependency, size before committing)
+**Priority:** Low
+**Branch:** `task/TASK-BE-026-resilience`
+**Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — there is **no**
+retry/circuit-breaker anywhere in the backend; every upstream is fail-fast-once.
+
+### Context
+
+Fail-fast → sanitized 503 is acceptable for a POC, but a real-time voice product with a cloud
+LLM + local embedding + pgvector benefits from bounded retries on **idempotent** reads
+(embedding, retrieval) and a circuit breaker on the LLM so a provider blip doesn't fail every
+turn. No `resilience4j` in `pom.xml` today.
+
+### Scope
+
+- Add bounded retries with jitter on idempotent reads (embedding, retrieval) — never on the
+  non-idempotent generation call beyond its timeout.
+- Add a circuit breaker on the LLM adapter (open → immediate degraded wording, don't hammer a
+  down provider); expose breaker state as a metric.
+- Keep the domain pure — resilience lives in the infrastructure adapters/config only.
+
+### Acceptance
+
+- Transient embedding/retrieval failures recover within the retry budget; the LLM breaker
+  opens/half-opens/closes as expected with metrics; domain layer unchanged.
+- Unit tests cover retry-then-succeed, retry-exhausted, and breaker open/half-open.
+
+### Notes
+
+- Deferred, not blocking: BE-025's timeouts remove the worst failure mode; retries/breaker are
+  an availability improvement. Confirm the dependency (resilience4j) is acceptable before start.
+
+---
+
+## TASK-BE-030 - Graceful Redis degradation: degrade to in-process memory, don't outage
+
+**Parent:** EPIC-012
+**Related decisions:** ADR-0044 (pilot data-tier resilience), ADR-0008 / TASK-BE-021 (Redis memory), ADR-0028 (observability)
+**Depends on:** —
+**Classification:** V1 backend resilience — pilot SPOF blast-radius reduction
+**Status:** Planned (decided 2026-08-15, global-review decision #4)
+**Priority:** Medium-High
+**Branch:** `task/TASK-BE-030-graceful-redis-degradation` (to create when work starts)
+**Surfaced by:** 2026-08-15 global adversarial review, decision #4 — with `CONVERSATION_STORE=redis`
++ `REDIS_HEALTH_ENABLED=true`, a Redis outage flips `/actuator/health` DOWN, so HAProxy pulls
+**every** backend node → a full conversation outage from a **memory-only** dependency.
+
+### Context
+
+ADR-0044 accepts the single-instance Redis SPOF for the pilot but requires reducing its blast
+radius: a Redis outage must **degrade, not outage**. Today Redis is a hard readiness gate in
+`redis`-store mode; it must become a **non-fatal degraded** signal, with the backend falling
+back to in-process conversation memory and **staying in rotation**.
+
+### Scope
+
+- When Redis is unreachable in `redis`-store mode, **fall back to in-process conversation
+  memory** for the affected turns instead of failing the request.
+- **Decouple Redis health from readiness**: a Redis outage must **not** flip `/actuator/health`
+  to DOWN and pull the node from HAProxy. Redis reachability becomes a **degraded/observable**
+  indicator (metric + structured log + a distinct alertable signal), not a hard readiness fail.
+- Auto-recover: when Redis returns, shared memory resumes with no restart.
+- Keep the domain pure — the fallback/health-gating lives in the infrastructure store adapter +
+  config, not in the conversation domain.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Redis outage degrades instead of taking the backend out of rotation
+  Given the backend runs with CONVERSATION_STORE=redis
+  When Redis becomes unreachable
+  Then /actuator/health stays UP and the node remains in HAProxy rotation
+  And new turns are served from in-process conversation memory
+  And a distinct "conversation-memory degraded" signal is emitted (metric + log)
+```
+
+```gherkin
+Scenario: Shared memory resumes when Redis recovers
+  Given the backend degraded to in-process memory during a Redis outage
+  When Redis becomes reachable again
+  Then subsequent turns use Redis-backed shared memory again without a restart
+```
+
+### Notes / Accepted caveat
+
+- Per ADR-0044: with in-process fallback across two nodes and no session affinity, **multi-turn
+  context may be partially lost while Redis is down** — explicitly accepted over a full outage.
+- Tests: manual fakes (no Mockito), GIVEN/WHEN/THEN — Redis-down fallback, Redis-restored resume,
+  and the health indicator reporting degraded without failing readiness.
+
+---
+
+## TASK-BE-031 - Data-minimization for cloud AI egress (processing inventory + retention + PII-in-logs)
+
+**Parent:** EPIC-009 (Trust, security and auditability)
+**Related decisions:** OQ-009 (residency/DPA), ADR-0039 (provider egress), ADR-0006 (Mistral), ADR-0023/0024 (Gradium)
+**Depends on:** —
+**Classification:** V1 privacy / compliance hardening — engineering follow-up to OQ-009
+**Status:** Planned (decided 2026-08-15, global-review decision #6)
+**Priority:** Medium
+**Branch:** `task/TASK-BE-031-data-minimization` (to create when work starts)
+**Surfaced by:** 2026-08-15 global adversarial review, decision #6 — no explicit data-processing
+posture for the two personal-data egress flows (customer audio → Gradium, turn text → Mistral).
+
+### Context
+
+OQ-009 tracks the **contractual** residency/DPA inputs (external: operator DPO + providers). This
+ticket covers the **engineering** side we control: minimize and inventory what personal data leaves
+the box, bound its retention, and confirm no PII lands in logs. Embeddings already stay local
+(ADR-0039).
+
+### Scope
+
+- **Processing inventory:** a short, versioned record of *what personal data* is sent to *which
+  processor* (customer audio → Gradium STT/TTS; turn text → Mistral chat), the purpose, and the
+  boundary (embeddings stay local). Live in `docs/` (e.g. a compliance/data-flow note).
+- **Retention:** confirm the conversation-memory retention (`CONVERSATION_MEMORY_TTL_SECONDS`) is
+  configurable and documented; ensure nothing persists customer audio/text beyond it.
+- **PII in logs:** confirm/enforce that raw audio, transcripts and turn text are **not** logged
+  (align with the existing sanitization); add a test/guard if a gap is found.
+- **Redaction where feasible:** evaluate lightweight redaction of obvious identifiers before the
+  Mistral text egress (note: audio to Gradium cannot be pre-redacted — STT needs the raw signal;
+  that flow is governed by the DPA in OQ-009, not by redaction).
+
+### Acceptance
+
+- A versioned data-processing inventory exists and is linked from OQ-009.
+- Retention is configurable + documented; no customer audio/text persists beyond it.
+- A test/guard confirms no raw audio/transcript/turn text in logs.
+- Any residual (e.g. text redaction feasibility) is documented with a recommendation.
+
+### Notes
+
+- Pure privacy/config/documentation hardening — no RAG or LLM behaviour change.
+- Does **not** unblock real-customer traffic on its own: the production gate stays OQ-009
+  (signed DPA + residency + training opt-out).
+
+---
+
+## TASK-BE-032 - DEC-002 amount matching: locale-aware normalization (close the digit-collision bypass)
+
+**Parent:** EPIC-009 (Trust, security and auditability) / DEC-002
+**Related decisions:** DEC-002 (never voice an ungrounded amount), ADR-0014 (guardrails)
+**Depends on:** —
+**Classification:** V1 safety hardening — DEC-002 output guardrail
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
+**Priority:** Medium
+**Surfaced by:** 2026-08-15 global adversarial review, decision #7 — `OutputGuardrail.canonical()`
+stripped every non-digit (`[^0-9]`), so `€1.50` and `€150` both became `"150"`: a fabricated
+amount could match a grounded one of a different magnitude/format (a **DEC-002 bypass**), and the
+same amount in two locales did **not** match.
+
+### Context
+
+The DEC-002 output guardrail blocks any currency amount in the answer that is not present in the
+retrieved evidence. Its amount key was digit-only, which both over-matched across magnitudes
+(bypass) and under-matched across locales. The bypass is latent today (BSS/PDF amount evidence is
+gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
+
+### What was implemented
+
+- `OutputGuardrail` now canonicalizes each amount to **`<currency-class>:<value@2dp>`**:
+  - **Currency class** from the symbol/word (`€`/`eur`/`euro` → EUR, `$`/`usd`/`dollar` → USD,
+    `£`/`gbp` → GBP, `cent` → CENT, else `?`).
+  - **Locale-aware value parsing** to `BigDecimal`: both separators → the rightmost is the decimal
+    one; a lone separator is decimal only when unique and grouping 1-2 trailing digits (`1,50`),
+    otherwise a thousands separator (`1,500`, `1.234.567`). Ambiguity resolves toward **not merging**
+    distinct-looking values (guardrail errs on the safe/block side).
+- Result: `€1.50` (EUR:1.50) no longer collides with `€150` (EUR:150.00); `1.234,56 €` matches
+  `€1,234.56` (EUR:1234.56); same digits in a different currency do not match.
+
+### Acceptance (met)
+
+- New tests: digit-collision blocked, cross-locale match passes, cross-currency does not match.
+- `mvn -o test` **391 green** (+3), ArchUnit OK. Domain stays pure (no Spring, no new dependency).
+
+### Notes / residuals
+
+- Heuristic edge (documented): a lone separator grouping exactly 3 trailing digits (`€1.234`) is
+  treated as thousands (1234), not `1.234`. Acceptable for currency amounts; revisit if BSS evidence
+  shows 3-decimal currencies. This is the natural point to confirm the definitive rounding/currency
+  policy once BSS/PDF amounts are wired (OQ-003/004).

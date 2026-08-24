@@ -1,0 +1,12 @@
+# App-schema changelog (TASK-INFRA-009, ADR-0041).
+# Run by Spring Boot Liquibase at startup, AS THE APP USER. Owns only ordinary schema DDL
+# (vector_store + kb_source_state). The privileged bootstrap (CREATE EXTENSION / grants) is a
+# SEPARATE superuser-run changelog: db/changelog/bootstrap/db.changelog-bootstrap.yaml — it is NOT
+# included here on purpose, so app startup never attempts a superuser-only operation.
+databaseChangeLog:
+  - include:
+      file: changes/001-vector-store.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/002-kb-source-state.yaml
+      relativeToChangelogFile: true

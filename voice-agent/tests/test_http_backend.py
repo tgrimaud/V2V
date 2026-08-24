@@ -90,6 +90,11 @@ class HttpBackendMappingTest(unittest.TestCase):
         self.assertEqual(call["headers"]["x-api-key"], API_KEY)
         # The correlation id is propagated as a header too (one id end to end).
         self.assertEqual(call["headers"]["X-Correlation-Id"], "corr-1")
+        # TASK-OPS-007: a W3C traceparent derived from the correlation id links the voice
+        # turn to its backend spans (same trace id, sampled flag so the backend keeps it).
+        from voice_common.trace_context import derive_traceparent
+
+        self.assertEqual(call["headers"]["traceparent"], derive_traceparent("corr-1"))
         sent = json.loads(call["body"])
         self.assertEqual(sent["transcript"], "bonjour")
         self.assertEqual(sent["conversation_id"], "conv-1")

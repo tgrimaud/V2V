@@ -63,8 +63,9 @@ slowest turns without skewing `tts_first_audio`. Write-up + evidence:
 | Sprint 8 | CSV KB ingestion | ✅ Done (2026-07-23) |
 | Sprint 9 | Hardening / assainissement | ✅ Done (2026-07-28) |
 | **Sprint 10** | **Pilot-readiness latency & perceived latency** | ✅ Done (closed 2026-07-31) |
-| Sprint 11 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
-| Sprint 12 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
+| Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) (EPIC-012) | 🚧 Planned (defined 2026-08-03) |
+| Sprint 12 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
+| Sprint 13 (tentative) | Telephony channel (US-018) + Genesys advisor handoff (EPIC-007) | Planned — gated by OQ-006 |
 
 ## Why now (state that justifies the sprint)
 

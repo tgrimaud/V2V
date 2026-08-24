@@ -1,0 +1,118 @@
+---
+# Provision the container runtime on a Rocky Linux EL9 VM (TASK-OPS-003, runtime
+# revised by TASK-INFRA-008 / ADR-0038 addendum 2026-08-13).
+#
+# The tst VMs are podman-native (podman 5.x + podman-docker shim, no Docker CE). The
+# compose_tier role (TASK-OPS-002) drives `podman compose`, which delegates to the
+# Docker Compose v2 binary installed here as podman's compose provider. Idempotent:
+# dnf/get_url/systemd report changed only on first apply.
+#
+# SELinux note (EL9 enforcing): the backend KB `:ro` bind mount is relabelled `:ro,Z`
+# in deploy/compose/backend/docker-compose.yml so the container reads /app/kb-assets
+# under podman without an AVC denial (TASK-INFRA-008).
+
+- name: "Ensure podman + the docker CLI shim are present"
+  ansible.builtin.dnf:
+    name:
+      - podman
+      - podman-docker
+    state: present
+
+- name: "Quiet the podman-docker emulation banner"
+  ansible.builtin.copy:
+    dest: /etc/containers/nodocker
+    content: ""
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "Ensure the compose provider plugin directory exists"
+  ansible.builtin.file:
+    path: "{{ compose_provider_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Docker Compose v2 as podman's compose provider (keeps the committed compose files
+# unchanged). checksum omitted only if compose_provider_checksum is empty (falsy).
+- name: "Install the Docker Compose v2 binary as podman's compose provider"
+  ansible.builtin.get_url:
+    url: "{{ compose_provider_url }}"
+    dest: "{{ compose_provider_path }}"
+    checksum: "{{ compose_provider_checksum or omit }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Register the compose provider in containers.conf"
+  ansible.builtin.template:
+    src: containers.conf.j2
+    dest: /etc/containers/containers.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# Docker-compatible API endpoint the compose provider talks to (rootful, system).
+- name: "Enable and start the podman API socket"
+  ansible.builtin.systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+
+# Tier-aware firewalld: open the published port so cross-VM traffic works
+# (backend<->redis, VIP<->tier). Uses firewall-cmd directly to avoid a collection
+# dependency; no-op when firewalld is not running. When firewall_allowed_sources is
+# set (the default in group_vars, TASK-OPS-004), the port is opened ONLY to those
+# source IPs via rich rules (least privilege — e.g. Redis 6379 only to the backend
+# VMs, backend/voice ports only to the HAProxy LB nodes); an empty list falls back
+# to opening the port to everyone (previous behaviour).
+- name: "Check whether firewalld is active"
+  ansible.builtin.command: systemctl is-active firewalld
+  register: firewalld_state
+  changed_when: false
+  failed_when: false
+
+# Preferred: source-scoped rich rules (only the tier's real clients reach the port).
+# argv keeps the whole rich-rule string as one argument (spaces + quotes intact).
+- name: "Open {{ tier }} port {{ firewall_port | default('') }}/tcp only to allowed sources"
+  ansible.builtin.command:
+    argv:
+      - firewall-cmd
+      - --permanent
+      - '--add-rich-rule=rule family="ipv4" source address="{{ item }}" port port="{{ firewall_port }}" protocol="tcp" accept'
+  register: fw_rich
+  changed_when: "'ALREADY_ENABLED' not in fw_rich.stderr and 'ALREADY_ENABLED' not in fw_rich.stdout"
+  loop: "{{ firewall_allowed_sources | default([]) }}"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+    - (firewall_allowed_sources | default([])) | length > 0
+
+# Fallback only: no source list configured -> open the port to everyone.
+- name: "Open the {{ tier }} port {{ firewall_port | default('') }}/tcp in firewalld (unscoped fallback)"
+  ansible.builtin.command:
+    cmd: "firewall-cmd --permanent --add-port={{ firewall_port }}/tcp"
+  register: fw_add
+  changed_when: "'ALREADY_ENABLED' not in fw_add.stderr and 'ALREADY_ENABLED' not in fw_add.stdout"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+    - (firewall_allowed_sources | default([])) | length == 0
+
+- name: "Reload firewalld to apply the permanent rule"
+  ansible.builtin.command:
+    cmd: "firewall-cmd --reload"
+  when:
+    - firewalld_state.stdout == 'active'
+    - firewall_port is defined
+    - (fw_rich is defined and fw_rich is changed) or (fw_add is defined and fw_add is changed)
+  changed_when: true
+
+- name: "Confirm podman + the compose provider are available"
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - "podman --version"
+    - "podman compose version"
+  changed_when: false

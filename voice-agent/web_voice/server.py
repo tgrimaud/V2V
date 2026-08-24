@@ -4,7 +4,7 @@ Serves the mic-capture page and exposes the voice endpoints:
 - `POST /api/voice/stt`  PCM16 mono 16 kHz audio in -> transcript JSON out.
 - `POST /api/voice/tts`  `?text=` in -> WAV audio out.
 - `POST /api/voice/turn` PCM16 audio in -> full STT -> backend answer -> TTS loop ->
-  WAV out (transcript + answer text returned as `X-Voice-*` headers).
+  JSON out: transcript + answer text + answer audio as base64 WAV (Decision #9).
 
 The runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
 the server drives a `VoiceTurnProcessor` seam, so the stdlib and Pipecat runtimes
@@ -13,6 +13,7 @@ coexist and produce identical output. The STT/TTS provider is selected with
 """
 
 import argparse
+import base64
 import json
 import os
 import socketserver
@@ -20,7 +21,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -31,17 +32,20 @@ from stt_validation.provider_factory import (  # noqa: E402
     PROVIDER_NAMES,
     build_provider,
     build_streaming_provider,
+    supports_streaming as stt_supports_streaming,
 )
 from tts_synthesis.provider_factory import (  # noqa: E402
     build_provider as build_tts_provider,
     build_streaming_provider as build_streaming_tts_provider,
+    supports_streaming as tts_supports_streaming,
 )
 from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
 
-from .egress import WebVoiceEgress  # noqa: E402
+from .egress import VoiceResponse, WebVoiceEgress, pcm_to_wav  # noqa: E402
+from .egress import _sample_rate_from_format  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
-from .error_response import client_error_body  # noqa: E402
+from .error_response import SessionCapacityError, client_error_body  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
 from .runtime import (  # noqa: E402
     DEFAULT_RUNTIME,
@@ -86,6 +90,13 @@ def build_handler(
     processor: VoiceTurnProcessor, signaling: Any = None
 ) -> type[BaseHTTPRequestHandler]:
     class WebVoiceHandler(BaseHTTPRequestHandler):
+        # Answer in HTTP/1.1 (the BaseHTTPRequestHandler default is HTTP/1.0). Behind the
+        # HAProxy TLS edge (alpn h2,http/1.1) a browser negotiates HTTP/2; HAProxy cannot
+        # mux an HTTP/1.0 backend response onto an h2 client and returns "Empty reply"
+        # (BUG-012). Every bodied response here sets Content-Length and the only bodiless
+        # response is 204, so HTTP/1.1 keep-alive has definite framing on all paths.
+        protocol_version = "HTTP/1.1"
+
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
             if path == "/favicon.ico":
@@ -100,6 +111,12 @@ def build_handler(
 
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
             path = urlparse(self.path).path
+            if path in (STT_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE) and self._is_chunked():
+                # Bodies are sized and capped via Content-Length; a chunked body has none, so
+                # _read_body would read it as empty (length 0) and it would look like an empty
+                # turn. Ask the client to send a Content-Length instead of failing silently (411).
+                self._send_json(411, {"error": "length_required"})
+                return
             if path == STT_ROUTE:
                 self._handle_stt()
             elif path == TTS_ROUTE:
@@ -122,6 +139,16 @@ def build_handler(
             try:
                 offer = json.loads(body or b"{}")
                 answer = signaling.handle_offer(offer)
+            except SessionCapacityError as exc:
+                # Backpressure (TASK-WEB-024): the concurrency ceiling is reached. 503 +
+                # Retry-After tells the client to retry later instead of failing hard; the
+                # refusal is already recorded in the signaling telemetry (no detail leaked).
+                self._send_json(
+                    503,
+                    {"error": "capacity", "active": exc.active, "max": exc.cap},
+                    extra_headers={"Retry-After": "5"},
+                )
+                return
             except Exception:  # noqa: BLE001 - never leak SDP/session detail to the client
                 self._send_json(502, {"error": "webrtc_negotiation_failed"})
                 return
@@ -190,10 +217,18 @@ def build_handler(
                 _log_turn(telemetry)
                 self._send_json(502, _turn_tts_error(response, envelope))
                 return
+            # Send EVERY synthesized sentence, not just the last (BUG-015). With backend
+            # streaming on (default), the answer arrives as one TextFrame per sentence, so
+            # `tts_response` holds only the last synthesis while `result.audio` is the whole
+            # answer accumulated by the capture sink; build one WAV from the accumulated PCM.
+            full = _full_turn_response(result)
             send = Timer()
-            self._send_wav(response.wav, _answer_headers(transcript, result.answer_result))
-            processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
+            self._send_json(200, _turn_success_body(transcript, result.answer_result, full.wav))
+            processor.record_egress(full, envelope, telemetry, sent_ms=send.elapsed_ms())
             _log_turn(telemetry)
+
+        def _is_chunked(self) -> bool:
+            return "chunked" in (self.headers.get("Transfer-Encoding", "") or "").lower()
 
         def _read_body(self) -> bytes | None:
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -226,20 +261,22 @@ def build_handler(
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_json(self, status: int, payload: dict) -> None:
+        def _send_json(
+            self, status: int, payload: dict, extra_headers: dict[str, str] | None = None
+        ) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_wav(self, wav: bytes, extra_headers: dict[str, str] | None = None) -> None:
+        def _send_wav(self, wav: bytes) -> None:
             self.send_response(200)
             self.send_header("Content-Type", "audio/wav")
             self.send_header("Content-Length", str(len(wav)))
-            for name, value in (extra_headers or {}).items():
-                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(wav)
 
@@ -256,6 +293,21 @@ def _turn_stt_error(transcript, envelope) -> dict[str, Any]:
     return client_error_body(transcript.error_code, transcript.correlation_id, transcript.outcome.value)
 
 
+def _full_turn_response(result) -> VoiceResponse:
+    """Wrap the whole-answer PCM accumulated at the capture sink into one WAV (BUG-015).
+
+    `result.tts_response` is the last synthesized sentence only (the batch TTS processor
+    overwrites it per `TextFrame`), while `result.audio` is every sentence in order. Send
+    the full audio; if nothing was accumulated (no sink frame), fall back to the last
+    synthesis so behaviour never regresses on the single-sentence / non-streaming path.
+    """
+    last = result.tts_response
+    if not result.audio:
+        return last
+    sample_rate = _sample_rate_from_format(last.result.audio_format)
+    return VoiceResponse(result=last.result, wav=pcm_to_wav(result.audio, sample_rate))
+
+
 def _turn_tts_error(response, envelope) -> dict[str, Any]:
     """Client-safe 502 body for a `/turn` that produced no audio answer (RF-013)."""
     if response is None:
@@ -264,27 +316,31 @@ def _turn_tts_error(response, envelope) -> dict[str, Any]:
     return client_error_body(result.error_code, result.correlation_id, result.outcome.value)
 
 
-def _answer_headers(transcript, answer) -> dict[str, str]:
-    """Expose the transcript + spoken answer to the same client on a `/turn` reply.
+def _turn_success_body(transcript, answer, wav: bytes) -> dict[str, Any]:
+    """Single JSON `/turn` success reply (Decision #9): audio as base64 with its metadata.
 
-    The `/turn` body is the answer WAV; these headers let the page still show what was
-    asked and what is being said, plus the correlation id, without a second request.
-    Text is percent-encoded (UTF-8) so accented characters are header-safe; it is sent
-    only to the requesting client and never written to server logs.
+    Replaces the previous `audio/wav` body + `X-Voice-*` / `X-Answer-*` headers. The transcript
+    and spoken answer are unbounded, accented customer text; percent-encoded into headers they
+    could exceed proxy header-size limits on long answers (truncation / 502) and leak into proxy
+    access logs. A JSON body has no such size cap, keeps the reply shape uniform with the 502
+    error body, and — since `/turn` already returns the whole WAV at once (streaming is the
+    WebRTC path) — base64 buffering is a non-issue here. `degraded_reason` stays a stable,
+    non-sensitive code (e.g. `backend_unavailable`) so the client/QA still see why a safe
+    fallback was spoken (TASK-WEB-003-F).
     """
-    headers: dict[str, str] = {}
-    if transcript is not None:
-        headers["X-Correlation-Id"] = transcript.correlation_id
-        headers["X-Voice-Transcript"] = quote(transcript.transcript)
+    body: dict[str, Any] = {
+        "correlation_id": transcript.correlation_id,
+        "transcript": transcript.transcript,
+        "audio_base64": base64.b64encode(wav).decode("ascii"),
+        "audio_format": "wav",
+    }
     if answer is not None:
-        headers["X-Voice-Answer"] = quote(answer.text)
-        headers["X-Answer-Provider"] = answer.provider
-        headers["X-Answer-Outcome"] = answer.outcome.value
-        # Degraded reason is a stable, non-sensitive code (e.g. backend_unavailable)
-        # so the client/QA can see *why* a safe fallback was spoken (TASK-WEB-003-F).
+        body["answer"] = answer.text
+        body["provider"] = answer.provider
+        body["outcome"] = answer.outcome.value
         if answer.degraded_reason:
-            headers["X-Answer-Degraded-Reason"] = answer.degraded_reason
-    return headers
+            body["degraded_reason"] = answer.degraded_reason
+    return body
 
 
 def _envelope_from_query(query: str) -> ChannelEnvelope:
@@ -312,6 +368,43 @@ def _log_turn(telemetry: TelemetryRecorder) -> None:
     export_recorder(telemetry)
 
 
+def build_ice_servers(
+    stun: str = "",
+    turn: str = "",
+    turn_username: str = "",
+    turn_credential: str = "",
+) -> list:
+    """Build the WebRTC ICE server list from env-provided STUN/TURN config.
+
+    STUN needs only URLs; TURN additionally needs credentials for relayed media.
+    `SmallWebRTCConnection` requires a *homogeneous* list (all `str` OR all
+    `IceServer`), so when any TURN server is configured every entry — STUN
+    included — is promoted to an `IceServer`; with STUN only we keep the plain
+    `list[str]` form (unchanged behaviour). A TURN URL without credentials is a
+    misconfiguration (a relay won't authenticate), so it is dropped with no
+    silent fallback that would look like it works.
+    """
+    stun_urls = [s.strip() for s in stun.split(",") if s.strip()]
+    turn_urls = [t.strip() for t in turn.split(",") if t.strip()]
+    if not turn_urls:
+        return stun_urls
+    from pipecat.transports.smallwebrtc.connection import IceServer
+
+    servers: list = [IceServer(urls=url) for url in stun_urls]
+    if turn_username and turn_credential:
+        servers.extend(
+            IceServer(urls=url, username=turn_username, credential=turn_credential)
+            for url in turn_urls
+        )
+    else:
+        print(
+            "[voice] VOICE_TURN set without VOICE_TURN_USERNAME/CREDENTIAL; "
+            "TURN relays ignored (a relay cannot authenticate without credentials)",
+            file=sys.stderr,
+        )
+    return servers
+
+
 def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     """Build the WebRTC signaling service + its background loop, or (None, None).
 
@@ -331,7 +424,12 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
 
     loop = BackgroundEventLoop()
     loop.start()
-    ice = [s for s in (args.stun or "").split(",") if s]
+    ice = build_ice_servers(
+        stun=args.stun or "",
+        turn=getattr(args, "turn", "") or "",
+        turn_username=getattr(args, "turn_username", "") or "",
+        turn_credential=getattr(args, "turn_credential", "") or "",
+    )
     signaling = WebRtcSignalingService(
         ingress=ingress,
         egress=egress,
@@ -348,7 +446,7 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
 
 def _streaming_stt_by_language(args) -> dict[str, Any]:
     """Per-session streaming STT providers keyed by language (US-042, WebRTC path)."""
-    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+    if args.stt_mode != "streaming" or not stt_supports_streaming(args.provider):
         return {}
     return {
         "fr": build_streaming_provider(args.provider, language="fr"),
@@ -360,7 +458,7 @@ def _streaming_tts_by_language(args) -> dict[str, Any]:
     """Per-session streaming TTS voices keyed by language (US-042, WebRTC path). French uses the
     default voice; English uses GRADIUM_VOICE_ID_EN when configured (Gradium picks language by voice).
     """
-    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+    if args.tts_mode != "streaming" or not tts_supports_streaming(args.provider):
         return {}
     by_language = {"fr": build_streaming_tts_provider(args.provider)}
     english_voice = os.environ.get("GRADIUM_VOICE_ID_EN")
@@ -394,10 +492,11 @@ def _tts_by_language(provider_name: str) -> dict[str, Any]:
 def _build_streaming_provider(args) -> Any:
     """Build the streaming STT provider for the WebRTC path, or None (batch fallback).
 
-    Streaming STT (TASK-STT-010) is Gradium-only; any other provider or an explicit
-    `--stt-mode batch` keeps the batch utterance-aggregator path.
+    Selection is keyed on the provider registry (TASK-WEB-023): a provider with no
+    registered streaming variant, or an explicit `--stt-mode batch`, keeps the batch
+    utterance-aggregator path. Adding a vendor is a registration, not an edit here.
     """
-    if args.stt_mode != "streaming" or args.provider != GRADIUM:
+    if args.stt_mode != "streaming" or not stt_supports_streaming(args.provider):
         return None
     return build_streaming_provider(args.provider)
 
@@ -405,10 +504,11 @@ def _build_streaming_provider(args) -> Any:
 def _build_streaming_tts_provider(args) -> Any:
     """Build the streaming TTS provider for the WebRTC path, or None (batch fallback).
 
-    Streaming TTS (TASK-WEB-004) is Gradium-only; any other provider or an explicit
-    `--tts-mode batch` keeps the batch TTS processor (synthesize whole clip then play).
+    Selection is keyed on the provider registry (TASK-WEB-023): a provider with no
+    registered streaming variant, or an explicit `--tts-mode batch`, keeps the batch
+    TTS processor (synthesize whole clip then play). Adding a vendor is a registration.
     """
-    if args.tts_mode != "streaming" or args.provider != GRADIUM:
+    if args.tts_mode != "streaming" or not tts_supports_streaming(args.provider):
         return None
     return build_streaming_tts_provider(args.provider)
 
@@ -443,6 +543,10 @@ def main() -> int:
             signaling.close()
         if loop is not None:
             loop.stop()
+        # Stop the batch pipecat processor's background loop if it started one (TASK-WEB-024).
+        close = getattr(processor, "close", None)
+        if callable(close):
+            close()
     return 0
 
 
@@ -472,7 +576,24 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stun",
         default=os.environ.get("VOICE_STUN", ""),
-        help="comma-separated STUN/TURN URLs for the WebRTC ICE servers (optional)",
+        help="comma-separated STUN URLs for the WebRTC ICE servers (optional)",
+    )
+    parser.add_argument(
+        "--turn",
+        default=os.environ.get("VOICE_TURN", ""),
+        help="comma-separated TURN URLs for relayed WebRTC media (needs "
+        "--turn-username/--turn-credential); required when clients cannot reach the "
+        "bridge's host candidates directly (e.g. Prodpriv NAT)",
+    )
+    parser.add_argument(
+        "--turn-username",
+        default=os.environ.get("VOICE_TURN_USERNAME", ""),
+        help="username for the TURN relays in --turn",
+    )
+    parser.add_argument(
+        "--turn-credential",
+        default=os.environ.get("VOICE_TURN_CREDENTIAL", ""),
+        help="credential/password for the TURN relays in --turn",
     )
     parser.add_argument(
         "--stt-mode",

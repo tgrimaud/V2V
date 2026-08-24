@@ -1,0 +1,61 @@
+# Voice bridge (WebRTC) - tst deploy stack (TASK-INFRA-001, ADR-0038).
+# Runs the TASK-DEPLOY-002 image on vla-ai4cc-t01/t02 (.103/.104), one instance per
+# VM, behind the voice VIP .10 (HAProxy TLS edge - TASK-INFRA-002). The image
+# entrypoint already binds 0.0.0.0:8090; everything else is env-driven.
+#
+# Values come from a sibling ".env" rendered by Ansible from secrets - never commit
+# a real .env. See .env.example for the contract.
+
+services:
+  voice-bridge:
+    image: "${VOICE_IMAGE:?set VOICE_IMAGE to the registry path}:${IMAGE_TAG:-latest}"
+    container_name: voice-support-bridge
+    restart: unless-stopped
+    # Published on the host so the voice VIP (.10) can load-balance t01/t02.
+    ports:
+      - "${VOICE_BIND:-0.0.0.0}:${VOICE_PORT:-8090}:8090"
+    environment:
+      # --- Conversation backend (reach the backend VIP .11) ---
+      VOICE_BACKEND: "${VOICE_BACKEND:-http}"
+      VOICE_BACKEND_URL: "${VOICE_BACKEND_URL}"
+      VOICE_BACKEND_API_KEY: "${VOICE_BACKEND_API_KEY}"
+      VOICE_BACKEND_TIMEOUT_S: "${VOICE_BACKEND_TIMEOUT_S:-30}"
+      # --- Latency levers (pilot GO defaults - TASK-WEB-020/021) ---
+      VOICE_BACKEND_STREAM: "${VOICE_BACKEND_STREAM:-1}"
+      VOICE_BACKEND_WARMUP: "${VOICE_BACKEND_WARMUP:-1}"
+      VOICE_STT_PREWARM: "${VOICE_STT_PREWARM:-0}"
+      # --- STT/TTS provider (Gradium cloud) ---
+      GRADIUM_API_KEY: "${GRADIUM_API_KEY}"
+      VOICE_STT_MODE: "${VOICE_STT_MODE:-streaming}"
+      VOICE_TTS_MODE: "${VOICE_TTS_MODE:-streaming}"
+      GRADIUM_VOICE_ID_EN: "${GRADIUM_VOICE_ID_EN:-}"
+      # --- WebRTC NAT traversal for Prodpriv clients (open input #1/#4) ---
+      VOICE_STUN: "${VOICE_STUN:-}"
+      VOICE_TURN: "${VOICE_TURN:-}"
+      VOICE_TURN_USERNAME: "${VOICE_TURN_USERNAME:-}"
+      VOICE_TURN_CREDENTIAL: "${VOICE_TURN_CREDENTIAL:-}"
+      # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
+      OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+    # Mirror the image HEALTHCHECK (python ships in the slim image; curl/wget do not).
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/', timeout=3).status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # Sized to the vla-t01/t02 flavor (2 vCPU / 4 GB).
+    deploy:
+      resources:
+        limits:
+          cpus: "${VOICE_CPUS:-1.5}"
+          memory: "${VOICE_MEMORY:-3g}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

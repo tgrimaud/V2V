@@ -4,6 +4,13 @@
 
 Accepted
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED on the current stack.** No
+> `IntentClassifier` / `AgentProfile` exists in `backend/src/main` on
+> `feat/restart-from-scratch` / the Sprint 11 branch (grep-verified); the rebuilt
+> backend answers through a single RAG pipeline with domain filtering, not runtime
+> multi-agent routing. An earlier implementation existed on `main`; this remains a
+> target decision to re-introduce when multiple agent profiles are needed.
+
 ## Context
 
 Voice Support Bot answers several support domains: technical support, billing,

@@ -77,6 +77,24 @@ class OtlpExportTranslationTest(unittest.TestCase):
         child = next(s for s in spans if s.name == "stt.request")
         self.assertEqual(child.attributes.get("provider"), "gradium")
 
+    def test_turn_uses_the_trace_id_derived_from_correlation_id(self):
+        # GIVEN a per-turn recorder (correlation_id="corr-1") and an in-memory exporter
+        from voice_common.trace_context import derive_trace_ids
+
+        exporter = InMemorySpanExporter()
+        # WHEN exporting
+        self.assertTrue(export_recorder(_recorder_with_turn(), span_exporter=exporter))
+        spans = exporter.get_finished_spans()
+        # THEN the root and every child share the trace id derived from the correlation id
+        # (the same id http_backend injects as traceparent) so the turn is one cross-tier trace
+        derived_trace_id, derived_span_id = derive_trace_ids("corr-1")
+        root = next(s for s in spans if s.name == "voice.turn")
+        self.assertEqual(root.context.trace_id, derived_trace_id)
+        # the root's parent is the derived span id — the backend spans hang off the same id
+        self.assertEqual(root.parent.span_id, derived_span_id)
+        for span in spans:
+            self.assertEqual(span.context.trace_id, derived_trace_id)
+
     def test_export_never_raises_on_translation_error(self):
         # GIVEN a recorder that raises while being read
         exporter = InMemorySpanExporter()

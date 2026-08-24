@@ -70,6 +70,12 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         List<ConversationTurn> prior = memory.recentTurns(conversationId);
         List<String> history = ConversationHistoryFormatter.format(prior);
         AnswerLanguage language = languageDetector.resolve(transcript, history, forcedLanguage);
+        // BUG-007: null domain = search ALL domains ON PURPOSE. There is no runtime classifier of
+        // the incoming QUESTION on the voice path (ADR-0015 not implemented); the DomainClassifierPort
+        // (ADR-0030) only tags KB articles at ingestion, so no reliable per-question domain can be
+        // supplied and forcing one could drop relevant chunks. Audience fail-closed (ADR-0034) +
+        // per-sentence guardrails still keep the streamed answer DEC-002-safe. Cross-domain precision
+        // trade-off tracked in OQ-008. See ConversationService.
         GroundingResult grounding = groundQueryUseCase.ground(transcript, null, topK, !prior.isEmpty(), language);
         GeneratedAnswer answer = grounding.answerable()
                 ? streamGrounded(transcript, grounding, history, language, onChunk)
@@ -85,7 +91,13 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         GuardedSentenceEmitter emitter = new GuardedSentenceEmitter(
                 evidence, outputGuardrail, onChunk, bestScore(evidence), language);
         streamingGenerator.generate(question, evidence, history, language, emitter::accept);
-        return emitter.finish();
+        GeneratedAnswer answer = emitter.finish();
+        // Count a DEC-002 output block (or an empty low-confidence turn) on the streamed path too, so
+        // the most safety-critical event ("bot suppressed a fabricated amount") is observable (ADR-0034).
+        if (emitter.blockedVerdict() != null) {
+            telemetry.recordGuardrailBlock(emitter.blockedVerdict().name());
+        }
+        return answer;
     }
 
     private GeneratedAnswer emitFallback(AnswerLanguage language, GuardrailDecision decision, Consumer<String> onChunk) {

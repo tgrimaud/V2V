@@ -3,7 +3,7 @@
 ## Status
 
 Accepted — implemented by TASK-BE-015. Builds on the answer engine of
-[ADR-0014](ADR-0014-answer-guardrails-and-grounding.md) (input/output guardrails,
+[ADR-0014](ADR-0014-domain-guardrails-before-and-after-rag.md) (input/output guardrails,
 grounding pipeline) and the provider-agnostic LLM wording of
 [ADR-0006](ADR-0006-mistral-chat-and-ollama-embeddings.md) / DEC-011. Closes the answer-language
 open question left by [ADR-0030](ADR-0030-csv-knowledge-connector-and-domain-classification.md)

@@ -13,8 +13,8 @@ output for the same input; only the execution path differs. This is the composin
 layer, so it may reference both halves.
 """
 
-import asyncio
-from typing import Any, Protocol
+import threading
+from typing import Any, Coroutine, Protocol
 
 from conversation_backend import (
     AnswerOutcome,
@@ -95,32 +95,57 @@ class StdlibTurnProcessor:
 
 
 class PipecatTurnProcessor:
-    """Runs the loop through the Pipecat pipeline (batch parity)."""
+    """Runs the loop through the Pipecat pipeline (batch parity).
+
+    Each turn runs on a single persistent background asyncio loop (TASK-WEB-024) instead
+    of `asyncio.run(...)` per HTTP turn, which created and tore down a fresh event loop on
+    every request. The loop is created lazily on first use and pinned to one daemon thread;
+    the threaded HTTP handler submits coroutines to it with `run_coroutine_threadsafe`
+    (`BackgroundEventLoop.run`), exactly as the WebRTC path already does.
+    """
 
     def __init__(
         self,
         ingress: WebVoiceIngress,
         egress: WebVoiceEgress,
         backend: BackendAnswerPort | None = None,
+        loop: "BackgroundEventLoop | None" = None,
     ) -> None:
         self._ingress = ingress
         self._egress = egress
         self._backend = backend or StubBackendAdapter()
+        self._loop = loop
+        # Only close a loop this processor created; an injected one is caller-owned.
+        self._owns_loop = loop is None
+        self._loop_lock = threading.Lock()
+
+    def _run(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        """Submit a coroutine to the shared background loop (created lazily, once)."""
+        loop = self._loop
+        if loop is None:
+            with self._loop_lock:
+                if self._loop is None:
+                    from .async_loop import BackgroundEventLoop
+
+                    self._loop = BackgroundEventLoop()
+                    self._loop.start()
+                loop = self._loop
+        return loop.run(coro)
 
     def transcribe_turn(self, audio, envelope, telemetry=None, *, received_ms=None):
-        return asyncio.run(
+        return self._run(
             run_stt_turn(audio, envelope, ingress=self._ingress, telemetry=telemetry, received_ms=received_ms)
         )
 
     def synthesize_turn(self, text, envelope, telemetry=None) -> VoiceResponse:
-        return asyncio.run(run_tts_turn(text, envelope, egress=self._egress, telemetry=telemetry))
+        return self._run(run_tts_turn(text, envelope, egress=self._egress, telemetry=telemetry))
 
     def record_egress(self, response, envelope, telemetry, *, sent_ms=None) -> None:
         # The egress span is transport-owned; recording it needs no pipeline.
         self._egress.record_egress(response, envelope, telemetry, sent_ms=sent_ms)
 
     def run_turn(self, audio, envelope, telemetry=None, *, received_ms=None) -> BatchTurnResult:
-        return asyncio.run(
+        return self._run(
             run_batch_turn(
                 audio,
                 envelope,
@@ -131,6 +156,12 @@ class PipecatTurnProcessor:
                 received_ms=received_ms,
             )
         )
+
+    def close(self) -> None:
+        """Stop the background loop on shutdown (only if this processor owns it)."""
+        if self._owns_loop and self._loop is not None:
+            self._loop.stop()
+            self._loop = None
 
 
 def build_turn_processor(

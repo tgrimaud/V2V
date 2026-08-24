@@ -139,9 +139,10 @@ eval (TASK-BE-027) run against `POST /api/conversation/retrieve` on the loaded c
   normalization (BE-029) fixes `sup-fr-slow`. The remaining lever is hybrid lexical (`tsvector`)
   + dense fusion or query expansion — or enriching the eval set with a variant that differs *only*
   by the greeting to keep the two phrasings otherwise identical.
-- **BUG-009** — the two EN `OFF_TOPIC` guardrail blocks are a tracked bug: the OFF_TOPIC royalty
-  pattern (`…|roi|queen|king`) lacks word boundaries, so `king` matches inside "wor**king**".
-  Out of OQ-008 scope (guardrail, not retrieval).
+- **BUG-016** (was informally "BUG-009" before that number went to the Ansible deploy bug) — the
+  two EN `OFF_TOPIC` guardrail blocks are a tracked bug: the OFF_TOPIC royalty pattern
+  (`…|roi|queen|king`) lacked word boundaries, so `king` matched inside "wor**king**". Fixed with
+  word boundaries (2026-08-14). Out of OQ-008 scope (guardrail, not retrieval).
 
 ### Baseline result (2026-08-13, 14 questions / 29 variants, dense-only, top-K=8)
 
@@ -170,9 +171,10 @@ Conclusions:
 - **MMR (TASK-BE-028)** is justified but **narrow** — it targets the single retrieval
   eviction, not the EN gap.
 - The **dominant EN gap is the input guardrail classifying legitimate support questions as
-  `OFF_TOPIC`** → now tracked as **BUG-009** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern
-  matches inside "wor**king**"); guardrail/EN-topicality work (BUG-001 class), **out of OQ-008
-  scope**. Had the harness not separated guardrail blocks from evictions, this would have been
+  `OFF_TOPIC`** → tracked as **BUG-016** (unbounded `king`/`roi`/`queen` OFF_TOPIC pattern
+  matched inside "wor**king**"; fixed with word boundaries 2026-08-14); guardrail/EN-topicality
+  work (BUG-001 class), **out of OQ-008 scope**. Had the harness not separated guardrail blocks
+  from evictions, this would have been
   misattributed to retrieval (MMR/hybrid/Qdrant) — the exact BUG-003 trap.
 - EN support **content coverage** (FR-only curated FAQs vs thinner EN CSV troubleshooting)
   remains a separate gap for Product.

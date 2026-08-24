@@ -4,6 +4,8 @@ import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -60,7 +62,7 @@ public class OutputGuardrail {
         Matcher matcher = CURRENCY_AMOUNT.matcher(text);
         return matcher.results()
                 .map(result -> canonical(result.group()))
-                .filter(digits -> !digits.isEmpty())
+                .filter(key -> !key.isEmpty())
                 .collect(Collectors.toSet());
     }
 
@@ -71,7 +73,76 @@ public class OutputGuardrail {
         return evidence.stream().map(RetrievedEvidence::text).collect(Collectors.joining("\n"));
     }
 
+    // Canonical amount key = currency class + value normalized to 2 decimals. A bare digit-only
+    // key (the previous "[^0-9]" strip) collided across magnitudes and formats: "€1.50" and "€150"
+    // both became "150", so a fabricated amount could match a grounded one of a different value
+    // (a DEC-002 bypass). Parsing to (currency, decimal value) closes that collision while making
+    // the same amount in different locales match ("1,50 €" == "€1.50" == "EUR:1.50").
     private String canonical(String amountToken) {
-        return amountToken.replaceAll("[^0-9]", "");
+        BigDecimal value = parseAmount(amountToken.replaceAll("[^0-9.,]", ""));
+        if (value == null) {
+            return "";
+        }
+        return currencyOf(amountToken) + ":" + value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String currencyOf(String token) {
+        String lower = token.toLowerCase(Locale.ROOT);
+        if (lower.contains("€") || lower.contains("eur") || lower.contains("euro")) {
+            return "EUR";
+        }
+        if (lower.contains("$") || lower.contains("usd") || lower.contains("dollar")) {
+            return "USD";
+        }
+        if (lower.contains("£") || lower.contains("gbp")) {
+            return "GBP";
+        }
+        if (lower.contains("cent")) {
+            return "CENT";
+        }
+        return "?";
+    }
+
+    // Locale-aware: with both separators the rightmost is the decimal one; a lone separator is a
+    // decimal point only when it is unique and groups 1-2 trailing digits (e.g. "1,50"), otherwise
+    // it is a thousands separator ("1,500", "1.234.567"). Ambiguity is resolved toward NOT merging
+    // distinct-looking values, so the guardrail errs on the safe (block) side.
+    private BigDecimal parseAmount(String number) {
+        if (number == null || number.isBlank()) {
+            return null;
+        }
+        boolean hasDot = number.indexOf('.') >= 0;
+        boolean hasComma = number.indexOf(',') >= 0;
+        String normalized;
+        if (hasDot && hasComma) {
+            char decimal = number.lastIndexOf('.') > number.lastIndexOf(',') ? '.' : ',';
+            normalized = stripAllBut(number, decimal).replace(decimal, '.');
+        } else if (hasDot || hasComma) {
+            normalized = normalizeSingleSeparator(number, hasDot ? '.' : ',');
+        } else {
+            normalized = number;
+        }
+        try {
+            return new BigDecimal(normalized);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String normalizeSingleSeparator(String number, char separator) {
+        int first = number.indexOf(separator);
+        int last = number.lastIndexOf(separator);
+        String trailing = number.substring(last + 1);
+        boolean decimal = first == last && trailing.length() >= 1 && trailing.length() <= 2;
+        return decimal ? number.replace(separator, '.') : stripSeparator(number, separator);
+    }
+
+    private String stripAllBut(String number, char keep) {
+        char strip = keep == '.' ? ',' : '.';
+        return stripSeparator(number, strip);
+    }
+
+    private String stripSeparator(String number, char separator) {
+        return number.replace(String.valueOf(separator), "");
     }
 }

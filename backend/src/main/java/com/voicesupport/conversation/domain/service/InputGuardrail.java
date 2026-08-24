@@ -65,7 +65,10 @@ public class InputGuardrail {
             compile("(blague|joke|histoire\\s+drôle|devinette|riddle)"),
             compile("(raconte|dis)[- ]moi\\s+(une\\s+)?(blague|histoire|poème)"),
             compile("\\b(joue|chante|danse|dessine|play|sing|draw|dance)\\b"),
-            compile("(président|president|capitale|capital\\s+of|roi|queen|king)"),
+            // BUG-016: the royalty tokens need word boundaries — bare king/roi/queen matched inside
+            // legitimate support words (working, booking, looking, parking, adroit), over-blocking
+            // EN turns as OFF_TOPIC before retrieval ever ran (the BUG-001 substring class).
+            compile("(président|president|capitale|capital\\s+of|\\broi\\b|\\bqueen\\b|\\bking\\b)"),
             compile("(recette|cuisine|ingrédient|recipe|cook(ing)?)"),
             compile("(foot(ball)?|rugby|tennis|basket|match\\s+de|ligue|champion(nat)?|tour\\s+de\\s+france)"),
             compile("\\b(film|cinéma|movie|musique|chanson|album|concert)\\b"),

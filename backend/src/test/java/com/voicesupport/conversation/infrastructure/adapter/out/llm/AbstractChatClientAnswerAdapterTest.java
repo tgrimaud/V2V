@@ -101,7 +101,7 @@ class AbstractChatClientAnswerAdapterTest {
 
     private static final class TestAdapter extends AbstractChatClientAnswerAdapter {
         TestAdapter(int maxAnswerSentences) {
-            super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0, maxAnswerSentences);
+            super(null, new BackendTelemetry(new SimpleMeterRegistry()), 0, 0, maxAnswerSentences);
         }
 
         String systemMessage(List<RetrievedEvidence> evidence, List<String> history) {

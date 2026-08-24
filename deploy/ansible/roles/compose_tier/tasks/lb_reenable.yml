@@ -1,0 +1,27 @@
+---
+# Voice tier only: put the node back in rotation on each LB once healthy
+# (TASK-INFRA-007, wires TASK-OPS-002). Delegated to each LB admin socket because
+# either LB node may hold the VIP via Keepalived.
+#
+# Loaded via include_tasks ONLY for the voice tier (mirrors drain.yml). An inline
+# task with `delegate_to: "{{ item }}"` + `loop` is CONSTRUCTED on every tier and
+# templates `delegate_to` before `when` is evaluated, so on redis/backend (where
+# voice_lb_socket_hosts is undefined) it aborts the play with "'item' is undefined"
+# — a build-time error that failed_when/ignore_unreachable cannot catch. Keeping it
+# behind an include gated on `tier == 'voice'` means the delegated loop is never
+# built off the voice tier.
+#
+# Non-fatal by design: re-enabling is a safety improvement, not a deploy gate. If an
+# LB node is unreachable or socat fails, the node stays 'drain' there (fails safe: no
+# new calls to a node we could not confirm) rather than aborting the voice roll.
+- name: "Re-enable the voice bridge in the load balancer"
+  ansible.builtin.shell:
+    cmd: "{{ voice_lb_enable_cmd }}"
+  delegate_to: "{{ item }}"
+  loop: "{{ voice_lb_socket_hosts }}"
+  when:
+    - voice_lb_enable_cmd | length > 0
+    - voice_lb_socket_hosts | length > 0
+  changed_when: true
+  ignore_unreachable: true
+  failed_when: false

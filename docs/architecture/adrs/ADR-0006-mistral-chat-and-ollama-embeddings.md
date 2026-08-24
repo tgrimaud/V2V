@@ -47,3 +47,4 @@ the vector table, and re-synchronizing the knowledge base.
 
 - `docs/architecture/architecture.md`
 - `CLAUDE.md`
+- ADR-0039 (tst embeddings placement: Ollama `nomic-embed-text` CPU sidecar)

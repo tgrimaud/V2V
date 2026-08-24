@@ -20,11 +20,29 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import jakarta.annotation.PostConstruct;
+import java.util.Set;
+
 // Provider-selectable LLM wording wiring (DEC-011). The chat model is built manually here
 // (Mistral/Ollama chat auto-configurations are excluded on the main class) so the provider is
 // chosen by voice-support.llm.provider with no domain change. Embeddings stay on Ollama.
 @Configuration
 public class LlmConfig {
+
+    private static final Set<String> SUPPORTED_PROVIDERS = Set.of("mistral-api", "ollama");
+
+    @Value("${voice-support.llm.provider:mistral-api}")
+    private String provider;
+
+    // Fail fast on a misconfigured provider: without this, an unknown value builds no ChatModel bean
+    // and startup dies later with an opaque "no qualifying bean of type ChatModel" on answerChatClient.
+    @PostConstruct
+    void validateProvider() {
+        if (provider == null || !SUPPORTED_PROVIDERS.contains(provider.trim())) {
+            throw new IllegalStateException("Unknown voice-support.llm.provider '" + provider
+                    + "'. Supported values: mistral-api, ollama.");
+        }
+    }
 
     @Bean
     @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
@@ -87,8 +105,9 @@ public class LlmConfig {
     public MistralAnswerAdapter mistralAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.stream-timeout-ms:10000}") long streamTimeoutMs,
             @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
-        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
+        return new MistralAnswerAdapter(answerChatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     @Bean
@@ -96,8 +115,9 @@ public class LlmConfig {
     public OllamaAnswerAdapter ollamaAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
+            @Value("${voice-support.llm.stream-timeout-ms:10000}") long streamTimeoutMs,
             @Value("${voice-support.llm.max-answer-sentences:3}") int maxAnswerSentences) {
-        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs, maxAnswerSentences);
+        return new OllamaAnswerAdapter(answerChatClient, telemetry, timeoutMs, streamTimeoutMs, maxAnswerSentences);
     }
 
     private static RestClient.Builder timeoutRestClientBuilder(long connectMs, long readMs) {

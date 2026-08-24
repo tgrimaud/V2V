@@ -4,6 +4,7 @@ import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
+import com.voicesupport.shared.concurrent.BoundedLlmCall;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.Slices;
@@ -11,12 +12,6 @@ import org.springframework.ai.chat.client.ChatClient;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -33,37 +28,28 @@ public abstract class AbstractChatClientAnswerAdapter
     private static final String CONTEXT_PLACEHOLDER = "{context}";
     private static final String HISTORY_HEADER =
             "\n\nHistorique de la conversation (ne répète PAS de salutation si un échange a déjà eu lieu) :\n";
-    // Bounded LLM timeout pool (TASK-BE-012 medium fix): a cached pool would spawn one thread per
-    // concurrent call with no ceiling, so a provider stall could exhaust threads. This caps
-    // in-flight LLM calls at MAX_LLM_THREADS; excess submissions are rejected and degrade to a
-    // sanitized 503 rather than piling up. The direct-handoff SynchronousQueue keeps latency low
-    // under normal load (no queueing) while enforcing the ceiling under overload.
-    private static final int MAX_LLM_THREADS = 16;
-    // Executor timeout is a backstop above the provider HTTP read timeout (LlmConfig): the socket
-    // read timeout normally fires first and closes the connection cleanly, so this only trips if
-    // the client hangs before the read (DNS/connect stall) — future.cancel then abandons it.
-    private static final long TIMEOUT_BACKSTOP_MS = 2_000;
-    private static final ExecutorService LLM_EXECUTOR = new ThreadPoolExecutor(
-            0, MAX_LLM_THREADS, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(),
-            runnable -> {
-                Thread thread = new Thread(runnable, "llm-call");
-                thread.setDaemon(true);
-                return thread;
-            },
-            new ThreadPoolExecutor.AbortPolicy());
 
     private final ChatClient chatClient;
     private final BackendTelemetry telemetry;
     private final long timeoutMs;
+    // Streaming call budget (TASK-BE-025): the sync path is bounded by an executor + HTTP read
+    // timeout, but the reactive stream() path uses a WebClient the RestClient read timeout does not
+    // cover, so a hung provider would tie up the SSE worker until the 60 s emitter timeout. This is
+    // the max gap allowed to the first token and between consecutive tokens (Reactor inter-signal
+    // timeout); a stall trips a fail-fast TimeoutException that degrades to the sanitized 503 path.
+    // <= 0 disables the stream timeout.
+    private final long streamTimeoutMs;
     // Voice-first answer-length budget (TASK-BE-018): appended per call as a concision directive so
     // long grounded answers stop dominating TTS synthesis time. <= 0 disables the constraint.
     private final int maxAnswerSentences;
 
     protected AbstractChatClientAnswerAdapter(
-            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs, int maxAnswerSentences) {
+            ChatClient chatClient, BackendTelemetry telemetry, long timeoutMs,
+            long streamTimeoutMs, int maxAnswerSentences) {
         this.chatClient = chatClient;
         this.telemetry = telemetry;
         this.timeoutMs = timeoutMs;
+        this.streamTimeoutMs = streamTimeoutMs;
         this.maxAnswerSentences = maxAnswerSentences;
     }
 
@@ -76,7 +62,7 @@ public abstract class AbstractChatClientAnswerAdapter
             String question, List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
         String systemMessage = buildSystemMessage(evidence, history, language);
         String text = telemetry.time(Slices.LLM_WORDING, providerName(),
-                () -> callProvider(systemMessage, question == null ? "" : question));
+                () -> BoundedLlmCall.run(timeoutMs, () -> invoke(systemMessage, question == null ? "" : question)));
         // Return the raw text (empty when the model produced nothing); classifying an empty or
         // refusal answer as a safe hand-off is the OutputGuardrail's job, so it is never voiced
         // as a grounded answer with a confidence signal.
@@ -85,29 +71,6 @@ public abstract class AbstractChatClientAnswerAdapter
         // budget's effect on TTS synthesis time is measurable next to the llm_wording latency.
         telemetry.recordAnswerLength(providerName(), answer.length());
         return answer;
-    }
-
-    private String callProvider(String systemMessage, String question) {
-        if (timeoutMs <= 0) {
-            return invoke(systemMessage, question);
-        }
-        Future<String> future;
-        try {
-            future = LLM_EXECUTOR.submit(() -> invoke(systemMessage, question));
-        } catch (RejectedExecutionException e) {
-            throw new UpstreamUnavailableException("LLM concurrency limit reached", e);
-        }
-        try {
-            return future.get(timeoutMs + TIMEOUT_BACKSTOP_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            throw new UpstreamUnavailableException("LLM provider timed out after " + timeoutMs + " ms", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new UpstreamUnavailableException("LLM call interrupted", e);
-        } catch (java.util.concurrent.ExecutionException e) {
-            throw new UpstreamUnavailableException("LLM provider call failed", e.getCause());
-        }
     }
 
     private String invoke(String systemMessage, String question) {
@@ -134,13 +97,36 @@ public abstract class AbstractChatClientAnswerAdapter
             telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "success", elapsed(start));
             telemetry.recordAnswerLength(providerName(), answerChars[0]);
         } catch (RuntimeException e) {
-            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "error", elapsed(start));
-            throw new UpstreamUnavailableException("LLM streaming call failed", e);
+            // A stalled stream trips the Reactor inter-signal timeout (TASK-BE-025); record it as a
+            // distinct `timeout` outcome so a hung provider is not conflated with a hard error and
+            // does not skew the success p95. Both degrade to the sanitized ERR_UPSTREAM path.
+            boolean timedOut = isTimeout(e);
+            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), timedOut ? "timeout" : "error", elapsed(start));
+            String reason = timedOut
+                    ? "LLM streaming call timed out after " + streamTimeoutMs + " ms"
+                    : "LLM streaming call failed";
+            throw new UpstreamUnavailableException(reason, e);
         }
     }
 
     private java.util.stream.Stream<String> streamContent(String systemMessage, String question) {
-        return chatClient.prompt().system(systemMessage).user(question).stream().content().toStream();
+        reactor.core.publisher.Flux<String> content =
+                chatClient.prompt().system(systemMessage).user(question).stream().content();
+        if (streamTimeoutMs > 0) {
+            content = content.timeout(Duration.ofMillis(streamTimeoutMs));
+        }
+        return content.toStream();
+    }
+
+    // Reactor bridges a TimeoutException from Flux.timeout through the blocking stream wrapped in a
+    // RuntimeException, so scan the cause chain rather than matching the top-level type.
+    private static boolean isTimeout(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof TimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void forwardToken(String token, Consumer<String> onToken, boolean[] firstSeen, long start) {

@@ -253,6 +253,21 @@ class WebVoiceServerTest(unittest.TestCase):
 
         self.assertIn("Web Voice Chat", body)
 
+    def test_responses_use_http_1_1(self) -> None:
+        # GIVEN the bridge behind an HAProxy TLS edge that offers `alpn h2,http/1.1`
+        _, port = self._serve(WebVoiceIngress(_StubProvider(transcript="bonjour")))
+
+        # WHEN a client reads a served response
+        conn = HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request("GET", "/")
+        response = conn.getresponse()
+        response.read()
+        conn.close()
+
+        # THEN it is HTTP/1.1, not the BaseHTTPRequestHandler default HTTP/1.0 — otherwise
+        # HAProxy cannot mux the backend response onto an HTTP/2 client (BUG-012).
+        self.assertEqual(response.version, 11)
+
     def test_favicon_returns_no_content(self) -> None:
         _, port = self._serve(WebVoiceIngress(_StubProvider()))
 

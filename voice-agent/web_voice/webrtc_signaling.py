@@ -46,6 +46,7 @@ from .closing_intent import (
 from .egress import WebVoiceEgress
 from .end_of_turn import MIN_SAFE_SILENCE_WINDOW_MS
 from .envelope import ChannelEnvelope
+from .error_response import SessionCapacityError
 from .ingress import WebVoiceIngress
 from .streaming_runtime import StreamingVoiceSession
 from .streaming_stt_processor import StreamingSttProcessor
@@ -54,6 +55,20 @@ from .utterance_aggregator import UtteranceAggregator
 from .webrtc_support import probe_webrtc_support
 
 DEFAULT_SAMPLE_RATE = 16000
+
+# Concurrency ceiling for live WebRTC sessions (TASK-WEB-024). All sessions share one
+# asyncio loop on a `ThreadingHTTPServer`, and the pilot LB VMs are 1 vCPU, so unbounded
+# sessions are a latency + stability risk. New offers beyond the cap are refused with a
+# clear 503 (backpressure) instead of degrading every live call. Env-tunable per host.
+DEFAULT_MAX_WEBRTC_SESSIONS = 8
+MAX_WEBRTC_SESSIONS_ENV_VAR = "VOICE_MAX_WEBRTC_SESSIONS"
+
+# Metric/event names for the concurrency ceiling (TASK-WEB-024) — exported via OTLP as
+# root-span attributes/events (see voice_common/otel_export) so the pilot can chart the
+# active-session gauge and count refusals per host.
+ACTIVE_SESSIONS_METRIC = "voice.webrtc.active_sessions"
+SESSION_REJECTED_EVENT = "voice.webrtc.session_rejected"
+REASON_CAPACITY = "capacity"
 
 # End-of-call reasons emitted on the `voice.call_end` telemetry event (TASK-WEB-010).
 END_OF_CALL_EVENT = "voice.call_end"
@@ -122,27 +137,51 @@ def _barge_in_config() -> dict[str, int]:
     return config
 
 
-def _silence_window_config() -> dict[str, float]:
-    """Read the optional end-of-turn hold override (TASK-WEB-015 lever 3).
+# TASK-WEB-022 (lever 3): the tuned end-of-turn hold is the pilot RUNTIME default. The live
+# before/after pass (2026-07-29, real backend) measured 350 ms with a 0/10 premature-cut rate
+# (vs 500 ms), so the streaming runtime holds 350 ms by default while the detector library
+# default (`DEFAULT_SILENCE_WINDOW_MS`, 500 ms) stays untouched for batch/fixture callers.
+PILOT_END_OF_TURN_SILENCE_MS = 350.0
 
-    `VOICE_END_OF_TURN_SILENCE_MS` tunes the trailing-silence window (default 500 ms)
-    down toward `MIN_SAFE_SILENCE_WINDOW_MS` to shave latency. A value below the floor
-    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop
-    into constant premature cuts; unset or invalid -> the processor default applies.
+
+def _silence_window_config() -> dict[str, float]:
+    """Resolve the end-of-turn hold for the streaming runtime (TASK-WEB-015/022 lever 3).
+
+    Defaults to the validated tuned hold (`PILOT_END_OF_TURN_SILENCE_MS`, 350 ms).
+    `VOICE_END_OF_TURN_SILENCE_MS` overrides it: a value below `MIN_SAFE_SILENCE_WINDOW_MS`
+    is clamped to the floor (never honoured) so a misconfiguration can't drop the loop into
+    constant premature cuts; unset or invalid -> the pilot default applies.
     """
     raw = os.environ.get("VOICE_END_OF_TURN_SILENCE_MS")
     if raw is None:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     try:
         value = float(raw)
     except ValueError:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     if value <= 0:
-        return {}
+        return {"silence_window_ms": PILOT_END_OF_TURN_SILENCE_MS}
     if value < MIN_SAFE_SILENCE_WINDOW_MS:
         _warn_silence_clamp_once(value)
         return {"silence_window_ms": MIN_SAFE_SILENCE_WINDOW_MS}
     return {"silence_window_ms": value}
+
+
+def _max_sessions_config() -> int:
+    """Resolve the live WebRTC session cap (TASK-WEB-024).
+
+    `VOICE_MAX_WEBRTC_SESSIONS` overrides the code default; a non-numeric or non-positive
+    value falls back to `DEFAULT_MAX_WEBRTC_SESSIONS` rather than disabling the ceiling
+    (an unbounded runtime on a 1 vCPU VM is the failure mode we are closing).
+    """
+    raw = os.environ.get(MAX_WEBRTC_SESSIONS_ENV_VAR)
+    if raw is None:
+        return DEFAULT_MAX_WEBRTC_SESSIONS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_WEBRTC_SESSIONS
+    return value if value > 0 else DEFAULT_MAX_WEBRTC_SESSIONS
 
 
 def _stt_prewarm_enabled() -> bool:
@@ -154,6 +193,12 @@ def _stt_prewarm_enabled() -> bool:
     `acquire()` only recovers from an open *failure*, not from a stale-but-opened session,
     so this stays opt-in (`VOICE_STT_PREWARM=1`) until the live turn-1 sample confirms it is
     safe. The connect-time backend warm-up (the larger, side-effect-free win) stays on.
+
+    TASK-WEB-022 decision: this is the ONE latency lever deliberately kept OFF by default —
+    levers 1 (`VOICE_BACKEND_STREAM`) and 3 (end-of-turn hold) are now default-on because
+    their live before/after showed a strict win with no regression, whereas STT pre-warm's
+    turn-1 safety is unvalidated and its failure mode degrades the first turn. Enable it only
+    with a live turn-1 sample confirming a `voice.stt.prewarm` `hit` (not a stale `fallback`).
     """
     raw = os.environ.get("VOICE_STT_PREWARM")
     if raw is None:
@@ -222,6 +267,7 @@ class WebRtcSignalingService:
         streaming_tts_provider: Any = None,
         streaming_providers_by_language: dict[str, Any] | None = None,
         streaming_tts_providers_by_language: dict[str, Any] | None = None,
+        max_sessions: int | None = None,
     ) -> None:
         support = probe_webrtc_support()
         if not support.available:
@@ -252,6 +298,21 @@ class WebRtcSignalingService:
             key.lower(): value for key, value in (streaming_tts_providers_by_language or {}).items()
         }
         self._sessions: dict[str, _Session] = {}
+        # Concurrency ceiling (TASK-WEB-024): refuse new offers past this many live sessions.
+        self._max_sessions = max_sessions if max_sessions is not None else _max_sessions_config()
+        # Slots reserved by offers mid-negotiation (before they land in `_sessions`). All
+        # negotiation runs on one asyncio loop, so incrementing this synchronously (no await
+        # in between) reserves a slot atomically and stops concurrent offers from racing past
+        # the cap while they `await connection.initialize(...)`.
+        self._pending = 0
+
+    @property
+    def max_sessions(self) -> int:
+        return self._max_sessions
+
+    def active_sessions(self) -> int:
+        """Number of live WebRTC sessions (the active-session gauge value)."""
+        return len(self._sessions)
 
     def _streaming_provider_for(self, envelope: ChannelEnvelope) -> Any:
         language = (getattr(envelope, "language", None) or "").lower()
@@ -281,22 +342,65 @@ class WebRtcSignalingService:
     async def _new_session(self, body: dict) -> dict:
         import asyncio
 
-        from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+        # Backpressure (TASK-WEB-024): refuse before touching the WebRTC stack so a
+        # rejection never allocates a connection. Counts live sessions + those still
+        # negotiating (`_pending`) so concurrent offers cannot race past the cap. Checked
+        # here (not on renegotiation) so in-call SDP updates are always honoured.
+        active = len(self._sessions) + self._pending
+        if active >= self._max_sessions:
+            self._reject_session(active)
+            raise SessionCapacityError(active, self._max_sessions)
+        self._pending += 1  # reserve the slot for the length of this negotiation
+        try:
+            from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 
-        connection = SmallWebRTCConnection(ice_servers=self._ice_servers)
-        await connection.initialize(sdp=body["sdp"], type=body["type"])
-        # US-042: the UI-selected language rides on the offer body and is carried by the
-        # session envelope -> forces the backend answer language and selects the STT/TTS voice.
-        envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
+            connection = SmallWebRTCConnection(ice_servers=self._ice_servers)
+            await connection.initialize(sdp=body["sdp"], type=body["type"])
+            # US-042: the UI-selected language rides on the offer body and is carried by the
+            # session envelope -> forces the backend answer language and selects the voice.
+            envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
+            telemetry = self._telemetry_factory()
+            session, farewell = self._build_session(connection, envelope, telemetry)
+            record = _Session(connection, session, envelope, telemetry, farewell=farewell)
+            self._register_cleanup(connection)
+            self._sessions[connection.pc_id] = record
+            # Active-session gauge on accept (count includes the new session, TASK-WEB-024).
+            self._emit_active_gauge(telemetry, outcome="accepted")
+            self._wire_farewell(record)
+            answer = self._answer_payload(connection.get_answer(), envelope)
+            record.task = asyncio.ensure_future(session.run())
+            return answer
+        finally:
+            # Release the reservation once the session is registered (or the offer failed).
+            self._pending -= 1
+
+    def _emit_active_gauge(self, telemetry: TelemetryRecorder, *, outcome: str) -> None:
+        """Record the active-session gauge (TASK-WEB-024) onto a call's recorder so the
+        sample is dumped + OTLP-exported with the call. `outcome` labels the transition
+        (accepted / closed / rejected) so the pilot can chart concurrency and refusals."""
+        telemetry.metric(
+            ACTIVE_SESSIONS_METRIC,
+            float(len(self._sessions)),
+            outcome=outcome,
+            max_sessions=self._max_sessions,
+        )
+
+    def _reject_session(self, active: int) -> None:
+        """Emit the refusal evidence for a capacity-rejected offer (TASK-WEB-024).
+
+        A rejected offer never gets a session recorder, so a fresh one carries the event +
+        gauge and is logged immediately (the client gets a 503 from the HTTP layer). The
+        event reports the effective count that hit the cap (live + negotiating); the gauge
+        stays the live-session count."""
         telemetry = self._telemetry_factory()
-        session, farewell = self._build_session(connection, envelope, telemetry)
-        record = _Session(connection, session, envelope, telemetry, farewell=farewell)
-        self._register_cleanup(connection)
-        self._sessions[connection.pc_id] = record
-        self._wire_farewell(record)
-        answer = self._answer_payload(connection.get_answer(), envelope)
-        record.task = asyncio.ensure_future(session.run())
-        return answer
+        telemetry.record(
+            SESSION_REJECTED_EVENT,
+            reason=REASON_CAPACITY,
+            active_sessions=active,
+            max_sessions=self._max_sessions,
+        )
+        self._emit_active_gauge(telemetry, outcome="rejected")
+        self._log(telemetry)
 
     def _wire_farewell(self, record: _Session) -> None:
         """Give the farewell processor a teardown callback now that its session/connection
@@ -521,6 +625,8 @@ class WebRtcSignalingService:
     def _discard(self, pc_id: str) -> None:
         record = self._sessions.pop(pc_id, None)
         if record is not None:
+            # Active-session gauge after removal (count reflects the freed slot, TASK-WEB-024).
+            self._emit_active_gauge(record.telemetry, outcome="closed")
             self._log(record.telemetry)
 
     def _answer_payload(self, answer: dict | None, envelope: ChannelEnvelope) -> dict:

@@ -1,0 +1,95 @@
+---
+# Voice bridge tier (vla-t01/t02, behind VIP .10). Mirrors
+# deploy/compose/voice/.env.example.
+tier: "voice"
+compose_src: "voice"
+
+# HTTP health probed after `up -d` (GET / serves the SPA, returns 200).
+health_url: "http://127.0.0.1:8090/"
+
+voice_bind: "0.0.0.0"
+voice_port: 8090
+
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 8090
+
+# Least privilege (TASK-OPS-004): 8090 is reached ONLY by the HAProxy LB nodes
+# (voice VIP .10 -> t01/t02). Source-scoped firewalld rich rules; empty = open to all.
+firewall_allowed_sources:
+  - "192.168.0.100/32"   # vlp-t01 HAProxy
+  - "192.168.0.101/32"   # vlp-t02 HAProxy
+
+# Conversation backend. VOICE_BACKEND_URL is the backend *server base* URL (BUG-013):
+# the bridge appends /api/conversation/converse and derives the /converse-stream and
+# /warm-up siblings itself. HAProxy binds the backend VIP .11 on :80 (plain HTTP ->
+# backends :8080); it does NOT listen on :8080, so do not set :8080 here.
+# See deploy/haproxy/README.md.
+voice_backend: "http"
+voice_backend_url: "http://192.168.0.11"
+voice_backend_timeout_s: 30
+
+# Latency levers (pilot GO defaults, TASK-WEB-020/021).
+voice_backend_stream: "1"
+voice_backend_warmup: "1"
+voice_stt_prewarm: "0"
+
+# Gradium STT/TTS.
+voice_stt_mode: "streaming"
+voice_tts_mode: "streaming"
+gradium_voice_id_en: ""
+
+# WebRTC NAT traversal (open input #1/#4). Comma-separated URLs.
+# STUN lets a client discover its public address; it is enough only when the client
+# can then reach the bridge's host ICE candidate directly. Prodpriv clients behind a
+# symmetric NAT/firewall need a TURN *relay* (media is UDP + peer-to-peer, NOT proxied
+# by HAProxy - see deploy/haproxy/README.md). TURN URLs + username are config; the
+# credential is a secret rendered from vault_turn_credential (never committed).
+# Empty (default) = STUN/host-candidate only; fill once the platform confirms a relay.
+voice_stun: ""
+voice_turn: ""
+voice_turn_username: ""
+
+# Live WebRTC concurrency ceiling (TASK-WEB-024): max simultaneous sessions per bridge.
+# Offers past it get HTTP 503 + Retry-After. Sessions share one asyncio loop, so this
+# bounds load on a 2 vCPU VM; the app also uses it to emit the active-session gauge.
+voice_max_webrtc_sessions: 8
+
+# Resource sizing (2 vCPU / 4 GB VM).
+voice_cpus: "1.5"
+voice_memory: "3g"
+
+# ---- Session draining (see docs/operations/release-process.md) -------------
+# The bridge has no active-session endpoint yet, so draining is best-effort:
+#  1) plays run serial:1 so only one bridge recreates at a time (the VIP peer
+#     keeps serving);
+#  2) the LB node-down/up hook below stops NEW calls hitting this node while it
+#     recreates (wired to the HAProxy admin socket, TASK-INFRA-007);
+#  3) a bounded grace window lets an in-flight call wind down before recreate.
+# A hard "wait until 0 active calls" still needs a bridge /drain endpoint
+# (follow-up); until then this + serial:1 + grace is the documented ceiling.
+voice_drain_grace_seconds: 60
+
+# LB node-down/up hook (TASK-INFRA-007, wires TASK-OPS-002). The HAProxy admin
+# socket lives on the LB nodes ([lb] group, platform-managed), so the drain/enable
+# commands are delegated there (see roles/compose_tier/tasks/drain.yml + main.yml).
+# We set state on EVERY LB node because either may hold the VIP via Keepalived.
+#
+# DEFAULT = OPT-IN (empty): the [lb] group is platform-managed and SSH access to it
+# is not confirmed yet (deferred to TASK-INFRA-006). Delegating a drain to an
+# unreachable LB with serial:1 + max_fail_percentage:0 would ABORT the whole voice
+# deploy, so the commands stay wired but the hosts list is empty -> grace-only until
+# LB access is validated. Turn it on then with, e.g.:
+#   -e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'
+# As a second safety net the delegated tasks are non-fatal (ignore_unreachable +
+# failed_when: false): a failing LB hook degrades to grace-only, it never aborts.
+voice_lb_socket_hosts: []
+voice_lb_backend: "voice_bridges"
+voice_lb_admin_socket: "/run/haproxy/admin.sock"
+# This bridge's server name inside the voice_bridges backend (deploy/haproxy/haproxy.cfg).
+voice_lb_server_names:
+  vla-ai4cc-t01.prod.lan: "vla-t01"
+  vla-ai4cc-t02.prod.lan: "vla-t02"
+voice_lb_server_name: "{{ voice_lb_server_names[inventory_hostname] | default(inventory_hostname) }}"
+# socat needs a shell (pipe); tasks use ansible.builtin.shell + delegate_to the LB.
+voice_lb_drain_cmd: "echo 'set server {{ voice_lb_backend }}/{{ voice_lb_server_name }} state drain' | socat stdio {{ voice_lb_admin_socket }}"
+voice_lb_enable_cmd: "echo 'set server {{ voice_lb_backend }}/{{ voice_lb_server_name }} state ready' | socat stdio {{ voice_lb_admin_socket }}"

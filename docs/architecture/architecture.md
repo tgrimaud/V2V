@@ -7,8 +7,8 @@
 > refers to design intent and to the `main` reference implementation. Read the
 > "What is actually built on this branch today" block below for the current state.
 >
-> **What is actually built on this branch today (through Sprint 9)** is a full
-> **web Voice2Voice loop** across two rebuilt services:
+> **What is actually built on this branch today (through Sprint 11)** is a full
+> **web Voice2Voice loop** across two rebuilt services, now packaged for deployment:
 >
 > - **Python voice runtime** (`voice-agent/`, port `8090`): **STT**
 >   (`stt_validation/` — fixture + real Gradium, batch REST **and** streaming
@@ -30,16 +30,21 @@
 >   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
 >   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up}`,
 >   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
-> - **Infra:** `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama).
+> - **Infra:** local `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama) for
+>   dev, **plus the Sprint 11 deployment packaging**: Docker images for both services,
+>   `deploy/compose/` stacks per tier, HAProxy/Keepalived VIPs, GitHub Actions CI, and
+>   an Ansible deploy (packaged/deployable, not yet live on tst — network-access open
+>   inputs). **Redis-backed shared conversation memory** is built (`CONVERSATION_STORE=redis`,
+>   TASK-BE-021) so two backends behind a VIP keep multi-turn context.
 >
-> **Not built yet** (target only, Sprints 10–11): customer identity, read-only BSS
-> access, invoice PDF extraction + deterministic comparison, escalation contract +
-> Genesys handoff, phone (Twilio) Voice2Voice, Redis session store, and the
-> standalone React frontend (the web client is the `web_voice/` static page).
-> Route/port tables further down this document may still show the legacy
-> `main` contract (`/api/conversation/ask`, `ask-stream`, `:8081`, `agent/bot.py`,
-> `:7860` Pipecat UI, `:5173` React); the authoritative current contract is the one
-> in this block. See `voice-agent/README.md` and `product-backlog/backlog-index.md`.
+> **Not built yet** (target only): customer identity, read-only BSS access, invoice
+> PDF extraction + deterministic comparison, escalation contract + Genesys handoff,
+> phone (Twilio) Voice2Voice, and the standalone React frontend (the web client is the
+> `web_voice/` static page). Route/port tables further down this document may still
+> show the legacy `main` contract (`/api/conversation/ask`, `ask-stream`, `:8081`,
+> `agent/bot.py`, `:7860` Pipecat UI, `:5173` React); the authoritative current
+> contract is the one in this block. See `voice-agent/README.md` and
+> `product-backlog/backlog-index.md`.
 
 ## Overview
 
@@ -436,7 +441,9 @@ sequenceDiagram
 sentence around **700ms** instead of ~2.2s in sequential mode. Per
 [`ADR-0018`](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md), this
 is an aspirational user-experience target; the measurable pilot criterion is
-`time_to_first_audio` p95 below 800 ms in a pre-warmed, co-located environment.
+`time_to_first_audio` p95 below 800 ms in a pre-warmed, co-located environment
+(the stub-era number, **revised by [`ADR-0029`](adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+for a real backend to mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s).
 
 ### Legacy WebSocket Protocol (React Frontend ↔ Bridge)
 
@@ -639,7 +646,9 @@ identity.
 
 This table is a target budget, not a production SLO.
 [ADR-0018](adrs/ADR-0018-voice-latency-targets-and-slo-measurement.md) defines
-the current measurable pilot criterion (`time_to_first_audio` p95 below 800 ms)
+the stub-era pilot criterion (`time_to_first_audio` p95 below 800 ms), **revised
+for a real backend by [ADR-0029](adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)**
+(mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio` p95 ≤ 1.2 s),
 and keeps production SLO acceptance gated by
 [ADR-0010](adrs/ADR-0010-industrialization-requires-contracts-slos-and-observability.md):
 per-step/channel observability, dashboards, alerting, degraded modes,

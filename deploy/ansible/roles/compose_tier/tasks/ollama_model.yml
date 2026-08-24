@@ -1,0 +1,14 @@
+---
+# Pull the embeddings model into the co-located Ollama sidecar (ADR-0039).
+# Ollama does not auto-pull; without this the first KB sync/retrieval fails.
+# Idempotent: `ollama pull` is a no-op when the model is already present.
+
+- name: "Pull the embeddings model {{ ollama_embedding_model }} into the sidecar"
+  ansible.builtin.command:
+    cmd: "{{ compose_cmd }} exec -T ollama ollama pull {{ ollama_embedding_model }}"
+    chdir: "{{ compose_root }}/{{ compose_src }}"
+  register: ollama_pull
+  until: ollama_pull.rc == 0
+  retries: 10
+  delay: 10
+  changed_when: "'pulling' in (ollama_pull.stdout | default(''))"

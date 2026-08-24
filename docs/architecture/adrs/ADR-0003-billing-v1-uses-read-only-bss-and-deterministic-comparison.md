@@ -4,6 +4,12 @@
 
 Accepted
 
+> **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
+> `BssBillingPort`, invoice-PDF extractor, or deterministic comparison engine
+> exists in `backend/src/main` yet (grep-verified). Billing V1 is deferred
+> (Sprint 12+, gated by OQ-001/003/004). The runnable product answers billing
+> questions from the static knowledge base via RAG only.
+
 ## Context
 
 The V1 product value is invoice explanation for telecom customers. Users ask why

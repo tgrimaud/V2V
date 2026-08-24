@@ -21,8 +21,4 @@ public record ConverseRequest(
     public boolean hasTranscript() {
         return transcript != null && !transcript.isBlank();
     }
-
-    public boolean hasConversationId() {
-        return conversationId != null && !conversationId.isBlank();
-    }
 }

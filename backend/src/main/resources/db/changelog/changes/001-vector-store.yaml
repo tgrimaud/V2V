@@ -1,0 +1,40 @@
+# vector_store — reproduces Spring AI 1.0.0's PgVectorStore schema BYTE-FOR-BYTE
+# (verified from spring-ai-pgvector-store-1.0.0.jar). Do not change column types or the index
+# without re-verifying against the Spring AI version on the classpath: the RAG insert/search path
+# is bound to this exact shape (metadata is `json`, NOT `jsonb`; embedding is vector(768)).
+# `uuid DEFAULT uuid_generate_v4()` is kept identical to the historical schema even though the
+# default is inert (Spring AI always supplies the id on insert); it needs the `uuid-ossp` extension,
+# provisioned by the bootstrap changelog (pilot) or the dev init script (local).
+#
+# The preCondition makes this a no-op (MARK_RAN) on a legacy dev DB where Spring AI's
+# initialize-schema already created the table — so adopting Liquibase never clashes with an
+# existing volume.
+databaseChangeLog:
+  - changeSet:
+      id: 001-vector-store
+      author: voice-support
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: vector_store
+                schemaName: public
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ;
+            sql: >-
+              CREATE TABLE public.vector_store (
+                  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+                  content text,
+                  metadata json,
+                  embedding vector(768)
+              );
+              CREATE INDEX spring_ai_vector_index ON public.vector_store USING hnsw (embedding vector_cosine_ops);
+      rollback:
+        - sql:
+            splitStatements: true
+            endDelimiter: ;
+            sql: >-
+              DROP INDEX IF EXISTS spring_ai_vector_index;
+              DROP TABLE IF EXISTS public.vector_store;

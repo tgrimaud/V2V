@@ -1,0 +1,41 @@
+---
+# Redis tier (vlb-t02). Mirrors deploy/compose/redis/.env.example.
+# Skip this group entirely if the platform provides Redis natively (open input #8).
+tier: "redis"
+compose_src: "redis"
+
+# No HTTP health; the container healthcheck runs `redis-cli ping`. The role
+# verifies via `docker exec ... redis-cli ping` after `up -d`.
+health_url: ""
+redis_container_name: "voice-support-redis"
+
+redis_image_tag: "7-alpine"
+redis_bind: "0.0.0.0"
+redis_port: 6379
+
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 6379
+
+# Least privilege (TASK-OPS-004): 6379 is reached ONLY by the backend VMs that use
+# the shared conversation memory. host_prereqs opens the port via source-scoped
+# firewalld rich rules; empty list = fall back to opening to everyone.
+firewall_allowed_sources:
+  - "192.168.0.105/32"   # vla-t03 backend
+  - "192.168.0.106/32"   # vla-t04 backend
+
+# maxmemory < container memory limit; noeviction keeps active sessions.
+redis_maxmemory: "2gb"
+redis_cpus: "1.5"
+redis_memory: "3g"
+
+# ---- Backup schedule (TASK-OPS-008) -----------------------------------------
+# AOF (--appendonly yes in the compose) is the continuous layer (~1s RPO). This cron
+# is the off-host, restorable snapshot (BGSAVE + AOF tar). Set redis_backup_remote to a
+# reachable rsync/scp target to protect against losing the Redis VM (the SPOF concern).
+# See deploy/backup/ + docs/operations/backup-restore.md.
+redis_backup_enabled: true
+redis_backup_dir: "/var/backups/voice-support/redis"
+redis_backup_cron_minute: "17"
+redis_backup_cron_hour: "*"      # hourly at :17
+redis_backup_keep: 168            # ~7 days of hourly snapshots
+redis_backup_remote: ""           # e.g. "backup@vlb-ai4cc-t01.prod.lan:/srv/backups/redis"

@@ -65,6 +65,9 @@ public class AnswerService implements AnswerQuestionUseCase {
         String text = answerGenerator.generate(question, evidence, safeHistory, language);
         GuardrailDecision outputDecision = outputGuardrail.check(text, evidence, language);
         if (outputDecision.blocked()) {
+            // DEC-002 output block (e.g. an ungrounded amount): count it so QA/Ops can observe how
+            // often the bot suppresses a fabricated answer, not just the grounding-stage blocks.
+            telemetry.recordGuardrailBlock(outputDecision.verdict().name());
             return GeneratedAnswer.fallback(outputDecision.fallbackMessage());
         }
         return GeneratedAnswer.grounded(text, bestScore(evidence));

@@ -1,0 +1,340 @@
+# First-deploy runbook — eir-ai4cc-tst pilot
+
+Chronological, zero-to-running checklist to bring the two-service stack (backend
+Java + voice bridge) live on the **eir-ai4cc-tst** pilot for the **first time**, on
+bare Rocky EL9 VMs. A delivery engineer should reach a passing smoke test by
+following the steps in order, without tribal knowledge.
+
+- **Topology, ports, per-tier env**: [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md).
+- **Repeatable release/rollback** (after the first deploy): [`release-process.md`](release-process.md).
+- **Rationale**: [`ADR-0038`](../architecture/adrs/ADR-0038-pilot-deployment-architecture-eir-ai4cc-tst.md),
+  [`ADR-0039`](../architecture/adrs/ADR-0039-embeddings-placement-and-provider-egress-tst.md).
+
+> This is a **first-deploy** runbook (host provisioning + Postgres bootstrap +
+> initial RAG sync happen once). For subsequent version promotions, use the
+> release process; it reuses the same deploy playbook and health gates.
+
+## At a glance
+
+| # | Step | Where | Once? |
+|---|------|-------|-------|
+| 0 | Confirm access + open inputs | control node → all VMs | — |
+| 1 | Publish the release images | CI (git tag) → GHCR | per version |
+| 2 | Populate the vault (secrets + registry token) | control node | once |
+| 3 | Provision the container runtime | `prereqs.yml` | once/host |
+| 4 | Bootstrap PostgreSQL + `vector` extension | data VM `.102` | once |
+| 5 | Deploy Redis | `deploy.yml --limit redis` | per version |
+| 6 | Deploy backend (+ auto model pull) + first RAG sync | `deploy.yml --limit backend` | per version |
+| 7 | Deploy voice bridge | `deploy.yml --limit voice` | per version |
+| 8 | Load balancer / TLS edge | platform / `deploy/haproxy/` | once |
+| 9 | Smoke test | control node | per version |
+
+All Ansible commands run from `deploy/ansible/`. `image_tag` is the **image** tag
+(no `v` prefix — see step 1). Provide the vault password with `--ask-vault-pass`,
+or drop it into the git-ignored `deploy/ansible/.vault_pass` (auto-loaded via
+`ansible.cfg`).
+
+## Step 0 — Access and open inputs
+
+- **SSH** reaches every VM: `ssh grimaud@<hostname>.prod.lan` then `sudo su -`
+  (public key already installed). The VMs live on the tenant subnet
+  `192.168.0.0/24`; from outside you need the VPN/bastion route to that subnet
+  (**open input #1** — ingress/SSH source range). Deployment cannot start until
+  this route is up.
+- Review the tracked open inputs in
+  [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#open-inputs-needed)
+  (owner + status + gate, TASK-INFRA-006). All self-owned items are closed; the
+  residual **platform-owned** gates are **#1a** SSH/ingress CIDR, **#4** TLS cert +
+  FQDN, **#11** Prod→VIP NAT mapping, **#12** STUN/TURN relay + credentials, and the
+  platform side of **#10** LB apply (NIC/VRID/secret). Steps 3–7 and the backend/text
+  smoke (step 9, tier A) need none of these; the **full browser voice turn** (step 9,
+  tier B) needs #4 + #11 + #12.
+
+## Step 1 — Publish the release images
+
+Images are produced by CI, never by hand (`.github/workflows/images.yml`).
+
+```bash
+git tag v0.4.0            # git tag keeps the leading v
+git push origin v0.4.0    # triggers the tests gate, then build + push
+```
+
+> **Tag gotcha (verify before deploying).** `docker/metadata-action`
+> (`type=semver,pattern={{version}}`) **strips the leading `v`**: git tag
+> `v0.4.0` publishes the **image** tag `0.4.0` (plus `sha-<short>`, and `latest`
+> only on the mainline). So the deploy uses `image_tag=0.4.0`, **not** `v0.4.0`.
+
+Confirm both private packages exist at that tag before deploying (read-only PAT
+`vault_registry_token`, GitHub user `tgrimaud`):
+
+```bash
+echo "$PAT" | docker login ghcr.io -u tgrimaud --password-stdin
+docker buildx imagetools inspect ghcr.io/tgrimaud/voice-support-backend:0.4.0
+docker buildx imagetools inspect ghcr.io/tgrimaud/voice-support-voice:0.4.0
+docker logout ghcr.io
+```
+
+## Step 2 — Populate the vault
+
+Secrets live only in the encrypted `deploy/ansible/group_vars/all/vault.yml`
+(git-ignored). For a fresh checkout:
+
+```bash
+cd deploy/ansible
+cp group_vars/all/vault.example.yml group_vars/all/vault.yml
+$EDITOR group_vars/all/vault.yml     # fill every value (below), then:
+ansible-vault encrypt group_vars/all/vault.yml
+```
+
+Required values:
+
+| Key | Purpose |
+|-----|---------|
+| `vault_db_password` | Postgres app-user password (used in step 4 and the backend `.env`) |
+| `vault_redis_password` | Redis `requirepass`, shared with the backend |
+| `vault_mistral_api_key` | Chat LLM (cloud) |
+| `vault_gradium_api_key` | STT/TTS (cloud) |
+| `vault_conversation_api_key` | Shared `x-api-key`: backend `CONVERSATION_API_KEY` **==** voice `VOICE_BACKEND_API_KEY` |
+| `vault_registry_username` / `vault_registry_token` | GHCR read-only pull (private packages); `registry_login_required: true` |
+
+## Step 3 — Provision the container runtime (once per host)
+
+Ensures **podman + the `podman-docker` shim**, installs the **Docker Compose v2 binary
+as podman's compose provider**, writes `/etc/containers/containers.conf` +
+`/etc/containers/nodocker`, enables the rootful `podman.socket`, and opens each tier's
+firewalld port (TASK-OPS-003, runtime revised by TASK-INFRA-008 / ADR-0038 addendum).
+Idempotent, safe to re-run.
+
+```bash
+cd deploy/ansible
+ansible-playbook prereqs.yml --limit 'redis:backend'      # add voice when deploying it
+```
+
+The VMs are **podman-native** (podman 5.x, no Docker CE) — the deploy runs the per-tier
+stacks with `podman compose`, which delegates to the installed Compose v2 provider. For
+an air-gapped prod, override `compose_provider_url` (and matching `compose_provider_checksum`)
+to an internal mirror. The data VM `.102` (podman pod for Postgres) is **not** a prereqs
+target.
+
+## Step 4 — Bootstrap PostgreSQL (once)
+
+PostgreSQL 18.4 runs on `vlb-ai4cc-t01` (`.102`) as a podman pod (`podpg`). The schema
+is owned by **Liquibase in the backend** (ADR-0041, TASK-INFRA-009), so this step is now
+two deterministic parts instead of free-form SQL:
+
+- **4a — psql pre-step (superuser):** only what Liquibase fundamentally cannot do (it
+  connects *into* a DB *as* the app role): create the database, the login role, and make
+  the app user the **DB owner** (which grants it `CREATE` on `public` on PG15+). The app-user
+  password (`vault_db_password`, `ansible-vault view group_vars/all/vault.yml`) is set **here
+  only** — it never enters any Liquibase file.
+- **4b — bootstrap changelog (superuser, one-shot Liquibase container):** creates the
+  `vector` + `uuid-ossp` extensions and a defensive grant. Tracked in its **own** changelog
+  tables so it never collides with the app's runtime `databasechangelog`.
+- The app schema (`vector_store`, `kb_source_state`) is created later by the backend at
+  startup (Step 6), by the Liquibase **app** changelog running as the app user.
+
+**4a — database + role (psql, superuser):**
+
+```bash
+ssh grimaud@vlb-ai4cc-t01.prod.lan
+sudo su -
+podpg
+psql
+```
+```sql
+CREATE DATABASE voicesupport;
+CREATE ROLE voicesupport LOGIN PASSWORD '<vault_db_password>';
+ALTER DATABASE voicesupport OWNER TO voicesupport;   -- DB owner => CREATE on public (PG15+)
+```
+
+**4b — extensions via the bootstrap changelog (one-shot Liquibase container on `.102`):**
+
+Copy the bootstrap changelog to the VM (it ships in the repo), then run the pinned
+Liquibase image against the local primary as a **superuser** (`postgres`). It uses dedicated
+tracking tables so a later app-user run is independent:
+
+```bash
+# from the control node checkout:
+scp -r backend/src/main/resources/db/changelog/bootstrap \
+    grimaud@vlb-ai4cc-t01.prod.lan:/tmp/liquibase-bootstrap
+# on vlb-ai4cc-t01 (sudo): pass the superuser password via env, never on the command line
+export LIQUIBASE_COMMAND_PASSWORD='<pg_superuser_password>'
+podman run --rm \
+  -e LIQUIBASE_COMMAND_PASSWORD \
+  -v /tmp/liquibase-bootstrap:/liquibase/changelog:ro,Z \
+  docker.io/liquibase/liquibase:4.29.2 \
+  --search-path=/liquibase/changelog \
+  --url="jdbc:postgresql://127.0.0.1:5432/voicesupport" \
+  --username=postgres \
+  --changelog-file=db.changelog-bootstrap.yaml \
+  --database-changelog-table-name=databasechangelog_bootstrap \
+  --database-changelog-lock-table-name=databasechangeloglock_bootstrap \
+  update
+unset LIQUIBASE_COMMAND_PASSWORD
+```
+
+> **Search path (required).** Liquibase resolves `--changelog-file` against `--search-path`,
+> which defaults to the image working dir (`/liquibase`), **not** the mounted `/liquibase/changelog`.
+> Omitting `--search-path=/liquibase/changelog` fails with `ChangeLogParseException:
+> db.changelog-bootstrap.yaml does not exist`. (Verified against `liquibase:4.29.2` in QA.)
+>
+> **App DB user.** The grant target defaults to `voicesupport` via a `property` in the changelog,
+> so no CLI parameter is needed. Do **not** pass `-Dapp_db_user=…` — the `4.29.x` CLI rejects it
+> with `Unexpected argument(s)`. To target a different role, edit the `property` value in
+> `db.changelog-bootstrap.yaml`.
+>
+> **Password handling.** Pass the superuser password via `LIQUIBASE_COMMAND_PASSWORD` (env),
+> never as `--password=…` on the command line (visible in `ps`/shell history). Pin the image to
+> the patch tag matching the backend's `liquibase-core` (`4.29.2`), not a floating minor.
+>
+> **Superuser DSN.** The container connects over TCP, so it needs a superuser credential
+> reachable over TCP (the same superuser access this step always required, previously used
+> locally via `podpg`). If the primary only offers local peer auth for `postgres`, provide a
+> superuser role with a password (platform input) or, as a fallback, pipe the changelog's
+> generated SQL through the local `podpg` psql (`… update-sql` then `psql -f`). The container
+> path is the versioned, tracked default.
+
+The backend now runs `ddl-auto: none` + `initialize-schema: false`; on first start (Step 6)
+its Liquibase app changelog creates `vector_store` (768 dim) and `kb_source_state` as the
+app user — which is why 4a makes it the DB owner and 4b pre-creates the extensions.
+
+## Step 5 — Deploy Redis
+
+Redis must be up first (shared conversation memory, ADR-0008 / TASK-BE-021).
+
+```bash
+cd deploy/ansible
+ansible-playbook deploy.yml -e image_tag=0.4.0 --limit redis --ask-vault-pass --check --diff   # dry-run
+ansible-playbook deploy.yml -e image_tag=0.4.0 --limit redis --ask-vault-pass                   # apply
+```
+
+Verify:
+
+```bash
+ssh grimaud@vlb-ai4cc-t02.prod.lan \
+  'docker exec voice-support-redis redis-cli -a "<vault_redis_password>" ping'   # -> PONG
+```
+
+## Step 6 — Deploy the backend + first RAG sync
+
+```bash
+ansible-playbook deploy.yml -e image_tag=0.4.0 --limit backend --ask-vault-pass --check --diff
+ansible-playbook deploy.yml -e image_tag=0.4.0 --limit backend --ask-vault-pass
+```
+
+The role pulls the `nomic-embed-text` model into the co-located Ollama sidecar at
+deploy time (ADR-0039) and health-checks each node (`/actuator/health` → 200,
+rolling `serial: 1`). The image does **not** bundle the knowledge base, so trigger
+the first RAG sync to populate pgvector:
+
+```bash
+curl -fsS -X POST http://192.168.0.11/api/knowledge/sync    # via the backend VIP (.11:80)
+```
+
+Verify health on both nodes and the VIP:
+
+```bash
+curl -fsS http://192.168.0.105:8080/api/health      # t03
+curl -fsS http://192.168.0.106:8080/api/health      # t04
+curl -fsS http://192.168.0.11/actuator/health  # VIP (.11:80) -> {"status":"UP"}
+```
+
+## Step 7 — Deploy the voice bridge
+
+```bash
+ansible-playbook prereqs.yml   --limit voice --ask-vault-pass          # if not done in step 3
+ansible-playbook deploy.yml    -e image_tag=0.4.0 --limit voice --ask-vault-pass --check --diff
+ansible-playbook deploy.yml    -e image_tag=0.4.0 --limit voice --ask-vault-pass
+```
+
+Rolling `serial: 1` with best-effort draining (the VIP peer keeps serving). Verify
+each bridge answers:
+
+```bash
+curl -fsS http://192.168.0.103:8090/    # t01 -> 200
+curl -fsS http://192.168.0.104:8090/    # t02 -> 200
+```
+
+## Step 8 — Load balancer and TLS edge
+
+HAProxy + Keepalived (two VIPs) are configured in
+[`deploy/haproxy/`](../../deploy/haproxy/) (TASK-INFRA-002). Apply them on the LB
+hosts `vlp-t01`/`t02` with the ordered **manual apply path** in
+[`deploy/haproxy/README.md`](../../deploy/haproxy/README.md) (packages →
+`ip_nonlocal_bind` → configs → substitute NIC/VRID/VRRP-secret → cert → validate →
+enable → failover test). The platform team confirms the NIC name, `virtual_router_id`
+uniqueness and the VRRP secret (**#10**). The public FQDN + TLS cert at the voice edge
+are **open input #4**; WebRTC **media** is UDP, peer-to-peer to the answering bridge
+and needs a STUN/TURN relay (**#12**) — the runtime is already wired for it
+(`VOICE_TURN`/`VOICE_TURN_USERNAME`/`VOICE_TURN_CREDENTIAL`), pending a relay endpoint
++ credentials. Media is never proxied by HAProxy.
+
+## Step 9 — Smoke test
+
+**Tier A — backend + RAG (no TLS/TURN needed).** A grounded answer proves the DB,
+pgvector, embeddings sidecar, RAG and Mistral chat all work end to end:
+
+```bash
+curl -fsS -X POST http://192.168.0.11/api/conversation/converse \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: <vault_conversation_api_key>' \
+  -d '{"transcript":"Pourquoi ma facture a augmenté ce mois-ci ?","conversation_id":"smoke-1","channel":"smoke","language":"fr"}'
+```
+
+Expect HTTP 200 with a non-empty `{"text": "..."}`. An `x-api-key` mismatch returns
+401 (empty body) — verify the shared-secret parity from step 2. Repeat with the
+same `conversation_id` to confirm shared memory (Redis) keeps context.
+
+**Tier B — full voice turn (final acceptance).** Once the TLS edge (#4) and
+STUN/TURN (#1) are in place, open the voice UI at the voice VIP over HTTPS, speak a
+billing question, and confirm an audible answer plus a coherent transcript (see the
+QA voice-turn checklist,
+[`docs/qa/`](../qa/)). This closes the acceptance criterion.
+
+> **Tier B — internal media pre-validation (no TURN).** The tenant mesh
+> `192.168.0.0/24` is open VM↔VM, **UDP included** (network model in
+> [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md#network-model--name-resolution);
+> verified by a VM↔VM UDP round-trip). So the full WebRTC media path can be proven
+> **internally before the external gates**: run a headless WebRTC client on a mesh node
+> against a bridge over its **short name** (`vla-ai4cc-t0x` / `192.168.0.x`), which
+> exercises end-of-turn, STT/TTS and the audio round-trip **without** #4/#11/#12. The
+> **external** client turn still needs the TLS edge (#4), Prod→VIP NAT (#11) and the TURN
+> relay (#12).
+
+## Rollback (known-good)
+
+Roll back by redeploying the previous good **image** tag — same path, same health
+gates (no divergent rollback code):
+
+```bash
+cd deploy/ansible
+ansible-playbook rollback.yml -e image_tag=0.3.0 --ask-vault-pass         # add --limit <tier> to scope
+```
+
+Pick the previous tag from the GHCR packages. `latest` is refused so every deploy
+stays reproducible and rollback-addressable.
+
+## Troubleshooting (first-deploy)
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `manifest ... not found` on pull | Used the git tag `v0.4.0` as the image tag | Deploy with `image_tag=0.4.0` (no `v`, see step 1) |
+| `docker login` denied at deploy | Missing/expired `vault_registry_token`, or `registry_login_required` false | Refresh the PAT (`read:packages`) in the vault; confirm `registry_login_required: true` |
+| Backend fails on first start (Liquibase / pgvector) | Step 4b extensions not created (`type "vector" does not exist` / `uuid_generate_v4()` missing), or the app user isn't DB owner so it can't create the schema / `databasechangelog` | Run Step 4b (bootstrap changelog) before Step 6; confirm 4a's `ALTER DATABASE … OWNER TO voicesupport` (or grant `CREATE ON SCHEMA public`) |
+| Liquibase `changelog … could not be found` at startup | App changelog missing from the image classpath | Confirm `db/changelog/db.changelog-master.yaml` is bundled (it is under `src/main/resources`); rebuild the image |
+| Step 4b `ChangeLogParseException: db.changelog-bootstrap.yaml does not exist` | `--search-path` omitted — Liquibase resolves `--changelog-file` against `/liquibase`, not the mount | Add `--search-path=/liquibase/changelog` (as in the Step 4b command) |
+| Step 4b `Unexpected argument(s): -Dapp_db_user=…` | The `liquibase:4.29.x` CLI rejects `-D` changelog params | Drop it — `app_db_user` defaults to `voicesupport` via the changelog `property`; edit that value to change the target role |
+| RAG answers are ungrounded / empty | First `POST /api/knowledge/sync` not run, or KB assets missing under `KB_HOST_PATH` | Confirm `knowledge-base/` + `articles.csv` on the host, re-run the sync |
+| `/actuator/health` flips DOWN | `REDIS_HEALTH_ENABLED=true` without a reachable Redis | Only enable it on the backend once Redis is deployed (step 5); default off |
+| `podman compose` "looking up compose provider failed" | Compose v2 provider not installed / `containers.conf` missing | Re-run `prereqs.yml` (installs the provider + writes `containers.conf`); check `compose_provider_url` reachability |
+| Embeddings model pull times out | `registry.ollama.ai:443` egress denied | Allow the egress, or pre-seed the model into the `ollama-models` volume (ADR-0039) |
+| KB read-only mount denied (SELinux) | AVC on the `:ro` bind under podman | Already handled: the KB mount is `:ro,Z` in the backend compose (TASK-INFRA-008); confirm `getenforce` and re-run the deploy |
+
+## Related
+
+- Repeatable release/rollback: [`release-process.md`](release-process.md)
+- Backup & restore (Redis + Postgres): [`backup-restore.md`](backup-restore.md)
+- Topology / ports / env: [`deployment-eir-ai4cc-tst.md`](deployment-eir-ai4cc-tst.md)
+- Ansible deploy: [`../../deploy/ansible/README.md`](../../deploy/ansible/README.md)
+- Compose stacks: [`../../deploy/compose/README.md`](../../deploy/compose/README.md)
+- Delivery workflow: [`development-workflow.md`](development-workflow.md)

@@ -4,15 +4,19 @@ This branch is a **from-scratch restart branch** for the Voice Support Bot V1.
 
 The previous implementation remains preserved on `main` as a backup/reference.
 The restart began by removing the old stack and rebuilding from the validated
-product and architecture baseline. Through **Sprint 9** the restart has rebuilt a
-runnable two-service stack (Python voice runtime + Java conversation backend).
+product and architecture baseline. Through **Sprint 11** the restart has rebuilt a
+runnable two-service stack (Python voice runtime + Java conversation backend),
+added **Redis-backed conversation sessions**, and packaged a **remote pilot
+deployment** (per-tier Docker/Podman Compose, Ansible, HAProxy/Keepalived VIPs).
 
 > **Restart history vs current state.** The branch *started* by deleting the old
 > `backend/`, `frontend/`, `agent/bot.py`, `bridge_server.py` and Docker Compose.
-> Since then the backend, the RAG answer engine, streaming/WebRTC/barge-in and a
-> minimal `docker-compose.yml` (Postgres + Ollama) have been **rebuilt** from
-> scratch. The only piece **not** rebuilt is the standalone React `frontend/`; the
-> web client is now the static page served by the voice runtime (`web_voice/`).
+> Since then the backend, the RAG answer engine, streaming/WebRTC/barge-in, a
+> minimal `docker-compose.yml` (Postgres + Ollama), **Redis-backed sessions**
+> (`CONVERSATION_STORE=redis`, Sprint 11) and the **pilot deployment** stack under
+> `deploy/` (Sprint 11) have been **rebuilt** from scratch. The only piece **not**
+> rebuilt is the standalone React `frontend/`; the web client is now the static
+> page served by the voice runtime (`web_voice/`).
 
 ## Current Repository State On This Branch
 
@@ -28,7 +32,10 @@ Rebuilt and runnable on this branch today:
 
 - `voice-agent/` — Python voice runtime (STT/TTS/answer loop, streaming, WebRTC);
 - `backend/` — Java Spring Boot conversation backend (RAG, guardrails, memory);
-- `docker-compose.yml` — Postgres (`pgvector`, port 5433) + Ollama for embeddings.
+- `docker-compose.yml` — Postgres (`pgvector`, port 5433) + Ollama for embeddings
+  (local dev); **Redis** sessions are opt-in via `CONVERSATION_STORE=redis`;
+- `deploy/` — Sprint 11 remote pilot packaging: per-tier Compose, Ansible
+  playbooks, HAProxy/Keepalived VIPs, backup/restore and OTLP collector.
 
 Not present on this branch:
 
@@ -37,7 +44,7 @@ Not present on this branch:
 
 ## What Actually Runs On This Branch Today
 
-A full **web Voice2Voice loop** rebuilt from scratch, delivered through **Sprint 9**
+A full **web Voice2Voice loop** rebuilt from scratch, delivered through **Sprint 11**
 across two services:
 
 **Python voice runtime (`voice-agent/`, default port `8090`):**
@@ -60,12 +67,14 @@ across two services:
 - Hexagonal Spring Boot app: **RAG** retrieval over **pgvector** (Ollama
   `nomic-embed-text`, 768-dim) with domain + audience filters, input/output
   **guardrails** (incl. the DEC-002 no-fabricated-amount invariant), three-band
-  retrieval **confidence** policy, conversation **memory**, and per-slice
-  correlation-id observability.
+  retrieval **confidence** policy, conversation **memory** (in-memory by default,
+  **Redis-backed** via `CONVERSATION_STORE=redis`), and per-slice correlation-id
+  observability (OpenTelemetry-ready).
 - **Chat LLM = Mistral** (`mistral-small-latest`, default; Ollama alternative);
   **embeddings = Ollama** — the two are distinct models.
 - Endpoints: `POST /api/conversation/converse`, `/converse-stream`, `/answer`,
-  `/retrieve`; `POST /api/knowledge/ingest`, `/sync`; OpenAPI/Swagger UI.
+  `/retrieve`, `/warm-up`; `POST /api/knowledge/ingest`, `/sync`, `/sync/{sourceType}`;
+  OpenAPI/Swagger UI.
 
 Delivered capability = **audio in → transcript → RAG-grounded answer → spoken
 answer out**, streaming or batch, with a single correlation id and per-slice
@@ -103,6 +112,8 @@ It must:
 | Architecture spine | `docs/architecture/architecture.md` |
 | ADRs | `docs/architecture/adrs/` |
 | Galaxion/BSS integration | `docs/integrations/galaxion/` |
+| Pilot deployment runbook | `docs/operations/deployment-eir-ai4cc-tst.md` |
+| Pilot voice access (web/WebRTC entry points) | `docs/operations/pilot-voice-access.md` |
 
 ## Restart Delivery Sequence
 

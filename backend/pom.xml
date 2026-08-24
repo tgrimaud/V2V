@@ -57,6 +57,16 @@
                 <artifactId>swagger-annotations</artifactId>
                 <version>2.2.38</version>
             </dependency>
+            <!-- Version conflict pin (TASK-INFRA-009): liquibase-core 4.29.2 pulls
+                 commons-io 2.16.1, but commons-csv 1.14.1 (KB CSV ingestion) needs >= 2.17 for
+                 org.apache.commons.io.input.UnsynchronizedBufferedReader. Maven mediation would
+                 otherwise resolve 2.16.1 -> NoClassDefFoundError. Pin to the version commons-csv
+                 expects (backward-compatible, satisfies Liquibase too). -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.19.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -100,6 +110,15 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!-- Redis-backed shared conversation memory (TASK-BE-021, ADR-0008): lets the pilot's two
+             backend instances behind the VIP share short conversation history (RedisConversationMemoryAdapter,
+             CONVERSATION_STORE=redis). Lettuce connection factory is created lazily and never contacted
+             in the default `memory` mode, so `mvn test` and offline startup are unchanged. BOM-managed. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Spring AI: Ollama embeddings (nomic-embed-text, 768d) + pgvector store.
              Unused auto-configurations (chat/mistral) are excluded on the main class. -->
         <dependency>
@@ -124,6 +143,16 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Schema management (TASK-INFRA-009, ADR-0041): Liquibase owns vector_store +
+             kb_source_state (app changelog run at startup as the app user), replacing Hibernate
+             ddl-auto + Spring AI initialize-schema; the privileged bootstrap (extension/grants) is
+             a separate superuser-run changelog. Version managed by the Spring Boot BOM. mvn test
+             stays offline (no @SpringBootTest boots the context, so Liquibase never runs in tests). -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
         </dependency>
 
         <!-- OpenAPI 3 spec (/v3/api-docs) + Swagger UI (/swagger-ui.html) for the REST

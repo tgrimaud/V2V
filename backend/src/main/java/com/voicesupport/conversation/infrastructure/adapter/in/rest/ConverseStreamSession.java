@@ -130,8 +130,11 @@ class ConverseStreamSession {
         return Duration.ofNanos(System.nanoTime() - startNanos);
     }
 
+    // Sanitizes before logging: channel/conversation_id/correlation_id are client-controlled, so a
+    // CR/LF-laced value could otherwise forge extra log lines (TASK-BE-022 review #3).
     private String nullSafe(String value) {
-        return value == null || value.isBlank() ? "n/a" : value;
+        String clean = CorrelationId.sanitize(value);
+        return clean == null || clean.isBlank() ? "n/a" : clean;
     }
 
     private String formatConfidence(Double confidence) {

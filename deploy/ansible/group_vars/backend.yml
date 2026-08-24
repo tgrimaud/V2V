@@ -1,0 +1,82 @@
+---
+# Backend Java tier (vla-t03/t04, behind VIP .11). Non-secret config; secrets
+# come from group_vars/all/vault.yml. Mirrors deploy/compose/backend/.env.example.
+tier: "backend"
+compose_src: "backend"
+
+# HTTP health probed after `up -d` (ungated, see deployment doc).
+health_url: "http://127.0.0.1:8080/actuator/health"
+
+backend_bind: "0.0.0.0"
+backend_port: 8080
+
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+firewall_port: 8080
+
+# Least privilege (TASK-OPS-004): 8080 is reached ONLY by the HAProxy LB nodes
+# (backend VIP .11 -> t03/t04); the voice tier always goes through the VIP, so the
+# proxied source is an LB node. Source-scoped firewalld rich rules; empty = open to all.
+firewall_allowed_sources:
+  - "192.168.0.100/32"   # vlp-t01 HAProxy
+  - "192.168.0.101/32"   # vlp-t02 HAProxy
+
+# Postgres .102 (pgvector 768 dim).
+db_url: "jdbc:postgresql://192.168.0.102:5432/voicesupport"
+db_username: "voicesupport"
+
+# Embeddings (ADR-0039): Ollama nomic-embed-text CPU sidecar co-located on each
+# backend VM, reached over the compose network. The model is pulled at deploy time.
+ollama_base_url: "http://ollama:11434"
+ollama_embedding_model: "nomic-embed-text"
+ollama_image_tag: "0.5.4"
+ollama_cpus: "1.0"
+ollama_memory: "2g"
+# BUG-014: pin the ollama sidecar to a static IP on a stable user-defined network and
+# resolve the "ollama" name via /etc/hosts (extra_hosts) so it survives container/network
+# churn without a `down && up`. ollama_static_ip must be inside backend_net_subnet; the
+# default subnet avoids podman's 10.89.0.0/16 pool (override if it collides on the VM).
+ollama_static_ip: "10.123.0.11"
+backend_net_subnet: "10.123.0.0/24"
+# Deep readiness includes the embedding hop: /actuator/health returns 503 when ollama is
+# unreachable so HAProxy drains the node (true on this tier; ollama is present).
+embedding_health_enabled: true
+
+# Chat LLM (Mistral cloud).
+llm_provider: "mistral-api"
+mistral_chat_model: "mistral-small-latest"
+
+# Shared conversation memory (Redis .107, ADR-0008 / TASK-BE-021).
+conversation_store: "redis"
+redis_host: "192.168.0.107"
+redis_port: 6379
+redis_timeout: "2s"
+conversation_memory_ttl_seconds: 3600
+redis_health_enabled: true
+
+# Knowledge base assets mounted read-only into the container.
+kb_host_path: "{{ compose_root }}/backend/kb-assets"
+
+# JVM / resource sizing (4 vCPU / 8 GB VM, shared with the ollama sidecar).
+# The embedding read timeout (voice-support.embedding.timeout-ms, default 5s) is sized for a
+# single per-query embedding at retrieval; the one-shot KB sync embeds a large batch in one
+# Ollama call on CPU and needs more headroom, so raise it here (Spring property override via
+# JAVA_OPTS). Runtime retrieval stays fast-fail-protected by voice-support.retrieval.timeout-ms.
+java_opts: "-XX:MaxRAMPercentage=75.0 -Dvoice-support.embedding.timeout-ms=120000"
+backend_cpus: "3.0"
+backend_memory: "5g"
+
+# ---- Postgres backup schedule (TASK-OPS-008) --------------------------------
+# Daily pg_dump -Fc of the KB + pgvector DB (.102), run from ONE backend node via a
+# throwaway postgres client container (no client install). Restore + KB re-sync are in
+# deploy/backup/pg-restore.sh + docs/operations/backup-restore.md. Set pg_backup_remote
+# to protect against losing the Postgres VM.
+pg_backup_enabled: true
+pg_backup_host: "192.168.0.102"
+pg_backup_port: 5432
+pg_backup_database: "voicesupport"
+pg_client_image: "postgres:18-alpine"
+pg_backup_dir: "/var/backups/voice-support/postgres"
+pg_backup_cron_minute: "37"
+pg_backup_cron_hour: "2"          # daily 02:37
+pg_backup_keep: 14                 # ~2 weeks of daily dumps
+pg_backup_remote: ""               # e.g. "backup@vlb-ai4cc-t01.prod.lan:/srv/backups/postgres"

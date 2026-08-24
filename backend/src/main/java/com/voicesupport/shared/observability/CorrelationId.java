@@ -11,8 +11,31 @@ public final class CorrelationId {
     public static final String MDC_KEY = "correlation_id";
     public static final String CHANNEL_MDC_KEY = "channel";
     private static final String NONE = "n/a";
+    // Bounds a client-supplied correlation id / channel so a crafted value cannot forge log lines
+    // (CR/LF injection) nor bloat the MDC/response header (TASK-BE-022 review #3).
+    private static final int MAX_LENGTH = 200;
 
     private CorrelationId() {
+    }
+
+    // Removes ISO control characters (CR/LF/TAB/…) and caps the length of a client-controlled
+    // correlation id or channel before it reaches the MDC, a structured log or a response header.
+    // Control chars are the log-injection / HTTP response-splitting vector; normal ids (UUIDs,
+    // alphanumerics, dashes) pass through unchanged. Returns null for null so callers keep their
+    // own blank handling.
+    public static String sanitize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String stripped = value.strip();
+        StringBuilder builder = new StringBuilder(Math.min(stripped.length(), MAX_LENGTH));
+        for (int i = 0; i < stripped.length() && builder.length() < MAX_LENGTH; i++) {
+            char c = stripped.charAt(i);
+            if (!Character.isISOControl(c)) {
+                builder.append(c);
+            }
+        }
+        return builder.toString();
     }
 
     public static String current() {
@@ -29,13 +52,15 @@ public final class CorrelationId {
     // body (e.g. the voice runtime's correlation_id on /converse), so backend logs align with
     // the runtime's id rather than a locally generated one.
     public static void set(String value) {
-        if (value != null && !value.isBlank()) {
-            MDC.put(MDC_KEY, value);
+        String clean = sanitize(value);
+        if (clean != null && !clean.isBlank()) {
+            MDC.put(MDC_KEY, clean);
         }
     }
 
     public static void setChannel(String value) {
-        MDC.put(CHANNEL_MDC_KEY, value == null || value.isBlank() ? NONE : value);
+        String clean = sanitize(value);
+        MDC.put(CHANNEL_MDC_KEY, clean == null || clean.isBlank() ? NONE : clean);
     }
 
     public static void clearChannel() {

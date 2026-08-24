@@ -7,12 +7,32 @@ spring:
     username: ${DB_USERNAME:voicesupport}
     password: ${DB_PASSWORD:voicesupport}
 
+  # Redis connection for the shared conversation memory (TASK-BE-021, ADR-0008). Only used when
+  # voice-support.conversation.memory.store=redis (CONVERSATION_STORE=redis); the connection factory
+  # is created lazily and never contacted in the default in-memory mode, so offline runs are unchanged.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+
+  # Schema is owned by Liquibase (TASK-INFRA-009, ADR-0041), not Hibernate: ddl-auto is `none`
+  # (was `update`) so JPA maps onto the Liquibase-created kb_source_state without touching DDL.
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Liquibase runs the APP changelog at startup AS THE APP USER (vector_store + kb_source_state).
+  # The privileged bootstrap (CREATE EXTENSION / grants) is a separate superuser-run changelog
+  # (db/changelog/bootstrap/) executed once at deploy Step 4 — never at app startup. mvn test never
+  # runs Liquibase (no @SpringBootTest boots the context). Set LIQUIBASE_ENABLED=false to opt out.
+  liquibase:
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+    enabled: ${LIQUIBASE_ENABLED:true}
 
   ai:
     ollama:
@@ -40,7 +60,10 @@ spring:
         dimensions: 768
         index-type: hnsw
         distance-type: cosine_distance
-        initialize-schema: true
+        # Schema owned by Liquibase (ADR-0041): Spring AI must NOT create vector_store nor attempt
+        # CREATE EXTENSION at startup (would fail for the unprivileged pilot app user). The Liquibase
+        # app changelog reproduces this exact schema (index-type/distance-type must stay in sync).
+        initialize-schema: false
 
 server:
   port: 8080
@@ -74,6 +97,15 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    redis:
+      # TASK-BE-021 review (blocking): spring-boot-starter-data-redis auto-registers a Redis health
+      # indicator that is aggregated into /actuator/health. In the default `memory` store mode Redis
+      # is NOT deployed, so the indicator would ping REDIS_HOST:REDIS_PORT (localhost:6379) and flip
+      # /actuator/health to DOWN — marking the container unhealthy (image HEALTHCHECK + HAProxy) even
+      # though the backend is fully functional. Gate it OFF by default and set REDIS_HEALTH_ENABLED=true
+      # ONLY in the redis-store deployment (.env), where Redis is present and worth monitoring.
+      enabled: ${REDIS_HEALTH_ENABLED:false}
   metrics:
     distribution:
       percentiles:
@@ -192,10 +224,18 @@ voice-support:
     api-key: ${CONVERSATION_API_KEY:}
     memory:
       # Short conversation memory (TASK-BE-006): prior turns per conversation placed in the
-      # LLM system message (current turn excluded). Process-local; a shared store is a later
-      # concern. max-turns = retained exchanges/conversation; max-conversations = LRU cap.
+      # LLM system message (current turn excluded). max-turns = retained exchanges/conversation;
+      # max-conversations = LRU cap (in-memory store only).
       max-turns: ${CONVERSATION_MEMORY_MAX_TURNS:6}
       max-conversations: ${CONVERSATION_MEMORY_MAX_CONVERSATIONS:10000}
+      # Memory backend (TASK-BE-021, ADR-0008): `memory` (default, process-local, single-node) or
+      # `redis` (shared across the backend instances behind the pilot VIP). Redis MUST be selected
+      # for a multi-instance deployment, otherwise consecutive turns routed to different instances
+      # lose conversation context.
+      store: ${CONVERSATION_STORE:memory}
+      # Sliding idle TTL (seconds) for a conversation's Redis history; refreshed on every append.
+      # Ignored by the in-memory store.
+      ttl-seconds: ${CONVERSATION_MEMORY_TTL_SECONDS:3600}
   llm:
     # LLM wording provider (DEC-011), selectable without any domain change:
     #   mistral-api = development default (mistral-small-latest)
@@ -207,9 +247,39 @@ voice-support:
     # This value is also applied as the provider HTTP read timeout so a stalled socket is closed
     # (not just abandoned by the executor); raise it when selecting the slower local ollama chat.
     timeout-ms: ${LLM_TIMEOUT_MS:8000}
+    # Streaming (SSE) LLM budget (TASK-BE-025). The reactive stream() path uses a WebClient the
+    # RestClient read timeout above does NOT cover, so a hung provider would hold the SSE worker
+    # until the 60 s emitter timeout. This bounds the gap to the first token and between tokens
+    # (Reactor inter-signal timeout); a stall degrades to the sanitized 503 with a `timeout`
+    # outcome. Keep it above a realistic cold first-token time; 0 disables.
+    stream-timeout-ms: ${LLM_STREAM_TIMEOUT_MS:10000}
     # Provider HTTP connect timeout for the chat call (TASK-BE-012). Bounds the pre-read handshake
     # so a dead/unreachable endpoint fails fast rather than hanging a bounded LLM worker thread.
     connect-timeout-ms: ${LLM_CONNECT_TIMEOUT_MS:3000}
+  # Embedding client HTTP timeouts (TASK-BE-025). The Ollama embedding call runs before every
+  # pgvector similaritySearch; without an explicit timeout a slow/hung Ollama stalls retrieval on
+  # Spring defaults. Bounds read + connect on the embedding RestClient (env-driven, like the LLM).
+  embedding:
+    timeout-ms: ${EMBEDDING_TIMEOUT_MS:5000}
+    connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
+    # BUG-014: bounded attempts on the embedding HTTP call. A single stale DNS lookup during
+    # container/network churn re-resolves on the retry (negative DNS TTL is 0) instead of failing
+    # the turn. 2 = one retry; 1 disables. Embedding is a side-effect-free read, so retry is safe.
+    max-attempts: ${EMBEDDING_MAX_ATTEMPTS:2}
+    # BUG-014: embedding-hop reachability contributed to /actuator/health so a broken Ollama path
+    # drains the node at HAProxy (TASK-INFRA-007 deep health). OFF by default (local/dev/memory
+    # have no Ollama); the pilot backend tier sets EMBEDDING_HEALTH_ENABLED=true. The probe is a
+    # cheap GET /api/tags (DNS + TCP + liveness) with its own short timeouts.
+    health:
+      enabled: ${EMBEDDING_HEALTH_ENABLED:false}
+      connect-timeout-ms: ${EMBEDDING_HEALTH_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${EMBEDDING_HEALTH_READ_TIMEOUT_MS:2000}
+  # Overall retrieval budget (TASK-BE-025) for the outbound RETRIEVAL seam: bounds the whole
+  # retrieve() call (query embedding + pgvector similaritySearch) so a slow/locked DB query fails
+  # fast into the sanitized 503 with a `timeout` outcome instead of holding the request/SSE worker.
+  # Keep it above embedding.timeout-ms (5s) since embedding runs inside this budget. 0 disables.
+  retrieval:
+    timeout-ms: ${RETRIEVAL_TIMEOUT_MS:6000}
     # Voice-first answer-length budget (TASK-BE-018). Appended per call as a concision directive in
     # the answer language, capping the spoken answer so long grounded answers stop dominating TTS
     # synthesis time (batch TTFA + live spoken tail). Does not weaken grounding (DEC-002 / BUG-004):

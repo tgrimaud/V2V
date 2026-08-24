@@ -35,6 +35,20 @@ _CLIENT_MESSAGES: dict[str, str] = {
 DEFAULT_ERROR_CODE = "voice_error"
 
 
+class SessionCapacityError(RuntimeError):
+    """Raised when a new WebRTC session is refused because the concurrency cap is reached.
+
+    Lives in this lightweight module (no pipecat/webrtc imports) so the HTTP server can
+    catch it and answer 503 without importing the WebRTC signaling module — server.py
+    must still start when the WebRTC extra / pipecat is absent (TASK-WEB-024).
+    """
+
+    def __init__(self, active: int, cap: int) -> None:
+        super().__init__(f"WebRTC session cap reached ({active}/{cap})")
+        self.active = active
+        self.cap = cap
+
+
 def client_error_body(
     error_code: str | None,
     correlation_id: str | None,

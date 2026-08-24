@@ -1,0 +1,17 @@
+---
+# Provision the container runtime on the deploy VMs before the first deploy (TASK-OPS-003,
+# runtime revised by TASK-INFRA-008 / ADR-0038 addendum). The tst VMs are podman-native
+# (podman 5.x + podman-docker shim, no Docker CE); the compose_tier role drives
+# `podman compose` via the Docker Compose v2 provider this playbook installs.
+#
+#   ansible-playbook prereqs.yml                 # all deploy tiers (redis + backend + voice)
+#   ansible-playbook prereqs.yml --limit redis   # a single tier
+#
+# Run once per fresh host; idempotent, so it is safe to re-run. Kept separate from
+# deploy.yml so routine deploys stay fast (the runtime is provisioned only once).
+
+- name: "Install the container runtime prerequisites"
+  hosts: redis:backend:voice
+  become: true
+  roles:
+    - host_prereqs

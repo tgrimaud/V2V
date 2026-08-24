@@ -6,6 +6,7 @@ import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.observability.Slices;
 import com.voicesupport.shared.web.rest.ErrorResponse;
+import com.voicesupport.shared.web.security.ApiKeyGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -41,7 +42,7 @@ public class ConverseController {
 
     private final ConverseUseCase converseUseCase;
     private final BackendTelemetry telemetry;
-    private final String apiKey;
+    private final ApiKeyGuard apiKeyGuard;
 
     public ConverseController(
             ConverseUseCase converseUseCase,
@@ -49,7 +50,7 @@ public class ConverseController {
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseUseCase = converseUseCase;
         this.telemetry = telemetry;
-        this.apiKey = apiKey;
+        this.apiKeyGuard = new ApiKeyGuard(apiKey);
     }
 
     @PostMapping("/converse")
@@ -69,7 +70,7 @@ public class ConverseController {
             @Parameter(description = "Optional shared secret; required only when the backend api-key is set.")
             @RequestHeader(value = "x-api-key", required = false) String providedKey,
             HttpServletResponse httpResponse) {
-        if (!authorized(providedKey)) {
+        if (!apiKeyGuard.authorized(providedKey)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         // Align backend logs/metrics with the runtime's correlation id (authoritative, from the
@@ -91,10 +92,6 @@ public class ConverseController {
         return ResponseEntity.ok(ConverseResponse.from(answer));
     }
 
-    private boolean authorized(String providedKey) {
-        return apiKey == null || apiKey.isBlank() || apiKey.equals(providedKey);
-    }
-
     private void logTurn(ConverseRequest request, GeneratedAnswer answer, long durationMs) {
         log.info("[CONVERSE] channel={} conversation_id={} correlation_id={} grounded={} confidence={} "
                         + "chars={} duration_ms={}",
@@ -103,8 +100,11 @@ public class ConverseController {
                 answer.text() != null ? answer.text().length() : 0, durationMs);
     }
 
+    // Sanitizes before logging: channel/conversation_id/correlation_id are client-controlled, so a
+    // CR/LF-laced value could otherwise forge extra log lines (TASK-BE-022 review #3).
     private String nullSafe(String value) {
-        return value == null || value.isBlank() ? "n/a" : value;
+        String clean = CorrelationId.sanitize(value);
+        return clean == null || clean.isBlank() ? "n/a" : clean;
     }
 
     private String formatConfidence(Double confidence) {

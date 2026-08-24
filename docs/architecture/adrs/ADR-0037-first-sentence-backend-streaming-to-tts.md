@@ -8,10 +8,16 @@
   (4 → 1), barge-in intact — see
   [`streaming-voice-qa-report.md`](../../qa/streaming-voice-qa-report.md) "Live Lever-1
   Pass". **GO to enable the flag on the pilot channel** (strict improvement, no
-  regression); **code default stays OFF** pending a larger warm+cold sample.
-  **ADR-0029 gate (≤ 1500 ms p95) not yet met** — lever 1 is the biggest single mover but
-  needs the STT finalize-tail work + lever-2 full-converse warm-up to attempt closure.
-  Lever 2 delivered (TASK-WEB-021). Originally Proposed (2026-07-29).
+  regression). **TASK-WEB-022 (2026-08-06): `VOICE_BACKEND_STREAM` code default flipped to
+  ON** — a default run now uses the validated fast path (disable only with an explicit
+  falsy value); the end-of-turn hold code default is likewise set to the live-validated
+  350 ms (lever 3), and the backend warm-up stays ON. **STT pre-warm is the one lever kept
+  OFF** (unvalidated Gradium idle-socket; enabling it can degrade turn 1). **ADR-0029 gate
+  (≤ 1500 ms p95) still not met** even with levers 1+2 (combined cold m2e p95 ≈ 2142 ms,
+  margin −642 ms); the residual is handed to TASK-STT-014 (STT finalize-tail) + TASK-BE-020
+  (first-sentence backend generation) plus a live re-measurement, and the gate stays OPEN
+  at 1.5 s (no number change — see ADR-0029 TASK-WEB-022 status). Lever 2 delivered
+  (TASK-WEB-021). Originally Proposed (2026-07-29).
 - **Deciders:** Architecture + Product (DEC-002 billing-safety owner)
 - **Related:** TASK-WEB-015 (perceived-latency levers), TASK-WEB-014 (mouth-to-ear
   measurement — prerequisite), ADR-0029 (pilot latency criterion & sub-targets),
@@ -27,7 +33,7 @@ the largest slice of time-to-first-audio (~1.1–1.2 s, warm): the voice runtime
 calls the **blocking** `POST /api/conversation/converse` through
 `HttpBackendAdapter.answer()` and waits for the **complete** LLM answer before any
 audio is synthesized (`backend.first_token == backend.request`). The backend already
-exposes an **SSE streaming** endpoint (`GET /api/conversation/ask-stream`) that the
+exposes an **SSE streaming** endpoint (`POST /api/conversation/converse-stream`) that the
 voice path does not use.
 
 Lever 1 of TASK-WEB-015 proposes to consume that stream and hand the **first
@@ -59,7 +65,7 @@ decision is recorded before the implementation and the implementation is gated.
 
 1. **Adopt first-sentence streaming as the target for lever 1**, on the **existing
    Flow A synchronous-per-turn path** (ADR-0036, no broker): the voice runtime
-   consumes `GET /api/conversation/ask-stream` (SSE) and forwards the first
+   consumes `POST /api/conversation/converse-stream` (SSE) and forwards the first
    **guardrail-passing, sentence-sized** chunk to the streaming TTS as a plain
    `TextFrame`, then continues with subsequent sentences. Valid for V1 because
    ADR-0012 reaffirms the modular cascade (OQ-005: V1 "OpenAI" = cascade chat
