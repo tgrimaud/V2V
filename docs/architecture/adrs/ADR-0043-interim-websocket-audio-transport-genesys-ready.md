@@ -73,6 +73,29 @@ Two facts make the WebSocket path high-value beyond the pilot:
    Genesys Audio Connector (ADR-0040) for the target contact-centre path. ADR-0042 stands:
    **no TURN** is provisioned.
 
+## Spike Outcome (2026-08-24, TASK-WEB-026)
+
+The socle spike **confirms this decision without changing it**. Concrete findings:
+
+- pipecat 1.5.0 ships `SingleClientWebsocketServerTransport`
+  (`pipecat.transports.websocket.server`) built on `websockets.asyncio.server.serve`,
+  which pulls **no FastAPI** — FastAPI is isolated in the sibling `websocket.fastapi`
+  module we never import. `websockets` is already a runtime dependency (Gradium TTS
+  client), so **no new dependency** is added. The hand-rolled `wss`-on-stdlib option is
+  therefore unnecessary; the pipecat transport is the lower-risk, higher-reuse socle.
+- The frame contract is carried by the pipecat **serializer seam**
+  (`WebSocketAudioSerializer`, `web_voice/websocket_framing.py`): binary → PCM16/16 kHz
+  `InputAudioRawFrame`, text → JSON control. The control vocabulary mirrors the Genesys
+  AudioHook semantics (the reference `pipecat.serializers.genesys.GenesysAudioHookSerializer`
+  has the same JSON-control + binary-audio shape), so Sprint 13 reuses the demux layer.
+- The transport is driven on the shared persistent asyncio loop
+  (`web_voice/async_loop.py`), like the WebRTC signaling path. HAProxy `wss` upgrade
+  routing to its listener is TASK-INFRA-010; wiring it into `StreamingVoiceSession` via
+  the transport-agnostic session factory is TASK-WEB-027 (where the canonical per-slice
+  OpenTelemetry spans — channel ingress → … → egress — are emitted by the existing
+  session/ingress/egress probes). This socle ticket adds the library layer only and runs
+  no live turn, so it introduces no new runtime span in isolation.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's
