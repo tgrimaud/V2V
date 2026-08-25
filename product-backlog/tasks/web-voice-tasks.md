@@ -3085,7 +3085,7 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime — latency optimisation
-**Status:** 🟢 **Lever implemented + unit-tested + LIVE re-scored (2026-08-25) — bounded finalize budget (1.2 s) with partial-snapshot fallback. STT time-to-final tail capped ~4042 → 1224 ms p95; mouth-to-ear p95 3743 → 2777 ms (−26%) vs WEB-032. ADR-0029 still FAIL (m2e 2777 > 1500) — remaining blocker is backend first-token (Lever B) + a possibly tighter budget.** 568 unit + 17 behave green; live 15-call WebRTC warm sample (real Gradium+Mistral). Formal WER pass is the remaining QA-GO closer.
+**Status:** 🟢 **Lever implemented + unit-tested + LIVE re-scored + merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `9676a45`, 2026-08-25) — bounded finalize budget (1.2 s) with partial-snapshot fallback. STT time-to-final tail capped ~4042 → 1224 ms p95; mouth-to-ear p95 3743 → 2777 ms (−26%) vs WEB-032. ADR-0029 still FAIL (m2e 2777 > 1500) — remaining blocker is backend first-token (Lever B) + a possibly tighter budget.** 568 unit + 17 behave green; live 15-call WebRTC warm sample (real Gradium+Mistral). Formal WER pass is the remaining QA-GO closer.
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
 / 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
