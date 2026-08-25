@@ -1,0 +1,55 @@
+{
+  "ticket": "TASK-WEB-035",
+  "experiment": "STT time-to-final tail: bounded finalize budget (1.2 s) with partial-snapshot fallback",
+  "date": "2026-08-25",
+  "method": "Warm 15-call WebRTC sample (5 billing clips x 3 reps) via scripts/webrtc_live_client.py against the real stack: Gradium streaming STT/TTS + Mistral RAG backend (top-k=5, WEB-036), co-located dev host, WAV clips padded with a low-amplitude noise tail (Opus DTX). 1 warm-up call discarded, telemetry reset, then 15 measured turns. Per-slice scored by scripts/streaming_latency_report.py; clean per-call weighting (WebRTC fresh session per offer, n=15).",
+  "config": {
+    "VOICE_STT_FINALIZE_BUDGET_MS": 1200,
+    "retrieval_top_k": 5,
+    "end_of_turn_silence_ms": 350,
+    "stt_mode": "streaming",
+    "tts_mode": "streaming"
+  },
+  "stt_time_to_final_ms": {
+    "per_turn": [358.7, 360.3, 473.3, 483.0, 546.9, 550.0, 566.3, 567.6, 673.9, 745.3, 819.2, 924.2, 1095.4, 1095.8, 1223.7],
+    "p50": 567.6,
+    "p95": 1223.7,
+    "max": 1223.7,
+    "n": 15
+  },
+  "finalize_fallback": {
+    "fired": 1,
+    "of_turns": 15,
+    "rate": "6.7%",
+    "capped_turn_time_to_final_ms": 1223.719,
+    "note": "The single stalled-terminal turn was finalized from the partials already received (non-empty snapshot) and answered. The other 14 finalized naturally on the provider terminal (<= 1095 ms). All 15 turns produced stt.transcript.final (0 unavailable), so the cap cost no turn to word-starvation."
+  },
+  "per_slice_p95_ms": {
+    "end_of_turn": 350.0,
+    "stt": 1223.7,
+    "backend_first_token": 1198.9,
+    "tts_first_audio": 393.3,
+    "channel_egress": 0.03
+  },
+  "composites_p95_ms": {
+    "time_to_first_audio": {"measured": 2426.8, "criterion": 1200, "status": "fail"},
+    "mouth_to_ear": {"measured": 2776.9, "criterion": 1500, "status": "fail"}
+  },
+  "comparison_p95_ms": {
+    "note": "Combined levers (top-k=5 WEB-036 + finalize budget WEB-035) vs the WEB-032 baseline and the WEB-036 STT-lever-less rescore.",
+    "stt_time_to_final": {"web032_baseline": 1535, "web036_rescore_no_stt_lever": 4042, "web035": 1224},
+    "backend_first_token": {"web032_baseline": 1717, "web036_rescore": 1245, "web035": 1199},
+    "time_to_first_audio": {"web032_baseline": 3393, "web036_rescore": 5669, "web035": 2427},
+    "mouth_to_ear": {"web032_baseline": 3743, "web036_rescore": 6019, "web035": 2777}
+  },
+  "outcome": {
+    "lever_effect": "The finalize budget capped the STT time-to-final tail at ~1.2 s (was up to ~4 s), removing the pathological outliers while all normal turns finalized on the real terminal. Combined with top-k=5, mouth-to-ear p95 dropped 3743 -> 2777 ms (-26%) and time_to_first_audio p95 3393 -> 2427 ms (-28%) vs the WEB-032 baseline.",
+    "gate": "ADR-0029 still FAIL (m2e p95 2777 > 1500; TTFA p95 2427 > 1200), but the STT tail is no longer the dominant blocker.",
+    "remaining_levers": [
+      "backend first-token (Lever B, LLM-provider benchmark): p95 ~1199 ms, LLM-first-token dominated and model-inherent — the largest remaining post-EOT slice.",
+      "finalize budget could be lowered further (e.g. ~900 ms) but must be WER-validated: at 1.2 s the fallback only fires on genuinely stalled terminals (partials long complete); tightening risks capping turns whose partials are still arriving.",
+      "end-of-turn hold (350 ms) trimming carries a false-cut risk (TASK-WEB-015 floor 250 ms)."
+    ],
+    "wer_note": "Transcripts are redacted in telemetry (PII), so a formal normalized-WER pass is not derivable from this dump. Proxy evidence: 15/15 stt.transcript.final, 0 unavailable, all turns answered audibly; the 1 fallback turn returned a non-empty partial snapshot (same join as the terminal path) and was answered. A dedicated WER pass with reference transcripts remains the QA-GO closer."
+  }
+}

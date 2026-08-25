@@ -73,6 +73,171 @@ Two facts make the WebSocket path high-value beyond the pilot:
    Genesys Audio Connector (ADR-0040) for the target contact-centre path. ADR-0042 stands:
    **no TURN** is provisioned.
 
+## Spike Outcome (2026-08-24, TASK-WEB-026)
+
+The socle spike **confirms this decision without changing it**. Concrete findings:
+
+- pipecat 1.5.0 ships `SingleClientWebsocketServerTransport`
+  (`pipecat.transports.websocket.server`) built on `websockets.asyncio.server.serve`,
+  which pulls **no FastAPI** — FastAPI is isolated in the sibling `websocket.fastapi`
+  module we never import. `websockets` is already a runtime dependency (Gradium TTS
+  client), so **no new dependency** is added. The hand-rolled `wss`-on-stdlib option is
+  therefore unnecessary; the pipecat transport is the lower-risk, higher-reuse socle.
+- The frame contract is carried by the pipecat **serializer seam**
+  (`WebSocketAudioSerializer`, `web_voice/websocket_framing.py`): binary → PCM16/16 kHz
+  `InputAudioRawFrame`, text → JSON control. The control vocabulary mirrors the Genesys
+  AudioHook semantics (the reference `pipecat.serializers.genesys.GenesysAudioHookSerializer`
+  has the same JSON-control + binary-audio shape), so Sprint 13 reuses the demux layer.
+- The transport is driven on the shared persistent asyncio loop
+  (`web_voice/async_loop.py`), like the WebRTC signaling path. HAProxy `wss` upgrade
+  routing to its listener is TASK-INFRA-010; wiring it into `StreamingVoiceSession` via
+  the transport-agnostic session factory is TASK-WEB-027 (where the canonical per-slice
+  OpenTelemetry spans — channel ingress → … → egress — are emitted by the existing
+  session/ingress/egress probes). This socle ticket adds the library layer only and runs
+  no live turn, so it introduces no new runtime span in isolation.
+
+## Factory Outcome (2026-08-24, TASK-WEB-027)
+
+The capitalisation refactor (spine point 3) is **done**. Session assembly is extracted
+into `SessionFactory` (`web_voice/session_factory.py`): it takes an already-built
+transport + call envelope + telemetry and returns the built `StreamingVoiceSession`
+(STT/TTS processors, end-of-call farewell, channel-egress probe, per-language provider
+selection, streaming vs batch), plus the env-tunable config it needs (farewell, barge-in,
+end-of-turn hold, STT prewarm) and `DEFAULT_SAMPLE_RATE`.
+
+- `WebRtcSignalingService` now owns only its **WebRTC transport build** (`_build_transport`)
+  and delegates the rest to `self._factory.build_session(...)`. It re-exports the moved
+  config symbols so backward-compat imports keep working. WebRTC behaviour is
+  **byte-for-byte** — the full `tests/test_webrtc_signaling.py` passes unchanged (three
+  tests that poked private building helpers were re-pointed at the factory, same
+  assertions).
+- A **non-WebRTC stub transport** builds the identical session through the factory
+  (`tests/test_session_factory.py`): streaming path wires the streaming STT/TTS processors
+  + farewell in the pre-answer seam; batch path builds the utterance aggregator at the
+  **PCM16/16 kHz** internal boundary. Any codec/sample-rate conversion stays inside each
+  transport adapter, never in the factory (spine point / this ADR's audio-boundary rule).
+- The WebSocket transport (TASK-WEB-028/029) and the future Genesys Audio Connector
+  (ADR-0040) now consume this one seam; the per-slice OpenTelemetry spans are still emitted
+  by the existing session/ingress/egress probes when a transport is wired in and run live.
+
+## Client Outcome (2026-08-24, TASK-WEB-028)
+
+The interim browser client + its server wiring are **done**, built entirely on the WEB-026
+socle and the WEB-027 factory (no bespoke socket/session code):
+
+- **Server** — `web_voice/websocket_signaling.py` (`WebSocketSignalingService`): builds the
+  socle transport via `build_websocket_audio_transport(...)`, assembles the session through
+  the shared `SessionFactory`, and runs it on the shared `BackgroundEventLoop`. Wired into
+  `server.py main()` behind `--websocket {auto,on,off}` on a dedicated port (`VOICE_WS_PORT`,
+  default **8091**), sharing the WebRTC loop when present. The canonical per-call telemetry
+  dump is extracted into `web_voice/session_telemetry.py` and shared with the WebRTC path
+  (identical evidence shape across transports).
+- **Client** — `static/ws.html` + `static/ws.js`: `getUserMedia` → existing `pcm-worklet.js`
+  → PCM16/16 kHz binary frames over `wss`; bot audio is played by scheduling 16 kHz
+  `AudioBuffer`s back-to-back (the context resamples — no upsampling worklet needed);
+  `barge_in`/`call_end` control frames stop playback / end the call. A second concurrent
+  connection is refused by the single-client socle with WS close **1013**, surfaced as a
+  clear "server busy — try again" message (AC#2); failures never fabricate a transcript.
+- **Language: no pre-media declaration step (the key interim constraint).** Unlike the batch
+  path (`?language=` per HTTP turn) and WebRTC (language in the SDP offer body), the
+  single-client `wss` transport **binds then accepts** and the `ChannelEnvelope` is frozen at
+  build time, so a per-connection language (WS URL query or `open` control frame) arrives
+  *after* provider selection is locked. Interim decision: the effective STT/TTS/answer
+  language is the **server default** (`VOICE_WS_LANGUAGE`, `None` = backend auto-detect,
+  pilot fr-first); the client's declared language is captured for **telemetry/correlation**
+  only (`voice.ws.client_connected.declared_language`). Full dynamic per-call fr/en selection
+  is **deferred** — candidates: a **listener-per-language** topology (one port per language,
+  language known at build) or a **pre-media signaling hook** before the pipeline is built.
+  Tracked as an open question; revisited with TASK-WEB-030 (capacity + per-slice observability).
+- **Interim observability.** `voice.ws.session_started` / `client_connected` /
+  `client_disconnected` events carry the correlation id + declared/effective language; the
+  full canonical per-slice spans + active-session gauge + rich capacity ceiling are
+  TASK-WEB-030, and live mouth-to-ear latency is TASK-WEB-031.
+
+## Control-Signal Seam Outcome (2026-08-24, TASK-WEB-029)
+
+Point 4 of the Decision is now **implemented** as a transport-agnostic seam (the energy
+detectors stay authoritative on the browser paths; the seam only *adds* a pluggable source):
+
+- **Vocabulary + port** — `web_voice/control_signals.py`: `ControlSignalType` named after
+  Genesys AudioHook semantics (`barge_in`, `end_of_turn`, `call_end`, `playback_started`,
+  `playback_completed`), a `ControlSignal` dataclass, a `ControlSignalSource` port (async
+  `signals()` + `close()`), and an `EndOfTurnSignalFrame` control frame.
+- **Processor** — `web_voice/control_signal_processor.py` (`ControlSignalProcessor`): a
+  front-of-pipeline `FrameProcessor` wired at `pre_stt` on WebRTC **and** WebSocket via
+  `SessionFactory`. It maps `barge_in → broadcast_interruption()` (Pipecat cancels the in-flight
+  `StreamingTtsProcessor` synthesis + flushes the output transport, so playback stops and the
+  socket stays open for the next turn), `end_of_turn → EndOfTurnSignalFrame` downstream (STT
+  finalizes the open turn via `_finalize_from_control`, independent of the energy detector),
+  and `call_end → injected end_call(signal)` (same seam the farewell processor uses) **or** a
+  graceful `EndFrame`. It also emits Genesys-named `voice.control_signal` telemetry from the
+  transport's `BotStarted/StoppedSpeakingFrame` playback lifecycle.
+- **Pluggability** — `SessionFactory(control_signal_source_factory=...)` injects a per-call
+  source; **default `None` = transparent pass-through** (energy detectors + 350 ms hold +
+  `VOICE_BARGE_IN_*` unchanged). Sprint 13's Genesys adapter supplies a real source that feeds
+  the *same* seam — no session-core change. Covered by `tests/test_control_signal_processor.py`
+  + `features/websocket_control_signals.feature` (source-driven barge-in/EOT with no energy
+  detector). A live `wss` barge-in / mouth-to-ear check stays TASK-WEB-031; wiring `call_end`
+  to the WS drain teardown is TASK-WEB-030.
+
+## Capacity + Observability Outcome (2026-08-25, TASK-WEB-030)
+
+The "Observability mandate" consequence and WebRTC-parity backpressure (TASK-WEB-024) are now
+**implemented** on the interim WS path, keeping the socle single-client model:
+
+- **Session ceiling + clean refusal.** `websocket_support.build_websocket_audio_transport`
+  gains an optional `on_client_rejected` callback. When set, it returns a small
+  `_CapacityAwareTransport` whose input subclasses pipecat's
+  `SingleClientWebsocketServerInputTransport` and, when a client is already connected,
+  **surfaces** the incoming (soon-to-be-1013) client to the callback *before* delegating to
+  the parent's own single-client refusal — no accept logic is duplicated, so pipecat still
+  performs the actual WS 1013 close. `WebSocketSignalingService` records the refusal as a
+  `voice.ws.session_rejected` event (`reason=single_client_capacity`, `active_sessions`,
+  `max_sessions`) and never crashes. The ceiling is env-tunable
+  (`VOICE_MAX_WS_SESSIONS`, default 1); a value > 1 would need a listener-per-session topology
+  (deferred, same open question as dynamic per-call language selection).
+- **Active-session gauge.** `voice.ws.active_sessions` is emitted on connect (`outcome=accepted`),
+  disconnect (`outcome=closed`) and refusal (`outcome=rejected`), stamped with `max_sessions`
+  for cross-transport charting (WebRTC-equivalent shape).
+- **Canonical per-slice spans in the per-call dump.** `session_telemetry.build_payload` (shared
+  by WebRTC + WS) now always includes `pipeline_timing = PipelineTimingReport.from_spans(...)`
+  so the end-of-call evidence carries every canonical journey slice (channel ingress →
+  end-of-turn → STT → backend → TTS first audio → channel egress) under **one correlation id**,
+  with a missing slice marked `measured=false` (never omitted). The channel-egress span is
+  stamped with a `transport` label (`SessionFactory(transport_label="websocket")`) so a latency
+  report can split WS from WebRTC. The dump now fires at **call end** (client disconnect), not
+  only at server shutdown, and is idempotent (`_dump_once`) so a shutdown after a clean
+  disconnect does not double-dump.
+- **Deferred.** A real end-to-end refusal + per-slice p50/p95 latency report through the
+  HAProxy edge stays TASK-WEB-031 (live QA). `call_end`→WS-drain teardown wiring likewise
+  remains a WEB-031/Genesys-adapter concern. Adversarial review **91/100 Pass** flagged one
+  Medium residual: telemetry/envelope are created once in `start()`, so the correlation id is
+  effectively **per server session, not per connection** — a reconnect on the single-client
+  socle reuses the same session and would accumulate spans under one id. Accepted interim
+  (one caller per session at pilot); a per-connection reset or a "one session = one call"
+  formalisation is carried to TASK-WEB-031.
+
+## Latency Evidence Outcome (2026-08-25, TASK-WEB-031)
+
+The interim WS path was scored end to end against the ADR-0029 gate with the **real** stack
+(Gradium streaming STT/TTS + the Java backend `--backend http`: Mistral chat + Ollama embeddings +
+pgvector), 16 warm calls on a co-located dev host, driven by the new `scripts/ws_live_client.py`
+harness and scored by `scripts/streaming_latency_report.py`:
+
+- **ADR-0029 gate: FAIL.** mouth-to-ear (`voice_to_first_audio`) **p95 3675 ms** (target ≤ 1500 ms)
+  and **time_to_first_audio p95 3325 ms** (target ≤ 1200 ms); median mouth-to-ear already 2055 ms.
+- **Per-slice p95 (ms):** end_of_turn 350 · **stt 2250** · **backend_first_token 1642** ·
+  tts_first_audio 402 · channel_egress 4 · channel_ingress not emitted on the WS path.
+- **Interpretation.** The interim transport itself is cheap (egress ~4 ms); the budget is dominated
+  by **STT time-to-final** and **backend first-token**, i.e. the pilot latency problem is a
+  STT-endpointing + LLM-first-token problem, not a transport-choice problem. Optimisation
+  (earlier end-pointing / partial-final, retrieval cache, faster/co-located LLM) is a follow-up
+  beyond the WEB-026…031 interim-transport scope; re-score with the same harness after each lever.
+- **Sample caveat.** The WEB-030 per-server-session correlation residual means each per-call dump
+  accumulates spans since server start, so the report counts `n=136` (= 1+2+…+16) per slice,
+  over-weighting later turns. Per-span latencies are genuine and the fail margin is large, so the
+  conclusion holds; a per-connection reset would make the weighting exact.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's

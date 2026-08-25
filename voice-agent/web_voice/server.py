@@ -444,6 +444,63 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     return signaling, loop
 
 
+def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]:
+    """Build the interim browser WebSocket signaling (TASK-WEB-028), or (None, None).
+
+    Reuses the WebRTC background loop when present; otherwise starts its own so the WS
+    path works even with `--webrtc off`. `--websocket off` disables it; `auto` (default)
+    enables it only when the websockets transport is importable; `on` requires it. The
+    session is transport-agnostic — the same `SessionFactory` as WebRTC is used, only the
+    transport differs (ADR-0043, TASK-WEB-027). Returns (ws_signaling, owned_loop) so
+    main() stops the loop only when this builder created it.
+    """
+    if getattr(args, "websocket", "auto") == "off":
+        return None, None
+    from .websocket_support import probe_websocket_support
+
+    if not probe_websocket_support().available:
+        if args.websocket == "on":
+            raise SystemExit('WebSocket requested but unavailable: pip install "websockets>=13,<17"')
+        return None, None
+    from .async_loop import BackgroundEventLoop
+    from .session_factory import SessionFactory
+    from .websocket_signaling import (
+        WebSocketSignalingService,
+        ws_host_config,
+        ws_language_config,
+        ws_max_sessions_config,
+        ws_port_config,
+    )
+
+    owned_loop = None
+    if loop is None:
+        loop = BackgroundEventLoop()
+        loop.start()
+        owned_loop = loop
+    factory = SessionFactory(
+        ingress=ingress,
+        egress=egress,
+        backend=backend,
+        streaming_provider=_build_streaming_provider(args),
+        streaming_tts_provider=_build_streaming_tts_provider(args),
+        streaming_providers_by_language=_streaming_stt_by_language(args),
+        streaming_tts_providers_by_language=_streaming_tts_by_language(args),
+        # Label the channel-egress span so a per-slice latency report can split WS from
+        # WebRTC (TASK-WEB-030); the session core is otherwise transport-agnostic.
+        transport_label="websocket",
+    )
+    ws_signaling = WebSocketSignalingService(
+        factory=factory,
+        loop=loop,
+        host=ws_host_config(),
+        port=ws_port_config(),
+        default_language=ws_language_config(),
+        max_sessions=ws_max_sessions_config(),
+    )
+    ws_signaling.start()
+    return ws_signaling, owned_loop
+
+
 def _streaming_stt_by_language(args) -> dict[str, Any]:
     """Per-session streaming STT providers keyed by language (US-042, WebRTC path)."""
     if args.stt_mode != "streaming" or not stt_supports_streaming(args.provider):
@@ -526,12 +583,14 @@ def main() -> int:
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
+    ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
     server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
+    ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
         f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name}, "
-        f"webrtc={'on' if signaling else 'off'}, stt_mode={args.stt_mode}, "
-        f"tts_mode={args.tts_mode})",
+        f"webrtc={'on' if signaling else 'off'}, websocket={ws_status}, "
+        f"stt_mode={args.stt_mode}, tts_mode={args.tts_mode})",
         file=sys.stderr,
     )
     try:
@@ -539,10 +598,14 @@ def main() -> int:
     except KeyboardInterrupt:
         server.shutdown()
     finally:
+        if ws_signaling is not None:
+            ws_signaling.close()
         if signaling is not None:
             signaling.close()
         if loop is not None:
             loop.stop()
+        if ws_loop is not None:
+            ws_loop.stop()
         # Stop the batch pipecat processor's background loop if it started one (TASK-WEB-024).
         close = getattr(processor, "close", None)
         if callable(close):
@@ -572,6 +635,13 @@ def _parse_args() -> argparse.Namespace:
         choices=("auto", "on", "off"),
         default=os.environ.get(WEBRTC_ENV_VAR, "auto"),
         help="WebRTC streaming runtime: 'auto' (on if installed), 'on' (require), 'off'",
+    )
+    parser.add_argument(
+        "--websocket",
+        choices=("auto", "on", "off"),
+        default=os.environ.get("VOICE_WEBSOCKET", "auto"),
+        help="interim browser WebSocket voice path (TASK-WEB-028): 'auto' (on if "
+        "installed), 'on' (require), 'off'. Listens on VOICE_WS_PORT (default 8091)",
     )
     parser.add_argument(
         "--stun",

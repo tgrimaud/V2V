@@ -215,7 +215,12 @@ voice-support:
       # Tunable without a code change; re-measure backend_first_token when adjusting.
       # BUG-003: raised 4 -> 8 to over-fetch so the answer-bearing chunk is not evicted by
       # near-duplicate keyword-dense chunks under a brittle dense-only top-K.
-      top-k: ${CONVERSATION_RETRIEVAL_TOP_K:8}
+      # TASK-WEB-036 (2026-08-25): lowered 8 -> 5 after a measured A/B — llm_first_token p95
+      # 1705 -> 891 ms and backend_first_token p95 2647 -> 1414 ms (~-47%, tail-dominated), with
+      # grounding preserved on the billing fixture set (all grounded, same confidence). 5 keeps a
+      # margin above the pre-BUG-003 value of 4; raise back via the env var if a BUG-003-style
+      # eviction reappears. Confirm on a broader retrieval-quality QA pass before pilot.
+      top-k: ${CONVERSATION_RETRIEVAL_TOP_K:5}
     # ADR-0021 shared secret for the write/read API. When set, requests must carry a
     # matching x-api-key header on every protected path: POST /api/conversation/converse[-stream]
     # (inline gate), POST /api/conversation/answer, POST /api/conversation/retrieve and all

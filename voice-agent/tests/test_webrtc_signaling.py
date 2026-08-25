@@ -249,13 +249,16 @@ class WebRtcLanguageSelectionTest(unittest.TestCase):
         en = ChannelEnvelope.for_web_turn(language="en")
         fr = ChannelEnvelope.for_web_turn(language="fr")
         none = ChannelEnvelope.for_web_turn()
-        # THEN each half picks the language-specific provider, and the default when unset
-        self.assertEqual(service._streaming_provider_for(en).name, "stt-en")
-        self.assertEqual(service._streaming_provider_for(fr).name, "stt-fr")
-        self.assertEqual(service._streaming_provider_for(none).name, "stt-default")
-        self.assertEqual(service._streaming_tts_provider_for(en).name, "tts-en")
-        self.assertEqual(service._streaming_tts_provider_for(fr).name, "tts-fr")
-        self.assertEqual(service._streaming_tts_provider_for(none).name, "tts-default")
+        # THEN each half picks the language-specific provider, and the default when unset.
+        # Provider selection moved to the transport-agnostic session factory (TASK-WEB-027);
+        # the WebRTC service delegates to it, so the behaviour is asserted on the factory.
+        factory = service._factory
+        self.assertEqual(factory._streaming_provider_for(en).name, "stt-en")
+        self.assertEqual(factory._streaming_provider_for(fr).name, "stt-fr")
+        self.assertEqual(factory._streaming_provider_for(none).name, "stt-default")
+        self.assertEqual(factory._streaming_tts_provider_for(en).name, "tts-en")
+        self.assertEqual(factory._streaming_tts_provider_for(fr).name, "tts-fr")
+        self.assertEqual(factory._streaming_tts_provider_for(none).name, "tts-default")
 
 
 class FarewellConfigTest(unittest.TestCase):
@@ -372,15 +375,17 @@ class SilenceWindowConfigTest(unittest.TestCase):
     def test_below_floor_logs_a_clamp_warning_once(self) -> None:
         import os
 
-        import web_voice.webrtc_signaling as signaling
+        # The end-of-turn config + its once-per-process clamp warning moved to the
+        # transport-agnostic session factory (TASK-WEB-027); assert on it there.
+        import web_voice.session_factory as factory
 
         # GIVEN a reckless low value and no prior clamp warning this process
-        signaling._silence_clamp_warned = False
+        factory._silence_clamp_warned = False
         os.environ["VOICE_END_OF_TURN_SILENCE_MS"] = "50"
         # WHEN the config is read twice
-        with self.assertLogs("web_voice.webrtc_signaling", level="WARNING") as captured:
-            signaling._silence_window_config()
-            signaling._silence_window_config()
+        with self.assertLogs("web_voice.session_factory", level="WARNING") as captured:
+            factory._silence_window_config()
+            factory._silence_window_config()
         # THEN exactly one warning naming the clamp is emitted (no per-connection spam)
         clamp_lines = [m for m in captured.output if "below the safe floor" in m]
         self.assertEqual(len(clamp_lines), 1)
@@ -476,9 +481,13 @@ class FarewellWiringTest(unittest.IsolatedAsyncioTestCase):
         saved = os.environ.pop("VOICE_FAREWELL_ENABLED", None)
         os.environ["VOICE_FAREWELL_ENABLED"] = "false"
         try:
-            # WHEN the feature is disabled -> THEN no farewell processor is built
+            # WHEN the feature is disabled -> THEN no farewell processor is built.
+            # Farewell assembly moved to the session factory (TASK-WEB-027); the service
+            # delegates to it, so the behaviour is asserted on the factory.
             self.assertIsNone(
-                service._build_farewell_processor(SimpleNamespace(correlation_id="c"), TelemetryRecorder())
+                service._factory._build_farewell_processor(
+                    SimpleNamespace(correlation_id="c"), TelemetryRecorder()
+                )
             )
         finally:
             if saved is None:

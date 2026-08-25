@@ -2572,9 +2572,21 @@ internal event vocabulary with a **pluggable source**.
 (WebRTC same-subnet), ADR-0040 (Genesys AudioHook shape to align with)
 **Depends on:** — (first ticket of the sprint)
 **Classification:** V1 voice runtime — external-reach interim transport
-**Status:** Planned
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24, `--no-ff` `f6e4214`) — adversarial review **94/100 Pass** + QA **GO** ([report](../../docs/qa/task-web-026-websocket-socle-qa-report.md))
 **Priority:** High (unblocks 027–031)
-**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (to create when work starts)
+**Branch:** `task/TASK-WEB-026-websocket-audio-socle` (off `feat/sprint-12-external-voice-websocket`)
+
+**Spike outcome (2026-08-24):** pipecat `SingleClientWebsocketServerTransport`
+(`pipecat.transports.websocket.server`, built on `websockets.asyncio.server.serve`) is the
+socle — **no FastAPI** (isolated in `websocket.fastapi`, never imported) and **no new
+dependency** (`websockets` already ships for Gradium TTS). The hand-rolled `wss`-on-stdlib
+alternative is unnecessary. Framing lives in the pipecat serializer seam
+(`web_voice/websocket_framing.py::WebSocketAudioSerializer`): binary → `InputAudioRawFrame`
+PCM16/16 kHz, text → JSON control; control vocabulary mirrors Genesys AudioHook semantics
+(`open`/`opened`, `close`/`closed`, `barge_in`, `language`, `ping`/`pong`, `call_end`) so the
+Sprint 13 Genesys adapter reuses the demux. Socle guard + builder in
+`web_voice/websocket_support.py`. **Tests:** 17 framing + 5 socle; full voice-agent suite **526**
+green. ADR-0043 "Spike Outcome" section records the confirmation.
 
 ### Context
 
@@ -2629,9 +2641,24 @@ Scenario: The wire framing separates JSON control from binary audio
 ADR-0040 (future Genesys adapter reuse)
 **Depends on:** TASK-WEB-026
 **Classification:** V1 voice runtime — refactor enabling multi-transport + Genesys reuse
-**Status:** Planned
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24,
+`--no-ff` `9026577`) — adversarial review **95/100 Pass** + QA **GO**
+([report](../../docs/qa/task-web-027-session-factory-qa-report.md))
 **Priority:** High
-**Branch:** `task/TASK-WEB-027-transport-agnostic-session-factory` (to create when work starts)
+**Branch:** `task/TASK-WEB-027-transport-agnostic-session-factory`
+
+### Outcome (2026-08-24)
+
+Session assembly extracted into `SessionFactory` (`web_voice/session_factory.py`):
+`build_session(transport, envelope, telemetry)` returns the built `StreamingVoiceSession`
+(STT/TTS/farewell/egress probe + per-language selection, streaming vs batch) plus the
+env-tunable config (farewell/barge-in/end-of-turn hold/STT prewarm) and `DEFAULT_SAMPLE_RATE`.
+`WebRtcSignalingService` keeps only its WebRTC `_build_transport` and delegates the rest —
+**byte-for-byte** WebRTC (27 signaling tests pass unchanged; signaling shrank 656 → 389
+lines). A non-WebRTC stub transport builds the same session at the **PCM16/16 kHz** internal
+boundary. Tests: `tests/test_session_factory.py` (3, AC#2); full suite **530** green +
+Behave **14/39/180**. ADR-0043 updated (Factory Outcome). Unblocks WEB-028/029 + the Genesys
+adapter (ADR-0040) as thin transport adapters over one core.
 
 ### Context
 
@@ -2675,11 +2702,11 @@ Scenario: A non-WebRTC transport builds a session through the same factory
 
 **Parent:** EPIC-006
 **Related decisions:** ADR-0043, ADR-0033 (WebRTC page stays), US-019 (web voice journey)
-**Depends on:** TASK-WEB-026
+**Depends on:** TASK-WEB-026, TASK-WEB-027
 **Classification:** V1 voice runtime — external-reach client
-**Status:** Planned
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24, `--no-ff` `f5652fc`) — user-validated live (open→opened, WS 1013 refusal, binary ingest, browser mic turn); adversarial **93/100 Pass**; QA GO. 538 unit + 15/42/192 behave green.
 **Priority:** High
-**Branch:** `task/TASK-WEB-028-browser-ws-voice-client` (to create when work starts)
+**Branch:** `task/TASK-WEB-028-browser-ws-voice-client`
 
 ### Context
 
@@ -2713,6 +2740,36 @@ Scenario: A capacity refusal is surfaced, not silent
   And no fabricated transcript or answer is shown
 ```
 
+### Outcome (2026-08-24)
+
+Implemented on the WEB-026 socle + WEB-027 factory (no bespoke socket/session code):
+
+- **Server** `web_voice/websocket_signaling.py` (`WebSocketSignalingService`): builds the
+  socle transport (`build_websocket_audio_transport`), assembles the session via the shared
+  `SessionFactory`, runs it on the shared `BackgroundEventLoop`. Wired in `server.py main()`
+  behind `--websocket {auto,on,off}` on `VOICE_WS_PORT` (default **8091**), sharing the WebRTC
+  loop when present. Per-call telemetry dump extracted to `web_voice/session_telemetry.py`
+  (shared with WebRTC; identical evidence shape).
+- **Client** `static/ws.html` + `static/ws.js`: `getUserMedia` → `pcm-worklet.js` → PCM16/16k
+  binary frames over `wss`; scheduled 16 kHz `AudioBuffer` playback; `open`/`barge_in`/
+  `call_end` framing matches the server serializer; a 2nd concurrent connection is refused by
+  the single-client socle with WS **1013**, surfaced as "server busy — try again" (AC#2); no
+  fabricated transcript on any failure branch.
+- **Interim language decision (ADR-0043 Client Outcome):** the single-client `wss` transport
+  binds-then-accepts and the envelope is frozen at build time, so there is **no pre-media
+  language-declaration step** like batch (`?language=` per turn) or WebRTC (SDP offer body).
+  The effective STT/TTS/answer language is the **server default** (`VOICE_WS_LANGUAGE`, None =
+  backend auto-detect, pilot fr-first); the client's declared language (WS URL query + `open`
+  frame) is captured for **telemetry/correlation** only. Full dynamic per-call fr/en selection
+  is **deferred** (candidate: listener-per-language or a pre-media signaling hook) — OQ, revisit
+  with TASK-WEB-030.
+- **Tests:** `tests/test_websocket_signaling.py` (8) + `features/websocket_voice_client.feature`
+  (3 scenarios / 12 steps). Full regression **538 unit** + **15 features / 42 scenarios / 192
+  steps** green. Adversarial **93/100 Pass**; QA **GO**
+  (`docs/qa/task-web-028-browser-ws-voice-client-qa-report.md`).
+- **Follow-ups:** barge-in/end-of-turn seam = WEB-029; capacity gauge + per-slice p50/p95/p99 +
+  `allowed_origins` at the edge = WEB-030 / INFRA-010; live latency = WEB-031.
+
 ---
 
 ## TASK-WEB-029 - Barge-in / end-of-turn on the WebSocket path (pluggable signal seam)
@@ -2722,9 +2779,9 @@ Scenario: A capacity refusal is surfaced, not silent
 amplitude gate), ADR-0040 (Genesys events feed the same seam later)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — interruption on the WS path
-**Status:** Planned
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-24, `--no-ff` `d67bccd`) — adversarial **93/100 Pass**; QA GO. 549 unit + 16/44/201 behave green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (to create when work starts)
+**Branch:** `task/TASK-WEB-029-ws-barge-in-eot` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2760,6 +2817,42 @@ Scenario: The signal source is pluggable
   Then the session finalizes the turn without depending on the energy detector
 ```
 
+### Outcome (2026-08-24)
+
+- **Pluggable control-signal seam (new, transport-agnostic).** `web_voice/control_signals.py`
+  adds a Genesys-named vocabulary (`ControlSignalType`: `barge_in`, `end_of_turn`, `call_end`,
+  `playback_started`, `playback_completed`), a `ControlSignal` dataclass, a `ControlSignalSource`
+  port (async `signals()` + `close()`), and an `EndOfTurnSignalFrame` control frame.
+  `web_voice/control_signal_processor.py` adds `ControlSignalProcessor`, a front-of-pipeline
+  `FrameProcessor` that maps signals to pipeline actions: `barge_in → broadcast_interruption()`,
+  `end_of_turn → EndOfTurnSignalFrame` downstream, `call_end → injected end_call(signal) or a
+  graceful EndFrame`; it also emits Genesys-named `voice.control_signal` telemetry for the
+  transport's playback lifecycle (`BotStarted/StoppedSpeakingFrame`).
+- **Pluggable without touching the core.** `SessionFactory` gains an optional
+  `control_signal_source_factory(envelope) -> ControlSignalSource | None`; the processor is wired
+  at the **front of the streaming pipeline** (`pre_stt`) on both WebRTC and WS. With **no source**
+  (default) it is a transparent pass-through — the energy/amplitude detectors inside
+  `StreamingSttProcessor` stay authoritative (350 ms hold, `VOICE_BARGE_IN_*` unchanged). A
+  fake/Genesys/WS-client source can drive barge-in and end-of-turn **without** the energy detector.
+- **AC #2 (pluggable EOT).** `StreamingSttProcessor` finalizes the open turn on an
+  `EndOfTurnSignalFrame` (`_finalize_from_control`, `SIGNAL_CONTROL_EOT`), reusing the same
+  `_finalize` path as the detector — proven by a fake source emitting `end_of_turn` with **no
+  trailing silence** producing a final transcript. Safe no-op when no session is open.
+- **AC #1 (barge-in cut).** Barge-in over the seam calls `broadcast_interruption()`; Pipecat
+  cancels the in-flight `StreamingTtsProcessor` synthesis (`asyncio.CancelledError` → `tts.interrupted`
+  + best-effort `aclose()`, TASK-WEB-008) and flushes the output transport, so playback stops and
+  the connection stays open for the next turn. The transport-agnostic core already carried this on
+  WS (WEB-028); WEB-029 adds the pluggable trigger + proves the cut via the seam.
+- **Tests.** `tests/test_control_signal_processor.py` (9: dispatch mapping incl. injected `end_call`,
+  Genesys-named telemetry, source-driven barge-in/EOT through a running pipeline, transparent
+  pass-through) + 2 STT finalize tests (`test_streaming_stt_processor.py`) +
+  `features/websocket_control_signals.feature` (2 scenarios). **549 unit + 16 features/44
+  scenarios/201 steps green.**
+- **Deferred (residual):** a live `wss` barge-in / mouth-to-ear verification (real socket + mic)
+  is out of unit/Behave scope → **TASK-WEB-031**. Wiring the seam's `call_end`/farewell to the WS
+  drain teardown is scoped with WS lifecycle in **TASK-WEB-030** (the processor supports
+  `set_end_call` today; default is a graceful `EndFrame`).
+
 ---
 
 ## TASK-WEB-030 - WebSocket capacity ceiling + per-slice observability
@@ -2768,9 +2861,9 @@ Scenario: The signal source is pluggable
 **Related decisions:** ADR-0043, ADR-0028 (per-slice OTel), TASK-WEB-024 (WebRTC ceiling)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — runtime safety + observability (mandatory)
-**Status:** Planned
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-25, `--no-ff` `b5b075a`) — adversarial **91/100 Pass** (no blockers; 1 Medium residual accepted → WEB-031); QA GO. 558 unit + 17/46/209 behave green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (to create when work starts)
+**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2804,6 +2897,34 @@ Scenario: A WebSocket call emits the canonical per-slice spans
   And a missing slice is marked measured=false, never omitted
 ```
 
+### Outcome (2026-08-25)
+
+- **AC#1 — clean refusal + observable ceiling.** `build_websocket_audio_transport` gains an
+  optional `on_client_rejected` callback; when set it returns a `_CapacityAwareTransport` whose
+  input subclasses pipecat's `SingleClientWebsocketServerInputTransport` and surfaces an extra
+  concurrent client to the callback **before** the parent performs the real WS 1013 refusal (no
+  accept logic duplicated). `WebSocketSignalingService` records a `voice.ws.session_rejected`
+  event (`reason=single_client_capacity`, `active_sessions`, `max_sessions`) and never crashes.
+  The ceiling is env-tunable (`VOICE_MAX_WS_SESSIONS`, default 1; the socle is single-client so
+  a value > 1 needs a listener-per-session topology, deferred).
+- **AC#1 — active-session gauge.** `voice.ws.active_sessions` emitted on connect (`accepted`),
+  disconnect (`closed`) and refusal (`rejected`), stamped with `max_sessions` for WebRTC-parity
+  charting.
+- **AC#2 — canonical per-slice spans.** The shared per-call dump (`session_telemetry.build_payload`,
+  used by WebRTC + WS) always includes `pipeline_timing` with every canonical slice (channel
+  ingress → end-of-turn → STT → backend → TTS first audio → channel egress) under one
+  correlation id; a missing slice is `measured=false`, never omitted. The channel-egress span
+  carries a `transport="websocket"` label (`SessionFactory`) so a report can split WS from WebRTC.
+  The dump fires at **call end** (disconnect), not only at shutdown, and is idempotent (`_dump_once`).
+- **Tests.** 9 new unit tests (capacity gauge/refusal + rejection-callback wiring +
+  `ws_max_sessions_config` + idempotent per-call dump + `build_payload` per-slice payload) and a
+  new `features/websocket_capacity.feature` (2 scenarios: cap refusal, canonical per-slice dump).
+  Full regression: **558 unit** (was 549) + **17 features / 46 scenarios / 209 steps** (was
+  16/44/201). Also fixed the WEB-028 unit + Behave transport-builder fakes to accept the new
+  `on_client_rejected` kwarg.
+- **Deferred.** Live end-to-end refusal + per-slice p50/p95 latency through the HAProxy edge →
+  TASK-WEB-031; `call_end`→WS-drain teardown wiring → WEB-031/Genesys adapter.
+
 ---
 
 ## TASK-WEB-031 - QA: WebSocket path functional + per-slice latency report
@@ -2812,9 +2933,9 @@ Scenario: A WebSocket call emits the canonical per-slice spans
 **Related decisions:** ADR-0043, ADR-0029 (mouth-to-ear gate), ADR-0028 (slice timing)
 **Depends on:** TASK-WEB-028, TASK-WEB-029, TASK-WEB-030
 **Classification:** V1 voice runtime — QA acceptance
-**Status:** Planned
+**Status:** ⚠️ **Functional GO / latency SCORED = ADR-0029 FAIL** — external WS journey covered + green; ADR-0029 gate scored on a warm 16-call real-provider sample (Gradium streaming STT/TTS + Mistral RAG backend): **mouth-to-ear p95 3675 ms (target ≤ 1500) and TTFA p95 3325 ms (target ≤ 1200) → FAIL**. Dominant levers: STT time-to-final p95 2250 ms + backend first-token p95 1642 ms (TTS first audio p95 402 ms is fine). No pilot latency SLO claimed on WS. 566 unit + 17/46/209 behave green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-031-ws-qa-latency` (to create when work starts)
+**Branch:** `task/TASK-WEB-031-ws-qa-functional-latency` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2846,6 +2967,43 @@ Scenario: The WebSocket path is scored against the latency gate
 - QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
 - No raw audio, secrets or PII in logs.
 
+### Outcome (2026-08-25)
+
+- **Functional coverage (GO).** The external WS journey — turn over the shared session core,
+  barge-in cut, pluggable end-of-turn, capacity refusal (WS 1013), safe-failure surfaces,
+  declared-vs-effective language — is covered by 10 Behave scenarios across 4 WS features
+  + unit suites, all green, plus WEB-028's user-validated live run (open→opened, 1013 refusal,
+  browser mic turn). See [QA report](../../docs/qa/task-web-031-ws-functional-latency-qa-report.md).
+- **Latency harness + tool (delivered).** `scripts/ws_live_client.py` (new) drives a real `wss`
+  turn (JSON `open` → real-time PCM16 frames from a fixture → trailing silence → hold →
+  `close`) so the server emits its per-call dump; pure frame helpers are unit-tested
+  (`tests/test_ws_live_client.py`). The WS per-call dump emits the **same** span names as WebRTC
+  (channel-egress just carries `transport="websocket"`), so `scripts/streaming_latency_report.py`
+  scores it **unchanged** — proven by `tests/test_streaming_latency_report.py::WebSocketSampleTest`
+  (per-slice measured + WS-egress folded into mouth-to-ear + ADR-0029 gate scored).
+- **Latency score (SCORED 2026-08-25 = ADR-0029 FAIL).** A warm 16-call sample was captured with
+  the **real** providers (Gradium streaming STT/TTS + the Java backend `--backend http`: Mistral
+  chat + Ollama embeddings + pgvector, 10 163 KB vectors) on a co-located dev host. Real per-slice
+  p50/p95/p99 (ms): end_of_turn 350/350/350 · **stt 380/2250/2250** · **backend_first_token
+  714/1642/1642** · tts_first_audio 361/402/410 · channel_egress 0/4/4 · channel_ingress *not
+  emitted on WS*. Composites: **time_to_first_audio p95 3325 ms (≤ 1200 → FAIL)**,
+  **voice_to_first_audio (mouth-to-ear) p95 3675 ms (≤ 1500 → FAIL)**; median mouth-to-ear
+  2055 ms already over target. **Dominant levers:** STT time-to-final and backend first-token
+  (~90 % of the budget); TTS first audio and egress are inside budget.
+- **Sample-weighting caveat (honest).** On the single-client socle the server session persists
+  across reconnects, so each per-call dump accumulates all spans since start (WEB-030 residual);
+  summed across 16 dumps the report counts `n=136` (= 1+2+…+16) per slice, over-weighting later
+  turns. Every counted latency is a genuine real-provider measurement; the fail margin (> 2 s on
+  both criteria, p50 already over target) makes the conclusion robust. Per-connection correlation
+  reset (from WEB-030) would make weighting exact.
+- **Degraded-mode note.** TCP head-of-line under packet loss (vs WebRTC/UDP) and weaker browser
+  AEC without headphones (mitigated by the ADR-0025 point-7 amplitude gate) remain to be exercised
+  under network impairment.
+- **Recommendation.** Functional **GO** for the interim external demo; **NO-GO on the pilot
+  latency SLO** for the WS path as measured. Latency levers (STT end-pointing / partial-final,
+  backend first-token via retrieval cache or faster/co-located LLM) are optimisation follow-ups
+  beyond the WEB-026…031 interim-transport scope; re-score with the same harness after each lever.
+
 ---
 
 ## TASK-WEB-032 - Reference mouth-to-ear measurement: warm WebRTC + real backend (ADR-0029 gate evidence)
@@ -2854,9 +3012,9 @@ Scenario: The WebSocket path is scored against the latency gate
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing), OQ-005
 **Depends on:** TASK-WEB-014 (mouth-to-ear instrumentation, done)
 **Classification:** V1 voice runtime — QA / latency evidence
-**Status:** Planned
+**Status:** ✅ **Measured 2026-08-25 = ADR-0029 FAIL — merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `4a1c013`)**. Warm 16-call WebRTC sample, real Gradium streaming STT/TTS + Mistral RAG backend, co-located: **mouth-to-ear p95 3743 ms (target ≤ 1500) / TTFA p95 3393 ms (target ≤ 1200) → FAIL** (median m2e 1951 ms also over). Clean per-call weighting (`n=16`). Confirms the bottleneck is **transport-independent** (≈ WebSocket WEB-031: m2e p95 3675 ms): STT time-to-final tail (p95 1535 ms) + backend first-token (p95 1717 ms); TTS + egress inside budget. Levers spun out to TASK-WEB-035 (STT end-pointing) + TASK-WEB-036 (backend first-token). [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md).
 **Priority:** High
-**Branch:** `task/TASK-WEB-032-m2e-reference-measurement` (to create when work starts)
+**Branch:** `task/TASK-WEB-032-m2e-reference-measurement`
 
 ### Context
 
@@ -2896,6 +3054,243 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 - QA/latency report under `docs/qa/` with the measured per-slice + composite p50/p95/p99.
 - The run configuration (warm, co-located, live Gradium STT/TTS, `--backend http`) stated explicitly.
 - No raw audio, secrets or PII in logs.
+
+### Outcome (2026-08-25)
+
+- **Measured, not projected.** 16 warm WebRTC calls (real Gradium streaming STT/TTS + Java
+  `--backend http`: Mistral + Ollama + pgvector) on a co-located host, driven by
+  `scripts/webrtc_live_client.py` (aiortc), scored by `scripts/streaming_latency_report.py`.
+  File-based clips use fixture speech + a **1.5 s low-amplitude noise tail** so Opus doesn't
+  DTX-drop the trailing silence and the energy end-of-turn fires (TASK-WEB-007 pitfall).
+- **ADR-0029 gate = FAIL.** Per-slice p95 (ms): end_of_turn 350 · **stt 1535** · **backend_first_token
+  1717** · tts_first_audio 395 · channel_egress 0.1. Composites: **time_to_first_audio p95
+  3393 ms (≤ 1200 → FAIL)**, **mouth-to-ear p95 3743 ms (≤ 1500 → FAIL)**; median m2e 1951 ms also
+  over. Clean per-call weighting (`n=16`; WebRTC negotiates a fresh session per offer, so no
+  accumulation bias — the cleaner reference vs the WS single-client `n=136`).
+- **Transport-independent bottleneck.** Nearly identical to the WebSocket score (WEB-031, m2e p95
+  3675 ms): STT time-to-final tail + backend first-token dominate (~90 % of the budget); TTS first
+  audio and transport egress are inside budget on both (WebRTC egress 0.1 ms, WS 4 ms) — so the
+  interim WebSocket path carries **no latency penalty** vs WebRTC, and the pilot latency problem is
+  an STT-endpointing + LLM-first-token problem, not a transport choice.
+- **Levers spun out:** TASK-WEB-035 (STT end-pointing / partial-final) + TASK-WEB-036 (backend
+  first-token). Re-score with the same harness after each lever.
+- [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md) + raw
+  `docs/qa/task-web-032-m2e-reference-report.json`.
+
+---
+
+## TASK-WEB-035 - Latency lever: STT time-to-final tail (end-pointing / partial-final acceptance)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
+**Depends on:** TASK-WEB-032 (reference measurement)
+**Classification:** V1 voice runtime — latency optimisation
+**Status:** 🟢 **Lever implemented + unit-tested + LIVE re-scored + merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `9676a45`, 2026-08-25) — bounded finalize budget (1.2 s) with partial-snapshot fallback. STT time-to-final tail capped ~4042 → 1224 ms p95; mouth-to-ear p95 3743 → 2777 ms (−26%) vs WEB-032. ADR-0029 still FAIL (m2e 2777 > 1500) — remaining blocker is backend first-token (Lever B) + a possibly tighter budget.** 568 unit + 17 behave green; live 15-call WebRTC warm sample (real Gradium+Mistral). Formal WER pass is the remaining QA-GO closer.
+**Priority:** High
+**Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
+/ 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
+Re-confirmed by the WEB-036 top-k=5 re-score: STT per-turn `[358…570, 1379…1786, 3758, 3909, 4042]`
+(median ~570 ms, p95 4042 ms) — highly variable Gradium finalization, the current gate blocker.
+
+### Context
+
+Gradium streaming STT finalizes after the full utterance; the first partial arrives fast
+(p50 ≈ 1494 ms on WS) but `time_to_final` carries a long tail. This slice is ~half the
+mouth-to-ear budget and is transport-independent (measured on both WebRTC and WebSocket).
+
+### Scope (to refine at design)
+
+- Investigate the end-pointing / finalization path (`StreamingSttProcessor`,
+  `GradiumStreamingSession`): confirmation window, whether a consolidated `end_text` is available,
+  and whether a partial-final can be accepted earlier without word loss (STT-013 delta semantics).
+- Do **not** regress transcript correctness (WER) — any earlier finalization must be validated
+  against the normalized-WER quality gate.
+- Re-measure `stt.time_to_final_ms` p50/p95 with `streaming_latency_report.py` before/after.
+
+### Root cause (2026-08-25, code map)
+
+`stt.request` on the streaming WebRTC/WebSocket path measures **only the post-end-of-turn
+finalize wait** — from `GradiumStreamingSession.finish()` (sends `flush` + `end_of_stream`)
+until `wait_final()` unblocks on the provider **terminal**: `flushed` (~350 ms, preferred,
+STT-013) or `end_of_stream` (~780 ms fallback). In-speech partial streaming is a *separate*
+signal (`time_to_first_partial`). The delta partials that make up the transcript land
+**~60–200 ms after our flush** (STT-013 spike), well before either terminal. So the 1.4–4 s
+tail turns are ones where the **terminal ack is pathologically slow/late** — the words are
+already in; we are just blocking on a stalled control message up to the 10 s hard ceiling.
+
+### Lever implemented — bounded finalize budget + partial-snapshot fallback
+
+`StreamingSttProcessor._await_final()` (new): wait up to a **finalize budget** (default
+**1.2 s**, above the normal ~780 ms terminal so healthy turns still finalize on the real ack)
+for the terminal; if it elapses **and partials are already in**, finalize from
+`GradiumStreamingSession.partial_snapshot()` — the *same* `" ".join(parts)` the terminal path
+would build, so **no word loss** relative to the same partials — instead of blocking to the
+hard timeout. If **no** partial has arrived at the budget it is a genuine provider stall (not
+just a slow ack), so it keeps waiting to the ceiling → the existing timeout → degraded-fallback
+failure path (TASK-WEB-018) is unchanged. Env-tunable `VOICE_STT_FINALIZE_BUDGET_MS`
+(`_finalize_budget_config()`); `<=0` or `>= final_timeout` disables the cap (original behavior).
+
+**Observability:** a `voice.stt.finalize_fallback` event + `.count` metric fire whenever the
+budget capped the tail, carrying `finalize_budget_ms` + `time_to_final_ms`, so QA can see the
+cap rate and confirm partials were complete before trusting the lever in the pilot. Files:
+`web_voice/streaming_stt_processor.py`, `stt_validation/streaming.py` (`partial_snapshot` +
+protocol), `web_voice/session_factory.py`. Tests:
+`tests/test_streaming_stt_processor.py` (slow-terminal → fallback from partials; empty-partials
+→ waits to ceiling → degraded, never a fabricated empty final).
+
+**Why this beats "commit on last partial" (STT-013 rejected):** STT-013 rejected committing at
+flush time (~100 ms) because a trailing word can still be in flight then. A **1.2 s** budget is
+after normal partial completion (~200 ms) *and* after the normal terminal (~780 ms), so it only
+ever fires on the abnormal tail — where the partials are long since complete.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: STT time-to-final tail is reduced without transcript regression
+  Given the warm real-provider harness (WebRTC + WebSocket)
+  When the bounded finalize budget + partial-snapshot fallback is applied
+  Then stt.time_to_final p95 drops materially vs the WEB-032 baseline
+  And normalized WER does not regress on the fixture set
+  And the mouth-to-ear p95 is re-scored against ADR-0029
+```
+
+### Live re-score result (2026-08-25, warm 15-call WebRTC, real Gradium+Mistral, top-k=5)
+
+Warm 15-call WebRTC sample (5 billing clips × 3 reps) against the real stack with the budget at
+its 1.2 s default. Evidence: `docs/qa/task-web-035-finalize-budget-report.json` (summary) +
+`task-web-035-rescore-report.json` (raw `streaming_latency_report.py`).
+
+| Slice / composite p95 (ms) | WEB-032 baseline | WEB-036 rescore (top-k5, no STT lever) | **WEB-035 (top-k5 + budget)** |
+|---|---:|---:|---:|
+| stt time-to-final | 1535 | **4042** | **1224** |
+| backend_first_token | 1717 | 1245 | 1199 |
+| tts_first_audio | 395 | ~390 | 393 |
+| end_of_turn | 350 | 350 | 350 |
+| time_to_first_audio (ADR-0018 ≤ 800) | 3393 | 5669 | **2427** |
+| **mouth-to-ear (ADR-0029 ≤ 1500)** | 3743 | 6019 | **2777** |
+
+- **STT per-turn (ms):** `[358.7, 360.3, 473.3, 483.0, 546.9, 550.0, 566.3, 567.6, 673.9, 745.3,
+  819.2, 924.2, 1095.4, 1095.8, 1223.7]` — the WEB-036 tail (`3758/3909/4042`) is **gone**, max
+  capped at the 1.2 s budget.
+- **`voice.stt.finalize_fallback` fired on exactly 1/15 turns** (6.7%), capping the single
+  stalled-terminal turn at 1223.7 ms from the partials already in; the other 14 finalized on the
+  real terminal (≤ 1095 ms). **15/15 `stt.transcript.final`, 0 `unavailable`** — the cap cost no
+  turn to word-starvation, and all 15 were answered audibly.
+- **Verdict:** the lever removes the STT tail (its stated goal) and, with top-k=5, cuts m2e p95
+  **−26%** and TTFA p95 **−28%** vs baseline. **ADR-0029 still FAIL** — the remaining blocker is
+  the backend first-token (p95 1199 ms, LLM-first-token bound → **Lever B**), plus possibly a
+  tighter budget (needs WER validation) and/or a shorter end-of-turn hold.
+- **WER note:** transcripts are PII-redacted in telemetry, so a formal normalized-WER pass is not
+  derivable from this dump (proxy: 15/15 finals, 0 unavailable, all answered; the fallback turn
+  returned a non-empty snapshot with the same join as the terminal path). A dedicated WER pass
+  with reference transcripts is the remaining QA-GO closer.
+
+---
+
+## TASK-WEB-036 - Latency lever: backend first-token (RAG retrieval + Mistral first token)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0013 (guarded SSE), DEC-002 (grounding)
+**Depends on:** TASK-WEB-032 (reference measurement)
+**Classification:** V1 voice runtime / backend — latency optimisation
+**Status:** 🟡 **Lever A done + measured (2026-08-25) — top-k 8→5 halves backend first-token p95; grounding preserved. Merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `a150794`).** Gate still FAIL end-to-end (STT variance dominates → WEB-035 is now critical path). Lever B (LLM-provider benchmark) deferred to an ADR.
+**Priority:** High
+**Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — backend first-token p95 1717 ms
+(WebRTC) / 1642 ms (WebSocket): the **largest single p95 slice**.
+
+### Context
+
+`backend.first_token` covers RAG retrieval (pgvector + Ollama embedding of the query) + Mistral
+first token via the guarded `converse-stream`. It is ~half the mouth-to-ear budget and
+transport-independent. TTS already begins per vetted sentence (ADR-0013), so the win is getting
+the **first vetted token/sentence out sooner**.
+
+### Investigation — sub-slice breakdown (2026-08-25, step 1 done, no code change needed)
+
+The backend **already** emits per-slice `[TELEMETRY]` logs (`BackendTelemetry.recordLatency`/`time`,
+Micrometer + structured logs; `Slices.java`) for `retrieval` (embedding+pgvector combined),
+`llm_first_token` and `backend_first_token`. Mining the WEB-032 backend run (16 warm WebRTC turns)
+gives the internal split of `backend_first_token` (p95 ≈ 1696 ms, matches the voice-side 1717 ms):
+
+| Sub-slice | p50 (ms) | p95 (ms) | Share of first-token |
+|---|---:|---:|---|
+| retrieval (embedding + pgvector) | 174 | **294** | ~17 % |
+| **llm_first_token (Mistral)** | 473 | **1473** | **~87 % — dominant** |
+
+`backend_first_token ≈ retrieval + llm_first_token` (guardrail/sentence-buffer overhead ~220 ms).
+**Conclusion:** the LLM time-to-first-token is the whole story; retrieval is cheap, so **splitting
+embedding vs pgvector is NOT worth building**. Prompt sizes on grounded turns: `system ≈ 4.8k
+chars`, `context ≈ 3.6k chars` (top-k=8 chunks), `history 0` → ~2–2.5k input tokens (a secondary,
+trimmable contributor to TTFT).
+
+### Lever options (post-investigation)
+
+- **A — zero-infra prompt/retrieval trim (quick, bounded):** shorten the system prompt (~4.8k chars)
+  and/or reduce top-k (8 → 4-5) to cut input tokens → lower TTFT. Must not regress grounding
+  (DEC-002) or answer quality; re-score after.
+- **B — LLM-provider benchmark (strategic, ADR):** the LLM TTFT is inherent, so the biggest lever is
+  the model/hosting: benchmark Mistral small/large (EU/sovereignty), a **co-located** model
+  (removes network hop + residency concern), and OpenAI gpt-4o-mini (fast TTFT, remote/residency
+  trade-off) on **TTFT + quality + cost + data residency**. Keep the provider port agnostic; decide
+  by ADR. (Answers the 2026-08-25 "OpenAI remote long-term?" question: the LLM *is* the dominant
+  cost, so provider/model choice materially moves the gate — retrieval tuning would not.)
+
+### Lever A result — top-k 8→5 (2026-08-25, implemented + measured)
+
+Change: `voice-support.conversation.retrieval.top-k` default **8 → 5** (env-tunable;
+`application.yml` + `ConversationConfig` `@Value` fallbacks). System prompt left as-is — already
+trimmed (TASK-BE-011, ~600 chars); the reducible input is the retrieved **context**, not the
+template.
+
+**Isolated backend A/B** (`/converse-stream`, 5 billing questions × 3 reps, same session, no STT/TTS
+noise, clean per-call weighting):
+
+| Slice p95 (ms) | top-k=8 | top-k=5 | Δ |
+|---|---:|---:|---|
+| llm_first_token | 1705 | **891** | **−48%** |
+| backend_first_token | 2647 | **1414** | **−47%** |
+| llm_wording | 2202 | 1264 | −43% |
+
+The **p50 barely moves** (llm_first_token 482→454) — the win is entirely in the **tail**: fewer
+context chunks (8→5, ~3.9k→~2.4k context chars) collapse Mistral's p95 prefill variance.
+
+**Quality (no regression on the fixture set):** all 15 top-k=5 turns `grounded=true`, identical
+retrieval confidence (same top hits), answers still correct (billing still cites the 149 € 5G modem).
+Only a minor breadth trade-off — top-k=5 dropped the specific "3900" number on the payment answer
+(still correct). No BUG-003 answer-bearing-chunk eviction observed; 5 keeps a margin above the
+pre-BUG-003 value of 4.
+
+**End-to-end re-score (WebRTC, top-k=5):** `backend_first_token` p95 **1717 → 1245 ms** confirms the
+lever end-to-end — **but** `stt` p95 spiked to 4042 ms this run (per-turn `[358…570, 1379…1786,
+3758, 3909, 4042]`: median ~570 ms, heavy tail), pushing m2e p95 to 6020 ms. **The end-to-end gate is
+now gated by STT time-to-final variance (WEB-035), not the backend slice.** ADR-0029 still **FAIL**.
+
+**Verdict:** keep top-k=5 (deterministic ~800 ms off the backend p95 tail, quality preserved), but
+the mouth-to-ear gate will not pass until **WEB-035 (STT tail)** lands too. Evidence:
+`docs/qa/task-web-036-topk-ab-report.json` (isolated A/B) + `task-web-036-rescore-topk5-report.json`.
+
+### Scope (remaining)
+
+- **WEB-035 is now the critical-path lever** for the ADR-0029 gate (STT time-to-final tail).
+- **Lever B (LLM-provider benchmark)** — the LLM first-token is still the largest backend sub-slice
+  even after top-k=5, and its p95 tail is model-inherent. Benchmark Mistral small/large + a
+  co-located Ollama model + OpenAI gpt-4o-mini on TTFT + quality + cost + residency, decide by ADR.
+  Keep the provider port agnostic. (Candidates confirmed 2026-08-25.) **Now formalized:
+  [ADR-0045](../../docs/architecture/adrs/ADR-0045-llm-provider-model-benchmark-for-backend-first-token.md)
+  (Proposed) + spike ticket TASK-BE-033 (`tasks/backend-hardening-tasks.md`). Scopes ADR-0029
+  Direction A only (cascade chat, not Realtime S2S).**
+- Broader retrieval-quality QA (BUG-003-style scenarios) should confirm top-k=5 before pilot.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Backend first-token is reduced with grounding and guardrails intact
+  Given the warm real-provider harness against --backend http
+  When the chosen first-token lever is applied
+  Then backend.first_token p95 drops materially vs the WEB-032 baseline
+  And DEC-002 grounding + per-sentence output guardrails still hold (no fabricated amounts)
+  And the mouth-to-ear p95 is re-scored against ADR-0029
+```
 
 ---
 

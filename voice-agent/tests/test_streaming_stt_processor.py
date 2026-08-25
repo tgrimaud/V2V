@@ -38,6 +38,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  #
 from conversation_backend import DEGRADED_FALLBACK_TEXT  # noqa: E402
 from stt_validation.streaming import FinalTranscript, PartialTranscript, StreamingSttError  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
+from web_voice.control_signals import EndOfTurnSignalFrame  # noqa: E402
 from web_voice.end_of_turn import (  # noqa: E402
     DEFAULT_AMPLITUDE_THRESHOLD,
     END_OF_TURN_SPAN,
@@ -46,6 +47,8 @@ from web_voice.end_of_turn import (  # noqa: E402
 from web_voice.streaming_stt_processor import (  # noqa: E402
     STT_DEGRADED_SPOKEN_EVENT,
     STT_DEGRADED_SPOKEN_METRIC,
+    STT_FINALIZE_FALLBACK_EVENT,
+    STT_FINALIZE_FALLBACK_METRIC,
     STT_PREWARM_EVENT,
     STT_PREWARM_METRIC,
     STT_REQUEST_SPAN,
@@ -101,6 +104,9 @@ class FakeSession:
     def __init__(self, partials, final_text, *, error=None, final_delay_s=0.0):
         self._queued = list(partials)
         self._released: list[PartialTranscript] = []
+        # Every partial ever released, mirroring GradiumStreamingSession._parts so
+        # partial_snapshot() can rebuild the transcript for the WEB-035 budget fallback.
+        self._all_parts: list[str] = []
         self._final_text = final_text
         self._error = error
         self._final_delay_s = final_delay_s
@@ -109,7 +115,9 @@ class FakeSession:
 
     async def send_audio(self, pcm: bytes) -> None:
         if self._queued:
-            self._released.append(self._queued.pop(0))
+            partial = self._queued.pop(0)
+            self._released.append(partial)
+            self._all_parts.append(partial.text)
 
     def poll_partials(self) -> list[PartialTranscript]:
         out, self._released = self._released, []
@@ -122,9 +130,12 @@ class FakeSession:
         if self._error is not None:
             raise self._error
         if self._final_delay_s:
-            # Stalls past the processor's final_timeout_s so wait_for raises TimeoutError.
+            # Stalls past the processor's budget/timeout so wait_for raises TimeoutError.
             await asyncio.sleep(self._final_delay_s)
         return FinalTranscript(self._final_text)
+
+    def partial_snapshot(self) -> FinalTranscript:
+        return FinalTranscript(" ".join(p for p in self._all_parts if p).strip())
 
     async def aclose(self) -> None:
         self.closed = True
@@ -295,6 +306,34 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.finals, [])
         self.assertEqual(sink.interims, [])
 
+    async def test_control_end_of_turn_finalizes_without_energy_detector(self):
+        # GIVEN an open turn (speech only, NO trailing-silence window) — the energy detector
+        # would keep buffering — and a control-plane end-of-turn from a pluggable source
+        # (TASK-WEB-029 AC#2)
+        session = FakeSession([PartialTranscript("bonjour")], "bonjour")
+        provider = FakeProvider(session)
+        processor = _processor(provider)
+        frames = [_speech_frame()] * 3 + [EndOfTurnSignalFrame()]
+        # WHEN driven through the pipeline
+        sink = await _drive(processor, frames)
+        # THEN the turn is finalized by the control signal alone: one final transcript,
+        # session finished and closed — no silence window required
+        self.assertEqual(provider.open_count, 1)
+        self.assertEqual(sink.finals, ["bonjour"])
+        self.assertEqual(processor.final_count, 1)
+        self.assertTrue(session.finished)
+        self.assertTrue(session.closed)
+
+    async def test_control_end_of_turn_is_a_noop_without_an_open_session(self):
+        # GIVEN no speech has opened a session yet
+        provider = FakeProvider(FakeSession([], ""))
+        processor = _processor(provider)
+        # WHEN a control end-of-turn arrives before any audio
+        sink = await _drive(processor, [EndOfTurnSignalFrame()])
+        # THEN it is a safe no-op: no session opened, no final transcript fabricated
+        self.assertEqual(provider.open_count, 0)
+        self.assertEqual(sink.finals, [])
+
     async def test_sub_minimum_click_is_discarded(self):
         # GIVEN a single short click (below min_utterance) then silence
         session = FakeSession([PartialTranscript("x")], "x")
@@ -348,6 +387,53 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sink.texts, [DEGRADED_FALLBACK_TEXT])
         self.assertTrue(any(e.name == "stt.failure" for e in telemetry.events()))
         self.assertTrue(any(e.name == STT_DEGRADED_SPOKEN_EVENT for e in telemetry.events()))
+
+    async def test_finalize_budget_falls_back_to_partials_on_slow_terminal(self):
+        # GIVEN the provider terminal ack stalls past the finalize budget (0.05 s) but the
+        # delta partials have already streamed in (WEB-035: the tail is a slow ack, not
+        # missing words) — and the stall stays below the hard failure ceiling.
+        session = FakeSession(
+            [PartialTranscript("bonjour"), PartialTranscript("je"), PartialTranscript("voudrais")],
+            "bonjour je voudrais",
+            final_delay_s=5.0,
+        )
+        telemetry = TelemetryRecorder()
+        processor = StreamingSttProcessor(
+            FakeProvider(session), _envelope(), telemetry,
+            detector=_detector(), final_timeout_s=10.0, finalize_budget_s=0.05,
+        )
+        # WHEN a full turn streams through
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        sink = await _drive(processor, frames)
+        # THEN the turn finalizes from the partials already received (no degraded fallback,
+        # no word loss — the transcript equals the joined partials the terminal would build)
+        self.assertEqual(sink.finals, ["bonjour je voudrais"])
+        self.assertEqual(sink.texts, [])
+        self.assertTrue(session.closed)
+        # AND a finalize-fallback event + metric prove the tail was capped (not the terminal)
+        fallback = [e for e in telemetry.events() if e.name == STT_FINALIZE_FALLBACK_EVENT]
+        self.assertEqual(len(fallback), 1)
+        self.assertEqual(fallback[0].attributes["finalize_budget_ms"], 50.0)
+        self.assertTrue(any(m.name == STT_FINALIZE_FALLBACK_METRIC for m in telemetry.metrics()))
+
+    async def test_finalize_budget_waits_to_ceiling_when_no_partials_yet(self):
+        # GIVEN the terminal stalls past the budget AND no partial has arrived — a genuine
+        # provider stall, not just a slow ack. The budget must NOT fabricate an empty final;
+        # it keeps waiting to the hard ceiling, which here also elapses -> degraded fallback.
+        session = FakeSession([], "", final_delay_s=0.5)
+        telemetry = TelemetryRecorder()
+        processor = StreamingSttProcessor(
+            FakeProvider(session), _envelope(), telemetry,
+            detector=_detector(), final_timeout_s=0.08, finalize_budget_s=0.03,
+        )
+        # WHEN a full turn streams through
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        sink = await _drive(processor, frames)
+        # THEN it fails safe (no final, degraded spoken) and never claims a budget fallback
+        self.assertEqual(sink.finals, [])
+        self.assertEqual(sink.texts, [DEGRADED_FALLBACK_TEXT])
+        self.assertTrue(any(e.name == "stt.failure" for e in telemetry.events()))
+        self.assertFalse(any(e.name == STT_FINALIZE_FALLBACK_EVENT for e in telemetry.events()))
 
     async def test_finalizes_on_end_frame_client_stop(self):
         # GIVEN speech with no trailing silence window before the stream ends
