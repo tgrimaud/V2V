@@ -1395,7 +1395,7 @@ gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
 **Related decisions:** ADR-0045 (this benchmark, Proposed), ADR-0029 (latency gate + Direction A/B), ADR-0026 (LLM behind replaceable ports), ADR-0006/DEC-011 (provider config), ADR-0039 (provider egress), ADR-0012 (cascade control)
 **Depends on:** TASK-WEB-036 (top-k=5, sub-span finding) + TASK-WEB-035 (STT tail capped)
 **Classification:** V1 voice runtime / backend — latency optimisation **spike** (measurement → ADR decision)
-**Status:** 📋 Planned — spike that feeds the ADR-0045 decision. Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
+**Status:** 📋 Planned — spike that feeds the ADR-0045 decision (ADR-0045 + this ticket definition merged into sprint-12 `fec413d`, 2026-08-25; execution not started). Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
 **Priority:** High
 **Branch:** `task/TASK-BE-033-llm-provider-benchmark` (to create when work starts)
 
