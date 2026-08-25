@@ -244,6 +244,48 @@ class MouthToEarCompositeTest(unittest.TestCase):
         self.assertIn("runtime egress", composite["note"])
 
 
+class WebSocketSampleTest(unittest.TestCase):
+    """TASK-WEB-031: the same report scores a WebSocket sample — the WS per-call dump emits
+    the identical span names (only the channel-egress `transport` label differs), so no
+    tool change is needed to score the interim WS path against the ADR-0029 gate."""
+
+    def _ws_dump(self, cid: str, stt: float, backend: float, tts: float, egress: float) -> str:
+        attrs = {"correlation_id": cid}
+        spans = [
+            {"name": "voice.end_of_turn", "duration_ms": 250.0, "attributes": attrs},
+            {"name": "stt.request", "duration_ms": stt, "attributes": attrs},
+            {"name": "backend.first_token", "duration_ms": backend, "attributes": attrs},
+            {"name": "voice.tts.first_audio", "duration_ms": tts, "attributes": attrs},
+            {"name": "web.voice.egress", "duration_ms": egress,
+             "attributes": {**attrs, "transport": "websocket", "measure": "runtime_egress"}},
+        ]
+        # A WS-shaped dump also carries pipeline_timing + the capacity gauge, which the
+        # report ignores (it recomputes per-slice from spans) — included here for realism.
+        return json.dumps({"spans": spans, "events": [],
+                           "metrics": [{"name": "voice.ws.active_sessions", "value": 1.0,
+                                        "attributes": {**attrs, "outcome": "closed"}}]},
+                          sort_keys=True)
+
+    def test_ws_sample_scores_per_slice_and_folds_websocket_egress(self) -> None:
+        # GIVEN two warm WS turns whose channel-egress span is labelled transport=websocket
+        spans, metrics, calls = parse_telemetry_dumps(
+            [self._ws_dump("w1", 120.0, 200.0, 180.0, 6.0),
+             self._ws_dump("w2", 130.0, 210.0, 190.0, 6.0)]
+        )
+        report = build_streaming_report(
+            spans, metrics, calls=calls, channel="web", provider="gradium-streaming", warm=True,
+        )
+        by_slice = {s["slice"]: s for s in report["per_slice"]["slices"]}
+
+        # THEN every post-EOT slice is measured and the WS egress folds into mouth-to-ear
+        for name in ("end_of_turn", "stt", "backend_first_token", "tts_first_audio"):
+            self.assertTrue(by_slice[name]["measured"], name)
+        self.assertTrue(report["voice_to_first_audio"]["measured"])
+        self.assertIn("runtime egress", report["voice_to_first_audio"]["note"])
+        # AND the ADR-0029 gate is scored (both sub-criteria well under threshold here)
+        self.assertEqual(report["adr_0029_gate"]["status"], "pass")
+
+
 class Adr0029GateTest(unittest.TestCase):
     def _gate(self, *dumps: str, m2e: float = 1500.0, ttfa: float = 1200.0) -> dict:
         spans, metrics, calls = parse_telemetry_dumps(list(dumps))

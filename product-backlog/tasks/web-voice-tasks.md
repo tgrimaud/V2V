@@ -2933,9 +2933,9 @@ Scenario: A WebSocket call emits the canonical per-slice spans
 **Related decisions:** ADR-0043, ADR-0029 (mouth-to-ear gate), ADR-0028 (slice timing)
 **Depends on:** TASK-WEB-028, TASK-WEB-029, TASK-WEB-030
 **Classification:** V1 voice runtime — QA acceptance
-**Status:** Planned
+**Status:** ⚠️ **Functional GO / latency SCORED = ADR-0029 FAIL** — external WS journey covered + green; ADR-0029 gate scored on a warm 16-call real-provider sample (Gradium streaming STT/TTS + Mistral RAG backend): **mouth-to-ear p95 3675 ms (target ≤ 1500) and TTFA p95 3325 ms (target ≤ 1200) → FAIL**. Dominant levers: STT time-to-final p95 2250 ms + backend first-token p95 1642 ms (TTS first audio p95 402 ms is fine). No pilot latency SLO claimed on WS. 566 unit + 17/46/209 behave green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-031-ws-qa-latency` (to create when work starts)
+**Branch:** `task/TASK-WEB-031-ws-qa-functional-latency` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2966,6 +2966,43 @@ Scenario: The WebSocket path is scored against the latency gate
 
 - QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
 - No raw audio, secrets or PII in logs.
+
+### Outcome (2026-08-25)
+
+- **Functional coverage (GO).** The external WS journey — turn over the shared session core,
+  barge-in cut, pluggable end-of-turn, capacity refusal (WS 1013), safe-failure surfaces,
+  declared-vs-effective language — is covered by 10 Behave scenarios across 4 WS features
+  + unit suites, all green, plus WEB-028's user-validated live run (open→opened, 1013 refusal,
+  browser mic turn). See [QA report](../../docs/qa/task-web-031-ws-functional-latency-qa-report.md).
+- **Latency harness + tool (delivered).** `scripts/ws_live_client.py` (new) drives a real `wss`
+  turn (JSON `open` → real-time PCM16 frames from a fixture → trailing silence → hold →
+  `close`) so the server emits its per-call dump; pure frame helpers are unit-tested
+  (`tests/test_ws_live_client.py`). The WS per-call dump emits the **same** span names as WebRTC
+  (channel-egress just carries `transport="websocket"`), so `scripts/streaming_latency_report.py`
+  scores it **unchanged** — proven by `tests/test_streaming_latency_report.py::WebSocketSampleTest`
+  (per-slice measured + WS-egress folded into mouth-to-ear + ADR-0029 gate scored).
+- **Latency score (SCORED 2026-08-25 = ADR-0029 FAIL).** A warm 16-call sample was captured with
+  the **real** providers (Gradium streaming STT/TTS + the Java backend `--backend http`: Mistral
+  chat + Ollama embeddings + pgvector, 10 163 KB vectors) on a co-located dev host. Real per-slice
+  p50/p95/p99 (ms): end_of_turn 350/350/350 · **stt 380/2250/2250** · **backend_first_token
+  714/1642/1642** · tts_first_audio 361/402/410 · channel_egress 0/4/4 · channel_ingress *not
+  emitted on WS*. Composites: **time_to_first_audio p95 3325 ms (≤ 1200 → FAIL)**,
+  **voice_to_first_audio (mouth-to-ear) p95 3675 ms (≤ 1500 → FAIL)**; median mouth-to-ear
+  2055 ms already over target. **Dominant levers:** STT time-to-final and backend first-token
+  (~90 % of the budget); TTS first audio and egress are inside budget.
+- **Sample-weighting caveat (honest).** On the single-client socle the server session persists
+  across reconnects, so each per-call dump accumulates all spans since start (WEB-030 residual);
+  summed across 16 dumps the report counts `n=136` (= 1+2+…+16) per slice, over-weighting later
+  turns. Every counted latency is a genuine real-provider measurement; the fail margin (> 2 s on
+  both criteria, p50 already over target) makes the conclusion robust. Per-connection correlation
+  reset (from WEB-030) would make weighting exact.
+- **Degraded-mode note.** TCP head-of-line under packet loss (vs WebRTC/UDP) and weaker browser
+  AEC without headphones (mitigated by the ADR-0025 point-7 amplitude gate) remain to be exercised
+  under network impairment.
+- **Recommendation.** Functional **GO** for the interim external demo; **NO-GO on the pilot
+  latency SLO** for the WS path as measured. Latency levers (STT end-pointing / partial-final,
+  backend first-token via retrieval cache or faster/co-located LLM) are optimisation follow-ups
+  beyond the WEB-026…031 interim-transport scope; re-score with the same harness after each lever.
 
 ---
 

@@ -217,6 +217,27 @@ The "Observability mandate" consequence and WebRTC-parity backpressure (TASK-WEB
   (one caller per session at pilot); a per-connection reset or a "one session = one call"
   formalisation is carried to TASK-WEB-031.
 
+## Latency Evidence Outcome (2026-08-25, TASK-WEB-031)
+
+The interim WS path was scored end to end against the ADR-0029 gate with the **real** stack
+(Gradium streaming STT/TTS + the Java backend `--backend http`: Mistral chat + Ollama embeddings +
+pgvector), 16 warm calls on a co-located dev host, driven by the new `scripts/ws_live_client.py`
+harness and scored by `scripts/streaming_latency_report.py`:
+
+- **ADR-0029 gate: FAIL.** mouth-to-ear (`voice_to_first_audio`) **p95 3675 ms** (target ≤ 1500 ms)
+  and **time_to_first_audio p95 3325 ms** (target ≤ 1200 ms); median mouth-to-ear already 2055 ms.
+- **Per-slice p95 (ms):** end_of_turn 350 · **stt 2250** · **backend_first_token 1642** ·
+  tts_first_audio 402 · channel_egress 4 · channel_ingress not emitted on the WS path.
+- **Interpretation.** The interim transport itself is cheap (egress ~4 ms); the budget is dominated
+  by **STT time-to-final** and **backend first-token**, i.e. the pilot latency problem is a
+  STT-endpointing + LLM-first-token problem, not a transport-choice problem. Optimisation
+  (earlier end-pointing / partial-final, retrieval cache, faster/co-located LLM) is a follow-up
+  beyond the WEB-026…031 interim-transport scope; re-score with the same harness after each lever.
+- **Sample caveat.** The WEB-030 per-server-session correlation residual means each per-call dump
+  accumulates spans since server start, so the report counts `n=136` (= 1+2+…+16) per slice,
+  over-weighting later turns. Per-span latencies are genuine and the fail margin is large, so the
+  conclusion holds; a per-connection reset would make the weighting exact.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's
