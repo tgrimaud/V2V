@@ -3124,7 +3124,7 @@ Scenario: STT time-to-final tail is reduced without transcript regression
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0013 (guarded SSE), DEC-002 (grounding)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime / backend — latency optimisation
-**Status:** 📋 Planned (follow-up, out of Sprint 12 WebSocket theme)
+**Status:** 🔎 **Sub-slice located (2026-08-25) — LLM first-token dominates (~87%)**; lever choice pending user decision (prompt/top-k trim vs LLM-provider benchmark).
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — backend first-token p95 1717 ms
 (WebRTC) / 1642 ms (WebSocket): the **largest single p95 slice**.
@@ -3136,14 +3136,42 @@ first token via the guarded `converse-stream`. It is ~half the mouth-to-ear budg
 transport-independent. TTS already begins per vetted sentence (ADR-0013), so the win is getting
 the **first vetted token/sentence out sooner**.
 
-### Scope (to refine at design)
+### Investigation — sub-slice breakdown (2026-08-25, step 1 done, no code change needed)
 
-- Break `backend.first_token` into sub-spans (embedding, pgvector search, LLM first token) to find
-  the dominant sub-slice before choosing a lever.
-- Candidate levers (design decision + ADR): query-embedding cache, leaner/shorter system prompt,
-  a faster or co-located LLM, retrieval top-k / HNSW ef tuning. Grounding (DEC-002) and
-  per-sentence guardrail vetting must stay intact.
-- Re-measure `backend.first_token` p50/p95 before/after.
+The backend **already** emits per-slice `[TELEMETRY]` logs (`BackendTelemetry.recordLatency`/`time`,
+Micrometer + structured logs; `Slices.java`) for `retrieval` (embedding+pgvector combined),
+`llm_first_token` and `backend_first_token`. Mining the WEB-032 backend run (16 warm WebRTC turns)
+gives the internal split of `backend_first_token` (p95 ≈ 1696 ms, matches the voice-side 1717 ms):
+
+| Sub-slice | p50 (ms) | p95 (ms) | Share of first-token |
+|---|---:|---:|---|
+| retrieval (embedding + pgvector) | 174 | **294** | ~17 % |
+| **llm_first_token (Mistral)** | 473 | **1473** | **~87 % — dominant** |
+
+`backend_first_token ≈ retrieval + llm_first_token` (guardrail/sentence-buffer overhead ~220 ms).
+**Conclusion:** the LLM time-to-first-token is the whole story; retrieval is cheap, so **splitting
+embedding vs pgvector is NOT worth building**. Prompt sizes on grounded turns: `system ≈ 4.8k
+chars`, `context ≈ 3.6k chars` (top-k=8 chunks), `history 0` → ~2–2.5k input tokens (a secondary,
+trimmable contributor to TTFT).
+
+### Lever options (post-investigation)
+
+- **A — zero-infra prompt/retrieval trim (quick, bounded):** shorten the system prompt (~4.8k chars)
+  and/or reduce top-k (8 → 4-5) to cut input tokens → lower TTFT. Must not regress grounding
+  (DEC-002) or answer quality; re-score after.
+- **B — LLM-provider benchmark (strategic, ADR):** the LLM TTFT is inherent, so the biggest lever is
+  the model/hosting: benchmark Mistral small/large (EU/sovereignty), a **co-located** model
+  (removes network hop + residency concern), and OpenAI gpt-4o-mini (fast TTFT, remote/residency
+  trade-off) on **TTFT + quality + cost + data residency**. Keep the provider port agnostic; decide
+  by ADR. (Answers the 2026-08-25 "OpenAI remote long-term?" question: the LLM *is* the dominant
+  cost, so provider/model choice materially moves the gate — retrieval tuning would not.)
+
+### Scope (remaining)
+
+- Implement the chosen lever (A and/or B); grounding (DEC-002) and per-sentence output guardrail
+  vetting must stay intact. Re-measure `llm_first_token` + `backend.first_token` + mouth-to-ear
+  p50/p95 with the same harness before/after.
+- If B: create the LLM-benchmark ADR under `docs/architecture/adrs/`.
 
 ### Acceptance Criteria
 
