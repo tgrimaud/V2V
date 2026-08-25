@@ -3275,7 +3275,10 @@ the mouth-to-ear gate will not pass until **WEB-035 (STT tail)** lands too. Evid
 - **Lever B (LLM-provider benchmark)** — the LLM first-token is still the largest backend sub-slice
   even after top-k=5, and its p95 tail is model-inherent. Benchmark Mistral small/large + a
   co-located Ollama model + OpenAI gpt-4o-mini on TTFT + quality + cost + residency, decide by ADR.
-  Keep the provider port agnostic. (Candidates confirmed 2026-08-25.)
+  Keep the provider port agnostic. (Candidates confirmed 2026-08-25.) **Now formalized:
+  [ADR-0045](../../docs/architecture/adrs/ADR-0045-llm-provider-model-benchmark-for-backend-first-token.md)
+  (Proposed) + spike ticket TASK-BE-033 (`tasks/backend-hardening-tasks.md`). Scopes ADR-0029
+  Direction A only (cascade chat, not Realtime S2S).**
 - Broader retrieval-quality QA (BUG-003-style scenarios) should confirm top-k=5 before pilot.
 
 ### Acceptance Criteria
