@@ -96,6 +96,22 @@ DEFAULT_BARGE_IN_CONFIRM_FRAMES = 4
 # The final transcript should land ~1 s after end-of-turn; cap the wait so a stalled
 # provider fails the turn (safe degraded reply) instead of hanging the call.
 DEFAULT_FINAL_TIMEOUT_S = 10.0
+# Bounded finalize budget (TASK-WEB-035). `stt.request` measures only the post-end-of-turn
+# wait for the provider's terminal ack (`flushed` ~350 ms / `end_of_stream` ~780 ms, STT-013).
+# A pathologically slow terminal stretches that wait to several seconds even though the delta
+# partials are already in (~60-200 ms after our flush). This budget caps the wait: if the
+# terminal has not landed by it, finalize from the partials already received (identical join
+# to the terminal path) instead of blocking to the hard failure ceiling. 1.2 s sits well above
+# the normal ~780 ms terminal so healthy turns still finalize on the real ack; only the tail is
+# capped. Env-tunable (VOICE_STT_FINALIZE_BUDGET_MS); <=0 or >= final_timeout disables it (the
+# processor then waits the full final_timeout as before). Empty partials at the budget are a
+# genuine provider stall, not just a slow ack -> keep waiting to the ceiling (failure path).
+DEFAULT_FINALIZE_BUDGET_S = 1.2
+# Emitted when the finalize budget elapsed and the turn finalized from the partials received
+# so far (not the provider terminal). Lets QA see how often the tail was capped and confirm
+# the partials were complete (no word loss) before trusting the lever in the pilot.
+STT_FINALIZE_FALLBACK_EVENT = "voice.stt.finalize_fallback"
+STT_FINALIZE_FALLBACK_METRIC = "voice.stt.finalize_fallback.count"
 
 
 class StreamingSttProcessor(FrameProcessor):
@@ -112,6 +128,7 @@ class StreamingSttProcessor(FrameProcessor):
         sample_rate_hz: int = DEFAULT_SAMPLE_RATE_HZ,
         silence_window_ms: float = DEFAULT_SILENCE_WINDOW_MS,
         final_timeout_s: float = DEFAULT_FINAL_TIMEOUT_S,
+        finalize_budget_s: float = DEFAULT_FINALIZE_BUDGET_S,
         barge_in_amplitude_threshold: int = DEFAULT_BARGE_IN_AMPLITUDE_THRESHOLD,
         barge_in_confirm_frames: int = DEFAULT_BARGE_IN_CONFIRM_FRAMES,
         prewarm: bool = True,
@@ -122,6 +139,12 @@ class StreamingSttProcessor(FrameProcessor):
         self._telemetry = telemetry
         self._provider_name = provider_name
         self._final_timeout_s = final_timeout_s
+        # Bounded finalize budget (TASK-WEB-035): caps the post-end-of-turn wait for the
+        # provider terminal by falling back to the partials already received. Disabled when
+        # >= the hard failure ceiling so the two knobs never fight.
+        self._finalize_budget_s = finalize_budget_s
+        # Set per turn when the budget capped the wait (partial-snapshot fallback fired).
+        self._finalize_fallback = False
         # TASK-WEB-021 lever 2: pre-open the first turn's STT session at pipeline start so
         # its connect + setup handshake is off the per-turn critical path. Gradium's ASR
         # socket is single-use, so we pre-open a *spare* (not reuse); the spare is handed
@@ -297,12 +320,13 @@ class StreamingSttProcessor(FrameProcessor):
         self._record_end_of_turn(detection)
         session = self._session
         self._session = None
+        self._finalize_fallback = False
         if session is None:
             return
         tail = Timer()
         try:
             await session.finish()
-            final = await asyncio.wait_for(session.wait_final(), self._final_timeout_s)
+            final = await self._await_final(session)
         except (StreamingSttError, asyncio.TimeoutError) as exc:
             await session.aclose()
             self._emit_stt_failure(exc, tail.elapsed_ms())
@@ -312,6 +336,34 @@ class StreamingSttProcessor(FrameProcessor):
         self._emit_partial_semantics_drift(session)
         await session.aclose()
         await self._emit_final(final, tail.elapsed_ms(), direction)
+
+    async def _await_final(self, session: Any) -> FinalTranscript:
+        """Wait for the final transcript, capping the tail with a partial fallback (WEB-035).
+
+        Waits up to the finalize budget for the provider terminal (`flushed`/`end_of_stream`).
+        If it elapses but partials are already in, finalizes from the partial snapshot (the
+        transcript the terminal would have built from the same partials) so a stalled terminal
+        no longer stretches `stt.request` to several seconds. If no partial has arrived at the
+        budget it is a genuine provider stall (not just a slow ack), so it keeps waiting to the
+        hard ceiling — the existing timeout -> degraded-fallback failure path is unchanged. The
+        budget is disabled (<=0 or >= the ceiling) -> the original single-wait behavior."""
+        budget = self._finalize_budget_s
+        if budget <= 0 or budget >= self._final_timeout_s:
+            return await asyncio.wait_for(session.wait_final(), self._final_timeout_s)
+        try:
+            return await asyncio.wait_for(session.wait_final(), budget)
+        except asyncio.TimeoutError:
+            snapshot = self._partial_snapshot(session)
+            if snapshot is not None and snapshot.text.strip():
+                self._finalize_fallback = True
+                return snapshot
+            return await asyncio.wait_for(session.wait_final(), self._final_timeout_s - budget)
+
+    @staticmethod
+    def _partial_snapshot(session: Any) -> FinalTranscript | None:
+        """Best-effort partial-based final for the budget fallback (None if unsupported)."""
+        snapshot = getattr(session, "partial_snapshot", None)
+        return snapshot() if callable(snapshot) else None
 
     def _emit_partial_semantics_drift(self, session: Any) -> None:
         """Surface a streaming-STT partial-semantics drift signal (TASK-WEB-033).
@@ -337,6 +389,8 @@ class StreamingSttProcessor(FrameProcessor):
         transcript = final.text.strip()
         outcome = SttOutcome.SUCCESS if transcript else SttOutcome.UNAVAILABLE
         self._emit_stt_telemetry(outcome, tail_ms)
+        if self._finalize_fallback:
+            self._emit_finalize_fallback(tail_ms)
         if transcript:
             self.final_count += 1
             await self.push_frame(
@@ -373,6 +427,22 @@ class StreamingSttProcessor(FrameProcessor):
         }
         self._telemetry.record(STT_DEGRADED_SPOKEN_EVENT, **attrs)
         self._telemetry.metric(STT_DEGRADED_SPOKEN_METRIC, 1, **attrs)
+
+    def _emit_finalize_fallback(self, tail_ms: float) -> None:
+        """Prove the finalize budget capped the tail (TASK-WEB-035): the turn finalized from
+        the partials received so far instead of the provider terminal. QA correlates the rate
+        + budget to confirm the cap does not cost words before trusting it in the pilot."""
+        if self._telemetry is None or self._envelope is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "finalize_budget_ms": round(self._finalize_budget_s * 1000.0, 3),
+            "time_to_final_ms": round(tail_ms, 3),
+        }
+        self._telemetry.record(STT_FINALIZE_FALLBACK_EVENT, **attrs)
+        self._telemetry.metric(STT_FINALIZE_FALLBACK_METRIC, 1, **attrs)
 
     def _emit_barge_in(self) -> None:
         if self._telemetry is None or self._envelope is None:

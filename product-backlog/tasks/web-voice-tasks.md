@@ -3085,7 +3085,7 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime — latency optimisation
-**Status:** 📋 Planned — **now the critical-path lever for the ADR-0029 gate** (confirmed by WEB-036: after top-k=5 halved backend first-token, mouth-to-ear is dominated by the STT time-to-final tail).
+**Status:** 🟡 **Lever implemented + unit-tested (2026-08-25) — bounded finalize budget with partial-snapshot fallback; pending live re-score.** The critical-path lever for the ADR-0029 gate (confirmed by WEB-036: after top-k=5 halved backend first-token, mouth-to-ear is dominated by the STT time-to-final tail). 568 unit tests + 17 behave features green.
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
 / 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
@@ -3107,16 +3107,56 @@ mouth-to-ear budget and is transport-independent (measured on both WebRTC and We
   against the normalized-WER quality gate.
 - Re-measure `stt.time_to_final_ms` p50/p95 with `streaming_latency_report.py` before/after.
 
+### Root cause (2026-08-25, code map)
+
+`stt.request` on the streaming WebRTC/WebSocket path measures **only the post-end-of-turn
+finalize wait** — from `GradiumStreamingSession.finish()` (sends `flush` + `end_of_stream`)
+until `wait_final()` unblocks on the provider **terminal**: `flushed` (~350 ms, preferred,
+STT-013) or `end_of_stream` (~780 ms fallback). In-speech partial streaming is a *separate*
+signal (`time_to_first_partial`). The delta partials that make up the transcript land
+**~60–200 ms after our flush** (STT-013 spike), well before either terminal. So the 1.4–4 s
+tail turns are ones where the **terminal ack is pathologically slow/late** — the words are
+already in; we are just blocking on a stalled control message up to the 10 s hard ceiling.
+
+### Lever implemented — bounded finalize budget + partial-snapshot fallback
+
+`StreamingSttProcessor._await_final()` (new): wait up to a **finalize budget** (default
+**1.2 s**, above the normal ~780 ms terminal so healthy turns still finalize on the real ack)
+for the terminal; if it elapses **and partials are already in**, finalize from
+`GradiumStreamingSession.partial_snapshot()` — the *same* `" ".join(parts)` the terminal path
+would build, so **no word loss** relative to the same partials — instead of blocking to the
+hard timeout. If **no** partial has arrived at the budget it is a genuine provider stall (not
+just a slow ack), so it keeps waiting to the ceiling → the existing timeout → degraded-fallback
+failure path (TASK-WEB-018) is unchanged. Env-tunable `VOICE_STT_FINALIZE_BUDGET_MS`
+(`_finalize_budget_config()`); `<=0` or `>= final_timeout` disables the cap (original behavior).
+
+**Observability:** a `voice.stt.finalize_fallback` event + `.count` metric fire whenever the
+budget capped the tail, carrying `finalize_budget_ms` + `time_to_final_ms`, so QA can see the
+cap rate and confirm partials were complete before trusting the lever in the pilot. Files:
+`web_voice/streaming_stt_processor.py`, `stt_validation/streaming.py` (`partial_snapshot` +
+protocol), `web_voice/session_factory.py`. Tests:
+`tests/test_streaming_stt_processor.py` (slow-terminal → fallback from partials; empty-partials
+→ waits to ceiling → degraded, never a fabricated empty final).
+
+**Why this beats "commit on last partial" (STT-013 rejected):** STT-013 rejected committing at
+flush time (~100 ms) because a trailing word can still be in flight then. A **1.2 s** budget is
+after normal partial completion (~200 ms) *and* after the normal terminal (~780 ms), so it only
+ever fires on the abnormal tail — where the partials are long since complete.
+
 ### Acceptance Criteria
 
 ```gherkin
 Scenario: STT time-to-final tail is reduced without transcript regression
   Given the warm real-provider harness (WebRTC + WebSocket)
-  When the end-pointing / partial-final change is applied
+  When the bounded finalize budget + partial-snapshot fallback is applied
   Then stt.time_to_final p95 drops materially vs the WEB-032 baseline
   And normalized WER does not regress on the fixture set
   And the mouth-to-ear p95 is re-scored against ADR-0029
 ```
+
+**Live validation status:** unit + behave suites green; the real-provider re-score (WebRTC +
+WebSocket warm sample, WER check, ADR-0029 re-score, `voice.stt.finalize_fallback` rate) is the
+remaining step before QA GO.
 
 ---
 
