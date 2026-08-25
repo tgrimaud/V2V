@@ -64,6 +64,8 @@ class StreamingSttSession(Protocol):
 
     async def wait_final(self) -> FinalTranscript: ...
 
+    def partial_snapshot(self) -> FinalTranscript: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -193,6 +195,19 @@ class GradiumStreamingSession:
         if self._error is not None:
             raise self._error
         return self._final or FinalTranscript("")
+
+    def partial_snapshot(self) -> FinalTranscript:
+        """Assemble a final from the partials received so far, without waiting for the
+        provider's terminal ack (TASK-WEB-035).
+
+        Same join as `_finalize_from_parts` (`" ".join(parts)`) so the fallback transcript
+        is identical to the one the terminal path would build from the *same* partials.
+        Used by the streaming processor's bounded finalize-budget fallback: on a
+        pathologically slow `flushed` / `end_of_stream` ack, the delta partials are already
+        in (they land ~60-200 ms after our end-of-turn flush, per STT-013), so this caps the
+        finalize tail without waiting seconds for a stalled terminal. Non-blocking and
+        side-effect-free (does not set `_done`), so it never disturbs the terminal path."""
+        return FinalTranscript(" ".join(p for p in self._parts if p).strip())
 
     async def aclose(self) -> None:
         if self._receiver is not None:

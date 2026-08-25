@@ -133,6 +133,26 @@ def _silence_window_config() -> dict[str, float]:
     return {"silence_window_ms": value}
 
 
+def _finalize_budget_config() -> dict[str, float]:
+    """Resolve the bounded STT finalize budget for the streaming runtime (TASK-WEB-035).
+
+    `VOICE_STT_FINALIZE_BUDGET_MS` caps the post-end-of-turn wait for the provider terminal
+    ack: once it elapses the turn finalizes from the partials already received (which land
+    ~60-200 ms after the flush) instead of blocking on a stalled `flushed`/`end_of_stream`,
+    so a pathologically slow terminal no longer stretches the `stt.request` tail to seconds.
+    Returns only the key when set (invalid/unset -> the processor default of 1.2 s applies);
+    a value <=0 disables the cap (the processor then waits the full failure timeout as before).
+    """
+    raw = os.environ.get("VOICE_STT_FINALIZE_BUDGET_MS")
+    if raw is None:
+        return {}
+    try:
+        value = float(raw)
+    except ValueError:
+        return {}
+    return {"finalize_budget_s": value / 1000.0}
+
+
 def _stt_prewarm_enabled() -> bool:
     """Whether to pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2).
 
@@ -261,6 +281,10 @@ class SessionFactory:
             # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
             # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
             **_silence_window_config(),
+            # Bounded finalize budget (TASK-WEB-035): caps the post-end-of-turn wait on a
+            # stalled provider terminal by finalizing from the partials already received.
+            # VOICE_STT_FINALIZE_BUDGET_MS overrides it; unset -> the processor default (1.2 s).
+            **_finalize_budget_config(),
             # Pre-open the first turn's STT session at connect (TASK-WEB-021 / lever 2);
             # opt-in via VOICE_STT_PREWARM=1 (off by default pending live idle-socket
             # validation — see _stt_prewarm_enabled).
