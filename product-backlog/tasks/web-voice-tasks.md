@@ -3012,9 +3012,9 @@ Scenario: The WebSocket path is scored against the latency gate
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing), OQ-005
 **Depends on:** TASK-WEB-014 (mouth-to-ear instrumentation, done)
 **Classification:** V1 voice runtime — QA / latency evidence
-**Status:** Planned
+**Status:** ✅ **Measured 2026-08-25 = ADR-0029 FAIL** — warm 16-call WebRTC sample, real Gradium streaming STT/TTS + Mistral RAG backend, co-located: **mouth-to-ear p95 3743 ms (target ≤ 1500) / TTFA p95 3393 ms (target ≤ 1200) → FAIL** (median m2e 1951 ms also over). Clean per-call weighting (`n=16`). Confirms the bottleneck is **transport-independent** (≈ WebSocket WEB-031: m2e p95 3675 ms): STT time-to-final tail (p95 1535 ms) + backend first-token (p95 1717 ms); TTS + egress inside budget. Levers spun out to TASK-WEB-035 (STT end-pointing) + TASK-WEB-036 (backend first-token). [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md).
 **Priority:** High
-**Branch:** `task/TASK-WEB-032-m2e-reference-measurement` (to create when work starts)
+**Branch:** `task/TASK-WEB-032-m2e-reference-measurement`
 
 ### Context
 
@@ -3054,6 +3054,107 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 - QA/latency report under `docs/qa/` with the measured per-slice + composite p50/p95/p99.
 - The run configuration (warm, co-located, live Gradium STT/TTS, `--backend http`) stated explicitly.
 - No raw audio, secrets or PII in logs.
+
+### Outcome (2026-08-25)
+
+- **Measured, not projected.** 16 warm WebRTC calls (real Gradium streaming STT/TTS + Java
+  `--backend http`: Mistral + Ollama + pgvector) on a co-located host, driven by
+  `scripts/webrtc_live_client.py` (aiortc), scored by `scripts/streaming_latency_report.py`.
+  File-based clips use fixture speech + a **1.5 s low-amplitude noise tail** so Opus doesn't
+  DTX-drop the trailing silence and the energy end-of-turn fires (TASK-WEB-007 pitfall).
+- **ADR-0029 gate = FAIL.** Per-slice p95 (ms): end_of_turn 350 · **stt 1535** · **backend_first_token
+  1717** · tts_first_audio 395 · channel_egress 0.1. Composites: **time_to_first_audio p95
+  3393 ms (≤ 1200 → FAIL)**, **mouth-to-ear p95 3743 ms (≤ 1500 → FAIL)**; median m2e 1951 ms also
+  over. Clean per-call weighting (`n=16`; WebRTC negotiates a fresh session per offer, so no
+  accumulation bias — the cleaner reference vs the WS single-client `n=136`).
+- **Transport-independent bottleneck.** Nearly identical to the WebSocket score (WEB-031, m2e p95
+  3675 ms): STT time-to-final tail + backend first-token dominate (~90 % of the budget); TTS first
+  audio and transport egress are inside budget on both (WebRTC egress 0.1 ms, WS 4 ms) — so the
+  interim WebSocket path carries **no latency penalty** vs WebRTC, and the pilot latency problem is
+  an STT-endpointing + LLM-first-token problem, not a transport choice.
+- **Levers spun out:** TASK-WEB-035 (STT end-pointing / partial-final) + TASK-WEB-036 (backend
+  first-token). Re-score with the same harness after each lever.
+- [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md) + raw
+  `docs/qa/task-web-032-m2e-reference-report.json`.
+
+---
+
+## TASK-WEB-035 - Latency lever: STT time-to-final tail (end-pointing / partial-final acceptance)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
+**Depends on:** TASK-WEB-032 (reference measurement)
+**Classification:** V1 voice runtime — latency optimisation
+**Status:** 📋 Planned (follow-up, out of Sprint 12 WebSocket theme)
+**Priority:** High
+**Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
+/ 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
+
+### Context
+
+Gradium streaming STT finalizes after the full utterance; the first partial arrives fast
+(p50 ≈ 1494 ms on WS) but `time_to_final` carries a long tail. This slice is ~half the
+mouth-to-ear budget and is transport-independent (measured on both WebRTC and WebSocket).
+
+### Scope (to refine at design)
+
+- Investigate the end-pointing / finalization path (`StreamingSttProcessor`,
+  `GradiumStreamingSession`): confirmation window, whether a consolidated `end_text` is available,
+  and whether a partial-final can be accepted earlier without word loss (STT-013 delta semantics).
+- Do **not** regress transcript correctness (WER) — any earlier finalization must be validated
+  against the normalized-WER quality gate.
+- Re-measure `stt.time_to_final_ms` p50/p95 with `streaming_latency_report.py` before/after.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: STT time-to-final tail is reduced without transcript regression
+  Given the warm real-provider harness (WebRTC + WebSocket)
+  When the end-pointing / partial-final change is applied
+  Then stt.time_to_final p95 drops materially vs the WEB-032 baseline
+  And normalized WER does not regress on the fixture set
+  And the mouth-to-ear p95 is re-scored against ADR-0029
+```
+
+---
+
+## TASK-WEB-036 - Latency lever: backend first-token (RAG retrieval + Mistral first token)
+
+**Parent:** EPIC-006
+**Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0013 (guarded SSE), DEC-002 (grounding)
+**Depends on:** TASK-WEB-032 (reference measurement)
+**Classification:** V1 voice runtime / backend — latency optimisation
+**Status:** 📋 Planned (follow-up, out of Sprint 12 WebSocket theme)
+**Priority:** High
+**Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — backend first-token p95 1717 ms
+(WebRTC) / 1642 ms (WebSocket): the **largest single p95 slice**.
+
+### Context
+
+`backend.first_token` covers RAG retrieval (pgvector + Ollama embedding of the query) + Mistral
+first token via the guarded `converse-stream`. It is ~half the mouth-to-ear budget and
+transport-independent. TTS already begins per vetted sentence (ADR-0013), so the win is getting
+the **first vetted token/sentence out sooner**.
+
+### Scope (to refine at design)
+
+- Break `backend.first_token` into sub-spans (embedding, pgvector search, LLM first token) to find
+  the dominant sub-slice before choosing a lever.
+- Candidate levers (design decision + ADR): query-embedding cache, leaner/shorter system prompt,
+  a faster or co-located LLM, retrieval top-k / HNSW ef tuning. Grounding (DEC-002) and
+  per-sentence guardrail vetting must stay intact.
+- Re-measure `backend.first_token` p50/p95 before/after.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Backend first-token is reduced with grounding and guardrails intact
+  Given the warm real-provider harness against --backend http
+  When the chosen first-token lever is applied
+  Then backend.first_token p95 drops materially vs the WEB-032 baseline
+  And DEC-002 grounding + per-sentence output guardrails still hold (no fabricated amounts)
+  And the mouth-to-ear p95 is re-scored against ADR-0029
+```
 
 ---
 
