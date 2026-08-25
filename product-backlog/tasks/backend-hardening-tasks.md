@@ -1386,3 +1386,60 @@ gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
   treated as thousands (1234), not `1.234`. Acceptable for currency amounts; revisit if BSS evidence
   shows 3-decimal currencies. This is the natural point to confirm the definitive rounding/currency
   policy once BSS/PDF amounts are wired (OQ-003/004).
+
+---
+
+## TASK-BE-033 - Latency lever B: LLM provider/model benchmark for backend first-token (cascade chat)
+
+**Parent:** EPIC-006 (voice latency) / EPIC-005 (answer engine)
+**Related decisions:** ADR-0045 (this benchmark, Proposed), ADR-0029 (latency gate + Direction A/B), ADR-0026 (LLM behind replaceable ports), ADR-0006/DEC-011 (provider config), ADR-0039 (provider egress), ADR-0012 (cascade control)
+**Depends on:** TASK-WEB-036 (top-k=5, sub-span finding) + TASK-WEB-035 (STT tail capped)
+**Classification:** V1 voice runtime / backend — latency optimisation **spike** (measurement → ADR decision)
+**Status:** 📋 Planned — spike that feeds the ADR-0045 decision. Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
+**Priority:** High
+**Branch:** `task/TASK-BE-033-llm-provider-benchmark` (to create when work starts)
+
+### Context
+
+ADR-0029 is still FAIL. After WEB-035 (STT tail capped ~4042→1224 ms p95) and WEB-036 (top-k 8→5,
+which showed the LLM's time-to-first-token is ~87% of `backend_first_token`, retrieval only ~294 ms),
+the **backend first-token** (live re-score p95 ~1199 ms) is the largest remaining **reducible**
+post-end-of-turn slice, and it is **model-inherent**. Prompt/context trimming is exhausted (system
+prompt ~600 chars via TASK-BE-011; top-k already 5). The remaining lever on this slice is the
+**chat LLM model/hosting choice** — ADR-0029 Direction A (cascade chat LLM), **not** Direction B
+(Realtime speech-to-speech, out of scope, ADR-0012).
+
+### Scope
+
+- Benchmark, on the **same billing fixture set** through the guarded `POST /api/conversation/converse-stream`
+  path (real retrieval + guardrails, text-in so no STT/TTS noise), the candidates:
+  1. **Mistral `mistral-small-latest`** (current baseline — the number to beat).
+  2. **Mistral `mistral-large-latest`** (same EU residency; TTFT vs quality trade-off).
+  3. **Co-located Ollama instruct model** (no cloud hop / no chat egress; infra + quality trade-off).
+  4. **OpenAI `gpt-4o-mini`** (fast TTFT, US-remote residency; cascade chat only). Needs a throwaway
+     or real `LlmPort` adapter to measure — keep it behind the port (ADR-0026), no domain coupling.
+- Report a comparison table: `llm_first_token` + `backend_first_token` **p50/p95**, grounded rate +
+  confidence + correctness (DEC-002: no fabricated amounts), per-turn **cost** estimate, **data
+  residency/sovereignty**, and egress-allowlist impact (ADR-0039).
+- Keep the provider port agnostic; the spike measures, it does not migrate the default.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: LLM candidates are benchmarked on TTFT + quality + cost + residency
+  Given the billing fixture set and the guarded converse-stream path
+  When each candidate model answers the same questions (warm, isolated)
+  Then a versioned report gives llm_first_token / backend_first_token p50/p95 per candidate
+  And grounded rate + confidence + correctness are recorded (no DEC-002 regression)
+  And cost + data residency + egress impact are recorded per candidate
+  And ADR-0045 is updated with the chosen provider/model (or "keep Mistral small") and moved to Accepted
+```
+
+### Notes
+
+- A cascade chat swap **cannot** reach the ~800 ms aspirational bar (sub-second is a speech-to-speech
+  property, ADR-0029); the realistic goal is to shave the backend-first-token tail toward the 1.5 s
+  mouth-to-ear ceiling, combined with WEB-035/036.
+- OpenAI introduces **US chat egress** — a compliance decision (OQ-009), not only latency; may be
+  rejected on residency grounds regardless of TTFT.
+- Evidence to reuse: `docs/qa/task-web-036-topk-ab-report.json`, `docs/qa/task-web-035-finalize-budget-report.json`.
