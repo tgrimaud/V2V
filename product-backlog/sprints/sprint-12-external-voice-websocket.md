@@ -20,7 +20,13 @@ binary audio" — the same shape we build here.
 
 ## Status
 
-**Status:** 🚧 **In progress** (started 2026-08-24, after Sprint 11 closed 2026-08-24).
+**Status:** ✅ **Done (closed 2026-08-25)** — merged into `feat/restart-from-scratch`
+(`--no-ff` `0a10da4`) and released as **v0.6.0**. Delivered TASK-WEB-026..032 +
+TASK-WEB-035/036 + ADR-0045/TASK-BE-033 (all validated, adversarial ≥ 90%, QA GO where
+applicable). **TASK-INFRA-010** (HAProxy `wss` edge routing) is **carried out of this
+closure to Sprint 13** (edge wiring; not required for the 0.6.0 app-image release).
+Two GO-pilot QA passes stay open as follow-ups (not merge/release blockers on tst):
+formal WER on the WEB-035 sample and a broader retrieval-quality pass for top-k=5 (OQ-008).
 Decision #1 of the 2026-08-15 global-review decision loop (posture **B**:
 interim WebSocket audio path) recorded in ADR-0042 (update) and specified by
 ADR-0043.

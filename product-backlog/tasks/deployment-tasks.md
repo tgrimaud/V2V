@@ -1181,8 +1181,8 @@ the repo. One VM loss = data loss + outage, and there is no restore runbook.
 **Related decisions:** ADR-0043 (interim WebSocket audio transport), ADR-0042 (no TURN),
 ADR-0038 (pilot deployment), TASK-INFRA-002 (voice VIP `.10` TLS edge)
 **Depends on:** TASK-WEB-026 (framing/socle), TASK-INFRA-002 (existing voice VIP)
-**Classification:** V1 pilot deployment (edge wiring for Sprint 12)
-**Status:** 📋 Planned (Sprint 12)
+**Classification:** V1 pilot deployment (edge wiring — carried to Sprint 13)
+**Status:** 📋 Planned — **carried out of Sprint 12 at closure (2026-08-25) to Sprint 13** (edge `wss` routing; not required for the 0.6.0 app-image release — the two app images are transport-agnostic; this is HAProxy edge config on the LB tier).
 **Priority:** Medium
 **Branch:** `task/TASK-INFRA-010-haproxy-wss-voice` (to create when work starts)
 

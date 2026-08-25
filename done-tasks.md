@@ -928,3 +928,40 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/sprints/sprint-11-remote-deployment.md` — Status → ✅ Done (closed 2026-08-24), roadmap + INFRA-009/BUG-014 rows
 - `product-backlog/backlog-index.md` — Sprint registry row → ✅ Done; BUG-014 row
 - `done-tasks.md` — this closure entry
+
+## 2026-08-25 — Sprint 12 closed (External voice via interim WebSocket) + release v0.6.0
+
+**Summary:**
+
+- **Sprint 12 (EPIC-006) closed** and merged `feat/sprint-12-external-voice-websocket` →
+  `feat/restart-from-scratch` (`--no-ff` `0a10da4`), **released as v0.6.0** (tag `v0.6.0` →
+  CI images `0.6.0`). Gives an off-subnet browser a Voice2Voice path with **no TURN** via a
+  `wss` audio transport through the existing HAProxy edge, built behind reusable seams so the
+  Sprint 13 Genesys Audio Connector becomes a transport-adapter swap.
+- **Delivered + merged:** TASK-WEB-026 (WS socle/framing spike, pipecat `SingleClientWebsocketServerTransport`,
+  no FastAPI), TASK-WEB-027 (transport-agnostic `SessionFactory`, WebRTC byte-for-byte), TASK-WEB-028
+  (browser `ws.html`/`ws.js` PCM16/16k over `wss`, user-validated live), TASK-WEB-029 (pluggable
+  control-signal seam for barge-in/EOT), TASK-WEB-030 (WS capacity ceiling + canonical per-slice OTel),
+  TASK-WEB-031 (WS functional GO + ADR-0029 latency SCORED = FAIL), TASK-WEB-032 (reference WebRTC
+  m2e = FAIL, transport-independent).
+- **Pilot-latency lever wave:** TASK-WEB-035 (bounded STT **finalize budget** + partial-snapshot
+  fallback → STT time-to-final tail p95 4042→1224 ms, no word loss, m2e −26 % on the live 15-call
+  re-score), TASK-WEB-036 (retrieval **top-k 8→5** → backend first-token p95 −47 % isolated, grounding
+  preserved; sub-spanning showed LLM first-token ~87 % of the backend slice). **Lever B framed** as
+  **ADR-0045** (Proposed) + spike **TASK-BE-033** (LLM provider/model benchmark for the model-inherent
+  backend first-token tail).
+- **Carried to Sprint 13:** **TASK-INFRA-010** (HAProxy `wss` edge routing) — edge wiring only, not
+  required for the transport-agnostic 0.6.0 app images.
+- **GO-pilot QA follow-ups (open, not merge/release blockers on tst):** formal WER on the WEB-035
+  sample (transcripts PII-redacted in telemetry → need reference fixtures) and a broader
+  retrieval-quality pass confirming top-k=5 does not reintroduce BUG-003 beyond the billing fixtures
+  (OQ-008).
+- **ADR-0029 latency gate:** still **FAIL** (post-lever live m2e p95 2777 ms / TTFA 2427 ms), but the
+  STT tail is no longer the dominant blocker; the remaining reducible slice is the model-inherent
+  backend first-token → Lever B (ADR-0045 / TASK-BE-033).
+
+### Files changed
+- `product-backlog/sprints/sprint-12-external-voice-websocket.md` — Status → ✅ Done (closed 2026-08-25)
+- `product-backlog/backlog-index.md` — Sprint 12 registry row → ✅ Done (v0.6.0)
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-010 carried to Sprint 13
+- `done-tasks.md` — this closure entry
