@@ -3012,7 +3012,7 @@ Scenario: The WebSocket path is scored against the latency gate
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing), OQ-005
 **Depends on:** TASK-WEB-014 (mouth-to-ear instrumentation, done)
 **Classification:** V1 voice runtime — QA / latency evidence
-**Status:** ✅ **Measured 2026-08-25 = ADR-0029 FAIL** — warm 16-call WebRTC sample, real Gradium streaming STT/TTS + Mistral RAG backend, co-located: **mouth-to-ear p95 3743 ms (target ≤ 1500) / TTFA p95 3393 ms (target ≤ 1200) → FAIL** (median m2e 1951 ms also over). Clean per-call weighting (`n=16`). Confirms the bottleneck is **transport-independent** (≈ WebSocket WEB-031: m2e p95 3675 ms): STT time-to-final tail (p95 1535 ms) + backend first-token (p95 1717 ms); TTS + egress inside budget. Levers spun out to TASK-WEB-035 (STT end-pointing) + TASK-WEB-036 (backend first-token). [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md).
+**Status:** ✅ **Measured 2026-08-25 = ADR-0029 FAIL — merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `4a1c013`)**. Warm 16-call WebRTC sample, real Gradium streaming STT/TTS + Mistral RAG backend, co-located: **mouth-to-ear p95 3743 ms (target ≤ 1500) / TTFA p95 3393 ms (target ≤ 1200) → FAIL** (median m2e 1951 ms also over). Clean per-call weighting (`n=16`). Confirms the bottleneck is **transport-independent** (≈ WebSocket WEB-031: m2e p95 3675 ms): STT time-to-final tail (p95 1535 ms) + backend first-token (p95 1717 ms); TTS + egress inside budget. Levers spun out to TASK-WEB-035 (STT end-pointing) + TASK-WEB-036 (backend first-token). [QA report](../../docs/qa/task-web-032-m2e-reference-measurement-qa-report.md).
 **Priority:** High
 **Branch:** `task/TASK-WEB-032-m2e-reference-measurement`
 
@@ -3126,7 +3126,7 @@ Scenario: STT time-to-final tail is reduced without transcript regression
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0013 (guarded SSE), DEC-002 (grounding)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime / backend — latency optimisation
-**Status:** 🟡 **Lever A done + measured (2026-08-25) — top-k 8→5 halves backend first-token p95; grounding preserved.** Gate still FAIL end-to-end (STT variance dominates → WEB-035 is now critical path). Lever B (LLM-provider benchmark) deferred to an ADR.
+**Status:** 🟡 **Lever A done + measured (2026-08-25) — top-k 8→5 halves backend first-token p95; grounding preserved. Merged into `feat/sprint-12-external-voice-websocket` (`--no-ff` `a150794`).** Gate still FAIL end-to-end (STT variance dominates → WEB-035 is now critical path). Lever B (LLM-provider benchmark) deferred to an ADR.
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — backend first-token p95 1717 ms
 (WebRTC) / 1642 ms (WebSocket): the **largest single p95 slice**.
