@@ -1,0 +1,51 @@
+{
+  "ticket": "TASK-WEB-036",
+  "experiment": "top-k 8 vs 5 isolated backend A/B",
+  "date": "2026-08-25",
+  "method": "POST /api/conversation/converse-stream (SSE), 5 billing questions x 3 reps per arm, same backend session, real Gradium-free path (text in, no STT/TTS), Mistral mistral-small-latest + Ollama nomic-embed-text + pgvector. Clean per-request weighting.",
+  "questions": [
+    "Pourquoi ma facture de telephone est plus elevee que le mois dernier ?",
+    "Pouvez-vous m'expliquer en detail les differentes lignes qui composent le montant total de ma facture ?",
+    "Je souhaite comprendre pourquoi des frais supplementaires apparaissent sur mon releve ce mois.",
+    "Serait-il possible de mettre en place un echeancier pour etaler le paiement de ma facture ?",
+    "J'aimerais savoir comment resilier mon abonnement et connaitre les frais de resiliation associes."
+  ],
+  "arms": {
+    "top_k_8": {
+      "n": 15,
+      "context_chars_approx": [3182, 3852, 3946, 3226, 3883],
+      "chunk_count": 8,
+      "slices_ms": {
+        "retrieval":            {"p50": 157, "p95": 587,  "max": 587},
+        "llm_first_token":      {"p50": 482, "p95": 1705, "max": 1705},
+        "backend_first_token":  {"p50": 901, "p95": 2647, "max": 2647},
+        "llm_wording":          {"p50": 971, "p95": 2202, "max": 2202}
+      },
+      "grounded_all": true
+    },
+    "top_k_5": {
+      "n": 15,
+      "context_chars_approx": [2295, 2352, 2443, 2067, 2484],
+      "chunk_count": 5,
+      "slices_ms": {
+        "retrieval":            {"p50": 164, "p95": 353,  "max": 353},
+        "llm_first_token":      {"p50": 454, "p95": 891,  "max": 891},
+        "backend_first_token":  {"p50": 914, "p95": 1414, "max": 1414},
+        "llm_wording":          {"p50": 905, "p95": 1264, "max": 1264}
+      },
+      "grounded_all": true
+    }
+  },
+  "delta_p95": {
+    "llm_first_token": "-48%",
+    "backend_first_token": "-47%",
+    "llm_wording": "-43%"
+  },
+  "quality": {
+    "grounded": "all turns grounded=true in both arms",
+    "confidence": "identical per question across arms (same top hits)",
+    "regression": "none on correctness; minor breadth trade-off (top-k=5 dropped the specific 3900 phone number on the payment answer, still correct)",
+    "bug_003": "no answer-bearing-chunk eviction observed on the fixture set; top-k=5 keeps a margin above the pre-BUG-003 value of 4"
+  },
+  "conclusion": "top-k 8->5 halves backend first-token p95 (tail-dominated) with grounding preserved. Codified as the default (env-tunable). The mouth-to-ear ADR-0029 gate still FAILs end-to-end because the STT time-to-final tail (WEB-035) dominates and is highly variable; both levers are needed. LLM first-token remains the largest backend sub-slice and is model-inherent -> lever B (provider benchmark) tracked for an ADR."
+}

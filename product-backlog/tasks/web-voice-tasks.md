@@ -3085,10 +3085,12 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime — latency optimisation
-**Status:** 📋 Planned (follow-up, out of Sprint 12 WebSocket theme)
+**Status:** 📋 Planned — **now the critical-path lever for the ADR-0029 gate** (confirmed by WEB-036: after top-k=5 halved backend first-token, mouth-to-ear is dominated by the STT time-to-final tail).
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
 / 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
+Re-confirmed by the WEB-036 top-k=5 re-score: STT per-turn `[358…570, 1379…1786, 3758, 3909, 4042]`
+(median ~570 ms, p95 4042 ms) — highly variable Gradium finalization, the current gate blocker.
 
 ### Context
 
@@ -3124,7 +3126,7 @@ Scenario: STT time-to-final tail is reduced without transcript regression
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0013 (guarded SSE), DEC-002 (grounding)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime / backend — latency optimisation
-**Status:** 📋 Planned (follow-up, out of Sprint 12 WebSocket theme)
+**Status:** 🟡 **Lever A done + measured (2026-08-25) — top-k 8→5 halves backend first-token p95; grounding preserved.** Gate still FAIL end-to-end (STT variance dominates → WEB-035 is now critical path). Lever B (LLM-provider benchmark) deferred to an ADR.
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — backend first-token p95 1717 ms
 (WebRTC) / 1642 ms (WebSocket): the **largest single p95 slice**.
@@ -3136,14 +3138,78 @@ first token via the guarded `converse-stream`. It is ~half the mouth-to-ear budg
 transport-independent. TTS already begins per vetted sentence (ADR-0013), so the win is getting
 the **first vetted token/sentence out sooner**.
 
-### Scope (to refine at design)
+### Investigation — sub-slice breakdown (2026-08-25, step 1 done, no code change needed)
 
-- Break `backend.first_token` into sub-spans (embedding, pgvector search, LLM first token) to find
-  the dominant sub-slice before choosing a lever.
-- Candidate levers (design decision + ADR): query-embedding cache, leaner/shorter system prompt,
-  a faster or co-located LLM, retrieval top-k / HNSW ef tuning. Grounding (DEC-002) and
-  per-sentence guardrail vetting must stay intact.
-- Re-measure `backend.first_token` p50/p95 before/after.
+The backend **already** emits per-slice `[TELEMETRY]` logs (`BackendTelemetry.recordLatency`/`time`,
+Micrometer + structured logs; `Slices.java`) for `retrieval` (embedding+pgvector combined),
+`llm_first_token` and `backend_first_token`. Mining the WEB-032 backend run (16 warm WebRTC turns)
+gives the internal split of `backend_first_token` (p95 ≈ 1696 ms, matches the voice-side 1717 ms):
+
+| Sub-slice | p50 (ms) | p95 (ms) | Share of first-token |
+|---|---:|---:|---|
+| retrieval (embedding + pgvector) | 174 | **294** | ~17 % |
+| **llm_first_token (Mistral)** | 473 | **1473** | **~87 % — dominant** |
+
+`backend_first_token ≈ retrieval + llm_first_token` (guardrail/sentence-buffer overhead ~220 ms).
+**Conclusion:** the LLM time-to-first-token is the whole story; retrieval is cheap, so **splitting
+embedding vs pgvector is NOT worth building**. Prompt sizes on grounded turns: `system ≈ 4.8k
+chars`, `context ≈ 3.6k chars` (top-k=8 chunks), `history 0` → ~2–2.5k input tokens (a secondary,
+trimmable contributor to TTFT).
+
+### Lever options (post-investigation)
+
+- **A — zero-infra prompt/retrieval trim (quick, bounded):** shorten the system prompt (~4.8k chars)
+  and/or reduce top-k (8 → 4-5) to cut input tokens → lower TTFT. Must not regress grounding
+  (DEC-002) or answer quality; re-score after.
+- **B — LLM-provider benchmark (strategic, ADR):** the LLM TTFT is inherent, so the biggest lever is
+  the model/hosting: benchmark Mistral small/large (EU/sovereignty), a **co-located** model
+  (removes network hop + residency concern), and OpenAI gpt-4o-mini (fast TTFT, remote/residency
+  trade-off) on **TTFT + quality + cost + data residency**. Keep the provider port agnostic; decide
+  by ADR. (Answers the 2026-08-25 "OpenAI remote long-term?" question: the LLM *is* the dominant
+  cost, so provider/model choice materially moves the gate — retrieval tuning would not.)
+
+### Lever A result — top-k 8→5 (2026-08-25, implemented + measured)
+
+Change: `voice-support.conversation.retrieval.top-k` default **8 → 5** (env-tunable;
+`application.yml` + `ConversationConfig` `@Value` fallbacks). System prompt left as-is — already
+trimmed (TASK-BE-011, ~600 chars); the reducible input is the retrieved **context**, not the
+template.
+
+**Isolated backend A/B** (`/converse-stream`, 5 billing questions × 3 reps, same session, no STT/TTS
+noise, clean per-call weighting):
+
+| Slice p95 (ms) | top-k=8 | top-k=5 | Δ |
+|---|---:|---:|---|
+| llm_first_token | 1705 | **891** | **−48%** |
+| backend_first_token | 2647 | **1414** | **−47%** |
+| llm_wording | 2202 | 1264 | −43% |
+
+The **p50 barely moves** (llm_first_token 482→454) — the win is entirely in the **tail**: fewer
+context chunks (8→5, ~3.9k→~2.4k context chars) collapse Mistral's p95 prefill variance.
+
+**Quality (no regression on the fixture set):** all 15 top-k=5 turns `grounded=true`, identical
+retrieval confidence (same top hits), answers still correct (billing still cites the 149 € 5G modem).
+Only a minor breadth trade-off — top-k=5 dropped the specific "3900" number on the payment answer
+(still correct). No BUG-003 answer-bearing-chunk eviction observed; 5 keeps a margin above the
+pre-BUG-003 value of 4.
+
+**End-to-end re-score (WebRTC, top-k=5):** `backend_first_token` p95 **1717 → 1245 ms** confirms the
+lever end-to-end — **but** `stt` p95 spiked to 4042 ms this run (per-turn `[358…570, 1379…1786,
+3758, 3909, 4042]`: median ~570 ms, heavy tail), pushing m2e p95 to 6020 ms. **The end-to-end gate is
+now gated by STT time-to-final variance (WEB-035), not the backend slice.** ADR-0029 still **FAIL**.
+
+**Verdict:** keep top-k=5 (deterministic ~800 ms off the backend p95 tail, quality preserved), but
+the mouth-to-ear gate will not pass until **WEB-035 (STT tail)** lands too. Evidence:
+`docs/qa/task-web-036-topk-ab-report.json` (isolated A/B) + `task-web-036-rescore-topk5-report.json`.
+
+### Scope (remaining)
+
+- **WEB-035 is now the critical-path lever** for the ADR-0029 gate (STT time-to-final tail).
+- **Lever B (LLM-provider benchmark)** — the LLM first-token is still the largest backend sub-slice
+  even after top-k=5, and its p95 tail is model-inherent. Benchmark Mistral small/large + a
+  co-located Ollama model + OpenAI gpt-4o-mini on TTFT + quality + cost + residency, decide by ADR.
+  Keep the provider port agnostic. (Candidates confirmed 2026-08-25.)
+- Broader retrieval-quality QA (BUG-003-style scenarios) should confirm top-k=5 before pilot.
 
 ### Acceptance Criteria
 
