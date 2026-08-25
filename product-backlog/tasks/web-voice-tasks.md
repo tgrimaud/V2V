@@ -2933,9 +2933,9 @@ Scenario: A WebSocket call emits the canonical per-slice spans
 **Related decisions:** ADR-0043, ADR-0029 (mouth-to-ear gate), ADR-0028 (slice timing)
 **Depends on:** TASK-WEB-028, TASK-WEB-029, TASK-WEB-030
 **Classification:** V1 voice runtime — QA acceptance
-**Status:** Planned
+**Status:** ⚠️ **Functional GO / latency NOT-YET-SCORED** — external WS journey covered + green; latency harness + runbook delivered, but the ADR-0029 gate is not scored on WS (no warm real-provider sample in this env). 566 unit + 17/46/209 behave green.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-031-ws-qa-latency` (to create when work starts)
+**Branch:** `task/TASK-WEB-031-ws-qa-functional-latency` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2966,6 +2966,31 @@ Scenario: The WebSocket path is scored against the latency gate
 
 - QA report under `docs/qa/` (functional pass + per-slice p50/p95 + degraded-mode note).
 - No raw audio, secrets or PII in logs.
+
+### Outcome (2026-08-25)
+
+- **Functional coverage (GO).** The external WS journey — turn over the shared session core,
+  barge-in cut, pluggable end-of-turn, capacity refusal (WS 1013), safe-failure surfaces,
+  declared-vs-effective language — is covered by 10 Behave scenarios across 4 WS features
+  + unit suites, all green, plus WEB-028's user-validated live run (open→opened, 1013 refusal,
+  browser mic turn). See [QA report](../../docs/qa/task-web-031-ws-functional-latency-qa-report.md).
+- **Latency harness + tool (delivered).** `scripts/ws_live_client.py` (new) drives a real `wss`
+  turn (JSON `open` → real-time PCM16 frames from a fixture → trailing silence → hold →
+  `close`) so the server emits its per-call dump; pure frame helpers are unit-tested
+  (`tests/test_ws_live_client.py`). The WS per-call dump emits the **same** span names as WebRTC
+  (channel-egress just carries `transport="websocket"`), so `scripts/streaming_latency_report.py`
+  scores it **unchanged** — proven by `tests/test_streaming_latency_report.py::WebSocketSampleTest`
+  (per-slice measured + WS-egress folded into mouth-to-ear + ADR-0029 gate scored).
+- **Latency score (NOT YET SCORED, honest gap).** A trustworthy ADR-0029 score needs a warm,
+  co-located sample with the **real** providers (Gradium STT/TTS + Mistral); no provider
+  credentials were available in this session, and fixture/stub timings against a real-provider
+  gate would be misleading. The per-slice table marks every slice + both composites
+  `not measured`, with a copy-paste **runbook** to capture + score the warm sample.
+- **Degraded-mode note.** TCP head-of-line under packet loss (vs WebRTC/UDP) and weaker browser
+  AEC without headphones (mitigated by the ADR-0025 point-7 amplitude gate) are called out for
+  the live run.
+- **Recommendation.** Functional **GO** for the interim external demo; **no pilot latency SLO
+  claimed** on WS until the warm sample is captured with the delivered harness.
 
 ---
 
