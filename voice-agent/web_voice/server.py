@@ -468,6 +468,7 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
         WebSocketSignalingService,
         ws_host_config,
         ws_language_config,
+        ws_max_sessions_config,
         ws_port_config,
     )
 
@@ -484,6 +485,9 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
         streaming_tts_provider=_build_streaming_tts_provider(args),
         streaming_providers_by_language=_streaming_stt_by_language(args),
         streaming_tts_providers_by_language=_streaming_tts_by_language(args),
+        # Label the channel-egress span so a per-slice latency report can split WS from
+        # WebRTC (TASK-WEB-030); the session core is otherwise transport-agnostic.
+        transport_label="websocket",
     )
     ws_signaling = WebSocketSignalingService(
         factory=factory,
@@ -491,6 +495,7 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
         host=ws_host_config(),
         port=ws_port_config(),
         default_language=ws_language_config(),
+        max_sessions=ws_max_sessions_config(),
     )
     ws_signaling.start()
     return ws_signaling, owned_loop

@@ -65,5 +65,27 @@ class WebSocketSocleBuildTest(unittest.TestCase):
         self.assertEqual(transport._params.allowed_origins, origins)
 
 
+class WebSocketCapacityRejectionSeamTest(unittest.TestCase):
+    """TASK-WEB-030 AC#1: the socle can surface the single-client 1013 refusal to the caller
+    without reimplementing pipecat's accept loop."""
+
+    def test_rejection_callback_is_wired_into_the_transport_input(self):
+        # GIVEN a rejection callback
+        async def _cb(_ws):
+            return None
+
+        # WHEN the transport is built with it
+        transport = build_websocket_audio_transport("127.0.0.1", 8091, on_client_rejected=_cb)
+        # THEN a capacity-aware transport is returned and its input carries the callback
+        self.assertEqual(type(transport).__name__, "_CapacityAwareTransport")
+        self.assertIs(transport.input()._on_client_rejected, _cb)
+
+    def test_plain_transport_when_no_rejection_callback(self):
+        # GIVEN no rejection callback
+        transport = build_websocket_audio_transport("127.0.0.1", 8091)
+        # THEN the plain socle transport is returned (no capacity-aware wrapper)
+        self.assertNotEqual(type(transport).__name__, "_CapacityAwareTransport")
+
+
 if __name__ == "__main__":
     unittest.main()

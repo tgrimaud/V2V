@@ -46,11 +46,22 @@ DEFAULT_WS_PORT = 8091
 WS_HOST_ENV_VAR = "VOICE_WS_HOST"
 WS_PORT_ENV_VAR = "VOICE_WS_PORT"
 WS_LANGUAGE_ENV_VAR = "VOICE_WS_LANGUAGE"
+WS_MAX_SESSIONS_ENV_VAR = "VOICE_MAX_WS_SESSIONS"
+# The socle transport is single-client per listener, so the effective interim ceiling is 1.
+# Kept env-tunable + stamped on the gauge for parity with the WebRTC ceiling (TASK-WEB-024);
+# a value > 1 would need a listener-per-session topology (deferred, same OQ as the language
+# selection — see the module docstring / ADR-0043).
+DEFAULT_MAX_WS_SESSIONS = 1
 
-# Telemetry event names for the interim WS path (per-slice spans + gauge come with WEB-030).
+# Telemetry names for the interim WS path (TASK-WEB-028 events + TASK-WEB-030 capacity).
 SESSION_STARTED_EVENT = "voice.ws.session_started"
 CLIENT_CONNECTED_EVENT = "voice.ws.client_connected"
 CLIENT_DISCONNECTED_EVENT = "voice.ws.client_disconnected"
+# Capacity ceiling (TASK-WEB-030), mirroring the WebRTC gauge/refusal shape so the pilot can
+# chart active sessions + count refusals per host across both transports.
+ACTIVE_SESSIONS_METRIC = "voice.ws.active_sessions"
+SESSION_REJECTED_EVENT = "voice.ws.session_rejected"
+REASON_SINGLE_CLIENT = "single_client_capacity"
 
 
 class WebSocketSignalingService:
@@ -65,6 +76,7 @@ class WebSocketSignalingService:
         port: int = DEFAULT_WS_PORT,
         default_language: str | None = None,
         allowed_origins: list[str] | None = None,
+        max_sessions: int = DEFAULT_MAX_WS_SESSIONS,
         sample_rate: int = DEFAULT_SAMPLE_RATE,
         serializer_factory: Callable[[], WebSocketAudioSerializer] = WebSocketAudioSerializer,
         telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
@@ -82,6 +94,10 @@ class WebSocketSignalingService:
         self._port = port
         self._default_language = default_language
         self._allowed_origins = allowed_origins
+        self._max_sessions = max_sessions if max_sessions > 0 else DEFAULT_MAX_WS_SESSIONS
+        self._active = 0
+        # Guards the per-call dump so a normal disconnect + a later shutdown do not double-dump.
+        self._dumped = False
         self._sample_rate = sample_rate
         self._serializer_factory = serializer_factory
         self._telemetry_factory = telemetry_factory
@@ -111,6 +127,7 @@ class WebSocketSignalingService:
             sample_rate=self._sample_rate,
             serializer=self._serializer,
             allowed_origins=self._allowed_origins,
+            on_client_rejected=self._on_client_rejected,
         )
         self._telemetry = self._telemetry_factory()
         self._envelope = ChannelEnvelope.for_web_turn(language=self._default_language)
@@ -144,18 +161,56 @@ class WebSocketSignalingService:
         on the WS URL (the `open` control frame is captured by the serializer). Effective
         language stays the server default in the interim (see the module docstring)."""
         declared = self._declared_language(websocket)
+        self._active += 1
+        self._dumped = False
         self._telemetry.record(
             CLIENT_CONNECTED_EVENT,
             correlation_id=self._envelope.correlation_id,
             declared_language=declared or "",
             effective_language=self._envelope.language or "auto",
         )
+        self._emit_active_gauge(outcome="accepted")
 
     def _on_client_disconnected(self, websocket) -> None:
+        self._active = max(0, self._active - 1)
         self._telemetry.record(
             CLIENT_DISCONNECTED_EVENT,
             correlation_id=self._envelope.correlation_id,
         )
+        self._emit_active_gauge(outcome="closed")
+        # Per-call evidence dump (TASK-WEB-030): a streaming call has no per-turn HTTP
+        # response, so dump the canonical per-slice timing at call end (like WebRTC's
+        # _discard), not only at server shutdown.
+        self._dump_once()
+
+    async def _on_client_rejected(self, websocket) -> None:
+        """Fired by the socle when an extra concurrent client is refused (WS 1013).
+
+        Async to match the transport callback signature; only records telemetry so it never
+        blocks the refusal. The active gauge is emitted with `outcome=rejected` and the
+        rejected client is counted, mirroring the WebRTC ceiling (TASK-WEB-024)."""
+        self._telemetry.record(
+            SESSION_REJECTED_EVENT,
+            correlation_id=self._envelope.correlation_id,
+            reason=REASON_SINGLE_CLIENT,
+            active_sessions=self._active,
+            max_sessions=self._max_sessions,
+        )
+        self._emit_active_gauge(outcome="rejected")
+
+    def _emit_active_gauge(self, *, outcome: str) -> None:
+        self._telemetry.metric(
+            ACTIVE_SESSIONS_METRIC,
+            float(self._active),
+            correlation_id=self._envelope.correlation_id,
+            outcome=outcome,
+            max_sessions=self._max_sessions,
+        )
+
+    def _dump_once(self) -> None:
+        if self._telemetry is not None and not self._dumped:
+            self._dumped = True
+            self._log(self._telemetry)
 
     @staticmethod
     def _declared_language(websocket) -> str | None:
@@ -169,14 +224,17 @@ class WebSocketSignalingService:
         return values[0] if values else None
 
     def close(self) -> None:
-        """Stop the session/transport on the loop and dump the call telemetry once."""
+        """Stop the session/transport on the loop and dump the call telemetry once.
+
+        The dump is idempotent (`_dump_once`): a client disconnect already dumped this
+        call's evidence, so a shutdown after a clean disconnect does not double-dump; a
+        shutdown *mid-call* (no disconnect) still dumps here."""
         if self._session is not None:
             try:
                 self._loop.run(self._teardown(), timeout=10)
             except Exception:  # noqa: BLE001 - best-effort teardown on shutdown
                 pass
-        if self._telemetry is not None:
-            self._log(self._telemetry)
+        self._dump_once()
 
     async def _teardown(self) -> None:
         await self._session.stop()
@@ -202,3 +260,20 @@ def ws_language_config() -> str | None:
     """Server-default language for the interim WS path (None = backend auto-detect)."""
     raw = os.environ.get(WS_LANGUAGE_ENV_VAR)
     return raw.strip().lower() if raw and raw.strip() else None
+
+
+def ws_max_sessions_config() -> int:
+    """Resolve the WS session ceiling (TASK-WEB-030).
+
+    `VOICE_MAX_WS_SESSIONS` overrides the default; a non-numeric/non-positive value falls
+    back to `DEFAULT_MAX_WS_SESSIONS` (1). The socle transport is single-client per listener,
+    so this is primarily the value stamped on the active-session gauge for cross-transport
+    parity — a real ceiling > 1 needs a listener-per-session topology (deferred)."""
+    raw = os.environ.get(WS_MAX_SESSIONS_ENV_VAR)
+    if raw is None:
+        return DEFAULT_MAX_WS_SESSIONS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_WS_SESSIONS
+    return value if value > 0 else DEFAULT_MAX_WS_SESSIONS

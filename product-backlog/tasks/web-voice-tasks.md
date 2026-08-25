@@ -2861,9 +2861,9 @@ Scenario: The signal source is pluggable
 **Related decisions:** ADR-0043, ADR-0028 (per-slice OTel), TASK-WEB-024 (WebRTC ceiling)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — runtime safety + observability (mandatory)
-**Status:** Planned
+**Status:** ✅ **Implemented** — adversarial **91/100 Pass** (no blockers; 1 Medium residual accepted → WEB-031); QA GO. 558 unit + 17/46/209 behave green. Pending user merge request.
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (to create when work starts)
+**Branch:** `task/TASK-WEB-030-ws-capacity-observability` (off `feat/sprint-12-external-voice-websocket`)
 
 ### Context
 
@@ -2896,6 +2896,34 @@ Scenario: A WebSocket call emits the canonical per-slice spans
   Then every canonical journey slice is present under one correlation id
   And a missing slice is marked measured=false, never omitted
 ```
+
+### Outcome (2026-08-25)
+
+- **AC#1 — clean refusal + observable ceiling.** `build_websocket_audio_transport` gains an
+  optional `on_client_rejected` callback; when set it returns a `_CapacityAwareTransport` whose
+  input subclasses pipecat's `SingleClientWebsocketServerInputTransport` and surfaces an extra
+  concurrent client to the callback **before** the parent performs the real WS 1013 refusal (no
+  accept logic duplicated). `WebSocketSignalingService` records a `voice.ws.session_rejected`
+  event (`reason=single_client_capacity`, `active_sessions`, `max_sessions`) and never crashes.
+  The ceiling is env-tunable (`VOICE_MAX_WS_SESSIONS`, default 1; the socle is single-client so
+  a value > 1 needs a listener-per-session topology, deferred).
+- **AC#1 — active-session gauge.** `voice.ws.active_sessions` emitted on connect (`accepted`),
+  disconnect (`closed`) and refusal (`rejected`), stamped with `max_sessions` for WebRTC-parity
+  charting.
+- **AC#2 — canonical per-slice spans.** The shared per-call dump (`session_telemetry.build_payload`,
+  used by WebRTC + WS) always includes `pipeline_timing` with every canonical slice (channel
+  ingress → end-of-turn → STT → backend → TTS first audio → channel egress) under one
+  correlation id; a missing slice is `measured=false`, never omitted. The channel-egress span
+  carries a `transport="websocket"` label (`SessionFactory`) so a report can split WS from WebRTC.
+  The dump fires at **call end** (disconnect), not only at shutdown, and is idempotent (`_dump_once`).
+- **Tests.** 9 new unit tests (capacity gauge/refusal + rejection-callback wiring +
+  `ws_max_sessions_config` + idempotent per-call dump + `build_payload` per-slice payload) and a
+  new `features/websocket_capacity.feature` (2 scenarios: cap refusal, canonical per-slice dump).
+  Full regression: **558 unit** (was 549) + **17 features / 46 scenarios / 209 steps** (was
+  16/44/201). Also fixed the WEB-028 unit + Behave transport-builder fakes to accept the new
+  `on_client_rejected` kwarg.
+- **Deferred.** Live end-to-end refusal + per-slice p50/p95 latency through the HAProxy edge →
+  TASK-WEB-031; `call_end`→WS-drain teardown wiring → WEB-031/Genesys adapter.
 
 ---
 

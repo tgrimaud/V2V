@@ -14,12 +14,17 @@ import unittest
 
 from voice_common.telemetry import TelemetryRecorder
 from web_voice.websocket_signaling import (
+    ACTIVE_SESSIONS_METRIC,
     CLIENT_CONNECTED_EVENT,
     CLIENT_DISCONNECTED_EVENT,
+    DEFAULT_MAX_WS_SESSIONS,
     DEFAULT_WS_PORT,
+    REASON_SINGLE_CLIENT,
+    SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
     WebSocketSignalingService,
     ws_language_config,
+    ws_max_sessions_config,
     ws_port_config,
 )
 
@@ -94,12 +99,15 @@ def _build_service(**overrides):
     loop = _FakeLoop()
     captured = {}
 
-    def transport_builder(host, port, *, sample_rate, serializer, allowed_origins):
+    def transport_builder(
+        host, port, *, sample_rate, serializer, allowed_origins, on_client_rejected=None
+    ):
         captured["host"] = host
         captured["port"] = port
         captured["sample_rate"] = sample_rate
         captured["serializer"] = serializer
         captured["allowed_origins"] = allowed_origins
+        captured["on_client_rejected"] = on_client_rejected
         return transport
 
     service = WebSocketSignalingService(
@@ -179,6 +187,52 @@ class WebSocketSignalingClientEventsTest(unittest.TestCase):
         self.assertIsNone(service._declared_language(_FakeWebSocket("")))
 
 
+class WebSocketSignalingCapacityTest(unittest.TestCase):
+    """TASK-WEB-030 AC#1: session ceiling is observable — active-session gauge on
+    connect/disconnect and a clean refusal (gauge + event) for an extra concurrent client."""
+
+    def test_connect_then_disconnect_emit_the_active_session_gauge(self) -> None:
+        # GIVEN a started service
+        service, transport, _s, _f, _l, _c = _build_service()
+        telemetry = TelemetryRecorder()
+        service._telemetry_factory = lambda: telemetry
+        service.start()
+        # WHEN a client connects then disconnects
+        asyncio.run(transport.handlers["on_client_connected"](transport, _FakeWebSocket("/")))
+        asyncio.run(transport.handlers["on_client_disconnected"](transport, _FakeWebSocket("/")))
+        # THEN the active-session gauge is emitted with 1 (accepted) then 0 (closed)
+        gauges = [m for m in telemetry.metrics() if m.name == ACTIVE_SESSIONS_METRIC]
+        self.assertEqual([(g.value, g.attributes["outcome"]) for g in gauges], [(1.0, "accepted"), (0.0, "closed")])
+        self.assertTrue(all(g.attributes["max_sessions"] == 1 for g in gauges))
+
+    def test_extra_concurrent_client_is_refused_with_gauge_and_event(self) -> None:
+        # GIVEN a started service that already has one connected client
+        service, transport, _s, _f, _l, _c = _build_service()
+        telemetry = TelemetryRecorder()
+        service._telemetry_factory = lambda: telemetry
+        service.start()
+        asyncio.run(transport.handlers["on_client_connected"](transport, _FakeWebSocket("/")))
+        # WHEN the socle refuses an extra concurrent client (WS 1013) via the callback
+        asyncio.run(service._on_client_rejected(_FakeWebSocket("/")))
+        # THEN a refusal event carries the single-client reason + capacity, and the gauge
+        # records the rejection (no crash)
+        rejected = [e for e in telemetry.events() if e.name == SESSION_REJECTED_EVENT]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0].attributes["reason"], REASON_SINGLE_CLIENT)
+        self.assertEqual(rejected[0].attributes["active_sessions"], 1)
+        self.assertEqual(rejected[0].attributes["max_sessions"], 1)
+        self.assertTrue(any(m.attributes["outcome"] == "rejected" for m in telemetry.metrics() if m.name == ACTIVE_SESSIONS_METRIC))
+
+    def test_start_passes_the_rejection_callback_to_the_transport_builder(self) -> None:
+        # GIVEN a started service
+        service, _t, _s, _f, _l, captured = _build_service()
+        service._telemetry_factory = lambda: TelemetryRecorder()
+        service.start()
+        # THEN the transport is built with the signaling rejection callback wired in
+        # (bound methods compare equal by (instance, func), but are not identity-stable)
+        self.assertEqual(captured["on_client_rejected"], service._on_client_rejected)
+
+
 class WebSocketSignalingTeardownTest(unittest.TestCase):
     def test_close_stops_the_session_and_dumps_telemetry_once(self) -> None:
         # GIVEN a started service with a fake log sink
@@ -193,10 +247,26 @@ class WebSocketSignalingTeardownTest(unittest.TestCase):
         self.assertTrue(session.stopped)
         self.assertEqual(logged, [telemetry])
 
+    def test_disconnect_dumps_call_evidence_and_close_does_not_double_dump(self) -> None:
+        # GIVEN a started service with a fake log sink (TASK-WEB-030: per-call dump at call end)
+        logged: list[TelemetryRecorder] = []
+        service, transport, session, _f, _l, _c = _build_service(log=logged.append)
+        telemetry = TelemetryRecorder()
+        service._telemetry_factory = lambda: telemetry
+        service.start()
+        # WHEN the client disconnects (call ends) and the server is later shut down
+        asyncio.run(transport.handlers["on_client_disconnected"](transport, _FakeWebSocket("/")))
+        service.close()
+        # THEN the call evidence is dumped exactly once (disconnect), not again on close
+        self.assertEqual(logged, [telemetry])
+
 
 class WebSocketConfigTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._saved = {k: os.environ.get(k) for k in ("VOICE_WS_PORT", "VOICE_WS_LANGUAGE")}
+        self._saved = {
+            k: os.environ.get(k)
+            for k in ("VOICE_WS_PORT", "VOICE_WS_LANGUAGE", "VOICE_MAX_WS_SESSIONS")
+        }
 
     def tearDown(self) -> None:
         for key, value in self._saved.items():
@@ -220,6 +290,16 @@ class WebSocketConfigTest(unittest.TestCase):
         self.assertIsNone(ws_language_config())
         os.environ["VOICE_WS_LANGUAGE"] = "  FR "
         self.assertEqual(ws_language_config(), "fr")
+
+    def test_max_sessions_defaults_and_rejects_non_positive_or_garbage(self) -> None:
+        os.environ.pop("VOICE_MAX_WS_SESSIONS", None)
+        self.assertEqual(ws_max_sessions_config(), DEFAULT_MAX_WS_SESSIONS)
+        os.environ["VOICE_MAX_WS_SESSIONS"] = "not-a-number"
+        self.assertEqual(ws_max_sessions_config(), DEFAULT_MAX_WS_SESSIONS)
+        os.environ["VOICE_MAX_WS_SESSIONS"] = "0"
+        self.assertEqual(ws_max_sessions_config(), DEFAULT_MAX_WS_SESSIONS)
+        os.environ["VOICE_MAX_WS_SESSIONS"] = "3"
+        self.assertEqual(ws_max_sessions_config(), 3)
 
 
 if __name__ == "__main__":
