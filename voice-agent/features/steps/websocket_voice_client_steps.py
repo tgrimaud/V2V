@@ -86,7 +86,7 @@ def step_build_ws_signaling(context):
         loop=context.ws_loop,
         default_language="fr",
         telemetry_factory=lambda: context.ws_telemetry,
-        transport_builder=lambda host, port, *, sample_rate, serializer, allowed_origins: context.ws_transport,
+        transport_builder=lambda host, port, *, sample_rate, serializer, allowed_origins, on_client_rejected=None: context.ws_transport,
     )
 
 

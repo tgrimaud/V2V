@@ -180,12 +180,16 @@ class SessionFactory:
         streaming_providers_by_language: dict[str, Any] | None = None,
         streaming_tts_providers_by_language: dict[str, Any] | None = None,
         control_signal_source_factory: Callable[[Any], ControlSignalSource | None] | None = None,
+        transport_label: str = "webrtc",
     ) -> None:
         self._ingress = ingress
         self._egress = egress
         self._backend = backend
         self._streaming_provider = streaming_provider
         self._streaming_tts_provider = streaming_tts_provider
+        # Transport name stamped on the channel-egress span (TASK-WEB-030) so a per-slice
+        # latency report can be filtered by transport (webrtc vs websocket vs genesys).
+        self._transport_label = transport_label
         # Optional per-call pluggable control-signal source (TASK-WEB-029, ADR-0040): a callable
         # (envelope -> ControlSignalSource | None) so barge-in / end-of-turn / call-end can be
         # driven by WS-client or Genesys protocol events, not just the energy detectors. None
@@ -223,7 +227,9 @@ class SessionFactory:
         the active TTS provider so the egress span carries a meaningful provider attribute."""
         provider = self._streaming_tts_provider_for(envelope)
         provider_name = getattr(provider, "name", None) or "gradium-tts"
-        return ChannelEgressProbe(envelope, telemetry, provider_name=provider_name)
+        return ChannelEgressProbe(
+            envelope, telemetry, provider_name=provider_name, transport=self._transport_label
+        )
 
     def _build_tts_processor(self, envelope, telemetry):
         """Streaming TTS processor for the session, or None (batch TTS fallback)."""

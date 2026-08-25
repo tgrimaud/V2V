@@ -180,6 +180,38 @@ detectors stay authoritative on the browser paths; the seam only *adds* a plugga
   detector). A live `wss` barge-in / mouth-to-ear check stays TASK-WEB-031; wiring `call_end`
   to the WS drain teardown is TASK-WEB-030.
 
+## Capacity + Observability Outcome (2026-08-25, TASK-WEB-030)
+
+The "Observability mandate" consequence and WebRTC-parity backpressure (TASK-WEB-024) are now
+**implemented** on the interim WS path, keeping the socle single-client model:
+
+- **Session ceiling + clean refusal.** `websocket_support.build_websocket_audio_transport`
+  gains an optional `on_client_rejected` callback. When set, it returns a small
+  `_CapacityAwareTransport` whose input subclasses pipecat's
+  `SingleClientWebsocketServerInputTransport` and, when a client is already connected,
+  **surfaces** the incoming (soon-to-be-1013) client to the callback *before* delegating to
+  the parent's own single-client refusal — no accept logic is duplicated, so pipecat still
+  performs the actual WS 1013 close. `WebSocketSignalingService` records the refusal as a
+  `voice.ws.session_rejected` event (`reason=single_client_capacity`, `active_sessions`,
+  `max_sessions`) and never crashes. The ceiling is env-tunable
+  (`VOICE_MAX_WS_SESSIONS`, default 1); a value > 1 would need a listener-per-session topology
+  (deferred, same open question as dynamic per-call language selection).
+- **Active-session gauge.** `voice.ws.active_sessions` is emitted on connect (`outcome=accepted`),
+  disconnect (`outcome=closed`) and refusal (`outcome=rejected`), stamped with `max_sessions`
+  for cross-transport charting (WebRTC-equivalent shape).
+- **Canonical per-slice spans in the per-call dump.** `session_telemetry.build_payload` (shared
+  by WebRTC + WS) now always includes `pipeline_timing = PipelineTimingReport.from_spans(...)`
+  so the end-of-call evidence carries every canonical journey slice (channel ingress →
+  end-of-turn → STT → backend → TTS first audio → channel egress) under **one correlation id**,
+  with a missing slice marked `measured=false` (never omitted). The channel-egress span is
+  stamped with a `transport` label (`SessionFactory(transport_label="websocket")`) so a latency
+  report can split WS from WebRTC. The dump now fires at **call end** (client disconnect), not
+  only at server shutdown, and is idempotent (`_dump_once`) so a shutdown after a clean
+  disconnect does not double-dump.
+- **Deferred.** A real end-to-end refusal + per-slice p50/p95 latency report through the
+  HAProxy edge stays TASK-WEB-031 (live QA). `call_end`→WS-drain teardown wiring likewise
+  remains a WEB-031/Genesys-adapter concern.
+
 ## Consequences
 
 - **Weaker echo control than WebRTC.** The WebSocket path loses WebRTC's
