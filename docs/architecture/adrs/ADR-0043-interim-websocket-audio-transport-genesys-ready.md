@@ -210,7 +210,12 @@ The "Observability mandate" consequence and WebRTC-parity backpressure (TASK-WEB
   disconnect does not double-dump.
 - **Deferred.** A real end-to-end refusal + per-slice p50/p95 latency report through the
   HAProxy edge stays TASK-WEB-031 (live QA). `call_end`→WS-drain teardown wiring likewise
-  remains a WEB-031/Genesys-adapter concern.
+  remains a WEB-031/Genesys-adapter concern. Adversarial review **91/100 Pass** flagged one
+  Medium residual: telemetry/envelope are created once in `start()`, so the correlation id is
+  effectively **per server session, not per connection** — a reconnect on the single-client
+  socle reuses the same session and would accumulate spans under one id. Accepted interim
+  (one caller per session at pilot); a per-connection reset or a "one session = one call"
+  formalisation is carried to TASK-WEB-031.
 
 ## Consequences
 

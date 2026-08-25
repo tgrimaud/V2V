@@ -10,8 +10,12 @@
 Both acceptance criteria are covered by automated tests. The WS path now has WebRTC-parity
 backpressure (a session ceiling with a clean WS 1013 refusal made observable) and always dumps
 the canonical per-slice journey timing under one correlation id. The refusal reuses pipecat's
-own single-client guard (no accept logic duplicated), so it cannot crash the server. No blockers;
-residual risks are live-edge checks explicitly deferred to WEB-031.
+own single-client guard (no accept logic duplicated), so it cannot crash the server.
+
+Adversarial review: **91/100 Pass**, no blocking findings. The one Medium finding
+(correlation id is per server session, not per connection, on the single-client socle) is an
+accepted interim residual carried to WEB-031; other residuals are live-edge checks also deferred
+to WEB-031.
 
 ## Functional results
 
@@ -54,6 +58,8 @@ and is idempotent (`_dump_once`) so a shutdown after a clean disconnect does not
 |---|---|---|
 | Low | Live end-to-end refusal + per-slice p50/p95 latency through the HAProxy edge not exercised (no real socket in unit/Behave) | Deferred to **TASK-WEB-031** (external QA + latency report). |
 | Low | The `_client_handler` refusal-surfacing path is not driven against a real websocket in unit tests (only the wiring + signaling-side recording are) | The refusal itself is pipecat's own guard; end-to-end 1013 was already proven live in WEB-028 QA. Re-covered by WEB-031. |
+| Medium | **Correlation id is per server session, not per connection.** `_telemetry`/`_envelope` are created once in `start()`; on the single-client socle a reconnect reuses the same running session, so a per-disconnect dump on a **reconnect** would accumulate the previous connection's spans under the same correlation id (in tension with AC#2 "one correlation id per call"). | `websocket_signaling.start()` builds telemetry/envelope once; `_on_client_connected` only resets `_dumped`. | **Accepted (interim, single-client):** for the pilot one caller holds the session; treat correlation as per-session. Fix option for WEB-031: rotate telemetry+envelope per `on_client_connected`, or formalise "one session = one call". Carried to **TASK-WEB-031**. |
+| Low | Subclassing pipecat internals (`SingleClientWebsocketServerInputTransport._client_handler`, `self._websocket`, `State.OPEN`, `input()` reconstruction) is brittle across pipecat upgrades | `websocket_support._build_capacity_aware_transport_cls` | Parent guard verified to match byte-for-byte; the wiring test fails fast on a version drift. Re-verify on any pipecat bump. |
 | Info | Ceiling is effectively 1 (single-client socle); `VOICE_MAX_WS_SESSIONS > 1` has no effect without a listener-per-session topology | Intended interim behaviour; documented in ADR-0043 + ticket. |
 
 ## Recommendation
