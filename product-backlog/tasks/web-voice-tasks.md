@@ -3085,7 +3085,7 @@ Scenario: A single warm WebRTC session produces the mouth-to-ear reference numbe
 **Related decisions:** ADR-0029 (mouth-to-ear gate), ADR-0028 (per-slice timing)
 **Depends on:** TASK-WEB-032 (reference measurement)
 **Classification:** V1 voice runtime — latency optimisation
-**Status:** 🟡 **Lever implemented + unit-tested (2026-08-25) — bounded finalize budget with partial-snapshot fallback; pending live re-score.** The critical-path lever for the ADR-0029 gate (confirmed by WEB-036: after top-k=5 halved backend first-token, mouth-to-ear is dominated by the STT time-to-final tail). 568 unit tests + 17 behave features green.
+**Status:** 🟢 **Lever implemented + unit-tested + LIVE re-scored (2026-08-25) — bounded finalize budget (1.2 s) with partial-snapshot fallback. STT time-to-final tail capped ~4042 → 1224 ms p95; mouth-to-ear p95 3743 → 2777 ms (−26%) vs WEB-032. ADR-0029 still FAIL (m2e 2777 > 1500) — remaining blocker is backend first-token (Lever B) + a possibly tighter budget.** 568 unit + 17 behave green; live 15-call WebRTC warm sample (real Gradium+Mistral). Formal WER pass is the remaining QA-GO closer.
 **Priority:** High
 **Surfaced by:** TASK-WEB-031 + TASK-WEB-032 (2026-08-25) — STT time-to-final p95 1535 ms (WebRTC)
 / 2250 ms (WebSocket), while the p50 is only ~390 ms: the **tail** dominates, not the median.
@@ -3154,9 +3154,36 @@ Scenario: STT time-to-final tail is reduced without transcript regression
   And the mouth-to-ear p95 is re-scored against ADR-0029
 ```
 
-**Live validation status:** unit + behave suites green; the real-provider re-score (WebRTC +
-WebSocket warm sample, WER check, ADR-0029 re-score, `voice.stt.finalize_fallback` rate) is the
-remaining step before QA GO.
+### Live re-score result (2026-08-25, warm 15-call WebRTC, real Gradium+Mistral, top-k=5)
+
+Warm 15-call WebRTC sample (5 billing clips × 3 reps) against the real stack with the budget at
+its 1.2 s default. Evidence: `docs/qa/task-web-035-finalize-budget-report.json` (summary) +
+`task-web-035-rescore-report.json` (raw `streaming_latency_report.py`).
+
+| Slice / composite p95 (ms) | WEB-032 baseline | WEB-036 rescore (top-k5, no STT lever) | **WEB-035 (top-k5 + budget)** |
+|---|---:|---:|---:|
+| stt time-to-final | 1535 | **4042** | **1224** |
+| backend_first_token | 1717 | 1245 | 1199 |
+| tts_first_audio | 395 | ~390 | 393 |
+| end_of_turn | 350 | 350 | 350 |
+| time_to_first_audio (ADR-0018 ≤ 800) | 3393 | 5669 | **2427** |
+| **mouth-to-ear (ADR-0029 ≤ 1500)** | 3743 | 6019 | **2777** |
+
+- **STT per-turn (ms):** `[358.7, 360.3, 473.3, 483.0, 546.9, 550.0, 566.3, 567.6, 673.9, 745.3,
+  819.2, 924.2, 1095.4, 1095.8, 1223.7]` — the WEB-036 tail (`3758/3909/4042`) is **gone**, max
+  capped at the 1.2 s budget.
+- **`voice.stt.finalize_fallback` fired on exactly 1/15 turns** (6.7%), capping the single
+  stalled-terminal turn at 1223.7 ms from the partials already in; the other 14 finalized on the
+  real terminal (≤ 1095 ms). **15/15 `stt.transcript.final`, 0 `unavailable`** — the cap cost no
+  turn to word-starvation, and all 15 were answered audibly.
+- **Verdict:** the lever removes the STT tail (its stated goal) and, with top-k=5, cuts m2e p95
+  **−26%** and TTFA p95 **−28%** vs baseline. **ADR-0029 still FAIL** — the remaining blocker is
+  the backend first-token (p95 1199 ms, LLM-first-token bound → **Lever B**), plus possibly a
+  tighter budget (needs WER validation) and/or a shorter end-of-turn hold.
+- **WER note:** transcripts are PII-redacted in telemetry, so a formal normalized-WER pass is not
+  derivable from this dump (proxy: 15/15 finals, 0 unavailable, all answered; the fallback turn
+  returned a non-empty snapshot with the same join as the terminal path). A dedicated WER pass
+  with reference transcripts is the remaining QA-GO closer.
 
 ---
 
