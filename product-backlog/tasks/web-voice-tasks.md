@@ -2861,7 +2861,7 @@ Scenario: The signal source is pluggable
 **Related decisions:** ADR-0043, ADR-0028 (per-slice OTel), TASK-WEB-024 (WebRTC ceiling)
 **Depends on:** TASK-WEB-027
 **Classification:** V1 voice runtime — runtime safety + observability (mandatory)
-**Status:** ✅ **Implemented** — adversarial **91/100 Pass** (no blockers; 1 Medium residual accepted → WEB-031); QA GO. 558 unit + 17/46/209 behave green. Pending user merge request.
+**Status:** ✅ **Merged into `feat/sprint-12-external-voice-websocket`** (2026-08-25, `--no-ff` `b5b075a`) — adversarial **91/100 Pass** (no blockers; 1 Medium residual accepted → WEB-031); QA GO. 558 unit + 17/46/209 behave green.
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-030-ws-capacity-observability` (off `feat/sprint-12-external-voice-websocket`)
 
