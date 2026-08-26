@@ -584,19 +584,16 @@ def main() -> int:
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
     ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
-    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
     ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
-        f"(provider={args.provider}, runtime={args.runtime}, backend={backend.name}, "
-        f"webrtc={'on' if signaling else 'off'}, websocket={ws_status}, "
+        f"(server={args.server}, provider={args.provider}, runtime={args.runtime}, "
+        f"backend={backend.name}, webrtc={'on' if signaling else 'off'}, websocket={ws_status}, "
         f"stt_mode={args.stt_mode}, tts_mode={args.tts_mode})",
         file=sys.stderr,
     )
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        server.shutdown()
+        _serve(args, processor, signaling)
     finally:
         if ws_signaling is not None:
             ws_signaling.close()
@@ -613,10 +610,38 @@ def main() -> int:
     return 0
 
 
+def _serve(args, processor: VoiceTurnProcessor, signaling: Any) -> None:
+    """Run the selected HTTP server (blocking until shutdown).
+
+    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target; `stdlib`
+    is the historical `ThreadingHTTPServer`. Both serve the same HTTP contract; the
+    WebSocket unification onto the aiohttp port lands in the next slice.
+    """
+    if args.server == "aiohttp":
+        from aiohttp import web
+
+        from .app import make_app
+
+        web.run_app(make_app(processor, signaling), host=args.host, port=args.port, print=None)
+        return
+    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.shutdown()
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the web voice runtime server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8090)
+    parser.add_argument(
+        "--server",
+        choices=("stdlib", "aiohttp"),
+        default=os.environ.get("VOICE_SERVER", "stdlib"),
+        help="HTTP server: 'stdlib' (default, ThreadingHTTPServer) or 'aiohttp' "
+        "(single-async-server target, TASK-WEB-038/ADR-0047)",
+    )
     parser.add_argument("--provider", choices=PROVIDER_NAMES, default=GRADIUM)
     parser.add_argument(
         "--runtime",
