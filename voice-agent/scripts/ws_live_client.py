@@ -19,9 +19,10 @@ Capture a warm sample (server up with real providers), then score it:
     .venv/bin/python -m web_voice.server --websocket on --stt-mode streaming \\
         --tts-mode streaming --backend http 2> /tmp/ws-telemetry.jsonl
 
-    # terminal 2 — drive N warm turns (one call each; disconnect emits the dump)
+    # terminal 2 — drive N warm turns (one call each; disconnect emits the dump).
+    # Single routed port (ADR-0047): the WS is at /ws on the HTTP port (:8090).
     for i in $(seq 1 12); do
-      .venv/bin/python scripts/ws_live_client.py --url ws://127.0.0.1:8091 \\
+      .venv/bin/python scripts/ws_live_client.py --url ws://127.0.0.1:8090/ws \\
         --audio fixtures/long/billing-question.pcm --language fr --hold 12
     done
 
@@ -163,7 +164,7 @@ def _report(first_audible_at: float | None, stop_speaking_at: float) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Headless WebSocket voice evidence client")
-    parser.add_argument("--url", default="ws://127.0.0.1:8091")
+    parser.add_argument("--url", default="ws://127.0.0.1:8090/ws")
     parser.add_argument("--audio", required=True, help="PCM16/16k .pcm (or .wav) to stream")
     parser.add_argument("--language", default="fr")
     parser.add_argument("--hold", type=float, default=12.0, help="seconds to keep the call open")

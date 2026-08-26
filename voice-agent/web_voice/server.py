@@ -687,9 +687,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--server",
         choices=("stdlib", "aiohttp"),
-        default=os.environ.get("VOICE_SERVER", "stdlib"),
-        help="HTTP server: 'stdlib' (default, ThreadingHTTPServer) or 'aiohttp' "
-        "(single-async-server target, TASK-WEB-038/ADR-0047)",
+        default=os.environ.get("VOICE_SERVER", "aiohttp"),
+        help="HTTP server: 'aiohttp' (default, single async HTTP+WS server on one port, "
+        "TASK-WEB-038/ADR-0047) or 'stdlib' (legacy ThreadingHTTPServer + interim :8091 WS)",
     )
     parser.add_argument("--provider", choices=PROVIDER_NAMES, default=GRADIUM)
     parser.add_argument(
@@ -714,8 +714,10 @@ def _parse_args() -> argparse.Namespace:
         "--websocket",
         choices=("auto", "on", "off"),
         default=os.environ.get("VOICE_WEBSOCKET", "auto"),
-        help="interim browser WebSocket voice path (TASK-WEB-028): 'auto' (on if "
-        "installed), 'on' (require), 'off'. Listens on VOICE_WS_PORT (default 8091)",
+        help="live browser WebSocket voice path (TASK-WEB-028/038): 'auto' (on if "
+        "installed), 'on' (require), 'off'. On the default aiohttp server the WS rides "
+        "the SAME port at /ws (ceiling VOICE_MAX_WS_SESSIONS); on the legacy stdlib "
+        "server it uses a separate listener on VOICE_WS_PORT (default 8091)",
     )
     parser.add_argument(
         "--stun",

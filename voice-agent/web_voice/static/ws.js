@@ -1,16 +1,16 @@
 "use strict";
 
-// Interim browser WebSocket voice client (TASK-WEB-028, ADR-0043).
+// Browser WebSocket voice client (TASK-WEB-028, ADR-0043; single routed port per ADR-0047).
 //
 // Full-duplex over ONE `wss` connection (no TURN): the mic is captured, downsampled to
 // 16 kHz PCM16 and streamed as binary frames; the bot's answer arrives as binary PCM16
 // frames and JSON control frames (`opened`, `barge_in`, `call_end`, `pong`). The framing
 // mirrors the server serializer (web_voice/websocket_framing.py) and the Genesys AudioHook
-// shape. A second concurrent connection is refused by the server with WS close 1013, which
-// we surface as a "busy, try again" message (AC#2).
+// shape. The socket rides the SAME origin as the page at `/ws` (TASK-WEB-038). A connection
+// past the server's per-bridge session ceiling is refused with WS close 1013, which we
+// surface as a "busy, try again" message.
 
 const TARGET_SAMPLE_RATE = 16000; // Gradium PCM contract: mono, 16 kHz, s16le.
-const DEFAULT_WS_PORT = 8091;
 const USER_ON = 0.02; // mic RMS above this = user speaking
 const USER_OFF = 0.012; // mic RMS below this = user silent
 const SILENCE_HANGOVER_MS = 500; // sustained silence before a turn is "ended"
@@ -59,22 +59,18 @@ function selectedLanguage() {
 function wsUrl() {
   const params = new URLSearchParams(window.location.search);
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-  const host = window.location.hostname || "127.0.0.1";
   const lang = encodeURIComponent(selectedLanguage());
   const override = params.get("wsport");
-  // Behind the TLS edge (page served over HTTPS) the socket is reached SAME-ORIGIN on the
-  // page's port (:443): HAProxy routes the `Upgrade: websocket` request to the bridge's WS
-  // server, so one public port carries both the page and the socket, with no TURN/UDP
-  // (TASK-WEB-037 / TASK-INFRA-010, ADR-0046). Over plain HTTP (local dev, no edge) there is
-  // no router, so connect DIRECTLY to the WS port. `?wsport=<n>` forces a direct port in
-  // either scheme (dev against a specific bridge, e.g. `?wsport=8091`).
+  // Single routed port (ADR-0047 / TASK-WEB-038): the live socket rides the SAME origin as
+  // the page at `/ws` — one port carries the page, the REST API and the socket. Behind the
+  // TLS edge HAProxy routes the `Upgrade: websocket` request to the bridge on the existing
+  // backend (no edge special-case, no TURN/UDP); over plain HTTP (local dev) it is the same
+  // host:port the page came from. `?wsport=<n>` forces a direct host:port for dev against a
+  // specific bridge (e.g. the legacy stdlib :8091 listener).
   if (override) {
-    return `${scheme}://${host}:${override}/?language=${lang}`;
+    return `${scheme}://${window.location.hostname || "127.0.0.1"}:${override}/ws?language=${lang}`;
   }
-  if (scheme === "wss") {
-    return `${scheme}://${host}/?language=${lang}`;
-  }
-  return `${scheme}://${host}:${DEFAULT_WS_PORT}/?language=${lang}`;
+  return `${scheme}://${window.location.host}/ws?language=${lang}`;
 }
 
 async function connect() {
@@ -232,8 +228,9 @@ function onSocketClose(event) {
   if (closedByUser) {
     setStatus("Disconnected");
   } else if (event.code === 1013) {
-    // pipecat SingleClient transport refuses a 2nd concurrent client with 1013 (AC#2).
-    setStatus("Server busy — one conversation at a time. Try again shortly.", "busy");
+    // The server refuses a connection past its per-bridge session ceiling with 1013
+    // (VOICE_MAX_WS_SESSIONS, ADR-0047; the legacy stdlib path used 1 client).
+    setStatus("Server busy — please try again shortly.", "busy");
   } else if (event.code === 1000) {
     setStatus("Call ended");
   } else {

@@ -9,11 +9,11 @@ health_url: "http://127.0.0.1:8090/"
 
 voice_bind: "0.0.0.0"
 voice_port: 8090
-# Live voice WebSocket port (ADR-0046). Interim: the runtime serves the WS on this
-# separate listener and the compose publishes it so a same-subnet / SSH-tunnel client can
-# drive a direct `ws://<bridge>:8091` turn (live-latency test, no HAProxy). ADR-0047
-# folds this into the single routed :8090 (TASK-WEB-038), after which this goes away.
-voice_ws_port: 8091
+# Live WebSocket concurrency ceiling per bridge (ADR-0047, TASK-WEB-038). The live-voice
+# WebSocket rides the SAME routed :8090 at /ws (no separate listener); a connection past
+# this ceiling is refused with WS close 1013. All sessions share one asyncio loop, so this
+# bounds load on a 2 vCPU VM; the app also uses it to emit the active-session gauge.
+voice_max_ws_sessions: 8
 
 # Published port opened in firewalld by host_prereqs (TASK-OPS-003). Only 8090 is
 # edge-facing: per ADR-0047 the live-voice WebSocket is served on the SAME routed port

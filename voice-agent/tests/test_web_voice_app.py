@@ -233,7 +233,7 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ServerSelectorTest(unittest.TestCase):
-    """The --server selector (TASK-WEB-038) picks stdlib by default, aiohttp on request."""
+    """The --server selector: aiohttp (single port, ADR-0047) by default, stdlib on request."""
 
     def _parse(self, argv, env=None):
         from web_voice.server import _parse_args
@@ -243,16 +243,17 @@ class ServerSelectorTest(unittest.TestCase):
         ):
             return _parse_args()
 
-    def test_defaults_to_stdlib(self) -> None:
+    def test_defaults_to_aiohttp_single_port(self) -> None:
+        # Slice 3 flip (TASK-WEB-038): the single async HTTP+WS server is the default.
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("VOICE_SERVER", None)
-            self.assertEqual(self._parse([]).server, "stdlib")
+            self.assertEqual(self._parse([]).server, "aiohttp")
 
-    def test_flag_selects_aiohttp(self) -> None:
-        self.assertEqual(self._parse(["--server", "aiohttp"]).server, "aiohttp")
+    def test_flag_selects_stdlib(self) -> None:
+        self.assertEqual(self._parse(["--server", "stdlib"]).server, "stdlib")
 
-    def test_env_selects_aiohttp(self) -> None:
-        self.assertEqual(self._parse([], {"VOICE_SERVER": "aiohttp"}).server, "aiohttp")
+    def test_env_selects_stdlib(self) -> None:
+        self.assertEqual(self._parse([], {"VOICE_SERVER": "stdlib"}).server, "stdlib")
 
     def test_rejects_unknown_server(self) -> None:
         with self.assertRaises(SystemExit):

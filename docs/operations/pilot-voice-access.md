@@ -9,11 +9,13 @@ WebRTC page), the deployment topology behind the voice VIP, and why WebRTC media
 does not establish for remote clients (expected — it is a same-subnet/dev path now).
 
 > **Transport direction (ADR-0046, 2026-08-26):** the **WebSocket** audio tunnel
-> (`ws.html`, `wss://<vip>/`, routed by HAProxy to the bridges' `:8091`) is the
-> **primary V1 live voice transport** for web and the substrate for Genesys Audio
-> Connector. **WebRTC is demoted to an optional same-subnet / dev-only path** — it is
-> kept (not deleted) but is not the pilot's remote live path. TASK-WEB-037 tracks the
-> edge wiring; see [ADR-0046](../architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md).
+> (`ws.html`, same-origin `wss://<vip>/ws`, tunnelled by HAProxy to the bridges'
+> routed `:8090` on the existing backend — ADR-0047) is the **primary V1 live voice
+> transport** for web and the substrate for Genesys Audio Connector. **WebRTC is
+> demoted to an optional same-subnet / dev-only path** — it is kept (not deleted) but
+> is not the pilot's remote live path. See
+> [ADR-0046](../architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md)
+> and [ADR-0047](../architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md).
 
 This is an access/runbook note. The signaling contract itself lives in
 [`../architecture/voice-runtime-http-contract.md`](../architecture/voice-runtime-http-contract.md);
@@ -25,25 +27,21 @@ the media-plane decision lives in
 - Environment: pilot `eir-ai4cc-tst` — voice bridges `vla-ai4cc-t01/t02.prod.lan`
   (`.103/.104`), one bridge per VM, behind the voice VIP
   `https://vip-ai4cc-voice-t01.prod.lan/` (`.10`, HAProxy TLS edge).
-- The voice bridge image binds `0.0.0.0:8090` (HTTP) **and** `0.0.0.0:8091` (live
-  WebSocket, ADR-0046). HAProxy terminates TLS on `:443` and routes HTTP to
-  `vla-t01/t02:8090`. **Edge decision (ADR-0047):** the WebSocket will ride the same
-  routed `:8090` once the runtime unifies HTTP+WS on one port (TASK-WEB-038), so
-  HAProxy tunnels the `Upgrade` on the existing backend — **no `:8091` route at the
-  edge**. Until then, `:8091` is exercised **directly** (same-subnet or SSH tunnel),
-  not through the VIP.
+- The voice bridge image runs one async HTTP+WS server bound to `0.0.0.0:8090`
+  (aiohttp, ADR-0047 / TASK-WEB-038): UI + `/api/voice/*` REST + the live WebSocket at
+  `/ws` + WebRTC signaling all on that single routed port. HAProxy terminates TLS on
+  `:443` and routes to `vla-t01/t02:8090`, tunnelling the `Upgrade: websocket` on the
+  existing `voice_bridges` backend — **no `:8091` port and no edge special-case**.
 
 ## Entry Points
 
-The voice bridge serves the HTTP clients (batch + WebRTC signaling/UI) from its
-`:8090` server and the live WebSocket audio from its `:8091` server. The target is a
-**single routed port** (ADR-0047): the browser reaches all of them through the same
-VIP origin once the runtime unifies on one port. Until TASK-WEB-038 lands, the live
-WebSocket is validated **direct-to-bridge** (see [Live-latency test without HAProxy](#live-latency-test-without-haproxy)).
+The voice bridge serves everything — batch HTTP, WebRTC signaling/UI, and the live
+WebSocket audio — from **one async server on the single routed `:8090`** (ADR-0047 /
+TASK-WEB-038), so the browser reaches all of them through the same VIP origin.
 
 | Channel | Browser URL | Signaling / API endpoint | Media |
 |---------|-------------|--------------------------|-------|
-| **Live WebSocket (primary, ADR-0046)** | target: `…/ws.html` on the VIP · interim: `http://<bridge>:8090/ws.html` (direct) | target: `wss://<vip>/` (same origin, tunnelled on the existing backend — ADR-0047) · interim: `ws://<bridge>:8091/` | PCM16/16 kHz over **one WS tunnel** (TCP, no TURN) |
+| **Live WebSocket (primary, ADR-0046)** | `https://<vip>/ws.html` (or `http://<bridge>:8090/ws.html` direct) | same-origin `wss://<vip>/ws` (tunnelled on the existing backend — ADR-0047) | PCM16/16 kHz over **one WS tunnel** (TCP, no TURN) |
 | Batch one-shot (validated) | `https://vip-ai4cc-voice-t01.prod.lan/` (serves `index.html`) | `POST /api/voice/turn` (PCM16 in → full-answer WAV out) | HTTP response body over HTTPS (through HAProxy) |
 | Streaming WebRTC (optional / same-subnet / dev) | `https://vip-ai4cc-voice-t01.prod.lan/webrtc.html` | `POST /api/voice/webrtc/offer` (SDP offer → SDP answer) | RTP/SRTP over **UDP**, peer-to-peer with the answering bridge — **not** through HAProxy; needs same-subnet or STUN/TURN |
 
@@ -52,21 +50,21 @@ Notes:
 - `GET /` returns `index.html` (batch). Any other path is served as a static file,
   so the WebSocket UI is reached at **`/ws.html`** (paired with `ws.js`) and the
   WebRTC UI at **`/webrtc.html`** (paired with `webrtc.js`).
-- `ws.js` connects **same-origin** (`wss://<host>/` on `:443`) when served over HTTPS,
-  so the socket rides the VIP with the page — this is the target (ADR-0047, one routed
-  port). Served over plain HTTP it connects **direct** to `ws://<host>:8091/`;
-  `?wsport=<n>` forces a specific direct port for dev/testing.
+- `ws.js` connects **same-origin** to **`/ws`** — `wss://<host>/ws` over HTTPS (behind
+  the VIP) or `ws://<host>:8090/ws` over plain HTTP (local dev): one routed port carries
+  the page, the REST API and the socket (ADR-0047). `?wsport=<n>` forces a direct
+  `host:port/ws` for dev against a specific bridge (e.g. the legacy stdlib `:8091`).
 - Other endpoints on the same server: `POST /api/voice/stt`, `POST /api/voice/tts`,
   and `GET /api/voice/openapi.yaml`.
 
 ## What Works Today
 
 - **Live WebSocket is the primary transport (ADR-0046).** Audio streams full-duplex
-  (mic PCM16 up, bot PCM16 down) over one WS tunnel, with no TURN. The **target** edge
-  path is `wss://<vip>/` tunnelled on the existing backend once the runtime serves WS on
-  the routed `:8090` (ADR-0047 / TASK-WEB-038 — **no HAProxy change**). Until then, the
-  WS turn is validated **direct-to-bridge** on `:8091` (below); measure one full live
-  turn before declaring the pilot live path GO.
+  (mic PCM16 up, bot PCM16 down) over one WS tunnel, with no TURN. Since TASK-WEB-038
+  the WS rides the **single routed `:8090`** at `/ws`, so the edge path is same-origin
+  `wss://<vip>/ws` tunnelled on the existing backend (**no HAProxy change**). The live
+  edge tunnel + the ADR-0029 re-measure on the single port are pending a pilot deploy of
+  the unified image (TASK-WEB-039 re-score) — verify with the `101` curl below.
 - **Batch one-shot is a validated fallback path.** Open the VIP root, record a
   question, and the full multi-sentence answer is transcribed, answered and spoken
   back in one HTTP turn (validated on `v0.5.2`, BUG-015).
@@ -76,23 +74,21 @@ Notes:
   same-subnet (see below).
 
 <a id="live-latency-test-without-haproxy"></a>
-### Live-latency test without HAProxy (interim, ADR-0047)
+### Live-latency test on the single routed port (ADR-0047)
 
-We do **not** modify the HAProxy config to route the WebSocket: the runtime will fold
-HTTP+WS onto one routed port (TASK-WEB-038) and HAProxy will tunnel the upgrade on the
-existing backend. Until then, drive a real live `ws` turn **direct-to-bridge**, off the
-VIP — the server emits per-call US-036 telemetry on disconnect, scored against the
-ADR-0029 gate. Open an SSH tunnel to a bridge's published `:8091`, then run the headless
-client from a repo checkout:
+Since TASK-WEB-038 the live WS rides the same routed `:8090` at `/ws`, so a real live
+turn is driven over an SSH tunnel to the bridge's HTTP port (no separate `:8091`, no
+HAProxy/TLS needed). The server emits per-call US-036 telemetry on disconnect, scored
+against the ADR-0029 gate:
 
 ```bash
-# terminal 1 — tunnel the bridge's published WS port to localhost
-ssh -i ~/.ssh/id_itsf -N -L 8091:127.0.0.1:8091 grimaud@vla-ai4cc-t01.prod.lan
+# terminal 1 — tunnel the bridge's routed HTTP+WS port to localhost
+ssh -i ~/.ssh/id_itsf -N -L 8090:127.0.0.1:8090 grimaud@vla-ai4cc-t01.prod.lan
 
 # terminal 2 — drive a warm live turn (real Gradium STT/TTS + Mistral on the bridge)
 cd voice-agent
 for i in $(seq 1 12); do
-  .venv/bin/python scripts/ws_live_client.py --url ws://127.0.0.1:8091 \
+  .venv/bin/python scripts/ws_live_client.py --url ws://127.0.0.1:8090/ws \
     --audio fixtures/long/billing-question.pcm --language fr --hold 12
 done
 ```
@@ -100,17 +96,16 @@ done
 The bridge prints one telemetry JSON per call to its container logs
 (`docker logs`/`podman logs`); collect them and score with
 `scripts/streaming_latency_report.py --channel web --provider gradium-streaming --warm`.
-No HAProxy, no TLS, no edge change. (A browser can do the same via
-`http://localhost:8090/ws.html` over the tunnel — plain HTTP → `ws://localhost:8091/`,
-no mixed-content block.)
+(A browser can do the same via `http://localhost:8090/ws.html` over the tunnel — plain
+HTTP → same-origin `ws://localhost:8090/ws`, no mixed-content block.)
 
-Once TASK-WEB-038 lands, verify the target edge path (expects `101 Switching Protocols`
-from a bridge, not the `200` UI page):
+Verify the edge path through the VIP (expects `101 Switching Protocols` from a bridge,
+not the `200` UI page):
 
 ```bash
 curl -sv --http1.1 -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: $(openssl rand -base64 16)" \
-  https://vip-ai4cc-voice-t01.prod.lan/ 2>&1 | grep -i '< HTTP'
+  https://vip-ai4cc-voice-t01.prod.lan/ws 2>&1 | grep -i '< HTTP'
 ```
 
 Verify WebRTC signaling is active on a node (out-of-band, not through the VIP):
@@ -130,15 +125,16 @@ Since ADR-0046 this is **expected, not a defect**: WebRTC is the optional
 same-subnet/dev path and the live pilot uses the WebSocket transport instead.
 Signaling succeeding does **not** mean WebRTC audio flows. On the pilot:
 
-- **HAProxy carries HTTP and (target) the WebSocket tunnel on one routed port**
+- **HAProxy carries HTTP and the WebSocket tunnel on one routed port**
   (HTTPS; ADR-0047 tunnels the upgrade on the existing backend — no special-case).
   WebRTC media is UDP peer-to-peer and never traverses HAProxy — see
   [`../../deploy/haproxy/README.md`](../../deploy/haproxy/README.md).
 - **No STUN/TURN** is configured (`VOICE_STUN` / `VOICE_TURN` are empty) per
   ADR-0042/0046: the pilot intentionally skips TURN and uses the WebSocket
   transport for remote clients (and Genesys Audio Connector for telephony).
-- The voice compose publishes **`8090/tcp` + `8091/tcp`** (WebSocket); the ephemeral
-  UDP media ports chosen during WebRTC ICE are **not** published from the container.
+- The voice compose publishes **`8090/tcp` only** (UI + REST + the `/ws` WebSocket on
+  one routed port); the ephemeral UDP media ports chosen during WebRTC ICE are **not**
+  published from the container.
 
 Consequence: a remote browser can load `/webrtc.html` and complete the SDP
 exchange, but the WebRTC audio stream will not connect. Use **`/ws.html`** for the

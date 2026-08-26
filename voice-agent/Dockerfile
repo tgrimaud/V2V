@@ -1,6 +1,8 @@
 # Voice Support Bot - Python voice bridge image (TASK-DEPLOY-002, ADR-0038).
 # Single-stage on python:3.12-slim: install the heavy WebRTC/media deps
-# (pipecat-ai, aiortc, opencv-python, PyAV) then run the stdlib HTTP server.
+# (pipecat-ai, aiortc, opencv-python, PyAV) then run the single async HTTP+WS
+# server (aiohttp, ADR-0047): UI + REST + the live-voice WebSocket (/ws) + WebRTC
+# signaling all on one routed port (:8090).
 # Binds 0.0.0.0 for remote reachability (code default is 127.0.0.1). Non-root.
 # All runtime configuration is environment-driven (VOICE_BACKEND, VOICE_BACKEND_URL,
 # GRADIUM_API_KEY, VOICE_STUN, VOICE_BACKEND_STREAM, ...); no secret baked in.
