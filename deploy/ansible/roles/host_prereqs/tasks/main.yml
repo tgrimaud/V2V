@@ -100,35 +100,6 @@
     - firewall_port is defined
     - (firewall_allowed_sources | default([])) | length == 0
 
-# Extra tier ports (TASK-WEB-037): e.g. the voice live WebSocket listener on 8091. Opened
-# to the SAME allowed sources as firewall_port (least privilege). The product filter pairs
-# each extra port with each source so one loop covers ports x sources.
-- name: "Open {{ tier }} extra ports/tcp only to allowed sources"
-  ansible.builtin.command:
-    argv:
-      - firewall-cmd
-      - --permanent
-      - '--add-rich-rule=rule family="ipv4" source address="{{ item.1 }}" port port="{{ item.0 }}" protocol="tcp" accept'
-  register: fw_extra_rich
-  changed_when: "'ALREADY_ENABLED' not in fw_extra_rich.stderr and 'ALREADY_ENABLED' not in fw_extra_rich.stdout"
-  loop: "{{ (firewall_extra_ports | default([])) | product(firewall_allowed_sources | default([])) | list }}"
-  when:
-    - firewalld_state.stdout == 'active'
-    - (firewall_extra_ports | default([])) | length > 0
-    - (firewall_allowed_sources | default([])) | length > 0
-
-# Fallback: extra ports with no source list -> open to everyone.
-- name: "Open {{ tier }} extra ports/tcp in firewalld (unscoped fallback)"
-  ansible.builtin.command:
-    cmd: "firewall-cmd --permanent --add-port={{ item }}/tcp"
-  register: fw_extra_add
-  changed_when: "'ALREADY_ENABLED' not in fw_extra_add.stderr and 'ALREADY_ENABLED' not in fw_extra_add.stdout"
-  loop: "{{ firewall_extra_ports | default([]) }}"
-  when:
-    - firewalld_state.stdout == 'active'
-    - (firewall_extra_ports | default([])) | length > 0
-    - (firewall_allowed_sources | default([])) | length == 0
-
 - name: "Reload firewalld to apply the permanent rule"
   ansible.builtin.command:
     cmd: "firewall-cmd --reload"

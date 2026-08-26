@@ -3377,17 +3377,17 @@ and it already returns the whole WAV at once, so base64 buffering is a non-issue
 
 **Parent:** EPIC-006 (Voice2Voice foundation)
 **Decision:** [ADR-0046](../../docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md) (Accepted 2026-08-26, supersedes ADR-0033). Adversarial review: `docs/architecture/reviews/websocket-primary-transport-adversarial-review-2026-08-26.md`.
-**Depends on / bundles:** TASK-INFRA-010 (HAProxy `wss` edge routing — now on the V1 critical path).
+**Depends on / bundles:** ~~TASK-INFRA-010 (HAProxy `wss` edge routing)~~ — **dropped 2026-08-26** (ADR-0047): no HAProxy change; the WS folds onto the single routed port (TASK-WEB-038).
 **Classification:** V1 voice runtime + edge wiring (runtime-affecting: adds/updates the live transport path).
-**Status:** 🔧 In progress — code + edge reference config implemented (2026-08-26) on branch `task/TASK-WEB-037-websocket-primary-transport`. Remaining before GO: the platform applies the HAProxy `voice_ws` route on the real LB, then **one live `wss` turn is measured** end-to-end. Scope items 1–5 done in-repo; item 2's live tunnelling + the acceptance measurement are the only open points (LB is platform-managed).
+**Status:** 🔧 In progress — **edge-routing sub-scope reverted (decision 2026-08-26, [ADR-0047](../../docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md)).** The user chose the option that avoids touching the HAProxy config: rather than a `voice_ws` edge special-case, the runtime will unify HTTP+WS on one routed port (TASK-WEB-038), and HAProxy tunnels the upgrade on the existing `voice_bridges` backend. This ticket now keeps only the transport-agnostic bits (same-origin `ws.js` + WebRTC demotion + interim `:8091` publish for a **direct-to-bridge** live test); the HAProxy `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` have been removed. Remaining before GO: **one live `ws` turn measured direct-to-bridge** (no HAProxy) per `docs/operations/pilot-voice-access.md` → *Live-latency test without HAProxy*.
 
 **Implemented (2026-08-26):**
-- **`ws.js` same-origin** (item 1): served over HTTPS → connects `wss://<host>/` on :443 (edge-routed); plain HTTP dev → direct `:8091`; `?wsport=<n>` forces a direct port. `voice-agent/web_voice/static/ws.js::wsUrl()`.
-- **HAProxy edge route** (item 2, TASK-INFRA-010): `acl is_voice_ws hdr(Upgrade) -i websocket` → new `backend voice_ws` (`balance source` call affinity, TCP-check, `vla-t01/t02:8091`); global `timeout tunnel 1h` holds the call. `deploy/haproxy/haproxy.cfg` + README + `qa-validate-haproxy.sh` (38/38, `haproxy -c` valid). The `Upgrade` request arrives as HTTP/1.1 (browsers don't h2-tunnel `new WebSocket`), so it matches on the `h2,http/1.1` bind — documented curl `101` check for the platform to confirm live.
-- **Publish/allow 8091** (item 3): compose publishes `:8091`; `voice_ws_port`/`VOICE_WS_PORT` wired group_vars → `voice.env.j2` → compose → container; `host_prereqs` opens 8091 to the same LB sources via `firewall_extra_ports` (no-op where firewalld is inactive). Ansible QA 76/76.
+- **`ws.js` same-origin** (item 1, kept): served over HTTPS → connects `wss://<host>/` on :443 (the target single routed port, ADR-0047); plain HTTP → direct `ws://<host>:8091/`; `?wsport=<n>` forces a direct port. `voice-agent/web_voice/static/ws.js::wsUrl()`.
+- **~~HAProxy edge route~~ (item 2, REVERTED 2026-08-26, ADR-0047):** the `acl is_voice_ws` + `backend voice_ws` (:8091) special-case was removed from `deploy/haproxy/haproxy.cfg` / README / `qa-validate-haproxy.sh`. Decision: avoid touching HAProxy — the WS tunnels on the existing backend once HTTP+WS share one port (TASK-WEB-038). QA now asserts the *absence* of a `voice_ws` route.
+- **Publish 8091** (item 3, kept as interim): compose publishes `:8091`; `voice_ws_port`/`VOICE_WS_PORT` wired group_vars → `voice.env.j2` → compose → container — so a same-subnet / SSH-tunnel client can drive a direct `ws://<bridge>:8091` turn. The `firewall_extra_ports:[8091]` LB opening was **reverted** (no edge routing → not needed); QA asserts its absence. Removed by TASK-WEB-038 once WS moves to :8090.
 - **Demote WebRTC** (item 4): labelled optional/same-subnet/dev in `pilot-voice-access.md`, `haproxy/README.md`, ADR-0046 and an in-page banner on `webrtc.html` (links to `/ws.html`). Kept, not deleted.
 - **Observability** (item 5): the WS path reuses the shared streaming session core with `transport_label="websocket"` stamped on the channel-egress span; all US-036 slices (ingress via `stt.audio.accept`/`web.voice.ingress`, STT, backend first-token, TTS first-audio, egress) already emit under one correlation id (TASK-WEB-030). No code change; a live turn just needs measuring.
-- Validation: voice-agent **568 unit + 46 behave** green; `haproxy -c` valid (38/38 QA); Ansible **76/76** + `deploy.yml`/`prereqs.yml` syntax-check clean.
+- Validation: voice-agent **568 unit + 46 behave** green; `haproxy -c` valid (QA asserts no `voice_ws` route); Ansible QA + `deploy.yml`/`prereqs.yml` syntax-check clean (WS firewall assertions replaced by absence checks per ADR-0047).
 
 **Original status:** 📋 Planned — created 2026-08-26 from the WebRTC-vs-WebSocket transport decision (A); branch initially carried the ADR + review + this ticket (docs only).
 
@@ -3450,7 +3450,7 @@ Scenario: A remote browser completes a live voice turn over wss through the edge
 
 **Parent:** EPIC-006 (Voice2Voice foundation)
 **Decision:** [ADR-0047](../../docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md) (Accepted target 2026-08-26, refines ADR-0022 under ADR-0046).
-**Relationship:** Makes **TASK-WEB-037 / TASK-INFRA-010** the *interim bridge* and this ticket the *destination*: once HTTP + WS share one routed port, the HAProxy `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` become removable and the platform-team edge dependency disappears.
+**Relationship:** This ticket is the *destination* of the WebSocket-primary decision. The user chose to **avoid touching HAProxy** (decision 2026-08-26): TASK-WEB-037's `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` were already **reverted**, so this ticket now *delivers* the single routed port that makes HAProxy tunnel the upgrade natively (no edge special-case, no platform-team dependency). TASK-WEB-037 keeps only the same-origin `ws.js` + WebRTC demotion + the interim `:8091` publish used for the direct-to-bridge live-latency test.
 **Classification:** V1 voice runtime (runtime-affecting: changes the serving layer of the primary live transport).
 **Status:** 📋 Planned — opened 2026-08-26 from the "should we do the async refactor now?" decision (ADR-0047). Not started; begins with a spike.
 
@@ -3460,8 +3460,9 @@ The runtime today runs **two servers on two ports** (ADR-0022): a stdlib `Thread
 on `:8090` (UI + `/api/voice/*` REST + WebRTC signaling) and Pipecat's
 `SingleClientWebsocketServerTransport` on `:8091` (live PCM16 audio). ADR-0046 made WebSocket
 the **primary** transport, which turned the two-port split into a liability: it forces a
-platform-managed HAProxy special-case to route the WS port (TASK-WEB-037), caps concurrency at
-**one call per bridge** (single-client-per-listener), and grows the deploy surface. The business
+platform-managed HAProxy special-case to route the WS port (which is exactly why that route was
+reverted — decision 2026-08-26), caps concurrency at **one call per bridge**
+(single-client-per-listener), and grows the deploy surface. The business
 logic is already transport-neutral (ADR-0043 session factory) and **one asyncio loop already
 exists** (`web_voice/async_loop.py`); the stdlib HTTP server is the blocker.
 
@@ -3481,9 +3482,10 @@ exists** (`web_voice/async_loop.py`); the stdlib HTTP server is the blocker.
    lifting the single-client cap; keep a configurable per-bridge ceiling for backpressure.
 5. **WebRTC (dev-only, ADR-0046):** re-home its signaling into the async app **or** keep it
    behind the import guard; it must not be on the primary path.
-6. **Edge cleanup:** remove the TASK-WEB-037 `voice_ws` ACL/backend + `firewall_extra_ports`
-   once one routed port is confirmed to tunnel the upgrade through HAProxy `mode http`; update
-   `deploy/haproxy/haproxy.cfg` + `qa-validate-haproxy.sh` + `deploy/haproxy/README.md`.
+6. **Edge:** the `voice_ws` ACL/backend + `firewall_extra_ports` were **already reverted**
+   (decision 2026-08-26); this ticket only has to **confirm live** that the single routed port
+   tunnels the upgrade through HAProxy `mode http` (the `101` curl in `pilot-voice-access.md`),
+   then retire the now-interim `:8091` publish + `VOICE_WS_PORT` from compose/group_vars.
 7. **Observability:** the US-036 slices (TASK-WEB-030) must keep emitting under one correlation
    id on the unified path; `transport_label="websocket"` preserved.
 

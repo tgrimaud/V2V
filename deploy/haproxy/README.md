@@ -6,31 +6,38 @@ Keepalived (VRRP).
 
 > Topology & ports: [`docs/operations/deployment-eir-ai4cc-tst.md`](../../docs/operations/deployment-eir-ai4cc-tst.md).
 > Decisions: ADR-0038 (remote topology), ADR-0046 (WebSocket primary transport,
-> supersedes ADR-0033).
+> supersedes ADR-0033), ADR-0047 (single async HTTP+WS server on one port — **no
+> WebSocket-specific HAProxy route**).
 
 ## What HAProxy does — and does not do
 
 | VIP | Bind | Role | Backends | Health check |
 |-----|------|------|----------|--------------|
-| Voice `.10` | `:443` (TLS) | TLS edge + L7 LB: web UI + WebRTC signaling → `voice_bridges`; live voice WebSocket (`Upgrade: websocket`) → `voice_ws` | `vla-t01/t02:8090` (HTTP) + `:8091` (WS) | `GET /` → 200 (HTTP); TCP connect (WS) |
+| Voice `.10` | `:443` (TLS) | TLS edge + L7 LB: web UI + WebRTC signaling + live voice WebSocket, all → `voice_bridges` on one routed port | `vla-t01/t02:8090` | `GET /` → 200 |
 | Backend `.11` | `:80` | internal L7 LB for the conversation API | `vla-t03/t04:8080` | `GET /actuator/health` → 200 (deep: DB + Redis) |
 
-**Live voice now flows THROUGH HAProxy over a WebSocket tunnel (ADR-0046,
-TASK-WEB-037).** The primary V1 transport is a single `wss` connection: a browser
-`new WebSocket(...)` (and, later, Genesys Audio Connector) opens an HTTP/1.1
-request with `Upgrade: websocket`, which the voice frontend matches (`acl
-is_voice_ws hdr(Upgrade) -i websocket`) and routes to the `voice_ws` backend on
-`:8091`. `balance source` pins a call to one bridge (the socle WS transport is
-single-client per listener, ADR-0043) and the global `timeout tunnel 1h` holds the
-socket open for the whole call. This is TCP — **no TURN/UDP** is involved.
+**Live voice flows THROUGH HAProxy over a WebSocket tunnel, with no special-case
+route (ADR-0046 primary transport + ADR-0047 single port).** Once the runtime serves
+HTTP and the live-voice WebSocket on **one routed port** (`:8090`, TASK-WEB-038), a
+browser `new WebSocket(...)` (and, later, Genesys Audio Connector) opens an HTTP/1.1
+`Connection: upgrade` that HAProxy in `mode http` **tunnels on the existing
+`voice_bridges` backend** using the global `timeout tunnel 1h` — **no ACL, no second
+backend, no LB config change, no platform dependency.** The WebSocket is one
+long-lived connection routed once at handshake and held for the whole call. This is
+TCP — **no TURN/UDP**.
 
-**HAProxy still does NOT carry WebRTC media.** WebRTC is now an **optional,
-same-subnet / dev-only** path (ADR-0046). The SDP offer (`POST
-/api/voice/webrtc/offer`) and the UI go through HAProxy over HTTPS, but the WebRTC
-audio is RTP/SRTP over **UDP**, negotiated peer-to-peer with the bridge that
-answered the offer — it never traverses HAProxy. Off-subnet WebRTC clients would
-need **STUN/TURN**, which V1 deliberately avoids by using the WebSocket transport
-instead. Use WebRTC only for local/same-subnet development.
+> Decision (2026-08-26, ADR-0047): we deliberately do **not** add a WebSocket port
+> route here. An earlier interim design (TASK-WEB-037) routed a separate `:8091` WS
+> backend; it was dropped in favour of unifying the runtime on one port, which removes
+> both the edge special-case and the platform-team dependency.
+
+**HAProxy does NOT carry WebRTC media.** WebRTC is now an **optional, same-subnet /
+dev-only** path (ADR-0046). The SDP offer (`POST /api/voice/webrtc/offer`) and the UI
+go through HAProxy over HTTPS, but the WebRTC audio is RTP/SRTP over **UDP**,
+negotiated peer-to-peer with the bridge that answered the offer — it never traverses
+HAProxy. Off-subnet WebRTC clients would need **STUN/TURN**, which V1 deliberately
+avoids by using the WebSocket transport instead. Use WebRTC only for local/same-subnet
+development.
 
 > Voice entry points (batch one-shot vs streaming WebRTC), how to verify signaling
 > live, and how to test/enable WebRTC media are documented in
@@ -221,10 +228,11 @@ The live voice WebSocket (ADR-0046) is **unaffected by this h2 concern**: browse
 never negotiate the WebSocket over HTTP/2 for `new WebSocket(...)` — they open a
 **separate HTTP/1.1** connection carrying `Upgrade: websocket` + `Connection:
 Upgrade`. So even though the `bind` advertises `h2,http/1.1`, the socket arrives as
-http/1.1 and the `hdr(Upgrade) -i websocket` ACL matches. (RFC 8441 h2-tunnelled
-WebSocket is not initiated by browsers here.) Verify once live: `curl -sv --http1.1
--H "Connection: Upgrade" -H "Upgrade: websocket" ... https://<voice-vip>/` should get
-a `101 Switching Protocols` from a bridge, not a `200`/UI page.
+http/1.1 and HAProxy `mode http` tunnels it on the existing `voice_bridges` backend
+(no special-case route — ADR-0047). (RFC 8441 h2-tunnelled WebSocket is not initiated
+by browsers here.) Verify once the runtime serves WS on the routed port: `curl -sv
+--http1.1 -H "Connection: Upgrade" -H "Upgrade: websocket" ... https://<voice-vip>/`
+should get a `101 Switching Protocols` from a bridge, not a `200`/UI page.
 
 ## Open inputs (confirm with the platform team)
 
@@ -233,9 +241,10 @@ a `101 Switching Protocols` from a bridge, not a `200`/UI page.
 - **VRRP auth secret** (`CHANGE_ME_VRRP`).
 - Voice **Prod IP** `10.195.59.39` → private VIP `.10` mapping (platform NAT).
 - **TLS certificate** issuance for the voice VIP FQDN.
-- **WebSocket upgrade** end-to-end through the `.10:443` `h2,http/1.1` edge to
-  `voice_ws` (`:8091`) — confirm live with the `101 Switching Protocols` curl above
-  (ADR-0046, TASK-WEB-037 / TASK-INFRA-010).
+- **WebSocket upgrade** end-to-end through the `.10:443` `h2,http/1.1` edge, tunnelled
+  on the existing `voice_bridges` backend (no `voice_ws` route — ADR-0047) once the
+  runtime serves WS on the routed `:8090` (TASK-WEB-038) — confirm live with the `101
+  Switching Protocols` curl above.
 - **STUN/TURN** is **no longer on the V1 path** (ADR-0046 uses the WebSocket
   transport instead); only needed if off-subnet WebRTC (optional/dev) is ever
   revived.

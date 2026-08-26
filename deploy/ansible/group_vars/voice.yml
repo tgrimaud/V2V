@@ -9,23 +9,22 @@ health_url: "http://127.0.0.1:8090/"
 
 voice_bind: "0.0.0.0"
 voice_port: 8090
-# Live voice WebSocket port (ADR-0046, TASK-WEB-037): the primary V1 transport. The VIP
-# tunnels `wss` upgrades here; published by the compose alongside 8090.
+# Live voice WebSocket port (ADR-0046). Interim: the runtime serves the WS on this
+# separate listener and the compose publishes it so a same-subnet / SSH-tunnel client can
+# drive a direct `ws://<bridge>:8091` turn (live-latency test, no HAProxy). ADR-0047
+# folds this into the single routed :8090 (TASK-WEB-038), after which this goes away.
 voice_ws_port: 8091
 
-# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003). Only 8090 is
+# edge-facing: per ADR-0047 the live-voice WebSocket is served on the SAME routed port
+# (no separate :8091 at the edge), so no extra firewall opening is needed for it.
 firewall_port: 8090
 
-# Least privilege (TASK-OPS-004): 8090 (HTTP/signaling) and 8091 (live voice WebSocket,
-# ADR-0046) are reached ONLY by the HAProxy LB nodes (voice VIP .10 -> t01/t02).
-# Source-scoped firewalld rich rules; empty list = open to all.
+# Least privilege (TASK-OPS-004): 8090 is reached ONLY by the HAProxy LB nodes
+# (voice VIP .10 -> t01/t02). Source-scoped firewalld rich rules; empty = open to all.
 firewall_allowed_sources:
   - "192.168.0.100/32"   # vlp-t01 HAProxy
   - "192.168.0.101/32"   # vlp-t02 HAProxy
-# Extra tier ports opened to the same allowed sources (host_prereqs, TASK-WEB-037):
-# the live voice WebSocket listener. firewall_port stays the tier's primary (8090).
-firewall_extra_ports:
-  - 8091
 
 # Conversation backend. VOICE_BACKEND_URL is the backend *server base* URL (BUG-013):
 # the bridge appends /api/conversation/converse and derives the /converse-stream and

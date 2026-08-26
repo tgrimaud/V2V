@@ -242,18 +242,18 @@ ansible localhost -c local -m ansible.builtin.template \
 grep -q '^OTEL_EXPORTER_OTLP_ENDPOINT=http://obs.tst:4318$' "${TMP}/v_on.env" \
   && ok "voice export ON points OTEL_EXPORTER_OTLP_ENDPOINT at the collector" || bad "voice export-ON render wrong"
 
-# --- 14. Live voice WebSocket transport wiring (TASK-WEB-037, ADR-0046) -------
-# The primary V1 transport is a WebSocket tunnel on :8091. The port must flow
-# group_vars -> template -> compose (published) -> container, and the firewall role
-# must open 8091 to the same LB sources as 8090.
+# --- 14. Live voice WebSocket port wiring (ADR-0046 / ADR-0047) ---------------
+# The runtime serves the live WebSocket on :8091 (interim, for a direct same-subnet /
+# SSH-tunnel latency test). The port must flow group_vars -> template -> compose
+# (published) -> container. Per ADR-0047 there is NO separate edge firewall opening
+# for it: the WS is tunnelled on the same routed :8090, so firewall_extra_ports is not
+# used (asserted absent to avoid dead least-privilege config).
 grep -Eq '^voice_ws_port: 8091' "$VOICE_VARS" && ok "group_vars declares voice_ws_port 8091" || bad "group_vars missing voice_ws_port"
 grep -q '^VOICE_WS_PORT={{ voice_ws_port }}' "$VOICE_TPL" && ok "voice template renders VOICE_WS_PORT" || bad "voice template missing VOICE_WS_PORT"
-grep -Eq ':\$\{VOICE_WS_PORT:-8091\}:8091' "$VOICE_COMPOSE" && ok "compose publishes the WS port 8091" || bad "compose does not publish 8091"
+grep -Eq ':\$\{VOICE_WS_PORT:-8091\}:8091' "$VOICE_COMPOSE" && ok "compose publishes the WS port 8091 (interim direct test)" || bad "compose does not publish 8091"
 grep -q '^VOICE_WS_PORT=8091' "$VOICE_EXAMPLE" && ok ".env.example lists VOICE_WS_PORT" || bad ".env.example missing VOICE_WS_PORT"
-# Least privilege: 8091 opened only to the LB sources (firewall_extra_ports), like 8090.
-grep -q '^firewall_extra_ports:' "$VOICE_VARS" && grep -A2 '^firewall_extra_ports:' "$VOICE_VARS" | grep -q '8091' \
-  && ok "group_vars scopes 8091 via firewall_extra_ports" || bad "firewall_extra_ports missing 8091"
-grep -q 'firewall_extra_ports' roles/host_prereqs/tasks/main.yml && ok "host_prereqs opens firewall_extra_ports (source-scoped)" || bad "host_prereqs does not handle firewall_extra_ports"
+! grep -q '^firewall_extra_ports:' "$VOICE_VARS" && ! grep -q 'firewall_extra_ports' roles/host_prereqs/tasks/main.yml \
+  && ok "no firewall_extra_ports dead config (ADR-0047: WS tunnels on the routed :8090)" || bad "stale firewall_extra_ports present (dropped per ADR-0047)"
 # The rendered .env must actually carry the WS port (default render, export irrelevant).
 ansible localhost -c local -m ansible.builtin.template \
   -a "src=roles/compose_tier/templates/voice.env.j2 dest=${TMP}/v_ws.env mode=0600" \
