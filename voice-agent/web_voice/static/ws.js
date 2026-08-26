@@ -65,8 +65,8 @@ function wsUrl() {
   // the page at `/ws` — one port carries the page, the REST API and the socket. Behind the
   // TLS edge HAProxy routes the `Upgrade: websocket` request to the bridge on the existing
   // backend (no edge special-case, no TURN/UDP); over plain HTTP (local dev) it is the same
-  // host:port the page came from. `?wsport=<n>` forces a direct host:port for dev against a
-  // specific bridge (e.g. the legacy stdlib :8091 listener).
+  // host:port the page came from. `?wsport=<n>` forces a direct host:port/ws for dev against
+  // a specific bridge (bypassing the VIP), e.g. `?wsport=8090` straight at one node.
   if (override) {
     return `${scheme}://${window.location.hostname || "127.0.0.1"}:${override}/ws?language=${lang}`;
   }

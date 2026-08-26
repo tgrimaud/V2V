@@ -28,6 +28,7 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT))
 from aiohttp import WSMsgType, web  # noqa: E402
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 from pipecat.frames.frames import (  # noqa: E402
+    EndFrame,
     Frame,
     InputAudioRawFrame,
     OutputTransportMessageUrgentFrame,
@@ -68,6 +69,21 @@ async def _wait_for(predicate, *, timeout: float = 10.0) -> None:
         if loop.time() > deadline:
             raise AssertionError("timed out waiting for condition")
         await asyncio.sleep(0.02)
+
+
+async def _collect_binary(websocket, *, minimum: int, timeout: float = 5.0) -> bytes:
+    """Read binary WS frames until at least `minimum` bytes arrive (or timeout/close)."""
+    received = bytearray()
+    try:
+        while len(received) < minimum:
+            message = await asyncio.wait_for(websocket.receive(), timeout=timeout)
+            if message.type == WSMsgType.BINARY:
+                received.extend(message.data)
+            elif message.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED):
+                break
+    except asyncio.TimeoutError:
+        pass
+    return bytes(received)
 
 
 # --------------------------------------------------------------------------- #
@@ -257,6 +273,100 @@ class _FakeFactory:
         self.sessions.append(session)
         self.transports.append(transport)
         return session, None
+
+
+class _AudioEcho(FrameProcessor):
+    """Turns each inbound mic audio frame into an outbound bot audio frame (a minimal turn)."""
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if isinstance(frame, InputAudioRawFrame):
+            await self.push_frame(
+                TTSAudioRawFrame(
+                    audio=frame.audio, sample_rate=frame.sample_rate, num_channels=1
+                ),
+                FrameDirection.DOWNSTREAM,
+            )
+        else:
+            await self.push_frame(frame, direction)
+
+
+class _EchoSession:
+    """A real pipecat pipeline session (transport in -> echo -> transport out) built by the
+    handler exactly like a StreamingVoiceSession, so the aiohttp /ws lifecycle is exercised
+    end-to-end (accept -> build transport -> factory.build_session -> run -> drain)."""
+
+    def __init__(self, transport) -> None:
+        self._task = _pipeline_task(Pipeline([transport.input(), _AudioEcho(), transport.output()]))
+
+    async def run(self) -> None:
+        await PipelineRunner(handle_sigint=False).run(self._task)
+
+    async def drain(self) -> None:
+        # Peer disconnect -> the handler drains; queue an EndFrame so run() returns gracefully.
+        await self._task.queue_frame(EndFrame())
+
+    async def stop(self) -> None:
+        await self._task.cancel()
+
+
+class _EchoFactory:
+    def __init__(self) -> None:
+        self.sessions: list[_EchoSession] = []
+
+    def build_session(self, transport, envelope, telemetry):
+        session = _EchoSession(transport)
+        self.sessions.append(session)
+        return session, None
+
+
+class WsFullTurnTest(unittest.IsolatedAsyncioTestCase):
+    """End-to-end over the REAL aiohttp /ws handler: a real transport + real pipeline session
+    built by make_ws_handler, driven over a real socket. Proves the shipped default live path
+    (ADR-0047, TASK-WEB-038 slice 3) carries audio both ways and serves N callers at once."""
+
+    async def _serve(self, handler) -> TestClient:
+        app = web.Application()
+        app.router.add_get("/ws", handler)
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        self.addAsyncCleanup(client.close)
+        return client
+
+    async def test_full_turn_over_ws_handler_returns_bot_audio(self) -> None:
+        # GIVEN the real handler wiring a per-connection echo session (a minimal turn)
+        factory = _EchoFactory()
+        handler = make_ws_handler(factory, max_sessions=2)
+        client = await self._serve(handler)
+        websocket = await client.ws_connect("/ws?language=fr")
+        # WHEN the caller streams mic PCM16 up
+        peak = 1500
+        await websocket.send_bytes(_pcm(500, peak))
+        # THEN the bot's audio comes back down the SAME socket as binary PCM16
+        received = await _collect_binary(websocket, minimum=320)
+        self.assertGreater(len(received), 0)
+        self.assertEqual(set(array.array("h", received)), {peak})
+        self.assertEqual(len(factory.sessions), 1)
+        await websocket.close()
+
+    async def test_two_concurrent_callers_each_get_their_own_bot_audio(self) -> None:
+        # GIVEN a handler that admits two concurrent sessions (single-client cap lifted, 1->N)
+        factory = _EchoFactory()
+        handler = make_ws_handler(factory, max_sessions=2)
+        client = await self._serve(handler)
+        first = await client.ws_connect("/ws")
+        second = await client.ws_connect("/ws")
+        # WHEN both callers stream distinct audio at the same time
+        await first.send_bytes(_pcm(300, 111))
+        await second.send_bytes(_pcm(300, 222))
+        got_first = await _collect_binary(first, minimum=320)
+        got_second = await _collect_binary(second, minimum=320)
+        # THEN each caller gets its OWN answer back (no cross-talk), and both sessions were built
+        self.assertEqual(set(array.array("h", got_first)), {111})
+        self.assertEqual(set(array.array("h", got_second)), {222})
+        self.assertEqual(len(factory.sessions), 2)
+        await first.close()
+        await second.close()
 
 
 class WsHandlerLifecycleTest(unittest.IsolatedAsyncioTestCase):
