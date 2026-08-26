@@ -160,6 +160,9 @@ class _AiohttpMessageIterator:
     """Async iterator yielding binary (bytes) / text (str) messages, stopping on close."""
 
     _DATA_TYPES = {WSMsgType.BINARY, WSMsgType.TEXT}
+    # aiohttp auto-responds to PING (autoping=True) and surfaces PONG; these are not
+    # data and must NOT end the receive stream — only a real close/error does.
+    _IGNORED_TYPES = {WSMsgType.PING, WSMsgType.PONG}
 
     def __init__(self, websocket: web.WebSocketResponse) -> None:
         self._ws = websocket
@@ -172,7 +175,9 @@ class _AiohttpMessageIterator:
             message = await self._ws.receive()
             if message.type in self._DATA_TYPES:
                 return message.data
-            # CLOSE / CLOSING / CLOSED / ERROR (and any non-data control) end the stream.
+            if message.type in self._IGNORED_TYPES:
+                continue
+            # CLOSE / CLOSING / CLOSED / ERROR end the stream.
             raise StopAsyncIteration
 
 
@@ -505,12 +510,20 @@ async def _serve_connection(
     _emit_gauge(telemetry, cid, active.count, max_sessions, "accepted")
     try:
         await session.run()
+    except asyncio.CancelledError:
+        # Server shutdown mid-call: re-raise after the finally runs the accounting + dump.
+        raise
+    except Exception:  # noqa: BLE001 - one failed turn must not raise out of the aiohttp handler
+        _logger.error("ws session run failed", exc_info=True)
     finally:
-        await _safe_stop(session)
+        # Accounting + telemetry dump run FIRST and unconditionally, so a CancelledError
+        # from the stop below (BaseException, not caught by `except Exception`) can never
+        # skip freeing the capacity slot or dumping the call evidence.
         active.count = max(0, active.count - 1)
         telemetry.record(CLIENT_DISCONNECTED_EVENT, correlation_id=cid)
         _emit_gauge(telemetry, cid, active.count, max_sessions, "closed")
         log(telemetry)
+        await _safe_stop(session)
 
 
 def _wire_disconnect_drain(transport: AiohttpWebsocketTransport, session: Any) -> None:

@@ -32,6 +32,7 @@ from pipecat.frames.frames import (  # noqa: E402
     InputAudioRawFrame,
     OutputTransportMessageUrgentFrame,
     StartFrame,
+    TTSAudioRawFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline  # noqa: E402
 from pipecat.pipeline.runner import PipelineRunner  # noqa: E402
@@ -104,6 +105,26 @@ class _EmitOnStart(FrameProcessor):
             await self.push_frame(self._frame, FrameDirection.DOWNSTREAM)
 
 
+class _EmitAudioOnStart(FrameProcessor):
+    """Pushes one TTS audio frame downstream once the pipeline starts."""
+
+    def __init__(self, audio: bytes, *, sample_rate: int = 16000) -> None:
+        super().__init__()
+        self._audio = audio
+        self._sample_rate = sample_rate
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        await self.push_frame(frame, direction)
+        if isinstance(frame, StartFrame):
+            await self.push_frame(
+                TTSAudioRawFrame(
+                    audio=self._audio, sample_rate=self._sample_rate, num_channels=1
+                ),
+                FrameDirection.DOWNSTREAM,
+            )
+
+
 def _pipeline_task(pipeline: Pipeline) -> PipelineTask:
     return PipelineTask(
         pipeline,
@@ -150,6 +171,34 @@ class AiohttpWebsocketTransportTest(unittest.IsolatedAsyncioTestCase):
         capture = client.app["captured"]
         await _wait_for(capture.got.is_set)
         self.assertEqual(bytes(capture.audio), payload)
+        await websocket.close()
+
+    async def test_tts_audio_frame_reaches_the_client_as_binary_pcm(self) -> None:
+        # GIVEN a pipeline that emits a TTS audio frame toward the transport output
+        peak = 2000
+        payload = _pcm(500, peak)  # 500ms overshoots any single audio chunk size
+
+        def build(transport: AiohttpWebsocketTransport):
+            emit = _EmitAudioOnStart(payload)
+            return Pipeline([transport.input(), emit, transport.output()]), None
+
+        client = await self._serve(build)
+        websocket = await client.ws_connect("/ws")
+        # WHEN the output serializes the audio and writes it to the socket
+        received = bytearray()
+        try:
+            while len(received) < len(payload):
+                message = await asyncio.wait_for(websocket.receive(), timeout=3)
+                if message.type == WSMsgType.BINARY:
+                    received.extend(message.data)
+                elif message.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED):
+                    break
+        except asyncio.TimeoutError:
+            pass
+        # THEN the client receives real PCM16 bytes (write_audio_frame -> serialize -> send_bytes)
+        self.assertGreater(len(received), 0)
+        self.assertEqual(len(received) % 2, 0)
+        self.assertEqual(set(array.array("h", bytes(received))), {peak})
         await websocket.close()
 
     async def test_output_control_frame_reaches_the_client_as_json_text(self) -> None:
@@ -332,6 +381,32 @@ class WsMaxSessionsConfigTest(unittest.TestCase):
         self.assertEqual(ws_async_max_sessions_config(), DEFAULT_MAX_WS_SESSIONS_ASYNC)
         os.environ["VOICE_MAX_WS_SESSIONS"] = "5"
         self.assertEqual(ws_async_max_sessions_config(), 5)
+
+
+class BuildWsHandlerBranchTest(unittest.TestCase):
+    """server.py `_build_ws_handler`: `--websocket off` disables `/ws`; auto/on enable it."""
+
+    @staticmethod
+    def _args(websocket: str):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            websocket=websocket, stt_mode="batch", tts_mode="batch", provider="fixture"
+        )
+
+    def test_websocket_off_yields_no_handler(self) -> None:
+        from web_voice.server import _build_ws_handler
+
+        handler = _build_ws_handler(self._args("off"), object(), object(), object())
+        self.assertIsNone(handler)
+
+    def test_websocket_auto_and_on_yield_a_callable_handler(self) -> None:
+        from web_voice.server import _build_ws_handler
+
+        for mode in ("auto", "on"):
+            with self.subTest(mode=mode):
+                handler = _build_ws_handler(self._args(mode), object(), object(), object())
+                self.assertTrue(callable(handler))
 
 
 if __name__ == "__main__":
