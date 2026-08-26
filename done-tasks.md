@@ -996,3 +996,31 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `docs/qa/task-web-039-ws-live-latency-evidence.md` + `.json` — latency evidence report
 - `voice-agent/spikes/aiohttp_one_port/{server,verify}.py`, `static/index.html`, `README.md` — spike
 - `CLAUDE.md` / `AGENTS.md` — knowledge capture (this session)
+
+## 2026-08-26 — Merge TASK-WEB-037/038 + release v0.7.0 + deploy to eir-ai4cc-tst
+
+**Summary:**
+
+- Merged `task/TASK-WEB-038-aiohttp-one-port` (which carries `TASK-WEB-037`) into
+  `feat/restart-from-scratch` with `--no-ff` — integrates the WebSocket-primary live voice
+  transport (ADR-0046) and the single async HTTP+WS server on one routed port (ADR-0047,
+  aiohttp, now the **default** runtime; interim `:8091` retired; live concurrency lifted 1→N
+  via `VOICE_MAX_WS_SESSIONS`). Suite at merge: 601 unit + 46 behave green.
+- Cut and pushed tag **`v0.7.0`** → CI `images.yml` published `ghcr.io/tgrimaud/voice-support-{voice,backend}:0.7.0`.
+- Deployed **all tiers** to eir-ai4cc-tst via Ansible at `image_tag=0.7.0`: redis + backend
+  (normal gates, backend loopback `/actuator/health` 200) then voice (rolling, drained). The
+  voice HTTP health gate was run with `-e health_url=""` because it probes `127.0.0.1:8090`
+  and hits the documented podman host→loopback false-negative (TASK-INFRA-011, not yet on this
+  branch); verified out-of-band on the host LAN IP instead.
+- **Out-of-band verification, both voice nodes (t01/t02):** image `…/voice-support-voice:0.7.0`,
+  container `healthy`, `GET /` → 200, boot line `server=aiohttp … websocket=on:8090/ws`, and
+  **`GET /ws` → `101 Switching Protocols`** — confirms the single-port aiohttp WS upgrade works
+  direct-to-bridge (closes the direct-to-bridge half of the TASK-WEB-039 residual). WebRTC offer
+  → 502 on an empty body (off the primary path, non-blocking).
+- **Residual:** edge-via-VIP `101` + ADR-0029 mouth-to-ear re-measure on the routed port stay
+  under **TASK-WEB-039** (depend on the platform-managed HAProxy tunnelling the upgrade).
+
+### Files changed
+- Merge commit + `product-backlog/tasks/web-voice-tasks.md` — TASK-WEB-037/038 status → merged (v0.7.0) + deployed
+- `done-tasks.md` — this release/deploy entry
+- Tag `v0.7.0` (git) + images `0.7.0` (GHCR, CI-built)
