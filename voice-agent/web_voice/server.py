@@ -463,7 +463,6 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
             raise SystemExit('WebSocket requested but unavailable: pip install "websockets>=13,<17"')
         return None, None
     from .async_loop import BackgroundEventLoop
-    from .session_factory import SessionFactory
     from .websocket_signaling import (
         WebSocketSignalingService,
         ws_host_config,
@@ -477,20 +476,8 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
         loop = BackgroundEventLoop()
         loop.start()
         owned_loop = loop
-    factory = SessionFactory(
-        ingress=ingress,
-        egress=egress,
-        backend=backend,
-        streaming_provider=_build_streaming_provider(args),
-        streaming_tts_provider=_build_streaming_tts_provider(args),
-        streaming_providers_by_language=_streaming_stt_by_language(args),
-        streaming_tts_providers_by_language=_streaming_tts_by_language(args),
-        # Label the channel-egress span so a per-slice latency report can split WS from
-        # WebRTC (TASK-WEB-030); the session core is otherwise transport-agnostic.
-        transport_label="websocket",
-    )
     ws_signaling = WebSocketSignalingService(
-        factory=factory,
+        factory=_build_ws_session_factory(args, ingress, egress, backend),
         loop=loop,
         host=ws_host_config(),
         port=ws_port_config(),
@@ -499,6 +486,49 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
     )
     ws_signaling.start()
     return ws_signaling, owned_loop
+
+
+def _build_ws_session_factory(args, ingress, egress, backend):
+    """Build the transport-agnostic `SessionFactory` shared by both WS transports.
+
+    The interim `SingleClientWebsocketServerTransport` (`:8091`) and the aiohttp-native
+    `/ws` transport (single port, ADR-0047) differ only in the transport they pass to
+    `build_session`; the session core is identical (ADR-0043, TASK-WEB-027). The
+    channel-egress span is labelled `websocket` so a per-slice report can split it from
+    WebRTC regardless of which WS transport carried the call.
+    """
+    from .session_factory import SessionFactory
+
+    return SessionFactory(
+        ingress=ingress,
+        egress=egress,
+        backend=backend,
+        streaming_provider=_build_streaming_provider(args),
+        streaming_tts_provider=_build_streaming_tts_provider(args),
+        streaming_providers_by_language=_streaming_stt_by_language(args),
+        streaming_tts_providers_by_language=_streaming_tts_by_language(args),
+        transport_label="websocket",
+    )
+
+
+def _build_ws_handler(args, ingress, egress, backend):
+    """Build the aiohttp-native `/ws` handler for the single-port path, or None.
+
+    Unlike the interim `:8091` listener this needs **no `websockets` package** — it rides
+    aiohttp's own `WebSocketResponse` — so availability is gated only by `--websocket`
+    (`off` disables it; `auto`/`on` enable it). Concurrency is lifted from the interim
+    one-call cap to `VOICE_MAX_WS_SESSIONS` (ADR-0047).
+    """
+    if getattr(args, "websocket", "auto") == "off":
+        return None
+    from .websocket_app import make_ws_handler, ws_async_max_sessions_config
+    from .websocket_signaling import ws_language_config
+
+    return make_ws_handler(
+        _build_ws_session_factory(args, ingress, egress, backend),
+        default_language=ws_language_config(),
+        max_sessions=ws_async_max_sessions_config(),
+    )
 
 
 def _streaming_stt_by_language(args) -> dict[str, Any]:
@@ -583,8 +613,17 @@ def main() -> int:
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
-    ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
-    ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
+    # ADR-0047: on the aiohttp path the live WS rides the SAME port (`/ws`) via an
+    # aiohttp-native transport, so the interim single-client `:8091` listener is NOT
+    # started; the stdlib path keeps that listener unchanged.
+    if args.server == "aiohttp":
+        ws_handler = _build_ws_handler(args, ingress, egress, backend)
+        ws_signaling, ws_loop = None, None
+        ws_status = f"on:{args.port}/ws" if ws_handler else "off"
+    else:
+        ws_handler = None
+        ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
+        ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
         f"(server={args.server}, provider={args.provider}, runtime={args.runtime}, "
@@ -593,7 +632,7 @@ def main() -> int:
         file=sys.stderr,
     )
     try:
-        _serve(args, processor, signaling)
+        _serve(args, processor, signaling, ws_handler)
     finally:
         if ws_signaling is not None:
             ws_signaling.close()
@@ -610,12 +649,12 @@ def main() -> int:
     return 0
 
 
-def _serve(args, processor: VoiceTurnProcessor, signaling: Any) -> None:
+def _serve(args, processor: VoiceTurnProcessor, signaling: Any, ws_handler: Any = None) -> None:
     """Run the selected HTTP server (blocking until shutdown).
 
-    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target; `stdlib`
-    is the historical `ThreadingHTTPServer`. Both serve the same HTTP contract; the
-    WebSocket unification onto the aiohttp port lands in the next slice.
+    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target: static, REST
+    and — when `ws_handler` is supplied — the live WebSocket audio path all ride one port.
+    `stdlib` is the historical `ThreadingHTTPServer` (HTTP only; WS stays on `:8091`).
     """
     if args.server == "aiohttp":
         from aiohttp import web
@@ -627,7 +666,7 @@ def _serve(args, processor: VoiceTurnProcessor, signaling: Any) -> None:
         # query string, which carries conversation_id/correlation_id/session_id/language).
         # Keep those opaque IDs out of the access log — telemetry already records them.
         web.run_app(
-            make_app(processor, signaling),
+            make_app(processor, signaling, ws_handler=ws_handler),
             host=args.host,
             port=args.port,
             print=None,

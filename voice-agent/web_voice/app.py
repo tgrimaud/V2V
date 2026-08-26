@@ -47,6 +47,9 @@ from .server import (
 from urllib.parse import parse_qs
 
 _JSON = "application/json"
+# Live WebSocket audio upgrade route (mounted only when a ws_handler is supplied, so
+# importing this module stays free of the pipecat transport dependency).
+WS_ROUTE = "/ws"
 
 
 def _json_response(status: int, payload: dict, extra_headers: dict[str, str] | None = None) -> web.Response:
@@ -90,11 +93,16 @@ async def _run_blocking(func: Callable, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
 
 
-def make_app(processor: Any, signaling: Any = None) -> web.Application:
+def make_app(processor: Any, signaling: Any = None, ws_handler: Any = None) -> web.Application:
     """Build the aiohttp application wiring the voice HTTP surface to `processor`.
 
     `signaling` (optional) is the WebRTC signaling service used by the offer route;
     when None the offer route answers 503 `webrtc_unavailable`, exactly as before.
+
+    `ws_handler` (optional) is the live WebSocket audio handler (TASK-WEB-038 slice 2,
+    `websocket_app.make_ws_handler`). When provided it is mounted at `GET /ws` on the
+    same port; when None the `/ws` route is not registered (the interim `:8091` listener
+    stays authoritative), so the HTTP surface is unchanged.
     """
     app = web.Application(client_max_size=MAX_AUDIO_BYTES + 1024)
 
@@ -216,17 +224,19 @@ def make_app(processor: Any, signaling: Any = None) -> web.Application:
             return _json_response(502, {"error": "webrtc_negotiation_failed"})
         return _json_response(200, answer)
 
-    app.add_routes(
-        [
-            web.get("/", handle_root),
-            web.get("/favicon.ico", handle_favicon),
-            web.get(OPENAPI_ROUTE, handle_openapi),
-            web.post(STT_ROUTE, handle_stt),
-            web.post(TTS_ROUTE, handle_tts),
-            web.post(TURN_ROUTE, handle_turn),
-            web.post(WEBRTC_OFFER_ROUTE, handle_webrtc_offer),
-            # Static catch-all LAST so it never shadows the explicit routes above.
-            web.get("/{tail:.*}", handle_static),
-        ]
-    )
+    routes = [
+        web.get("/", handle_root),
+        web.get("/favicon.ico", handle_favicon),
+        web.get(OPENAPI_ROUTE, handle_openapi),
+        web.post(STT_ROUTE, handle_stt),
+        web.post(TTS_ROUTE, handle_tts),
+        web.post(TURN_ROUTE, handle_turn),
+        web.post(WEBRTC_OFFER_ROUTE, handle_webrtc_offer),
+    ]
+    if ws_handler is not None:
+        # Registered before the static catch-all so the upgrade route wins over it.
+        routes.append(web.get(WS_ROUTE, ws_handler))
+    # Static catch-all LAST so it never shadows the explicit routes above.
+    routes.append(web.get("/{tail:.*}", handle_static))
+    app.add_routes(routes)
     return app
