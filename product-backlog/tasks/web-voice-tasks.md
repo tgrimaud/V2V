@@ -3515,3 +3515,113 @@ Scenario: Two callers are served concurrently by one bridge
   serving-layer refactor changes it.
 - Genesys readiness: the unified async HTTP+WS server is the natural host for the Audio Connector
   `wss://` endpoint (ADR-0040, Sprint 13).
+
+## TASK-WEB-039 - Pilot WS-live ADR-0029 latency measurement (direct-to-bridge, v0.6.0) + gate tracking
+
+**Parent:** EPIC-006 (Voice2Voice foundation) / EPIC-010 (latency & pilot validation)
+**Related decisions:** ADR-0029 (mouth-to-ear p95 ≤ 1.5 s / TTFA p95 ≤ 1.2 s), ADR-0046 (WebSocket primary), ADR-0028 (observability)
+**Classification:** V1 pilot gate (latency evidence) — not runtime-affecting (measurement + tracking)
+**Status:** 🔧 Measured 2026-08-26 = **ADR-0029 FAIL** (first WS-live sample on the **actually-deployed pilot**, v0.6.0, direct-to-bridge). Remediation is tracked against existing levers (below), not re-implemented here.
+**Priority:** High
+**Branch:** `task/TASK-WEB-037-websocket-primary-transport` (measured alongside TASK-WEB-037's live proof)
+
+### Context
+
+TASK-WEB-037's acceptance was "measure one live `wss` turn end-to-end". With the HAProxy route
+dropped (ADR-0047), that measurement was done **direct-to-bridge** (no edge): the compose 8091
+publish was deployed to both pilot bridges (`vla-t01/t02`, image `0.6.0`, `websocket=on:8091`),
+an SSH tunnel to the bridge's **LAN IP** `:8091` (the podman-loopback quirk breaks `127.0.0.1` —
+same root cause as TASK-INFRA-011) drove the headless `scripts/ws_live_client.py`, and the
+server emitted per-call US-036 telemetry scored with `scripts/streaming_latency_report.py`.
+This is the WS-transport, real-pilot counterpart to the co-located TASK-WEB-031 (WS) and
+TASK-WEB-032 (WebRTC) reference measurements.
+
+### Result (warm, n=10, real Gradium streaming STT/TTS + Mistral RAG on the bridge)
+
+| Metric | p50 | p95 | ADR-0029 |
+|--------|-----|-----|----------|
+| mouth-to-ear (`voice_to_first_audio`) | 1929 | **2759 ms** | ≤ 1500 → **FAIL** (−1259) |
+| time-to-first-audio (end-of-speech → first bot audio) | 1579 | **2409 ms** | ≤ 1200 → **FAIL** (−1209) |
+| slice: end_of_turn (hold) | 350 | 350 | — |
+| slice: stt (post-EOT `time_to_final`) | 381 | **1235** | dominant |
+| slice: backend_first_token | 801 | 887 | 2nd |
+| slice: tts_first_audio (engine) | 359 | 401 | ✅ excellent |
+| slice: channel_egress (frame→transport) | 0.02 | 0.03 | ✅ negligible |
+| (context) stt.time_to_first_partial (pre-EOT) | 1407 | 2235 | off critical path |
+
+Client-observed mouth-to-ear proxy (incl. SSH-tunnel RTT), n=10: median ≈ 1750 ms, range 1553–2658 ms.
+Consistent with TASK-WEB-031/032 → **the bottleneck is transport-independent**: the post-EOT STT
+finalize tail (p95 1235 ms) then backend first-token (p95 887 ms) dominate; TTS first-audio and
+channel egress are well within budget. `stt.time_to_first_partial` (~1.4–2.2 s) happens **during**
+the caller's speech, so it is **not** on the post-EOT mouth-to-ear path (do not confuse it with the
+finalize tail).
+
+### Scope (tracking only — no new lever built here)
+
+1. Record the pilot WS-live evidence (see `docs/qa/task-web-039-*` report).
+2. Confirm the dominant slices (STT final tail + backend first-token) and route remediation to the
+   **existing** levers — do **not** duplicate:
+   - **TASK-STT-014** — reduce the post-EOT STT finalize tail (To do; activate).
+   - **TASK-BE-020** — shorten time-to-first-vetted-sentence in `converse-stream`.
+   - **TASK-BE-033** / **ADR-0045** — LLM first-token benchmark (largest reducible backend slice).
+3. Re-score ADR-0029 after TASK-WEB-038 (single port) so a clean measurement without the
+   SSH-tunnel/loopback workaround is available.
+
+### Acceptance
+
+- Pilot WS-live p50/p95 recorded per slice with the sample size + provider config.
+- Dominant slices identified and mapped to existing remediation tickets (no duplicate lever).
+- ADR-0029 status stated explicitly (FAIL, with the residual and its owning tickets).
+
+### Notes
+
+- The canonical per-slice table in `streaming_latency_report.py` populates correctly for the WS
+  path (end_of_turn / stt / backend_first_token / tts_first_audio / channel_egress all
+  `measured=true`); the **only** `NOT MEASURED` slice is `channel_ingress`, because the headless
+  client emits no browser-mic ingress span — a minor observability gap tracked as **TASK-WEB-040**.
+- An anomalous `barge_in_count=45` over 10 headless turns is **BUG-017** (separate).
+- Report JSON persisted at `docs/qa/task-web-039-ws-live-latency-report.json`; narrative at
+  `docs/qa/task-web-039-ws-live-latency-evidence.md`.
+
+## TASK-WEB-040 - Emit a `channel_ingress` slice on the WebSocket path (only unmeasured canonical slice)
+
+**Parent:** EPIC-010 (observability, latency & pilot validation)
+**Related decisions:** ADR-0028 (observability), ADR-0029 (gate), TASK-WEB-030 (WS canonical per-slice)
+**Classification:** V1 pilot gate (observability) — telemetry emission, runtime-affecting (span only)
+**Status:** 📋 Planned — surfaced 2026-08-26 by the TASK-WEB-039 WS-live measurement.
+**Priority:** Low
+**Branch:** `task/TASK-WEB-040-ws-channel-ingress-slice` (to create)
+
+### Context
+
+Scoring the WS-live sample (TASK-WEB-039) with `scripts/streaming_latency_report.py` showed the
+canonical per-slice table **populates correctly** for the WS path — `end_of_turn`, `stt`,
+`backend_first_token`, `tts_first_audio` and `channel_egress` are all `measured=true`. The
+**only** slice that reads `NOT MEASURED` is `channel_ingress` ("no channel-ingress span in this
+sample"). On the WebRTC path this slice comes from a `web.voice.ingress` span; the WS transport
+(TASK-WEB-030 `build_payload`) does not emit an equivalent ingress span, and the headless client
+naturally has no browser-mic ingress.
+
+This is a small observability completeness gap, not a scoring bug: the mouth-to-ear composite and
+gate verdicts do not depend on `channel_ingress`. It matters only so the WS per-slice picture is
+complete (US-036 "every slice emitted or explicitly `measured=false` with a reason") and directly
+comparable to the WebRTC path.
+
+### Scope
+
+- Emit a `channel_ingress`-equivalent span on the WS transport (first inbound audio frame →
+  handed to STT), under a name `streaming_latency_report.py` already recognises (or add it to the
+  slice's candidate names, first-present-wins so WS/WebRTC/fixture distributions don't mix).
+- Keep the report's `measured=false` + reason behaviour for genuinely headless runs (no fabricated zero).
+- Re-run against a real browser WS turn so `channel_ingress` populates; the other five slices are unchanged.
+
+### Acceptance
+
+- A real browser WS turn produces a `channel_ingress` slice (or an explicit `measured=false` reason for headless).
+- The other five canonical slices remain `measured=true` (regression-locked).
+- Numbers reconcile with the `metric_distributions` already emitted.
+
+### Notes
+
+- Scope corrected 2026-08-26 after the TASK-WEB-039 re-run: the earlier "all six slices
+  NOT MEASURED" observation was inaccurate (stale run) — only `channel_ingress` is missing.
