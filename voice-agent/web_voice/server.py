@@ -622,7 +622,17 @@ def _serve(args, processor: VoiceTurnProcessor, signaling: Any) -> None:
 
         from .app import make_app
 
-        web.run_app(make_app(processor, signaling), host=args.host, port=args.port, print=None)
+        # access_log=None: the stdlib handler silenced per-request logging (log_message
+        # no-op); aiohttp's default access format logs "%r" (the request line WITH the
+        # query string, which carries conversation_id/correlation_id/session_id/language).
+        # Keep those opaque IDs out of the access log — telemetry already records them.
+        web.run_app(
+            make_app(processor, signaling),
+            host=args.host,
+            port=args.port,
+            print=None,
+            access_log=None,
+        )
         return
     server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
     try:

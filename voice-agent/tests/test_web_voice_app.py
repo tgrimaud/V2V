@@ -8,9 +8,11 @@ tts happy + error paths), the chunked→411 guard, 404, and the WebRTC offer rou
 
 import base64
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from aiohttp.test_utils import TestClient, TestServer
 
@@ -86,6 +88,12 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         resp = await client.get("/favicon.ico")
         self.assertEqual(resp.status, 204)
 
+    async def test_responses_use_http_1_1(self) -> None:
+        # BUG-012: behind the HAProxy h2 edge the backend must answer HTTP/1.1.
+        client = await self._client()
+        resp = await client.get("/")
+        self.assertEqual((resp.version.major, resp.version.minor), (1, 1))
+
     async def test_openapi_is_served_as_yaml(self) -> None:
         client = await self._client()
         resp = await client.get("/api/voice/openapi.yaml")
@@ -125,6 +133,21 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         resp = await client.post(TURN_ROUTE, data=_agen())
         self.assertEqual(resp.status, 411)
         self.assertEqual((await resp.json())["error"], "length_required")
+
+    async def test_turn_over_cap_returns_json_413(self) -> None:
+        # A body over the cap must return the SAME JSON 413 the stdlib handler did,
+        # not aiohttp's default entity-too-large page (contract parity). Shrink the
+        # cap so the test stays fast.
+        import web_voice.app as app_module
+
+        with mock.patch.object(app_module, "MAX_AUDIO_BYTES", 256):
+            processor = build_turn_processor(PIPECAT, _ingress(), _egress())
+            client = TestClient(TestServer(app_module.make_app(processor)))
+            await client.start_server()
+            self.addAsyncCleanup(client.close)
+            resp = await client.post(TURN_ROUTE, data=b"\x00" * 4096)
+        self.assertEqual(resp.status, 413)
+        self.assertEqual((await resp.json())["error"], "audio_too_large")
 
     async def test_turn_speaks_degraded_wav_when_backend_fails(self) -> None:
         client = await self._client(backend=_UnavailableBackend())
@@ -207,6 +230,33 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         payload = await resp.read()
         self.assertEqual(json.loads(payload)["error"], "webrtc_negotiation_failed")
         self.assertNotIn(b"boom", payload)
+
+
+class ServerSelectorTest(unittest.TestCase):
+    """The --server selector (TASK-WEB-038) picks stdlib by default, aiohttp on request."""
+
+    def _parse(self, argv, env=None):
+        from web_voice.server import _parse_args
+
+        with mock.patch.object(sys, "argv", ["prog", *argv]), mock.patch.dict(
+            os.environ, env or {}, clear=False
+        ):
+            return _parse_args()
+
+    def test_defaults_to_stdlib(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("VOICE_SERVER", None)
+            self.assertEqual(self._parse([]).server, "stdlib")
+
+    def test_flag_selects_aiohttp(self) -> None:
+        self.assertEqual(self._parse(["--server", "aiohttp"]).server, "aiohttp")
+
+    def test_env_selects_aiohttp(self) -> None:
+        self.assertEqual(self._parse([], {"VOICE_SERVER": "aiohttp"}).server, "aiohttp")
+
+    def test_rejects_unknown_server(self) -> None:
+        with self.assertRaises(SystemExit):
+            self._parse(["--server", "bogus"])
 
 
 if __name__ == "__main__":

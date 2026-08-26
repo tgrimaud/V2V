@@ -71,7 +71,12 @@ async def _read_capped_body(request: web.Request) -> bytes | None:
     declared = int(request.headers.get("Content-Length", "0") or "0")
     if declared > MAX_AUDIO_BYTES:
         return None
-    body = await request.read()
+    try:
+        body = await request.read()
+    except web.HTTPRequestEntityTooLarge:
+        # A body over aiohttp's client_max_size raises here; normalize it to the
+        # same JSON 413 the stdlib handler returned instead of aiohttp's default page.
+        return None
     if len(body) > MAX_AUDIO_BYTES:
         return None
     return body
