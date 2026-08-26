@@ -1024,3 +1024,31 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - Merge commit + `product-backlog/tasks/web-voice-tasks.md` — TASK-WEB-037/038 status → merged (v0.7.0) + deployed
 - `done-tasks.md` — this release/deploy entry
 - Tag `v0.7.0` (git) + images `0.7.0` (GHCR, CI-built)
+
+## 2026-08-26 — TASK-INFRA-011: voice deploy health gate probes the container verdict, not host loopback
+
+**Summary:**
+
+- Fixed the recurring voice rolling-deploy hang (surfaced during the **v0.6.0** deploy): the Ansible
+  health gate probed `http://127.0.0.1:8090/` from the host with `ansible.builtin.uri`, but the bridge's
+  published port returns `000` on host loopback and its management interface is firewalld source-scoped
+  (TASK-OPS-004), so each attempt timed out (30 retries × ~30s) → ~15 min hang → play abort
+  (`serial:1` + `max_fail_percentage:0`). t02 had needed a manual `-e health_url=<service-IP>` override.
+- **Fix:** poll the **container's own health verdict** — `roles/compose_tier/tasks/health.yml` runs
+  `docker inspect --format {{.State.Health.Status}} <name>` until `healthy` when `health_container_name`
+  is set. The container `HEALTHCHECK` curls `localhost:8090` inside the container namespace → immune to
+  host interface/firewall/loopback quirks. Go template escaped with `{% raw %}…{% endraw %}`.
+- `group_vars/voice.yml` sets `health_container_name: voice-support-bridge`; the HTTP `uri` probe is kept
+  as the **fallback** (backend loopback `:8080` works), mutually gated, preserving the QA contract.
+- **Validated live:** re-ran the voice deploy on t01/t02 with the committed config — container-health gate
+  passes immediately, loopback HTTP probe skipped, `failed=0`, no override, no hang. `--syntax-check` clean;
+  `qa-validate-ansible.sh` **72/72** (+3 assertions). Non-runtime (deploy tooling only).
+- Branch `task/TASK-INFRA-011-voice-health-container-probe` off `feat/restart-from-scratch` (no sprint open);
+  committed `7256dfc`, pushed. Merge pending explicit user request.
+
+### Files changed
+- `deploy/ansible/roles/compose_tier/tasks/health.yml` — added container-health probe; gated both probes
+- `deploy/ansible/group_vars/voice.yml` — `health_container_name: voice-support-bridge`, `health_url` demoted to fallback
+- `deploy/ansible/qa-validate-ansible.sh` — +3 health-probe assertions
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket
+- `product-backlog/backlog-index.md` — TASK-INFRA-011 registry row
