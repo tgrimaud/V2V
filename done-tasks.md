@@ -965,3 +965,34 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `product-backlog/backlog-index.md` — Sprint 12 registry row → ✅ Done (v0.6.0)
 - `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-010 carried to Sprint 13
 - `done-tasks.md` — this closure entry
+
+## 2026-08-26 — Pilot WS-live latency evidence + follow-up tickets + aiohttp one-port spike
+
+**Summary:**
+
+- Ran the first WebSocket-transport ADR-0029 measurement on the **actually-deployed pilot**
+  (v0.6.0, direct-to-bridge, no HAProxy). Server-side, n=10 warm: **mouth-to-ear p95 2759 ms**
+  (≤1500 FAIL) / **TTFA p95 2409 ms** (≤1200 FAIL); TTS first-audio p95 401 ms ✅, egress ~0 ✅.
+  Dominant slices = STT finalize tail (p95 1235 ms) then backend first-token (p95 887 ms) —
+  transport-independent, consistent with the co-located WS/WebRTC refs (WEB-031/032). The 0.6.0
+  levers (finalize budget WEB-035, top-k=5 WEB-036) already lowered it vs Sprint-12.
+- Opened follow-up tickets: **TASK-WEB-039** (WS-live measurement + gate tracking, routes
+  remediation to existing TASK-STT-014/BE-020/BE-033, no duplicate lever), **TASK-WEB-040**
+  (emit the WS `channel_ingress` slice — the only unmeasured canonical slice), **TASK-INFRA-011**
+  (fix the podman host→loopback health-gate hang), **BUG-017** (`barge_in_count=45` over 10
+  headless WS turns). Marked **TASK-INFRA-010 superseded** by ADR-0047 (no HAProxy route).
+- Corrected a stale premise mid-task: a `streaming_latency_report.py` re-run showed the WS
+  per-slice table populates fine (only `channel_ingress` missing), not "all six NOT MEASURED".
+- **TASK-WEB-038 aiohttp spike (ADR-0047):** one aiohttp app serves static + `/api/voice/*` +
+  WS `101` upgrade on ONE port; `verify.py` PASS on aiohttp 3.14.1 / Python 3.14.2. Footprint
+  win — aiohttp is already transitive (zero new wheels); FastAPI rejected. Verdict: proceed with
+  aiohttp; full build ~4–5 days.
+
+### Files changed
+- `product-backlog/tasks/web-voice-tasks.md` — TASK-WEB-039 + TASK-WEB-040 tickets
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket; TASK-INFRA-010 superseded
+- `product-backlog/bugs/BUG-017-barge-in-count-anomaly-headless-ws-turns.md` — new bug ticket
+- `product-backlog/backlog-index.md` — registered the 4 new rows + updated INFRA-010
+- `docs/qa/task-web-039-ws-live-latency-evidence.md` + `.json` — latency evidence report
+- `voice-agent/spikes/aiohttp_one_port/{server,verify}.py`, `static/index.html`, `README.md` — spike
+- `CLAUDE.md` / `AGENTS.md` — knowledge capture (this session)
