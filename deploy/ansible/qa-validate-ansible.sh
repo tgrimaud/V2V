@@ -242,6 +242,24 @@ ansible localhost -c local -m ansible.builtin.template \
 grep -q '^OTEL_EXPORTER_OTLP_ENDPOINT=http://obs.tst:4318$' "${TMP}/v_on.env" \
   && ok "voice export ON points OTEL_EXPORTER_OTLP_ENDPOINT at the collector" || bad "voice export-ON render wrong"
 
+# --- 14. Live voice WebSocket transport wiring (TASK-WEB-037, ADR-0046) -------
+# The primary V1 transport is a WebSocket tunnel on :8091. The port must flow
+# group_vars -> template -> compose (published) -> container, and the firewall role
+# must open 8091 to the same LB sources as 8090.
+grep -Eq '^voice_ws_port: 8091' "$VOICE_VARS" && ok "group_vars declares voice_ws_port 8091" || bad "group_vars missing voice_ws_port"
+grep -q '^VOICE_WS_PORT={{ voice_ws_port }}' "$VOICE_TPL" && ok "voice template renders VOICE_WS_PORT" || bad "voice template missing VOICE_WS_PORT"
+grep -Eq ':\$\{VOICE_WS_PORT:-8091\}:8091' "$VOICE_COMPOSE" && ok "compose publishes the WS port 8091" || bad "compose does not publish 8091"
+grep -q '^VOICE_WS_PORT=8091' "$VOICE_EXAMPLE" && ok ".env.example lists VOICE_WS_PORT" || bad ".env.example missing VOICE_WS_PORT"
+# Least privilege: 8091 opened only to the LB sources (firewall_extra_ports), like 8090.
+grep -q '^firewall_extra_ports:' "$VOICE_VARS" && grep -A2 '^firewall_extra_ports:' "$VOICE_VARS" | grep -q '8091' \
+  && ok "group_vars scopes 8091 via firewall_extra_ports" || bad "firewall_extra_ports missing 8091"
+grep -q 'firewall_extra_ports' roles/host_prereqs/tasks/main.yml && ok "host_prereqs opens firewall_extra_ports (source-scoped)" || bad "host_prereqs does not handle firewall_extra_ports"
+# The rendered .env must actually carry the WS port (default render, export irrelevant).
+ansible localhost -c local -m ansible.builtin.template \
+  -a "src=roles/compose_tier/templates/voice.env.j2 dest=${TMP}/v_ws.env mode=0600" \
+  -e "@group_vars/voice.yml" -e ansible_become=false >/dev/null 2>&1
+grep -q '^VOICE_WS_PORT=8091$' "${TMP}/v_ws.env" && ok "rendered voice .env sets VOICE_WS_PORT=8091" || bad "rendered voice .env missing VOICE_WS_PORT=8091"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

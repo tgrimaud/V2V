@@ -3379,7 +3379,17 @@ and it already returns the whole WAV at once, so base64 buffering is a non-issue
 **Decision:** [ADR-0046](../../docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md) (Accepted 2026-08-26, supersedes ADR-0033). Adversarial review: `docs/architecture/reviews/websocket-primary-transport-adversarial-review-2026-08-26.md`.
 **Depends on / bundles:** TASK-INFRA-010 (HAProxy `wss` edge routing — now on the V1 critical path).
 **Classification:** V1 voice runtime + edge wiring (runtime-affecting: adds/updates the live transport path).
-**Status:** 📋 Planned — created 2026-08-26 from the WebRTC-vs-WebSocket transport decision (A). Branch `task/TASK-WEB-037-websocket-primary-transport` (off `feat/restart-from-scratch`) currently carries the ADR + review + this ticket (docs only); the code/edge work below is the remaining scope.
+**Status:** 🔧 In progress — code + edge reference config implemented (2026-08-26) on branch `task/TASK-WEB-037-websocket-primary-transport`. Remaining before GO: the platform applies the HAProxy `voice_ws` route on the real LB, then **one live `wss` turn is measured** end-to-end. Scope items 1–5 done in-repo; item 2's live tunnelling + the acceptance measurement are the only open points (LB is platform-managed).
+
+**Implemented (2026-08-26):**
+- **`ws.js` same-origin** (item 1): served over HTTPS → connects `wss://<host>/` on :443 (edge-routed); plain HTTP dev → direct `:8091`; `?wsport=<n>` forces a direct port. `voice-agent/web_voice/static/ws.js::wsUrl()`.
+- **HAProxy edge route** (item 2, TASK-INFRA-010): `acl is_voice_ws hdr(Upgrade) -i websocket` → new `backend voice_ws` (`balance source` call affinity, TCP-check, `vla-t01/t02:8091`); global `timeout tunnel 1h` holds the call. `deploy/haproxy/haproxy.cfg` + README + `qa-validate-haproxy.sh` (38/38, `haproxy -c` valid). The `Upgrade` request arrives as HTTP/1.1 (browsers don't h2-tunnel `new WebSocket`), so it matches on the `h2,http/1.1` bind — documented curl `101` check for the platform to confirm live.
+- **Publish/allow 8091** (item 3): compose publishes `:8091`; `voice_ws_port`/`VOICE_WS_PORT` wired group_vars → `voice.env.j2` → compose → container; `host_prereqs` opens 8091 to the same LB sources via `firewall_extra_ports` (no-op where firewalld is inactive). Ansible QA 76/76.
+- **Demote WebRTC** (item 4): labelled optional/same-subnet/dev in `pilot-voice-access.md`, `haproxy/README.md`, ADR-0046 and an in-page banner on `webrtc.html` (links to `/ws.html`). Kept, not deleted.
+- **Observability** (item 5): the WS path reuses the shared streaming session core with `transport_label="websocket"` stamped on the channel-egress span; all US-036 slices (ingress via `stt.audio.accept`/`web.voice.ingress`, STT, backend first-token, TTS first-audio, egress) already emit under one correlation id (TASK-WEB-030). No code change; a live turn just needs measuring.
+- Validation: voice-agent **568 unit + 46 behave** green; `haproxy -c` valid (38/38 QA); Ansible **76/76** + `deploy.yml`/`prereqs.yml` syntax-check clean.
+
+**Original status:** 📋 Planned — created 2026-08-26 from the WebRTC-vs-WebSocket transport decision (A); branch initially carried the ADR + review + this ticket (docs only).
 
 ### Context
 

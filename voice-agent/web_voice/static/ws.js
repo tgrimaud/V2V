@@ -58,10 +58,23 @@ function selectedLanguage() {
 
 function wsUrl() {
   const params = new URLSearchParams(window.location.search);
-  const port = params.get("wsport") || DEFAULT_WS_PORT;
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.hostname || "127.0.0.1";
-  return `${scheme}://${host}:${port}/?language=${encodeURIComponent(selectedLanguage())}`;
+  const lang = encodeURIComponent(selectedLanguage());
+  const override = params.get("wsport");
+  // Behind the TLS edge (page served over HTTPS) the socket is reached SAME-ORIGIN on the
+  // page's port (:443): HAProxy routes the `Upgrade: websocket` request to the bridge's WS
+  // server, so one public port carries both the page and the socket, with no TURN/UDP
+  // (TASK-WEB-037 / TASK-INFRA-010, ADR-0046). Over plain HTTP (local dev, no edge) there is
+  // no router, so connect DIRECTLY to the WS port. `?wsport=<n>` forces a direct port in
+  // either scheme (dev against a specific bridge, e.g. `?wsport=8091`).
+  if (override) {
+    return `${scheme}://${host}:${override}/?language=${lang}`;
+  }
+  if (scheme === "wss") {
+    return `${scheme}://${host}/?language=${lang}`;
+  }
+  return `${scheme}://${host}:${DEFAULT_WS_PORT}/?language=${lang}`;
 }
 
 async function connect() {

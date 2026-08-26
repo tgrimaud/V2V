@@ -47,6 +47,15 @@ grep -Eq 'bind 192\.168\.0\.11:80$' "$CFG"                && ok "backend fronten
 grep -q '192.168.0.103:8090' "$CFG" && grep -q '192.168.0.104:8090' "$CFG" && ok "voice backend targets both bridges :8090" || bad "voice backend targets wrong"
 grep -q '192.168.0.105:8080' "$CFG" && grep -q '192.168.0.106:8080' "$CFG" && ok "backend backend targets both nodes :8080"  || bad "backend targets wrong"
 grep -q 'http-check send meth GET uri /$' "$CFG"          && ok "voice health check GET /"              || bad "voice health check missing"
+# ADR-0046 / TASK-WEB-037: the primary live voice transport is a WebSocket tunnel. The edge
+# must detect `Upgrade: websocket`, route it to a dedicated :8091 backend, hold the tunnel
+# open, and pin a call to one bridge (single-client-per-listener socle, ADR-0043).
+grep -Eq 'acl +is_voice_ws +hdr\(Upgrade\) +-i +websocket' "$CFG" && ok "voice WS: Upgrade-header ACL present" || bad "voice WS Upgrade ACL missing"
+grep -Eq 'use_backend +voice_ws +if +is_voice_ws' "$CFG"  && ok "voice WS: routes upgrades to voice_ws" || bad "voice WS use_backend missing"
+grep -q '192.168.0.103:8091' "$CFG" && grep -q '192.168.0.104:8091' "$CFG" && ok "voice_ws targets both bridges :8091" || bad "voice_ws backend targets wrong"
+grep -q 'timeout tunnel' "$CFG"                           && ok "long tunnel timeout holds the WS call open" || bad "no timeout tunnel for WS"
+awk '/^backend voice_ws/{b=1} /^backend |^frontend /{if($0!~"voice_ws")b=0} b&&/balance source/{f=1} END{exit !f}' "$CFG" \
+  && ok "voice_ws pins a call to one bridge (balance source)" || bad "voice_ws missing call affinity (balance source)"
 # TASK-INFRA-007: the backend must use the deep dependency-aware /actuator/health,
 # NOT the static /api/health (which never reflects DB/Redis degradation).
 grep -q 'uri /actuator/health' "$CFG"                     && ok "backend deep health check GET /actuator/health" || bad "backend not using deep /actuator/health"

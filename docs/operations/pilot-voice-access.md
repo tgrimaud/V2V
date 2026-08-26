@@ -1,11 +1,19 @@
-# Pilot Voice Access — Entry Points And WebRTC Status
+# Pilot Voice Access — Entry Points And Transport Status
 
 ## Objective
 
 Give operations and QA a single place to answer "how do I reach the voice bot on
-the pilot, and what actually works today?". It documents the two browser entry
-points (batch one-shot and streaming WebRTC), the deployment topology behind the
-voice VIP, and the current WebRTC media limitation.
+the pilot, and what actually works today?". It documents the browser entry points
+(batch one-shot, the **primary live WebSocket** transport, and the optional/dev
+WebRTC page), the deployment topology behind the voice VIP, and why WebRTC media
+does not establish for remote clients (expected — it is a same-subnet/dev path now).
+
+> **Transport direction (ADR-0046, 2026-08-26):** the **WebSocket** audio tunnel
+> (`ws.html`, `wss://<vip>/`, routed by HAProxy to the bridges' `:8091`) is the
+> **primary V1 live voice transport** for web and the substrate for Genesys Audio
+> Connector. **WebRTC is demoted to an optional same-subnet / dev-only path** — it is
+> kept (not deleted) but is not the pilot's remote live path. TASK-WEB-037 tracks the
+> edge wiring; see [ADR-0046](../architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md).
 
 This is an access/runbook note. The signaling contract itself lives in
 [`../architecture/voice-runtime-http-contract.md`](../architecture/voice-runtime-http-contract.md);
@@ -17,36 +25,58 @@ the media-plane decision lives in
 - Environment: pilot `eir-ai4cc-tst` — voice bridges `vla-ai4cc-t01/t02.prod.lan`
   (`.103/.104`), one bridge per VM, behind the voice VIP
   `https://vip-ai4cc-voice-t01.prod.lan/` (`.10`, HAProxy TLS edge).
-- The voice bridge image binds `0.0.0.0:8090`; HAProxy terminates TLS on `:443`
-  and load-balances to `vla-t01/t02:8090`.
+- The voice bridge image binds `0.0.0.0:8090` (HTTP) **and** `0.0.0.0:8091` (live
+  WebSocket, ADR-0046); HAProxy terminates TLS on `:443` and routes HTTP to
+  `vla-t01/t02:8090` and `Upgrade: websocket` to `vla-t01/t02:8091`.
 
 ## Entry Points
 
-The voice bridge serves both clients from the same HTTP server. The root path is
-the batch client; the WebRTC client is a separate static page.
+The voice bridge serves the HTTP clients (batch + WebRTC signaling/UI) from its
+`:8090` server, and the live WebSocket audio from its `:8091` server. All three are
+reached through the **same VIP origin** — HAProxy demultiplexes by request type.
 
 | Channel | Browser URL | Signaling / API endpoint | Media |
 |---------|-------------|--------------------------|-------|
+| **Live WebSocket (primary, ADR-0046)** | `https://vip-ai4cc-voice-t01.prod.lan/ws.html` | `wss://vip-ai4cc-voice-t01.prod.lan/` (same origin; HAProxy `Upgrade` → bridge `:8091`) | PCM16/16 kHz over **one `wss` tunnel through HAProxy** (TCP, no TURN) |
 | Batch one-shot (validated) | `https://vip-ai4cc-voice-t01.prod.lan/` (serves `index.html`) | `POST /api/voice/turn` (PCM16 in → full-answer WAV out) | HTTP response body over HTTPS (through HAProxy) |
-| Streaming WebRTC | `https://vip-ai4cc-voice-t01.prod.lan/webrtc.html` | `POST /api/voice/webrtc/offer` (SDP offer → SDP answer) | RTP/SRTP over **UDP**, peer-to-peer with the answering bridge — **not** through HAProxy |
+| Streaming WebRTC (optional / same-subnet / dev) | `https://vip-ai4cc-voice-t01.prod.lan/webrtc.html` | `POST /api/voice/webrtc/offer` (SDP offer → SDP answer) | RTP/SRTP over **UDP**, peer-to-peer with the answering bridge — **not** through HAProxy; needs same-subnet or STUN/TURN |
 
 Notes:
 
 - `GET /` returns `index.html` (batch). Any other path is served as a static file,
-  so the WebRTC UI is reached at **`/webrtc.html`** (paired with `webrtc.js`).
+  so the WebSocket UI is reached at **`/ws.html`** (paired with `ws.js`) and the
+  WebRTC UI at **`/webrtc.html`** (paired with `webrtc.js`).
+- `ws.js` connects **same-origin** (`wss://<host>/` on `:443`) when served over HTTPS,
+  so the socket rides the VIP with the page; `?wsport=8091` forces a direct-to-bridge
+  port for local dev (TASK-WEB-037).
 - Other endpoints on the same server: `POST /api/voice/stt`, `POST /api/voice/tts`,
   and `GET /api/voice/openapi.yaml`.
 
 ## What Works Today
 
-- **Batch one-shot is the working end-to-end path.** Open the VIP root, record a
+- **Live WebSocket is the primary transport (ADR-0046).** Open `/ws.html` on the
+  VIP: the browser opens one `wss://<vip>/` tunnel that HAProxy routes to the
+  bridge's `:8091`, and audio streams full-duplex (mic PCM16 up, bot PCM16 down)
+  with no TURN. The edge wiring (HAProxy `Upgrade` route + published `:8091`) is
+  TASK-WEB-037; measure one full live turn before declaring the pilot live path GO.
+- **Batch one-shot is a validated fallback path.** Open the VIP root, record a
   question, and the full multi-sentence answer is transcribed, answered and spoken
   back in one HTTP turn (validated on `v0.5.2`, BUG-015).
-- **WebRTC signaling is live** on the bridges: the image ships the
-  `pipecat-ai[webrtc]` runtime and starts with `--webrtc auto`, so
-  `POST /api/voice/webrtc/offer` negotiates an SDP answer.
+- **WebRTC signaling is live** on the bridges (optional/dev path): the image ships
+  the `pipecat-ai[webrtc]` runtime and starts with `--webrtc auto`, so
+  `POST /api/voice/webrtc/offer` negotiates an SDP answer — but media only connects
+  same-subnet (see below).
 
-Verify signaling is active on a node (out-of-band, not through the VIP):
+Verify the WebSocket edge route is live (expects `101 Switching Protocols` from a
+bridge, not the `200` UI page):
+
+```bash
+curl -sv --http1.1 -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: $(openssl rand -base64 16)" \
+  https://vip-ai4cc-voice-t01.prod.lan/ 2>&1 | grep -i '< HTTP'
+```
+
+Verify WebRTC signaling is active on a node (out-of-band, not through the VIP):
 
 ```bash
 # 502 webrtc_negotiation_failed = signaling is ON (empty offer is invalid, as expected).
@@ -57,24 +87,26 @@ ssh -i ~/.ssh/id_itsf grimaud@vla-ai4cc-t01.prod.lan \
      -w "\nHTTP %{http_code}\n" http://$IP:8090/api/voice/webrtc/offer'
 ```
 
-## Current Limitation — WebRTC Media Does Not Establish For Remote Clients
+## WebRTC Media Does Not Establish For Remote Clients — Expected (Optional/Dev Path)
 
-Signaling succeeding does **not** mean audio flows. On the pilot:
+Since ADR-0046 this is **expected, not a defect**: WebRTC is the optional
+same-subnet/dev path and the live pilot uses the WebSocket transport instead.
+Signaling succeeding does **not** mean WebRTC audio flows. On the pilot:
 
-- **HAProxy carries signaling + UI only** (HTTPS). WebRTC media is UDP
+- **HAProxy carries HTTP + the WebSocket tunnel** (HTTPS). WebRTC media is UDP
   peer-to-peer and never traverses HAProxy — see
   [`../../deploy/haproxy/README.md`](../../deploy/haproxy/README.md).
 - **No STUN/TURN** is configured (`VOICE_STUN` / `VOICE_TURN` are empty) per
-  ADR-0042: the pilot intentionally skips TURN and routes external voice media
-  through the **Genesys Audio Connector** instead.
-- The voice compose publishes **`8090/tcp` only**; the ephemeral UDP media ports
-  chosen during ICE are not published from the container.
+  ADR-0042/0046: the pilot intentionally skips TURN and uses the WebSocket
+  transport for remote clients (and Genesys Audio Connector for telephony).
+- The voice compose publishes **`8090/tcp` + `8091/tcp`** (WebSocket); the ephemeral
+  UDP media ports chosen during WebRTC ICE are **not** published from the container.
 
 Consequence: a remote browser can load `/webrtc.html` and complete the SDP
-exchange, but the audio stream will not connect. The batch one-shot path is the
-supported browser test until media is enabled.
+exchange, but the WebRTC audio stream will not connect. Use **`/ws.html`** for the
+live remote path, or the batch one-shot path as a simple HTTP fallback.
 
-## Testing WebRTC Media (Options)
+## Testing WebRTC Media (Optional/Dev — Same-Subnet Only)
 
 Pick one depending on the goal.
 
