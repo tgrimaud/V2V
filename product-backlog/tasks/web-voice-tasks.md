@@ -3370,3 +3370,66 @@ and it already returns the whole WAV at once, so base64 buffering is a non-issue
 - `test_voice_runtime.py` updated to parse the JSON body + decode base64 WAV (RIFF/WAVE).
   voice-agent **504 unit tests green** + behave **13 features / 36 scenarios / 169 steps green**.
 - OpenAPI still describes every endpoint (behave openapi scenario green).
+
+---
+
+## TASK-WEB-037 - Consolidate on WebSocket as the primary V1 live voice transport (demote WebRTC to optional dev), fix `ws.js` same-origin
+
+**Parent:** EPIC-006 (Voice2Voice foundation)
+**Decision:** [ADR-0046](../../docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md) (Accepted 2026-08-26, supersedes ADR-0033). Adversarial review: `docs/architecture/reviews/websocket-primary-transport-adversarial-review-2026-08-26.md`.
+**Depends on / bundles:** TASK-INFRA-010 (HAProxy `wss` edge routing — now on the V1 critical path).
+**Classification:** V1 voice runtime + edge wiring (runtime-affecting: adds/updates the live transport path).
+**Status:** 📋 Planned — created 2026-08-26 from the WebRTC-vs-WebSocket transport decision (A). Branch `task/TASK-WEB-037-websocket-primary-transport` (off `feat/restart-from-scratch`) currently carries the ADR + review + this ticket (docs only); the code/edge work below is the remaining scope.
+
+### Context
+
+The v0.6.0 pilot proved the deployed voice stack is healthy and reachable (page + signalling +
+backend warm-up all 200) but **no live turn completes**: WebRTC media cannot traverse the
+containerised bridges (compose publishes only `8090/tcp`, `aiortc` gathers only the
+container-internal `10.89.x` ICE candidate, no UDP path, no TURN → ICE `connecting → closed`),
+and the WebSocket path — the transport *designed* to reach externally over TCP through the edge
+(server runs `websocket=on:8091`) — is not routed at the edge and `ws.js` targets a hard-coded
+`:8091` the VIP does not expose. Per ADR-0046, WebSocket is now the **primary** V1 live transport
+(web + Genesys Audio Connector, ADR-0040) and WebRTC is demoted to an optional same-subnet/dev path.
+
+### Scope
+
+1. **`ws.js` same-origin fix:** connect to `wss://<host>/` on **:443** (the routed edge port),
+   not a hard-coded `:8091`. Keep an explicit `?wsport=` override for local dev.
+2. **Edge routing (TASK-INFRA-010):** HAProxy on the voice VIP upgrades the browser WebSocket
+   (`Connection: upgrade`) and tunnels it to `bridges:8091` with a long `timeout tunnel` and
+   **call affinity** (session pinned to one bridge for its whole life); verify the upgrade
+   actually tunnels through the `alpn h2,http/1.1` front. Write the reference config in
+   `deploy/haproxy/haproxy.cfg` (LB is platform-managed → coordinate application).
+3. **Publish/allow the internal WS port:** ensure `bridges:8091` is reachable from the LB (open
+   `8091` to the LB source; publish it in compose only if the edge cannot reach the container
+   port otherwise).
+4. **Demote WebRTC:** label the WebRTC path "optional / same-subnet / dev only" in code + docs,
+   add a light guard so it does not rot, and decide deploy-image inclusion (opencv footprint,
+   ADR-0022). Do **not** delete it.
+5. **Observability:** ensure the live WS turn emits the canonical US-036 slices
+   (channel ingress / end-of-turn / STT / backend first-token / TTS first-audio / channel egress)
+   with the shared correlation id, so the primary transport is measurable.
+
+### Acceptance
+
+```gherkin
+Scenario: A remote browser completes a live voice turn over wss through the edge
+  Given the voice VIP routes wss and ws.js connects same-origin on :443
+  When an external browser opens ws.html, speaks a billing question, and pauses
+  Then the WebSocket handshake reaches a bridge and pins to it for the call
+  And the bot answers with streamed audio
+  And the US-036 slices are recorded with one correlation id
+```
+
+- One full live `wss` turn **measured** end-to-end (p95 mouth-to-ear + TTFA) and recorded against
+  the ADR-0029 gate (adversarial review "Must fix before pilot GO").
+- WebSocket upgrade confirmed to tunnel through the `h2,http/1.1` VIP front (platform-confirmed).
+- WebRTC path clearly marked optional/dev; voice-agent unit + behave suites stay green.
+
+### Notes
+
+- Direct-web AEC caveat (ADR-0025 pt7): on the WS path the browser loses native echo cancellation
+  → document "headset recommended" for hands-free, or add a client-side AEC fallback (deferrable).
+- The WebSocket transport + ADR-0043 session factory are the direct substrate for the Sprint-13
+  Genesys Audio Connector (ADR-0040); keep the control-signal seam transport-neutral.

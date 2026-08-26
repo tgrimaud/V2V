@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted (Sprint 6, TASK-WEB-007)
+Accepted (Sprint 6, TASK-WEB-007). **Refined by
+[ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md)** (2026-08-26): the WebRTC
+transport described here remains valid *mechanically*, but is **demoted to an optional
+same-subnet/dev live transport**. WebSocket (ADR-0043 → ADR-0040 Genesys Audio Connector) is
+now the **primary V1 live transport** for external/pilot/Genesys audio. The TURN/STUN note in
+this ADR's Consequences is the follow-up that ADR-0042 declined for the pilot.
 
 ## Context
 
