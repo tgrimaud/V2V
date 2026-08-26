@@ -9,8 +9,15 @@ health_url: "http://127.0.0.1:8090/"
 
 voice_bind: "0.0.0.0"
 voice_port: 8090
+# Live WebSocket concurrency ceiling per bridge (ADR-0047, TASK-WEB-038). The live-voice
+# WebSocket rides the SAME routed :8090 at /ws (no separate listener); a connection past
+# this ceiling is refused with WS close 1013. All sessions share one asyncio loop, so this
+# bounds load on a 2 vCPU VM; the app also uses it to emit the active-session gauge.
+voice_max_ws_sessions: 8
 
-# Published port opened in firewalld by host_prereqs (TASK-OPS-003).
+# Published port opened in firewalld by host_prereqs (TASK-OPS-003). Only 8090 is
+# edge-facing: per ADR-0047 the live-voice WebSocket is served on the SAME routed port
+# (no separate :8091 at the edge), so no extra firewall opening is needed for it.
 firewall_port: 8090
 
 # Least privilege (TASK-OPS-004): 8090 is reached ONLY by the HAProxy LB nodes

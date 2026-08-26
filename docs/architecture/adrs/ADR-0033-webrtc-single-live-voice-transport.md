@@ -2,9 +2,20 @@
 
 ## Status
 
-Accepted — builds on [ADR-0022](ADR-0022-webrtc-transport-for-streaming-voice-loop.md)
-(WebRTC transport for the streaming loop) and clarifies the client-facing transport
-boundary left implicit there. Reaffirms [ADR-0002](ADR-0002-pipecat-gradium-target-voice-path.md),
+**Superseded by [ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md)** (2026-08-26).
+The core claim below — "WebRTC is the *single* live customer-facing voice transport" and "do
+not add a browser-facing WebSocket" — no longer holds once V1 leaves the same-subnet dev bench:
+the V1 production ingress is Genesys-mediated (Genesys Audio Connector = `wss://` AudioHook,
+ADR-0040), external-browser WebRTC audio fails without TURN (ADR-0042), and the pilot proved
+WebRTC media cannot traverse the containerised bridges. ADR-0046 makes **WebSocket the primary
+V1 live transport** (web + Genesys) and **demotes WebRTC to an optional same-subnet/dev path**.
+This ADR is retained for history and for its still-valid points 3 (server↔provider WebSocket
+unchanged) and 4 (batch `/turn` is offline/tests only), plus its honest record of WebRTC's
+browser-media advantages, which remain the reason WebRTC survives as the on-net dev option.
+
+Originally: Accepted — built on [ADR-0022](ADR-0022-webrtc-transport-for-streaming-voice-loop.md)
+(WebRTC transport for the streaming loop) and clarified the client-facing transport
+boundary left implicit there. Reaffirmed [ADR-0002](ADR-0002-pipecat-gradium-target-voice-path.md),
 [ADR-0012](ADR-0012-modular-voice-pipeline-over-realtime-api.md),
 [ADR-0025](ADR-0025-barge-in-native-interruption.md), and the latency framing of
 [ADR-0029](ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md).

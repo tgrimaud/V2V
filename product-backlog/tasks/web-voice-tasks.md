@@ -3370,3 +3370,265 @@ and it already returns the whole WAV at once, so base64 buffering is a non-issue
 - `test_voice_runtime.py` updated to parse the JSON body + decode base64 WAV (RIFF/WAVE).
   voice-agent **504 unit tests green** + behave **13 features / 36 scenarios / 169 steps green**.
 - OpenAPI still describes every endpoint (behave openapi scenario green).
+
+---
+
+## TASK-WEB-037 - Consolidate on WebSocket as the primary V1 live voice transport (demote WebRTC to optional dev), fix `ws.js` same-origin
+
+**Parent:** EPIC-006 (Voice2Voice foundation)
+**Decision:** [ADR-0046](../../docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md) (Accepted 2026-08-26, supersedes ADR-0033). Adversarial review: `docs/architecture/reviews/websocket-primary-transport-adversarial-review-2026-08-26.md`.
+**Depends on / bundles:** ~~TASK-INFRA-010 (HAProxy `wss` edge routing)~~ — **dropped 2026-08-26** (ADR-0047): no HAProxy change; the WS folds onto the single routed port (TASK-WEB-038).
+**Classification:** V1 voice runtime + edge wiring (runtime-affecting: adds/updates the live transport path).
+**Status:** 🔧 In progress — **edge-routing sub-scope reverted (decision 2026-08-26, [ADR-0047](../../docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md)).** The user chose the option that avoids touching the HAProxy config: rather than a `voice_ws` edge special-case, the runtime will unify HTTP+WS on one routed port (TASK-WEB-038), and HAProxy tunnels the upgrade on the existing `voice_bridges` backend. This ticket now keeps only the transport-agnostic bits (same-origin `ws.js` + WebRTC demotion + interim `:8091` publish for a **direct-to-bridge** live test); the HAProxy `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` have been removed. Remaining before GO: **one live `ws` turn measured direct-to-bridge** (no HAProxy) per `docs/operations/pilot-voice-access.md` → *Live-latency test without HAProxy*.
+
+**Implemented (2026-08-26):**
+- **`ws.js` same-origin** (item 1, kept): served over HTTPS → connects `wss://<host>/` on :443 (the target single routed port, ADR-0047); plain HTTP → direct `ws://<host>:8091/`; `?wsport=<n>` forces a direct port. `voice-agent/web_voice/static/ws.js::wsUrl()`.
+- **~~HAProxy edge route~~ (item 2, REVERTED 2026-08-26, ADR-0047):** the `acl is_voice_ws` + `backend voice_ws` (:8091) special-case was removed from `deploy/haproxy/haproxy.cfg` / README / `qa-validate-haproxy.sh`. Decision: avoid touching HAProxy — the WS tunnels on the existing backend once HTTP+WS share one port (TASK-WEB-038). QA now asserts the *absence* of a `voice_ws` route.
+- **Publish 8091** (item 3, kept as interim): compose publishes `:8091`; `voice_ws_port`/`VOICE_WS_PORT` wired group_vars → `voice.env.j2` → compose → container — so a same-subnet / SSH-tunnel client can drive a direct `ws://<bridge>:8091` turn. The `firewall_extra_ports:[8091]` LB opening was **reverted** (no edge routing → not needed); QA asserts its absence. Removed by TASK-WEB-038 once WS moves to :8090.
+- **Demote WebRTC** (item 4): labelled optional/same-subnet/dev in `pilot-voice-access.md`, `haproxy/README.md`, ADR-0046 and an in-page banner on `webrtc.html` (links to `/ws.html`). Kept, not deleted.
+- **Observability** (item 5): the WS path reuses the shared streaming session core with `transport_label="websocket"` stamped on the channel-egress span; all US-036 slices (ingress via `stt.audio.accept`/`web.voice.ingress`, STT, backend first-token, TTS first-audio, egress) already emit under one correlation id (TASK-WEB-030). No code change; a live turn just needs measuring.
+- Validation: voice-agent **568 unit + 46 behave** green; `haproxy -c` valid (QA asserts no `voice_ws` route); Ansible QA + `deploy.yml`/`prereqs.yml` syntax-check clean (WS firewall assertions replaced by absence checks per ADR-0047).
+
+**Original status:** 📋 Planned — created 2026-08-26 from the WebRTC-vs-WebSocket transport decision (A); branch initially carried the ADR + review + this ticket (docs only).
+
+### Context
+
+The v0.6.0 pilot proved the deployed voice stack is healthy and reachable (page + signalling +
+backend warm-up all 200) but **no live turn completes**: WebRTC media cannot traverse the
+containerised bridges (compose publishes only `8090/tcp`, `aiortc` gathers only the
+container-internal `10.89.x` ICE candidate, no UDP path, no TURN → ICE `connecting → closed`),
+and the WebSocket path — the transport *designed* to reach externally over TCP through the edge
+(server runs `websocket=on:8091`) — is not routed at the edge and `ws.js` targets a hard-coded
+`:8091` the VIP does not expose. Per ADR-0046, WebSocket is now the **primary** V1 live transport
+(web + Genesys Audio Connector, ADR-0040) and WebRTC is demoted to an optional same-subnet/dev path.
+
+### Scope
+
+1. **`ws.js` same-origin fix:** connect to `wss://<host>/` on **:443** (the routed edge port),
+   not a hard-coded `:8091`. Keep an explicit `?wsport=` override for local dev.
+2. **Edge routing (TASK-INFRA-010):** HAProxy on the voice VIP upgrades the browser WebSocket
+   (`Connection: upgrade`) and tunnels it to `bridges:8091` with a long `timeout tunnel` and
+   **call affinity** (session pinned to one bridge for its whole life); verify the upgrade
+   actually tunnels through the `alpn h2,http/1.1` front. Write the reference config in
+   `deploy/haproxy/haproxy.cfg` (LB is platform-managed → coordinate application).
+3. **Publish/allow the internal WS port:** ensure `bridges:8091` is reachable from the LB (open
+   `8091` to the LB source; publish it in compose only if the edge cannot reach the container
+   port otherwise).
+4. **Demote WebRTC:** label the WebRTC path "optional / same-subnet / dev only" in code + docs,
+   add a light guard so it does not rot, and decide deploy-image inclusion (opencv footprint,
+   ADR-0022). Do **not** delete it.
+5. **Observability:** ensure the live WS turn emits the canonical US-036 slices
+   (channel ingress / end-of-turn / STT / backend first-token / TTS first-audio / channel egress)
+   with the shared correlation id, so the primary transport is measurable.
+
+### Acceptance
+
+```gherkin
+Scenario: A remote browser completes a live voice turn over wss through the edge
+  Given the voice VIP routes wss and ws.js connects same-origin on :443
+  When an external browser opens ws.html, speaks a billing question, and pauses
+  Then the WebSocket handshake reaches a bridge and pins to it for the call
+  And the bot answers with streamed audio
+  And the US-036 slices are recorded with one correlation id
+```
+
+- One full live `wss` turn **measured** end-to-end (p95 mouth-to-ear + TTFA) and recorded against
+  the ADR-0029 gate (adversarial review "Must fix before pilot GO").
+- WebSocket upgrade confirmed to tunnel through the `h2,http/1.1` VIP front (platform-confirmed).
+- WebRTC path clearly marked optional/dev; voice-agent unit + behave suites stay green.
+
+### Notes
+
+- Direct-web AEC caveat (ADR-0025 pt7): on the WS path the browser loses native echo cancellation
+  → document "headset recommended" for hands-free, or add a client-side AEC fallback (deferrable).
+- The WebSocket transport + ADR-0043 session factory are the direct substrate for the Sprint-13
+  Genesys Audio Connector (ADR-0040); keep the control-signal seam transport-neutral.
+
+---
+
+## TASK-WEB-038 - Unify the voice runtime onto a single async HTTP+WebSocket server on one port
+
+**Parent:** EPIC-006 (Voice2Voice foundation)
+**Decision:** [ADR-0047](../../docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md) (Accepted target 2026-08-26, refines ADR-0022 under ADR-0046).
+**Relationship:** This ticket is the *destination* of the WebSocket-primary decision. The user chose to **avoid touching HAProxy** (decision 2026-08-26): TASK-WEB-037's `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` were already **reverted**, so this ticket now *delivers* the single routed port that makes HAProxy tunnel the upgrade natively (no edge special-case, no platform-team dependency). TASK-WEB-037 keeps only the same-origin `ws.js` + WebRTC demotion + the interim `:8091` publish used for the direct-to-bridge live-latency test.
+**Classification:** V1 voice runtime (runtime-affecting: changes the serving layer of the primary live transport).
+**Branch:** `task/TASK-WEB-038-aiohttp-one-port` (off `task/TASK-WEB-037-websocket-primary-transport`).
+**Status:** 🔧 Code-complete — **spike + Slice 1 + Slice 2 + Slice 3 landed (2026-08-26).** The build is sliced to keep the suite green at every step. The aiohttp single-port server is now the **default**; the only residual is the on-pilot live confirmation (edge `101` + ADR-0029 re-measure), tracked under scope 7 / TASK-WEB-039.
+
+**Slice progress:**
+- ✅ **Spike (gate, scope 1):** `voice-agent/spikes/aiohttp_one_port/` — one aiohttp app serves static + `/api/voice/*` + a WS `101` upgrade on one port; `verify.py` PASS on aiohttp **3.14.1** / Python **3.14.2**. aiohttp is **already transitive** (zero new wheels); FastAPI rejected (would add starlette+pydantic+uvicorn). Confirms ADR-0047.
+- ✅ **Slice 1 — aiohttp HTTP surface (scope 2 partial, scope 3):** `web_voice/app.py::make_app(processor, signaling)` serves static + OpenAPI + all `/api/voice/*` REST (`turn`/`stt`/`tts`/`webrtc/offer`) with **byte-identical contracts** (204/404/411/413/502, JSON shapes, `application/json` no-charset, path-traversal guard, body cap). Blocking processor/signaling calls run in a thread executor so the single loop stays responsive. Selectable via `--server aiohttp` / `VOICE_SERVER=aiohttp` (default still `stdlib` this slice). Parity suite `tests/test_web_voice_app.py` (22 tests) + full suite green; live boot on one port confirmed. The batch `/api/voice/turn` BUG-015 whole-answer WAV is preserved (reuses `_full_turn_response`).
+- ✅ **Slice 2 — WS upgrade onto the aiohttp port (scope 2 core, 4):** `web_voice/websocket_app.py` adds an **aiohttp-native pipecat transport** (`AiohttpWebsocketClient` + `AiohttpWebsocketInputTransport` + `AiohttpWebsocketOutputTransport` + `AiohttpWebsocketTransport`) that consumes an already-upgraded `web.WebSocketResponse` — modelled on pipecat's `FastAPIWebsocketTransport` but built directly on `BaseInput/OutputTransport` so it pulls **no FastAPI/starlette** (ADR-0022). `make_ws_handler(factory, …)` mounts `GET /ws` on `make_app`: **one `StreamingVoiceSession` per connection** via the unchanged `SessionFactory` (ADR-0043), awaited inline on the aiohttp loop; peer disconnect **drains** the session (graceful `EndFrame`, TASK-WEB-008) so `run()` returns. **Concurrency lifted 1→N** (`VOICE_MAX_WS_SESSIONS`, default 8); an over-ceiling connection is refused with **WS 1013** + `session_rejected(reason=capacity)`. Framing (`WebSocketAudioSerializer`) + US-036 telemetry names reused for cross-transport parity. On `--server aiohttp` the interim `:8091` listener is **not** started (WS rides `/ws` on the HTTP port). Tests `tests/test_websocket_app.py` (real-socket transport round-trip + capacity 1013 + telemetry parity + drain wiring, 9 tests); full suite **599 unit + 46 behave** green. **Live single-port smoke:** HTTP (`/`, openapi, 404) + WS `101` + capacity refusal (4 held, 5th → 1013) all on one port, telemetry `accepted`/`closed`/`rejected` + `reason=capacity` emitted. **Adversarial review remediation (2026-08-26):** the 87/100 review's 2 blocking + 3 minor findings all fixed — (B1) real audio-egress test proves a `TTSAudioRawFrame` reaches the client as PCM16 bytes (`write_audio_frame`→serialize→`send_bytes`); (B2) cancel-safe teardown — accounting + telemetry dump now run **before** the best-effort stop in `finally`, so a shutdown `CancelledError` (a `BaseException`) can never leak the capacity slot; (m3) the message iterator skips `PING`/`PONG` and only ends on close/error; (m4) a per-turn `session.run()` exception is caught + logged, not raised out of the aiohttp handler; (m5) unit tests for `server.py::_build_ws_handler` (`off`→None, `auto`/`on`→callable). Re-review ≥90 → QA-ready.
+- ✅ **Slice 3 — default flip + WebRTC guard + edge/compose cleanup (scopes 5, 6; `--server` default):** `--server`/`VOICE_SERVER` **default flipped to `aiohttp`** (`_parse_args`), so the single async HTTP+WS server on one routed port is now the standard runtime (stdlib is the explicit legacy fallback). **Scope 5 (WebRTC):** confirmed already dev-only + off the primary path — `_build_signaling` stays behind the `probe_webrtc_support` import guard (returns None on `--webrtc off`/unavailable → offer answers `503 webrtc_unavailable`), and `handle_webrtc_offer` runs the blocking negotiation in a thread executor so it never blocks the loop; WS (`/ws`) is primary. **Scope 6 (edge/deploy cleanup, retire `:8091`/`VOICE_WS_PORT`):** compose now publishes **only** the routed `:8090` (dropped the `:8091` publish + `VOICE_WS_PORT` env) and forwards the new `VOICE_MAX_WS_SESSIONS` ceiling; `voice.env.j2` / `.env.example` / `group_vars/voice.yml` drop `VOICE_WS_PORT`/`voice_ws_port` and add `voice_max_ws_sessions`; `qa-validate-ansible.sh` §14 rewritten to assert the single-port model (no `VOICE_WS_PORT`, exactly one published port, WS ceiling wired) — **80/0**; `qa-validate-haproxy.sh` already ADR-0047-clean (no `voice_ws`, `timeout tunnel` present, `haproxy -c` valid) — **35/0**. `ws.js` connects **same-origin `/ws`** (dropped the `:8091` default; `?wsport=` still forces a direct bridge port); `ws_live_client.py` + Dockerfile + `pilot-voice-access.md` updated to the single routed `/ws`. Suite **601 unit + 46 behave** green (`ServerSelectorTest` now asserts the aiohttp default; **+2 end-to-end functional tests** from the adversarial-review follow-up: `WsFullTurnTest` drives a real transport + real pipeline session **built by `make_ws_handler`** over a real socket — audio-in → bot-audio-out on the shipped default `/ws`, plus **two concurrent callers each get their own answer** with no cross-talk, proving the 1→N lift end-to-end via the active-session gauge accepted 2→closed 0). **Live single-port smoke (default flip, no `--server`):** boot reports `server=aiohttp, websocket=on:<port>/ws`; `GET /`=200, `/ws.js` served, `POST /api/voice/webrtc/offer`→`503` (guarded off), `/ws` connects + session replies `{"type":"opened"}`, and a WS to `/` correctly refuses the upgrade (falls to static). **Residual (scope 7, tracked — needs a pilot deploy of the unified image):** the on-VIP edge `101 Switching Protocols` confirmation on `/ws` and the ADR-0029 mouth-to-ear re-measure on the single routed port (no SSH-tunnel/loopback workaround) are re-scored under **TASK-WEB-039**.
+
+### Context
+
+The runtime today runs **two servers on two ports** (ADR-0022): a stdlib `ThreadingHTTPServer`
+on `:8090` (UI + `/api/voice/*` REST + WebRTC signaling) and Pipecat's
+`SingleClientWebsocketServerTransport` on `:8091` (live PCM16 audio). ADR-0046 made WebSocket
+the **primary** transport, which turned the two-port split into a liability: it forces a
+platform-managed HAProxy special-case to route the WS port (which is exactly why that route was
+reverted — decision 2026-08-26), caps concurrency at **one call per bridge**
+(single-client-per-listener), and grows the deploy surface. The business
+logic is already transport-neutral (ADR-0043 session factory) and **one asyncio loop already
+exists** (`web_voice/async_loop.py`); the stdlib HTTP server is the blocker.
+
+### Scope
+
+1. **Spike (gate):** confirm **aiohttp** (preferred over FastAPI/uvicorn — lighter, no pydantic)
+   can serve static files + the `/api/voice/*` REST routes + a WebSocket upgrade on one asyncio
+   app, with Python 3.14 wheels available on the internal mirror. Record footprint; FastAPI is
+   the fallback. Output feeds the ADR-0047 "Accepted → confirmed" note.
+2. **Single server on one port:** migrate the UI, REST routes and the live-audio WebSocket
+   upgrade onto one async server on the existing `BackgroundEventLoop`, bound to a single port
+   (default `:8090`). Retire the second listener + `VOICE_WS_PORT` + the second published port.
+3. **Reuse the domain unchanged:** keep the ADR-0043 transport-agnostic session factory, the
+   STT/answer/TTS `FrameProcessor`s, the control-signal seam and `BackendAnswerPort`. This is an
+   adapter-layer change; the batch `/api/voice/turn` contract (BUG-015) is preserved.
+4. **Concurrency:** accept N concurrent WebSocket connections (one session per connection),
+   lifting the single-client cap; keep a configurable per-bridge ceiling for backpressure.
+5. **WebRTC (dev-only, ADR-0046):** re-home its signaling into the async app **or** keep it
+   behind the import guard; it must not be on the primary path.
+6. **Edge:** the `voice_ws` ACL/backend + `firewall_extra_ports` were **already reverted**
+   (decision 2026-08-26); this ticket only has to **confirm live** that the single routed port
+   tunnels the upgrade through HAProxy `mode http` (the `101` curl in `pilot-voice-access.md`),
+   then retire the now-interim `:8091` publish + `VOICE_WS_PORT` from compose/group_vars.
+7. **Observability:** the US-036 slices (TASK-WEB-030) must keep emitting under one correlation
+   id on the unified path; `transport_label="websocket"` preserved.
+
+### Acceptance
+
+```gherkin
+Scenario: One routed port serves the UI and the live voice WebSocket, no edge special-case
+  Given the runtime serves HTTP and the WebSocket on a single port
+  And ws.js connects same-origin wss://<host>/
+  When the request reaches HAProxy with an Upgrade: websocket header
+  Then the existing voice_bridges backend tunnels it (no voice_ws ACL/backend)
+  And a full live turn completes with US-036 slices under one correlation id
+Scenario: Two callers are served concurrently by one bridge
+  Given two browsers open ws.html against the same bridge
+  Then both establish a live session (single-client cap lifted)
+```
+
+- Spike outcome recorded; aiohttp (or FastAPI fallback) chosen with footprint noted.
+- Voice-agent unit + behave suites green (batch `/turn` regression-covered).
+- One full live `wss` turn measured E2E, re-validated against the ADR-0029 gate.
+- HAProxy `voice_ws` special-case + `firewall_extra_ports:[8091]` removed; `qa-validate-haproxy.sh` / `qa-validate-ansible.sh` updated; `haproxy -c` valid.
+
+### Notes
+
+- Depends on / follows TASK-WEB-037 (which delivers the same-origin `ws.js` + the interim edge
+  route). Do TASK-WEB-037's live measurement first so the audio pipeline is proven **before** the
+  serving-layer refactor changes it.
+- Genesys readiness: the unified async HTTP+WS server is the natural host for the Audio Connector
+  `wss://` endpoint (ADR-0040, Sprint 13).
+
+## TASK-WEB-039 - Pilot WS-live ADR-0029 latency measurement (direct-to-bridge, v0.6.0) + gate tracking
+
+**Parent:** EPIC-006 (Voice2Voice foundation) / EPIC-010 (latency & pilot validation)
+**Related decisions:** ADR-0029 (mouth-to-ear p95 ≤ 1.5 s / TTFA p95 ≤ 1.2 s), ADR-0046 (WebSocket primary), ADR-0028 (observability)
+**Classification:** V1 pilot gate (latency evidence) — not runtime-affecting (measurement + tracking)
+**Status:** 🔧 Measured 2026-08-26 = **ADR-0029 FAIL** (first WS-live sample on the **actually-deployed pilot**, v0.6.0, direct-to-bridge). Remediation is tracked against existing levers (below), not re-implemented here.
+**Priority:** High
+**Branch:** `task/TASK-WEB-037-websocket-primary-transport` (measured alongside TASK-WEB-037's live proof)
+
+### Context
+
+TASK-WEB-037's acceptance was "measure one live `wss` turn end-to-end". With the HAProxy route
+dropped (ADR-0047), that measurement was done **direct-to-bridge** (no edge): the compose 8091
+publish was deployed to both pilot bridges (`vla-t01/t02`, image `0.6.0`, `websocket=on:8091`),
+an SSH tunnel to the bridge's **LAN IP** `:8091` (the podman-loopback quirk breaks `127.0.0.1` —
+same root cause as TASK-INFRA-011) drove the headless `scripts/ws_live_client.py`, and the
+server emitted per-call US-036 telemetry scored with `scripts/streaming_latency_report.py`.
+This is the WS-transport, real-pilot counterpart to the co-located TASK-WEB-031 (WS) and
+TASK-WEB-032 (WebRTC) reference measurements.
+
+### Result (warm, n=10, real Gradium streaming STT/TTS + Mistral RAG on the bridge)
+
+| Metric | p50 | p95 | ADR-0029 |
+|--------|-----|-----|----------|
+| mouth-to-ear (`voice_to_first_audio`) | 1929 | **2759 ms** | ≤ 1500 → **FAIL** (−1259) |
+| time-to-first-audio (end-of-speech → first bot audio) | 1579 | **2409 ms** | ≤ 1200 → **FAIL** (−1209) |
+| slice: end_of_turn (hold) | 350 | 350 | — |
+| slice: stt (post-EOT `time_to_final`) | 381 | **1235** | dominant |
+| slice: backend_first_token | 801 | 887 | 2nd |
+| slice: tts_first_audio (engine) | 359 | 401 | ✅ excellent |
+| slice: channel_egress (frame→transport) | 0.02 | 0.03 | ✅ negligible |
+| (context) stt.time_to_first_partial (pre-EOT) | 1407 | 2235 | off critical path |
+
+Client-observed mouth-to-ear proxy (incl. SSH-tunnel RTT), n=10: median ≈ 1750 ms, range 1553–2658 ms.
+Consistent with TASK-WEB-031/032 → **the bottleneck is transport-independent**: the post-EOT STT
+finalize tail (p95 1235 ms) then backend first-token (p95 887 ms) dominate; TTS first-audio and
+channel egress are well within budget. `stt.time_to_first_partial` (~1.4–2.2 s) happens **during**
+the caller's speech, so it is **not** on the post-EOT mouth-to-ear path (do not confuse it with the
+finalize tail).
+
+### Scope (tracking only — no new lever built here)
+
+1. Record the pilot WS-live evidence (see `docs/qa/task-web-039-*` report).
+2. Confirm the dominant slices (STT final tail + backend first-token) and route remediation to the
+   **existing** levers — do **not** duplicate:
+   - **TASK-STT-014** — reduce the post-EOT STT finalize tail (To do; activate).
+   - **TASK-BE-020** — shorten time-to-first-vetted-sentence in `converse-stream`.
+   - **TASK-BE-033** / **ADR-0045** — LLM first-token benchmark (largest reducible backend slice).
+3. Re-score ADR-0029 after TASK-WEB-038 (single port) so a clean measurement without the
+   SSH-tunnel/loopback workaround is available.
+
+### Acceptance
+
+- Pilot WS-live p50/p95 recorded per slice with the sample size + provider config.
+- Dominant slices identified and mapped to existing remediation tickets (no duplicate lever).
+- ADR-0029 status stated explicitly (FAIL, with the residual and its owning tickets).
+
+### Notes
+
+- The canonical per-slice table in `streaming_latency_report.py` populates correctly for the WS
+  path (end_of_turn / stt / backend_first_token / tts_first_audio / channel_egress all
+  `measured=true`); the **only** `NOT MEASURED` slice is `channel_ingress`, because the headless
+  client emits no browser-mic ingress span — a minor observability gap tracked as **TASK-WEB-040**.
+- An anomalous `barge_in_count=45` over 10 headless turns is **BUG-017** (separate).
+- Report JSON persisted at `docs/qa/task-web-039-ws-live-latency-report.json`; narrative at
+  `docs/qa/task-web-039-ws-live-latency-evidence.md`.
+
+## TASK-WEB-040 - Emit a `channel_ingress` slice on the WebSocket path (only unmeasured canonical slice)
+
+**Parent:** EPIC-010 (observability, latency & pilot validation)
+**Related decisions:** ADR-0028 (observability), ADR-0029 (gate), TASK-WEB-030 (WS canonical per-slice)
+**Classification:** V1 pilot gate (observability) — telemetry emission, runtime-affecting (span only)
+**Status:** 📋 Planned — surfaced 2026-08-26 by the TASK-WEB-039 WS-live measurement.
+**Priority:** Low
+**Branch:** `task/TASK-WEB-040-ws-channel-ingress-slice` (to create)
+
+### Context
+
+Scoring the WS-live sample (TASK-WEB-039) with `scripts/streaming_latency_report.py` showed the
+canonical per-slice table **populates correctly** for the WS path — `end_of_turn`, `stt`,
+`backend_first_token`, `tts_first_audio` and `channel_egress` are all `measured=true`. The
+**only** slice that reads `NOT MEASURED` is `channel_ingress` ("no channel-ingress span in this
+sample"). On the WebRTC path this slice comes from a `web.voice.ingress` span; the WS transport
+(TASK-WEB-030 `build_payload`) does not emit an equivalent ingress span, and the headless client
+naturally has no browser-mic ingress.
+
+This is a small observability completeness gap, not a scoring bug: the mouth-to-ear composite and
+gate verdicts do not depend on `channel_ingress`. It matters only so the WS per-slice picture is
+complete (US-036 "every slice emitted or explicitly `measured=false` with a reason") and directly
+comparable to the WebRTC path.
+
+### Scope
+
+- Emit a `channel_ingress`-equivalent span on the WS transport (first inbound audio frame →
+  handed to STT), under a name `streaming_latency_report.py` already recognises (or add it to the
+  slice's candidate names, first-present-wins so WS/WebRTC/fixture distributions don't mix).
+- Keep the report's `measured=false` + reason behaviour for genuinely headless runs (no fabricated zero).
+- Re-run against a real browser WS turn so `channel_ingress` populates; the other five slices are unchanged.
+
+### Acceptance
+
+- A real browser WS turn produces a `channel_ingress` slice (or an explicit `measured=false` reason for headless).
+- The other five canonical slices remain `measured=true` (regression-locked).
+- Numbers reconcile with the `metric_distributions` already emitted.
+
+### Notes
+
+- Scope corrected 2026-08-26 after the TASK-WEB-039 re-run: the earlier "all six slices
+  NOT MEASURED" observation was inaccurate (stale run) — only `channel_ingress` is missing.

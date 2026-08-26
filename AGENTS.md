@@ -209,6 +209,10 @@
 - Guessing pipecat test-helper import paths — `SleepFrame` and `run_test` are in **`pipecat.tests.utils`**, not `pipecat.frames.frames`. Needed to drive time-based FrameProcessor tests (e.g. a confirmation silence timeout).
 - Faking a telemetry recorder with `SimpleNamespace` — processors call `telemetry.record(name, correlation_id=..., **attrs)`, which a `SimpleNamespace` lacks. Use the real `voice_common.telemetry.TelemetryRecorder` in tests (also lets you assert emitted events).
 - Building a partial turn envelope (only `correlation_id`) in voice tests/Behave — the answer stage builds the backend request from it and fails without `conversation_id`, `channel`, `language`. Populate the full envelope.
+- Opening a ticket off a remembered/summarized tool result — the "all six per-slice NOT MEASURED for WS" claim was stale; a `streaming_latency_report.py` re-run showed only `channel_ingress` missing. Re-run the tool and read the JSON before writing a ticket's premise, then correct any ticket/index rows already written to match ground truth.
+- Confusing `stt.time_to_first_partial` (pre-EOT, while the caller still speaks) with the post-EOT `time_to_final` finalize tail — only `time_to_final` is on the mouth-to-ear path. Cite the right slice when attributing an ADR-0029 miss (STT tail → TASK-STT-014; backend first-token → TASK-BE-020/BE-033).
+- Reaching for FastAPI to unify HTTP+WS on one port (ADR-0047) — `aiohttp` is already transitive via pipecat/aiortc (zero new wheels, Python 3.14-ready); FastAPI would add starlette+pydantic+uvicorn for nothing. Verify a one-port app with `aiohttp.test_utils.TestServer` + `ClientSession` (ephemeral port, `ws_connect`), not a hand-bound port.
+- Adding a `:8091` publish and expecting to reach it on loopback through an SSH tunnel — the podman host→loopback quirk breaks the WS handshake on `127.0.0.1`; tunnel to the bridge LAN IP. Same quirk hangs the Ansible voice health gate (TASK-INFRA-011).
 
 ## Checklist After Substantive Changes
 

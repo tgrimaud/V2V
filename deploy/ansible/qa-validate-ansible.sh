@@ -242,6 +242,29 @@ ansible localhost -c local -m ansible.builtin.template \
 grep -q '^OTEL_EXPORTER_OTLP_ENDPOINT=http://obs.tst:4318$' "${TMP}/v_on.env" \
   && ok "voice export ON points OTEL_EXPORTER_OTLP_ENDPOINT at the collector" || bad "voice export-ON render wrong"
 
+# --- 14. Single routed-port live WebSocket wiring (ADR-0047 / TASK-WEB-038) ---
+# The runtime now serves the live WebSocket on the SAME routed :8090 at /ws (single async
+# aiohttp server). The interim second listener/port (:8091 + VOICE_WS_PORT) is RETIRED:
+# assert it is gone from group_vars/template/compose/.env.example, and that the WS session
+# ceiling (VOICE_MAX_WS_SESSIONS) flows group_vars -> template -> compose -> container.
+# Per ADR-0047 there is still NO separate edge firewall opening (WS tunnels on :8090).
+! grep -q 'voice_ws_port' "$VOICE_VARS"  && ok "group_vars drops voice_ws_port (WS on the routed :8090)"   || bad "stale voice_ws_port in group_vars (retired per ADR-0047)"
+! grep -q 'VOICE_WS_PORT' "$VOICE_TPL"   && ok "voice template drops VOICE_WS_PORT"                          || bad "stale VOICE_WS_PORT in voice template"
+! grep -q 'VOICE_WS_PORT' "$VOICE_EXAMPLE" && ok ".env.example drops VOICE_WS_PORT"                          || bad "stale VOICE_WS_PORT in .env.example"
+! grep -Eq ':8091' "$VOICE_COMPOSE"      && ok "compose no longer publishes a separate :8091 port"           || bad "compose still publishes :8091 (retired per ADR-0047)"
+[ "$(grep -cE '^\s+- "\$\{VOICE_BIND' "$VOICE_COMPOSE")" -eq 1 ] && ok "compose publishes exactly one port (the routed :8090)" || bad "compose publishes more than one port"
+grep -Eq '^voice_max_ws_sessions: [0-9]+' "$VOICE_VARS" && ok "group_vars declares voice_max_ws_sessions" || bad "group_vars missing voice_max_ws_sessions"
+grep -q '^VOICE_MAX_WS_SESSIONS={{ voice_max_ws_sessions }}' "$VOICE_TPL" && ok "voice template renders VOICE_MAX_WS_SESSIONS" || bad "voice template missing VOICE_MAX_WS_SESSIONS"
+grep -q 'VOICE_MAX_WS_SESSIONS:' "$VOICE_COMPOSE" && ok "compose forwards VOICE_MAX_WS_SESSIONS into the container" || bad "compose missing VOICE_MAX_WS_SESSIONS"
+grep -q '^VOICE_MAX_WS_SESSIONS=' "$VOICE_EXAMPLE" && ok ".env.example lists VOICE_MAX_WS_SESSIONS" || bad ".env.example missing VOICE_MAX_WS_SESSIONS"
+! grep -q '^firewall_extra_ports:' "$VOICE_VARS" && ! grep -q 'firewall_extra_ports' roles/host_prereqs/tasks/main.yml \
+  && ok "no firewall_extra_ports dead config (ADR-0047: WS tunnels on the routed :8090)" || bad "stale firewall_extra_ports present (dropped per ADR-0047)"
+# The rendered .env must actually carry the WS ceiling (default render, export irrelevant).
+ansible localhost -c local -m ansible.builtin.template \
+  -a "src=roles/compose_tier/templates/voice.env.j2 dest=${TMP}/v_ws.env mode=0600" \
+  -e "@group_vars/voice.yml" -e ansible_become=false >/dev/null 2>&1
+grep -Eq '^VOICE_MAX_WS_SESSIONS=[0-9]+$' "${TMP}/v_ws.env" && ok "rendered voice .env sets VOICE_MAX_WS_SESSIONS" || bad "rendered voice .env missing VOICE_MAX_WS_SESSIONS"
+
 echo
 echo "RESULT: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

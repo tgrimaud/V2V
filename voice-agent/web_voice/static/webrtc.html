@@ -83,6 +83,10 @@
       <p class="subtitle">
         Full-duplex mic + speaker over one WebRTC media channel (TASK-WEB-007).
         Speak a question, pause, and the bot answers over the same connection.
+        <br><strong>Optional / same-subnet / dev only</strong> (ADR-0046): WebRTC
+        media is UDP peer-to-peer and does not traverse the load balancer, so it
+        only connects on the same subnet (or with STUN/TURN). For the live remote
+        path use the WebSocket client at <a href="/ws.html">/ws.html</a>.
       </p>
       <div class="controls">
         <button id="start">Start call</button>

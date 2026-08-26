@@ -1,7 +1,10 @@
-# Voice bridge (WebRTC) - tst deploy stack (TASK-INFRA-001, ADR-0038).
+# Voice bridge - tst deploy stack (TASK-INFRA-001, ADR-0038).
 # Runs the TASK-DEPLOY-002 image on vla-ai4cc-t01/t02 (.103/.104), one instance per
-# VM, behind the voice VIP .10 (HAProxy TLS edge - TASK-INFRA-002). The image
-# entrypoint already binds 0.0.0.0:8090; everything else is env-driven.
+# VM, behind the voice VIP .10 (HAProxy TLS edge - TASK-INFRA-002). The image entrypoint
+# runs the single async HTTP+WS server (aiohttp, ADR-0047 / TASK-WEB-038) on ONE routed
+# port 0.0.0.0:8090: UI + `/api/voice/*` REST + the live-voice WebSocket (`/ws`, the
+# primary transport per ADR-0046) + WebRTC signaling. HAProxy tunnels the `Upgrade:
+# websocket` on the existing voice_bridges backend, so there is NO separate WS port.
 #
 # Values come from a sibling ".env" rendered by Ansible from secrets - never commit
 # a real .env. See .env.example for the contract.
@@ -11,10 +14,16 @@ services:
     image: "${VOICE_IMAGE:?set VOICE_IMAGE to the registry path}:${IMAGE_TAG:-latest}"
     container_name: voice-support-bridge
     restart: unless-stopped
-    # Published on the host so the voice VIP (.10) can load-balance t01/t02.
+    # Published on the host. ONE routed port 8090 carries HTTP (UI + REST + WebRTC signaling)
+    # AND the live-voice WebSocket at /ws (ADR-0047 / TASK-WEB-038), load-balanced by the voice
+    # VIP (.10). HAProxy tunnels the `Upgrade: websocket` on the existing backend — one port.
     ports:
       - "${VOICE_BIND:-0.0.0.0}:${VOICE_PORT:-8090}:8090"
     environment:
+      # --- Live WebSocket concurrency ceiling (ADR-0047, TASK-WEB-038) ---
+      # Max concurrent live WS sessions per bridge; a connection past it is refused with WS
+      # close 1013 (backpressure) and the active-session gauge is exported. Code default 8.
+      VOICE_MAX_WS_SESSIONS: "${VOICE_MAX_WS_SESSIONS:-8}"
       # --- Conversation backend (reach the backend VIP .11) ---
       VOICE_BACKEND: "${VOICE_BACKEND:-http}"
       VOICE_BACKEND_URL: "${VOICE_BACKEND_URL}"

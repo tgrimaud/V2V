@@ -47,6 +47,12 @@ grep -Eq 'bind 192\.168\.0\.11:80$' "$CFG"                && ok "backend fronten
 grep -q '192.168.0.103:8090' "$CFG" && grep -q '192.168.0.104:8090' "$CFG" && ok "voice backend targets both bridges :8090" || bad "voice backend targets wrong"
 grep -q '192.168.0.105:8080' "$CFG" && grep -q '192.168.0.106:8080' "$CFG" && ok "backend backend targets both nodes :8080"  || bad "backend targets wrong"
 grep -q 'http-check send meth GET uri /$' "$CFG"          && ok "voice health check GET /"              || bad "voice health check missing"
+# ADR-0047 (decision 2026-08-26): NO WebSocket-specific route. The runtime unifies HTTP + the
+# live-voice WebSocket on one routed port, so HAProxy tunnels the upgrade on the existing
+# voice_bridges backend via `timeout tunnel` — assert there is no dead voice_ws special-case.
+grep -q 'timeout tunnel' "$CFG"                           && ok "long tunnel timeout present (tunnels the WS upgrade on the existing backend)" || bad "no timeout tunnel (WS upgrade would not hold)"
+! grep -q 'backend voice_ws' "$CFG" && ! grep -q 'use_backend voice_ws' "$CFG" \
+  && ok "no dead voice_ws special-case (ADR-0047: single routed port)" || bad "stale voice_ws route present (should be removed per ADR-0047)"
 # TASK-INFRA-007: the backend must use the deep dependency-aware /actuator/health,
 # NOT the static /api/health (which never reflects DB/Redis degradation).
 grep -q 'uri /actuator/health' "$CFG"                     && ok "backend deep health check GET /actuator/health" || bad "backend not using deep /actuator/health"
