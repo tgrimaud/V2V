@@ -2,8 +2,10 @@
 # Runs the TASK-DEPLOY-002 image on vla-ai4cc-t01/t02 (.103/.104), one instance per
 # VM, behind the voice VIP .10 (HAProxy TLS edge - TASK-INFRA-002). The image entrypoint
 # binds 0.0.0.0:8090 (HTTP: UI + WebRTC signaling) AND 0.0.0.0:8091 (the primary live
-# voice WebSocket transport, ADR-0046). Both are published so the VIP can route each
-# (HTTP -> :8090, `Upgrade: websocket` -> :8091). Everything else is env-driven.
+# voice WebSocket transport, ADR-0046). :8091 is published so a same-subnet / SSH-tunnel
+# client can drive a DIRECT `ws://<bridge>:8091` turn (interim live-latency test, no
+# HAProxy). Per ADR-0047 the WS folds onto the single routed :8090 (TASK-WEB-038), after
+# which :8091 goes away and HAProxy tunnels the upgrade on the existing backend.
 #
 # Values come from a sibling ".env" rendered by Ansible from secrets - never commit
 # a real .env. See .env.example for the contract.
@@ -13,17 +15,18 @@ services:
     image: "${VOICE_IMAGE:?set VOICE_IMAGE to the registry path}:${IMAGE_TAG:-latest}"
     container_name: voice-support-bridge
     restart: unless-stopped
-    # Published on the host so the voice VIP (.10) can load-balance t01/t02. 8090 = HTTP
-    # (UI + WebRTC signaling); 8091 = live voice WebSocket (ADR-0046, TASK-WEB-037) that
-    # HAProxy tunnels for the primary V1 transport (no TURN/UDP).
+    # Published on the host. 8090 = HTTP (UI + WebRTC signaling) load-balanced by the voice
+    # VIP (.10). 8091 = live voice WebSocket (ADR-0046), published for a DIRECT same-subnet /
+    # SSH-tunnel latency test (no HAProxy route — ADR-0047); removed once the WS moves to
+    # :8090 (TASK-WEB-038).
     ports:
       - "${VOICE_BIND:-0.0.0.0}:${VOICE_PORT:-8090}:8090"
       - "${VOICE_BIND:-0.0.0.0}:${VOICE_WS_PORT:-8091}:8091"
     environment:
       # --- Conversation backend (reach the backend VIP .11) ---
-      # Live voice WebSocket listener (ADR-0046). Bound 0.0.0.0:8091 in-container; published
-      # above so the VIP can tunnel `wss` upgrades to it. Auto-enabled when the websockets lib
-      # ships in the image (default); set VOICE_WS_PORT to move the port.
+      # Live voice WebSocket listener (ADR-0046). Bound 0.0.0.0:8091 in-container; auto-enabled
+      # when the websockets lib ships in the image (default). Published above for the interim
+      # direct-to-bridge test; set VOICE_WS_PORT to move the port.
       VOICE_WS_PORT: "${VOICE_WS_PORT:-8091}"
       VOICE_BACKEND: "${VOICE_BACKEND:-http}"
       VOICE_BACKEND_URL: "${VOICE_BACKEND_URL}"
