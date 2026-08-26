@@ -108,3 +108,50 @@ lands the single routed port (`wss://<vip>/` through HAProxy).
 3. `cd voice-agent && ./.venv/bin/python scripts/ws_live_client.py --url ws://127.0.0.1:8091 --audio fixtures/long/billing-question.pcm --language fr --hold 12` (×10 warm).
 4. Collect the server telemetry dumps from the container logs → `ws-telemetry.jsonl`.
 5. Score: `./.venv/bin/python scripts/streaming_latency_report.py --input ws-telemetry.jsonl --channel web-voice-websocket --provider gradium-stt+mistral-rag+gradium-tts --warm`.
+
+---
+
+## Update 2026-08-26 — v0.7.0 single routed port, re-measured **through the HAProxy edge**
+
+Re-run after `v0.7.0` (single async HTTP+WS server, ADR-0047) was deployed to eir-ai4cc-tst.
+This closes both TASK-WEB-039 confirmation residuals **except** the latency gate itself.
+
+- **Edge `101` confirmed (was pending).** `GET /ws` returns `HTTP/1.1 101 Switching Protocols`
+  both **direct-to-bridge** (`http://<bridge-LAN-IP>:8090/ws`, both nodes) and **through the VIP**
+  (`https://vip-ai4cc-voice-t01.prod.lan/ws`) — HAProxy tunnels the upgrade on the existing
+  `voice_bridges` backend, no edge special-case, no `:8091`. Bridge boot line: `server=aiohttp …
+  websocket=on:8090/ws`, container `healthy` on t01/t02.
+- **ADR-0029 gate = FAIL (unchanged).** Warm n=10, driven **through the edge VIP** (`wss://…/ws`),
+  real Gradium streaming STT/TTS + Mistral RAG, calls LB-balanced across t01/t02:
+  mouth-to-ear **p95 2763 ms** (target ≤ 1500, margin −1263) / time-to-first-audio **p95 2413 ms**
+  (target ≤ 1200, margin −1213).
+- **The edge tunnel adds ≈ 0 ms.** Edge-routed m2e p95 **2763 ms** vs the v0.6.0 direct-to-bridge
+  **2759 ms** — HAProxy's WS tunnelling is not a latency contributor. The bottleneck stays
+  transport- and edge-independent: **STT finalize tail p95 1227 ms** + **backend first-token p95
+  1388 ms**; TTS first-audio p95 390 ms and channel egress ~0 ms are inside budget.
+
+| Slice (post-EOT) | p50 | p95 | Budget |
+|---|---:|---:|---|
+| end_of_turn | 350 | 350 ms | fixed window |
+| stt (finalize tail) | 723 | **1227 ms** | dominant lever → TASK-STT-014 |
+| backend_first_token | 901 | **1388 ms** | dominant lever → TASK-BE-020 / BE-033 |
+| tts_first_audio | 353 | 390 ms | ✅ |
+| channel_egress | ~0 | ~0 ms | ✅ |
+| **mouth-to-ear** | 2437 | **2763 ms** | ❌ ≤ 1500 |
+| **time-to-first-audio** | 2087 | **2413 ms** | ❌ ≤ 1200 |
+
+**Residual now = latency only.** The transport/edge/deploy questions are answered (single routed
+port live, edge `101` confirmed both ways, edge adds no latency). Reaching the ADR-0029 gate is
+purely the STT-tail + backend-first-token work already ticketed (TASK-STT-014, TASK-BE-020/BE-033) —
+no transport change will move it.
+
+- **Raw report:** [`task-web-039-ws-edge-latency-report-v0.7.0.json`](./task-web-039-ws-edge-latency-report-v0.7.0.json)
+- **Raw telemetry:** [`task-web-039-ws-edge-telemetry-v0.7.0.jsonl`](./task-web-039-ws-edge-telemetry-v0.7.0.jsonl)
+
+### Procedure (edge re-measure)
+
+1. Deploy `v0.7.0` (single port `:8090`, `/ws`) to the voice tier.
+2. Confirm the upgrade: `curl -k -i -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://vip-ai4cc-voice-t01.prod.lan/ws` → `101`.
+3. Drive warm turns through the edge: `ws_live_client.py --url wss://vip-ai4cc-voice-t01.prod.lan/ws --audio fixtures/long/<clip>.pcm --language fr --hold 14 --insecure` (×10+).
+4. Collect per-call dumps from **both** bridges: `ssh <node> 'sudo podman logs --since 15m voice-support-bridge | grep pipeline_timing'` → merge into one `.jsonl`.
+5. Score: `streaming_latency_report.py --input <merged>.jsonl --channel web --provider gradium-streaming --warm`.

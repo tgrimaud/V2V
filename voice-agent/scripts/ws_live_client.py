@@ -104,12 +104,27 @@ def frame_rms(pcm: bytes) -> float:
     return math.sqrt(sum(s * s for s in samples) / n)
 
 
+def _ssl_context(url: str, insecure: bool):
+    """For a `wss://` edge with an internal-CA cert, an unverified context lets the
+    headless client drive the real edge path (ADR-0047); `ws://` needs no TLS."""
+    if not url.startswith("wss://"):
+        return None
+    import ssl
+
+    ctx = ssl.create_default_context()
+    if insecure:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 async def run(
     url: str,
     audio: str,
     *,
     language: str | None = "fr",
     hold: float = 12.0,
+    insecure: bool = False,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     frame_ms: int = DEFAULT_FRAME_MS,
 ) -> int:
@@ -121,7 +136,7 @@ async def run(
     trailing = list(silence_frames(max(1, TRAILING_SILENCE_MS // frame_ms), chunk))
     first_audible = {"at": None}
 
-    async with websockets.connect(url, max_size=None) as ws:
+    async with websockets.connect(url, max_size=None, ssl=_ssl_context(url, insecure)) as ws:
         await ws.send(build_open_frame(language))
         drain = asyncio.ensure_future(_drain(ws, first_audible))
         # Stream the clip in real time (one frame per frame_ms) so the server's
@@ -168,8 +183,15 @@ def main() -> int:
     parser.add_argument("--audio", required=True, help="PCM16/16k .pcm (or .wav) to stream")
     parser.add_argument("--language", default="fr")
     parser.add_argument("--hold", type=float, default=12.0, help="seconds to keep the call open")
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="skip TLS verification for a wss:// edge with an internal-CA cert (edge re-measure)",
+    )
     args = parser.parse_args()
-    return asyncio.run(run(args.url, args.audio, language=args.language, hold=args.hold))
+    return asyncio.run(
+        run(args.url, args.audio, language=args.language, hold=args.hold, insecure=args.insecure)
+    )
 
 
 if __name__ == "__main__":
