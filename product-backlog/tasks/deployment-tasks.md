@@ -1232,56 +1232,49 @@ Scenario: A wss voice connection survives a full call through the edge
   WebSocket route + tunnel timeout.
 - No TURN, no STUN — this is the whole point of the interim path (ADR-0042/0043).
 
-## TASK-INFRA-011 - Fix the voice deploy health gate hanging on the podman loopback quirk
+---
 
-**Parent:** EPIC-012 (pilot deployment)
-**Related decisions:** ADR-0038 (pilot deployment), TASK-OPS-002 (Ansible deploy playbooks)
-**Related:** TASK-WEB-037 / TASK-WEB-039 (the same loopback quirk broke the live-test SSH tunnel)
-**Classification:** V1 pilot deployment (release correctness)
-**Status:** 📋 Planned — recurring blocker; surfaced again 2026-08-26 during the v0.6.0 WS live test.
-**Priority:** High
-**Branch:** `task/TASK-INFRA-011-voice-health-gate-loopback` (to create)
+## TASK-INFRA-011 - Voice deploy health gate: probe the container health verdict, not host loopback
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** ADR-0038 (deploy topology), TASK-OPS-002 (Ansible deploy), TASK-OPS-004 (firewalld source-scoping)
+**Depends on:** —
+**Classification:** V1 pilot deployment — deploy-tooling fix (non-runtime)
+**Status:** ✅ Implemented + validated live on t01/t02 (2026-08-26) on `task/TASK-INFRA-011-voice-health-container-probe` (off `feat/restart-from-scratch`). Surfaced during the **v0.6.0 deploy**: the voice rolling deploy hung ~15 min on the health gate and had to be finished with a per-host `-e health_url` override.
 
 ### Context
 
-The Ansible voice deploy's "Wait for voice HTTP health" step probes `http://127.0.0.1:8090/`
-(`group_vars/voice.yml` `health_url`). On the pilot podman hosts the published port answers on
-`0.0.0.0:8090` and via the **host LAN IP** (`curl http://<host-ip>:8090/` → `200`, container
-`healthy`), but **host→loopback** returns `000` — a podman port-forwarder quirk, not an app
-failure. Same root cause bit the WS live test (TASK-WEB-039): `ws://127.0.0.1:8091` timed out
-through an SSH tunnel until it was re-pointed at the bridge LAN IP.
+The Ansible deploy health task (`roles/compose_tier/tasks/health.yml`) probed each tier
+over HTTP from the **host** with `ansible.builtin.uri` at `health_url`. For the **voice
+bridge** this is `http://127.0.0.1:8090/`, which is a recurring false-negative (documented
+in CLAUDE.md): the published port answers on the **192.168.x service IP** but returns **000
+on host loopback**, and the management-interface FQDN is **firewalld source-scoped**
+(TASK-OPS-004) so a probe there **hangs** (30 retries × ~30 s `uri` timeout ≈ 15 min) before
+aborting the rolling deploy (`serial:1` + `max_fail_percentage:0`). During the v0.6.0 deploy
+this blocked the voice tier; t02 had to be finished manually with
+`-e health_url=http://192.168.0.104:8090/`.
 
-With `retries:30 delay:5` + `serial:1 max_fail_percentage:0`, the false negative burns ~150 s
-then aborts the whole play **after** the node was already recreated at the new tag — so the
-next node is never touched and the deploy is left half-applied.
+### What was implemented
 
-### Scope
+- Added a **container-health probe** to `health.yml`: when `health_container_name` is set,
+  poll `docker inspect --format {{.State.Health.Status}} <name>` until `healthy`
+  (30×5 s). The container's own `HEALTHCHECK` curls `localhost:8090` **inside the container
+  namespace**, so it is immune to host interface/firewall/loopback quirks.
+- `group_vars/voice.yml` sets `health_container_name: voice-support-bridge`; the HTTP `uri`
+  probe is kept as a **fallback** (runs only when `health_container_name` is unset, e.g. the
+  backend tier whose loopback `:8080` probe works) so the QA contract (`ansible.builtin.uri`
+  present) is preserved.
+- `qa-validate-ansible.sh` gains 3 assertions (container-health probe present + gated +
+  voice tier uses it).
 
-- Replace the loopback HTTP probe with one of:
-  - **(preferred)** the container's own health verdict — `podman inspect --format '{{.State.Health.Status}}'`
-    (the image already ships a `HEALTHCHECK`), which is immune to the host→loopback forwarder quirk; or
-  - repoint `health_url` at the host's primary LAN IP
-    (`ansible_default_ipv4.address`) instead of `127.0.0.1`.
-- Keep the gate meaningful (still fail on a genuinely unhealthy container) and keep
-  `serial:1` safe (don't recreate the next node on a real failure).
-- Sweep the same loopback assumption anywhere else in the deploy (backend tier probe if present).
+### Acceptance (met)
 
-### Acceptance
-
-```gherkin
-Scenario: Voice deploy health gate passes when the bridge is actually healthy
-  Given a voice bridge published on 8090 and reporting healthy via podman inspect
-  When the Ansible voice deploy runs its health gate on the pilot podman host
-  Then the gate passes without the host->loopback false negative
-  And a genuinely unhealthy container still fails the gate
-```
-
-- `qa-validate-ansible.sh` stays green; add a check asserting the gate is not a bare `127.0.0.1` probe.
-- Documented in the deploy runbook (the manual "finish a blocked node" workaround can be retired).
+- `ansible-playbook deploy.yml --syntax-check` clean; `qa-validate-ansible.sh` **72/72** (+3).
+- **Live**: re-running the voice deploy on t01/t02 with the committed config passes
+  `Wait for voice container to report healthy (voice-support-bridge)` immediately and
+  **skips** the loopback HTTP probe — no override, no hang, `failed=0`.
 
 ### Notes
 
-- Interim manual workaround (already documented): verify health out-of-band
-  (`docker inspect --format {{.State.Health.Status}}` + `curl http://<host-ip>:8090/`), then
-  finish a blocked node by bumping `IMAGE_TAG` in `/opt/voice-support/voice/.env` (preserve the
-  vault-rendered secrets — never hand-write `.env`) and `podman compose up -d --remove-orphans`.
+- Non-runtime (deploy tooling only). Backend/redis health paths unchanged.
+- Removes the need for the manual `-e health_url=<service-IP>` workaround on future voice deploys.

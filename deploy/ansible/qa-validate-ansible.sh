@@ -125,6 +125,11 @@ grep -q "ignore_unreachable: true" roles/compose_tier/tasks/lb_reenable.yml && g
 # --- 8. Health verification ----------------------------------------------------
 grep -q "ansible.builtin.uri" roles/compose_tier/tasks/health.yml && ok "HTTP health probe present" || bad "no HTTP health probe"
 grep -q "redis-cli" roles/compose_tier/tasks/health.yml && ok "Redis ping health present" || bad "no Redis ping health"
+# TASK-INFRA-011: container-health probe (docker inspect .State.Health.Status) is the
+# preferred gate for tiers with a container HEALTHCHECK, immune to host loopback/firewall.
+grep -q ".State.Health.Status" roles/compose_tier/tasks/health.yml && ok "container-health probe present" || bad "no container-health probe"
+grep -q "health_container_name" roles/compose_tier/tasks/health.yml && ok "container-health probe gated by health_container_name" || bad "container-health probe not gated"
+grep -q 'health_container_name: "voice-support-bridge"' group_vars/voice.yml && ok "voice tier uses the container-health gate" || bad "voice tier not set to container-health gate"
 grep -q 'REDISCLI_AUTH=' roles/compose_tier/tasks/health.yml && ! grep -q 'redis-cli -a ' roles/compose_tier/tasks/health.yml \
   && ok "Redis password via REDISCLI_AUTH (not argv)" || bad "Redis password exposed in argv (-a)"
 
