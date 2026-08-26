@@ -3443,3 +3443,73 @@ Scenario: A remote browser completes a live voice turn over wss through the edge
   → document "headset recommended" for hands-free, or add a client-side AEC fallback (deferrable).
 - The WebSocket transport + ADR-0043 session factory are the direct substrate for the Sprint-13
   Genesys Audio Connector (ADR-0040); keep the control-signal seam transport-neutral.
+
+---
+
+## TASK-WEB-038 - Unify the voice runtime onto a single async HTTP+WebSocket server on one port
+
+**Parent:** EPIC-006 (Voice2Voice foundation)
+**Decision:** [ADR-0047](../../docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md) (Accepted target 2026-08-26, refines ADR-0022 under ADR-0046).
+**Relationship:** Makes **TASK-WEB-037 / TASK-INFRA-010** the *interim bridge* and this ticket the *destination*: once HTTP + WS share one routed port, the HAProxy `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` become removable and the platform-team edge dependency disappears.
+**Classification:** V1 voice runtime (runtime-affecting: changes the serving layer of the primary live transport).
+**Status:** 📋 Planned — opened 2026-08-26 from the "should we do the async refactor now?" decision (ADR-0047). Not started; begins with a spike.
+
+### Context
+
+The runtime today runs **two servers on two ports** (ADR-0022): a stdlib `ThreadingHTTPServer`
+on `:8090` (UI + `/api/voice/*` REST + WebRTC signaling) and Pipecat's
+`SingleClientWebsocketServerTransport` on `:8091` (live PCM16 audio). ADR-0046 made WebSocket
+the **primary** transport, which turned the two-port split into a liability: it forces a
+platform-managed HAProxy special-case to route the WS port (TASK-WEB-037), caps concurrency at
+**one call per bridge** (single-client-per-listener), and grows the deploy surface. The business
+logic is already transport-neutral (ADR-0043 session factory) and **one asyncio loop already
+exists** (`web_voice/async_loop.py`); the stdlib HTTP server is the blocker.
+
+### Scope
+
+1. **Spike (gate):** confirm **aiohttp** (preferred over FastAPI/uvicorn — lighter, no pydantic)
+   can serve static files + the `/api/voice/*` REST routes + a WebSocket upgrade on one asyncio
+   app, with Python 3.14 wheels available on the internal mirror. Record footprint; FastAPI is
+   the fallback. Output feeds the ADR-0047 "Accepted → confirmed" note.
+2. **Single server on one port:** migrate the UI, REST routes and the live-audio WebSocket
+   upgrade onto one async server on the existing `BackgroundEventLoop`, bound to a single port
+   (default `:8090`). Retire the second listener + `VOICE_WS_PORT` + the second published port.
+3. **Reuse the domain unchanged:** keep the ADR-0043 transport-agnostic session factory, the
+   STT/answer/TTS `FrameProcessor`s, the control-signal seam and `BackendAnswerPort`. This is an
+   adapter-layer change; the batch `/api/voice/turn` contract (BUG-015) is preserved.
+4. **Concurrency:** accept N concurrent WebSocket connections (one session per connection),
+   lifting the single-client cap; keep a configurable per-bridge ceiling for backpressure.
+5. **WebRTC (dev-only, ADR-0046):** re-home its signaling into the async app **or** keep it
+   behind the import guard; it must not be on the primary path.
+6. **Edge cleanup:** remove the TASK-WEB-037 `voice_ws` ACL/backend + `firewall_extra_ports`
+   once one routed port is confirmed to tunnel the upgrade through HAProxy `mode http`; update
+   `deploy/haproxy/haproxy.cfg` + `qa-validate-haproxy.sh` + `deploy/haproxy/README.md`.
+7. **Observability:** the US-036 slices (TASK-WEB-030) must keep emitting under one correlation
+   id on the unified path; `transport_label="websocket"` preserved.
+
+### Acceptance
+
+```gherkin
+Scenario: One routed port serves the UI and the live voice WebSocket, no edge special-case
+  Given the runtime serves HTTP and the WebSocket on a single port
+  And ws.js connects same-origin wss://<host>/
+  When the request reaches HAProxy with an Upgrade: websocket header
+  Then the existing voice_bridges backend tunnels it (no voice_ws ACL/backend)
+  And a full live turn completes with US-036 slices under one correlation id
+Scenario: Two callers are served concurrently by one bridge
+  Given two browsers open ws.html against the same bridge
+  Then both establish a live session (single-client cap lifted)
+```
+
+- Spike outcome recorded; aiohttp (or FastAPI fallback) chosen with footprint noted.
+- Voice-agent unit + behave suites green (batch `/turn` regression-covered).
+- One full live `wss` turn measured E2E, re-validated against the ADR-0029 gate.
+- HAProxy `voice_ws` special-case + `firewall_extra_ports:[8091]` removed; `qa-validate-haproxy.sh` / `qa-validate-ansible.sh` updated; `haproxy -c` valid.
+
+### Notes
+
+- Depends on / follows TASK-WEB-037 (which delivers the same-origin `ws.js` + the interim edge
+  route). Do TASK-WEB-037's live measurement first so the audio pipeline is proven **before** the
+  serving-layer refactor changes it.
+- Genesys readiness: the unified async HTTP+WS server is the natural host for the Audio Connector
+  `wss://` endpoint (ADR-0040, Sprint 13).

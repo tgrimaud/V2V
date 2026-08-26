@@ -9,7 +9,11 @@ transport). **Refines** the client-facing transport emphasis of
 [ADR-0002](ADR-0002-pipecat-gradium-target-voice-path.md) (Pipecat/Gradium orchestration
 unchanged). **Builds on** [ADR-0040](ADR-0040-genesys-audio-connector-v2v-media-plane.md),
 [ADR-0042](ADR-0042-no-turn-for-pilot-genesys-audio-connector-external-media.md), and
-[ADR-0043](ADR-0043-interim-websocket-audio-transport-genesys-ready.md). Adversarial review:
+[ADR-0043](ADR-0043-interim-websocket-audio-transport-genesys-ready.md). **Followed by**
+[ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md) (unify onto a single async
+HTTP+WebSocket server on one port — removes the WS edge special-case + platform dependency and
+lifts the one-call-per-bridge cap; TASK-WEB-037 is the interim bridge, ADR-0047 the
+destination). Adversarial review:
 `docs/architecture/reviews/websocket-primary-transport-adversarial-review-2026-08-26.md`.
 
 ## Context
