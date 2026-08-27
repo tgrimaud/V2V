@@ -818,9 +818,18 @@ DEC-002 (no invented / ungrounded amounts — must stay enforced per sentence)
 first vetted sentence, so the backend's time-to-first-vetted-sentence is directly on the
 critical path.
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (future improvement, out of Sprint 10 scope). Created 2026-07-31 from the
-TASK-WEB-020 cold/combined live passes.
+**Status:** 🔵 **Implemented — pending live latency re-measurement (QA gate).** Created 2026-07-31
+from the TASK-WEB-020 cold/combined live passes; implemented 2026-08-27 on
+`task/TASK-BE-020-first-sentence-latency` (off `feat/sprint-12-external-voice-websocket`).
+Lever: **warm the reactive LLM streaming path** at connect-time warm-up (the `.stream()`/WebClient
+path the TASK-BE-017 sync `.call()` warm-up left cold — the ADR-0037 turn-1 JIT residual on
+`converse-stream`). Adversarial self-review **93/100** (Pass, no blocking), `mvn test` **401**
+green + ArchUnit OK. DEC-002 unchanged (contract + incremental-delivery tests green). Report:
+`docs/qa/task-be-020-first-sentence-latency-report.md`. **Remaining:** live A/B micro-benchmark +
+streaming pass on real Gradium+Mistral infra (see report §"Pending live measurement"); no SLO
+claimed until that p95 is captured.
 **Priority:** Medium
+**Branch:** `task/TASK-BE-020-first-sentence-latency`
 
 ### Objective
 
@@ -852,6 +861,37 @@ slice that spikes to ~2042 ms on a cold turn without warm-up.
 - DEC-002 preserved: contract test still proves no chunk is emitted before vetting; grounded /
   blocked-sentence behaviour unchanged. `mvn test` green + ArchUnit OK; no secret / raw
   provider text leak in telemetry.
+
+### Implementation notes (2026-08-27)
+
+Delivered on `task/TASK-BE-020-first-sentence-latency`:
+
+- **Lever — warm the reactive LLM streaming path.** `converse-stream` generates through the
+  Spring AI **reactive** `chatClient.stream()` (WebClient) — a distinct HTTP client + pipeline
+  from the synchronous `.call()` (RestClient) that the TASK-BE-017 warm-up exercised, so the
+  first `converse-stream` turn paid the reactive-stack JIT + streaming-endpoint connection
+  (the ADR-0037 "~300 ms turn-1 JIT" residual; combined-cold pass showed `backend_first_token`
+  p95 **1052 ms** with sync-only warm-up vs **733 ms** warm-steady p50). `WarmUpService` now
+  also warms the `StreamingAnswerGeneratorPort` at connect.
+- **Side-effect-free + safe:** still no `ConversationMemoryPort`; tokens discarded
+  (`token -> { }`); never throws (a failure records a `warmup_stream` `error` miss); default-safe
+  via `voice-support.conversation.warmup.stream-enabled` (default `true`; null generator when
+  disabled ⇒ skipped, reported warmed). Routing warm-up through the full `ConverseStreamUseCase`
+  was rejected because it would append to memory.
+- **DEC-002 untouched:** no change to grounding, per-sentence `OutputGuardrail`, or the
+  stop-and-hand-off terminal path; `backend.first_token` still measures the first *vetted*
+  sentence. Locked by the unchanged `StreamingConversationServiceTest`
+  `delivers_first_sentence_before_full_answer` (incremental delivery) + `ungrounded_amount_stops_stream`
+  (no emit before vetting).
+- **Telemetry:** new `warmup_stream` slice (provider `warmup`, success/error), `stream_warmed`
+  on the `/warm-up` response + `[WARMUP]` log; sanitized, no provider text leak.
+- **Files:** `WarmUpService`, `WarmUpResult`, `WarmUpResponse`, `WarmUpController`,
+  `ConversationConfig` (+ `WarmUpServiceTest`, `WarmUpControllerTest`). `mvn test` **401** green,
+  ArchUnit OK. Adversarial self-review **93/100** (Pass). Full report:
+  `docs/qa/task-be-020-first-sentence-latency-report.md`.
+- **Not done here (out of scope):** the **model-inherent** first-sentence generation time
+  (warm-steady p50 ~733 ms) → **TASK-BE-033** (model choice). The live latency re-measurement is
+  the remaining QA gate (needs real Gradium+Mistral infra + tst collector).
 
 ---
 

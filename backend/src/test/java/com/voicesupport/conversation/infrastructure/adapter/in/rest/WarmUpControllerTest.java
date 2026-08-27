@@ -15,8 +15,8 @@ class WarmUpControllerTest {
     @Test
     @DisplayName("returns 200 with the per-model warm-up outcome on a full warm-up")
     void returns_full_warmup_outcome() {
-        // GIVEN a use case that reports both models warmed
-        WarmUpController controller = new WarmUpController(() -> new WarmUpResult(true, true, 42));
+        // GIVEN a use case that reports embedding, LLM and the streaming path warmed
+        WarmUpController controller = new WarmUpController(() -> new WarmUpResult(true, true, true, 42));
 
         // WHEN the endpoint is called
         ResponseEntity<WarmUpResponse> response = controller.warmUp();
@@ -26,6 +26,7 @@ class WarmUpControllerTest {
         WarmUpResponse body = response.getBody();
         assertTrue(body.embeddingWarmed());
         assertTrue(body.llmWarmed());
+        assertTrue(body.streamWarmed());
         assertTrue(body.fullyWarmed());
         assertEquals(42, body.durationMs());
     }
@@ -33,17 +34,18 @@ class WarmUpControllerTest {
     @Test
     @DisplayName("still returns 200 when a warm-up misses, with fully_warmed false (best-effort)")
     void returns_partial_warmup_outcome() {
-        // GIVEN a use case where the LLM warm-up missed
-        WarmUpController controller = new WarmUpController(() -> new WarmUpResult(true, false, 10));
+        // GIVEN a use case where the streaming path warm-up missed
+        WarmUpController controller = new WarmUpController(() -> new WarmUpResult(true, true, false, 10));
 
         // WHEN the endpoint is called
         ResponseEntity<WarmUpResponse> response = controller.warmUp();
 
-        // THEN it is still a 200 and fully_warmed is false
+        // THEN it is still a 200 and fully_warmed is false because the streaming path stayed cold
         assertEquals(200, response.getStatusCode().value());
         WarmUpResponse body = response.getBody();
         assertTrue(body.embeddingWarmed());
-        assertFalse(body.llmWarmed());
+        assertTrue(body.llmWarmed());
+        assertFalse(body.streamWarmed());
         assertFalse(body.fullyWarmed());
     }
 }
