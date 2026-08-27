@@ -2,13 +2,26 @@
 
 ## Status
 
-Accepted (target)
+Accepted (target). **Delivery shape refined by [ADR-0048](ADR-0048-genesys-audio-connector-sprint-13-delivery-shape.md)**
+(Genesys Audio Connector Sprint 13 delivery shape, Proposed — spike-gated).
 
 > **Implementation status (2026-08-07): NOT IMPLEMENTED — target decision.** No
 > Genesys Audio Connector server, Architect flow, or adapter exists in the runtime
 > yet. Full Genesys voice routing stays deferred (Sprint 13, gated by OQ-006). This
 > ADR fixes the target integration shape and terminology so the future spike and
 > backlog stay precise. It refines ADR-0020 and does not change any runtime code.
+
+> **Foundation update (2026-08-27): the media plane now rides the unified async
+> server.** Since this ADR was written, [ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md)
+> made **WebSocket the primary V1 live transport** and [ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md)
+> unified the runtime onto a **single async HTTP+WebSocket server on one port**
+> (delivered v0.7.0), reusing the [ADR-0043](ADR-0043-interim-websocket-audio-transport-genesys-ready.md)
+> transport-agnostic session factory + PCM16/16 kHz internal boundary. The Audio
+> Connector `wss://` endpoint is therefore delivered as **one more transport adapter**
+> on that server — not a parallel stack. Sprint 13 sequences this behind the
+> **TASK-WEB-025** go/no-go spike; the concrete delivery decisions (media-adapter,
+> handoff-by-reference, per-path barge-in, degraded modes, per-leg latency + concurrency)
+> are recorded in **ADR-0048** and mapped to the R1–R6 Must-fix items.
 
 ## Context
 
@@ -118,6 +131,9 @@ the NFR budget and must be tracked, not discovered late:
 
 ## Related Documents
 
+- `docs/architecture/adrs/ADR-0048-genesys-audio-connector-sprint-13-delivery-shape.md`
+- `docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md`
+- `docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md`
 - `docs/architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md`
 - `docs/architecture/adrs/ADR-0019-escalation-rules-and-handoff-contract.md`
 - `docs/architecture/adrs/ADR-0009-independent-channel-adapters-shared-java-backend.md`

@@ -1,0 +1,289 @@
+# Sprint 13 — Genesys Audio Connector + Genesys Integration
+
+## Sprint Objective
+
+Bring the target **Genesys** integration from an accepted-on-paper decision
+(ADR-0040) to a **measured, de-risked, and specified** state, so a Genesys-fronted
+Voice2Voice call can reach the in-house voice runtime over the **Audio Connector**
+feature of AudioHook, get a grounded answer from the Java backend, and hand off to a
+human advisor with usable context — **without moving any conversation intelligence
+into Genesys**.
+
+The sprint is **gate-first**. It opens with the investigation-only feasibility spike
+(**TASK-WEB-025**, gated by **OQ-006**) whose go/no-go decision unblocks the
+follow-on implementation tickets. Every follow-on ticket is therefore **Proposed and
+conditional**: it commits only once the spike returns **GO** and OQ-006 grants pilot
+environment access. If the spike returns **NO-GO** (or OQ-006 stays unanswered), the
+sprint closes on the spike report + updated ADRs, and the follow-on tickets carry
+forward.
+
+**Design invariant (enforced at review, all Sprint 13 tickets):** the Java backend
+remains the source of truth for the AI conversation workflow, RAG, billing reasoning,
+guardrails, escalation policy, handoff content, and conversation memory (ADR-0001).
+Genesys Cloud CX stays the contact-center system of record — call ingestion, IVR/ANI,
+recording, routing, queues, supervision, reporting, advisor desktop. The Audio
+Connector media plane is delivered as **one more transport adapter** on the ADR-0047
+single async HTTP+WebSocket server, reusing the ADR-0043 transport-agnostic session
+factory and the PCM16/16 kHz internal boundary — **not** a parallel stack.
+
+**Decisions of record:** ADR-0040 (Genesys Audio Connector 3-plane split — updated
+this sprint), **ADR-0048** (Genesys Audio Connector Sprint 13 delivery shape — new,
+Proposed). Builds on ADR-0046 (WebSocket primary transport) + ADR-0047 (single async
+server) + ADR-0043 (session factory) + ADR-0019/0020 (escalation + handoff) +
+ADR-0009 (channel envelope) + ADR-0029 (latency gate) + ADR-0025 (barge-in).
+
+## Status
+
+**Status:** 📋 **Planned** (created 2026-08-27) — gated by **OQ-006** (Genesys pilot
+environment access + handoff shape) and by the **TASK-WEB-025** go/no-go. Planning
+only at creation: sprint definition + tickets + ADRs, **no runtime code**.
+
+**Sprint branch:** `feat/sprint-13-genesys-audio-connector` (forked from
+`feat/restart-from-scratch`, 2026-08-27). Two-level branch model: ticket branches
+fork from and merge back into this sprint branch (`git merge --no-ff`); the sprint
+branch merges into `feat/restart-from-scratch` only on the user's explicit request at
+sprint closure.
+
+## Roadmap Context
+
+> **Scope note (2026-08-27):** the Sprint 13 registry row historically read
+> *"Telephony channel (US-018) + Genesys Audio Connector + advisor handoff"*. This
+> sprint **narrows the theme to Genesys** (Audio Connector media plane + advisor
+> handoff, EPIC-007/012). **Telephony as a separate Twilio/SIP entry (US-018) is moved
+> OUT** — Genesys is the target contact-center entry, so a second telephony media
+> profile is deferred until the Genesys spike decides the single pilot entry (the
+> adversarial review's "one pilot entry" recommendation). US-018 stays in the backlog,
+> not dropped.
+
+| Sprint | Theme | State |
+|---|---|---|
+| Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | ✅ Done (2026-08-24) |
+| Sprint 12 | External voice via interim WebSocket audio (Genesys-ready) | ✅ Done (2026-08-25, v0.6.0) |
+| **Sprint 13** | **Genesys Audio Connector + Genesys integration** | 📋 Planned — gated by OQ-006 + TASK-WEB-025 |
+| Sprint 14 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
+
+## Why now (state that justifies the sprint)
+
+- **The capital is in place.** Sprints 12 + the ADR-0046/0047 transport consolidation
+  built exactly what Genesys needs: an AudioHook-shaped `wss` transport (JSON control
+  frames + binary PCM16/16 kHz audio), a **transport-agnostic session factory**
+  (ADR-0043), a PCM16/16 kHz internal boundary with codec conversion inside adapters,
+  a **pluggable control-signal seam**, and — since ADR-0047 / TASK-WEB-038 — a **single
+  async HTTP+WebSocket server** that is the natural host for the Audio Connector
+  `wss://` endpoint. Genesys is now a **transport-adapter swap**, not a greenfield build.
+- **The decision was reviewed and conditionally approved.** The 2026-08-07 adversarial
+  review scored the target 2.2/5 and said *"proceed with conditions — as a bounded,
+  measured feasibility spike, NOT as V1 core"*, raising six Must-fix risks (R1–R6). This
+  sprint is the vehicle that answers them by measurement before any commitment.
+- **V1 needs a credible human escalation path** on the target contact-center
+  (ADR-0019/0020). The handoff transport contract (Architect variables vs
+  `handoff_id` + backend fetch) is unproven and must be settled.
+- **The latency gate is honest but currently FAIL** (ADR-0029 mouth-to-ear p95 ≤ 1.5 s;
+  last WS-live pilot sample 2.76 s, TASK-WEB-039). Adding a Genesys cloud round trip can
+  only add latency, so the Genesys leg must be **isolated and measured** before it goes
+  anywhere near the V1 critical path.
+
+## Scope IN
+
+1. **Feasibility spike / go-no-go (the gate):** measure the isolated Genesys-leg
+   latency and re-score against ADR-0029; confirm codec (L16/PCMU) and the 15-minute
+   cap against the billing journey; characterise ≥1 degraded mode; decide the
+   escalation-handoff transport; define barge-in/end-of-turn ownership per path; and a
+   minimal concurrency ceiling. Throwaway prototype + report (TASK-WEB-025).
+2. **Audio Connector transport adapter** (conditional on GO): an AudioHook `wss://`
+   endpoint on the ADR-0047 unified server, via the ADR-0043 session factory —
+   PCMU/L16 ↔ PCM16 codec conversion inside the adapter, one bidirectional
+   stream/session, 15-minute-cap handling (TASK-WEB-041).
+3. **Barge-in / end-of-turn ownership per path** — consume Genesys native events on
+   the Genesys path; keep the in-house energy/amplitude detectors for the WS/WebRTC dev
+   path only (TASK-WEB-042).
+4. **Genesys-path concurrency ceiling + per-channel observability** — minimal
+   concurrent-session ceiling + backpressure, per-channel gauges, per-leg latency
+   slices, and correlation-id propagation from Genesys into OpenTelemetry (TASK-WEB-043).
+5. **Degraded-mode behaviors** — endpoint down/slow/timeout, session drop,
+   15-minute timeout mid-call, transcode failure → fail-safe route to the advisor queue
+   (TASK-WEB-044).
+6. **EscalationHandoff transport contract** — the recommended `handoff_id` +
+   backend-fetch shape (ADR-0019 payload stays backend-owned), validated against
+   Architect variable size/type limits (TASK-BE-034).
+7. **Normalized channel envelope for the Genesys adapter** — `channel`,
+   `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`,
+   `escalation_context` (ADR-0009), so escalation/routing/memory stay backend-owned and
+   consistent across channels (TASK-BE-035).
+8. **Genesys Architect flow + control/routing plane config** — the Call Audio
+   Connector action forks + pauses the flow to our `wss` endpoint; on session end the
+   flow resumes and routes to the billing advisor queue; queue/skill routing; endpoint
+   exposure/TLS/auth (TASK-INFRA-012).
+
+## Scope OUT
+
+- **Moving any conversation logic into Genesys** — RAG, billing reasoning, guardrails,
+  escalation policy, handoff content, and memory stay in the Java backend (ADR-0001).
+  Genesys-native voicebots (Dialogflow/Lex/Nuance) are explicitly rejected (ADR-0040).
+- **Telephony as a separate Twilio/SIP entry (US-018)** — deferred (see the scope note
+  above); one pilot entry is chosen by the spike.
+- **Full production hardening / SLO claim on the Genesys path** — the spike is
+  investigation-only; a production SLO still requires the ADR-0010 operational controls
+  on top of a measured baseline.
+- **Billing/identity, BSS/PDF evidence, deterministic comparison** — Sprint 14.
+- **Any change to what the bot says** — DEC-002 grounding stays enforced; this sprint
+  changes *how a Genesys-fronted call reaches the runtime and hands off*, not answer
+  content.
+- **Compliance/data-residency sign-off for PII audio** egress from the Genesys cloud to
+  the runtime VMs — surfaced by the spike as an OQ-006 decision item; not resolved here.
+
+## Tickets (ordered)
+
+| # | Ticket | Title | Role | Gate | Status |
+|---|---|---|---|---|---|
+| 1 | TASK-WEB-025 | Genesys Audio Connector **feasibility spike** (investigation only) — go/no-go | Investigate (the gate) | OQ-006 | 📋 Proposed |
+| 2 | TASK-WEB-041 | Genesys **Audio Connector transport adapter** on the ADR-0047 server — codec (PCMU/L16 ↔ PCM16) + one stream/session + 15-min cap | Build (runtime) | spike GO | 📋 Proposed |
+| 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | 📋 Proposed |
+| 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | 📋 Proposed |
+| 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | 📋 Proposed |
+| 6 | TASK-BE-034 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | 📋 Proposed |
+| 7 | TASK-BE-035 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | 📋 Proposed |
+| 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure | Wire (infra/config) | spike GO + OQ-006 | 📋 Proposed |
+
+Full ticket details: TASK-WEB-025/041/042/043/044 in `tasks/web-voice-tasks.md`;
+TASK-BE-034/035 in `tasks/backend-hardening-tasks.md`; TASK-INFRA-012 in
+`tasks/deployment-tasks.md`.
+
+## Dependencies & Sequencing
+
+```
+OQ-006 (pilot access + handoff shape)  ─┐
+                                        ├─▶  TASK-WEB-025 (spike / go-no-go)  ──▶ GO?
+ADR-0047 single async server (done) ────┘                                         │
+                                                                                  ▼
+        ┌──────────────────────────────────────────────────────────────────────────┐
+        │  On GO (all conditional):                                                  │
+        │  TASK-WEB-041 (transport adapter) ──┬─▶ TASK-WEB-042 (barge-in ownership)   │
+        │                                     ├─▶ TASK-WEB-043 (concurrency + obs.)   │
+        │                                     └─▶ TASK-WEB-044 (degraded modes)       │
+        │  TASK-BE-035 (channel envelope) ────────▶ TASK-BE-034 (handoff transport)   │
+        │  TASK-INFRA-012 (Architect flow) ── pairs with TASK-WEB-041 + TASK-WEB-044  │
+        └──────────────────────────────────────────────────────────────────────────┘
+```
+
+- **TASK-WEB-025 is the gate.** Nothing downstream commits before its go/no-go.
+- **TASK-WEB-041** (transport adapter) is the spine; 042/043/044 refine the live
+  behaviour on it. **TASK-INFRA-012** (Architect flow) is co-developed — the media
+  adapter is untestable end-to-end without the fork/resume flow.
+- **TASK-BE-035** (channel envelope) precedes **TASK-BE-034** (handoff transport): the
+  handoff payload rides the envelope fields.
+- The spike may re-order or fold follow-ons based on what it finds (e.g. if PCMU
+  transcoding is heavier than budget, 041 grows; if the 15-minute cap forces
+  checkpoint/resume, that becomes an explicit 041 sub-item or a new ticket).
+
+## Must-fix traceability (adversarial review 2026-08-07, R1–R6)
+
+Every Must-fix risk maps to a ticket and an acceptance hook.
+Source: `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`.
+
+| Must-fix | Risk (short) | Ticket(s) | Acceptance hook |
+|---|---|---|---|
+| **R1** | Latency starts in deficit; Genesys leg unmeasured (ADR-0029 already FAIL) | TASK-WEB-025 (measure isolated leg + re-score), TASK-WEB-043 (per-leg slices + correlation id) | Isolated Genesys-leg p50/p95 reported; full round trip re-scored vs ADR-0029 with a go/no-go note; per-leg slices emitted on the live path |
+| **R2** | 15-minute cap may cut a billing journey mid-explanation | TASK-WEB-025 (confirm cap vs journey), TASK-WEB-041 (cap handling), TASK-WEB-044 (cap-timeout degraded mode) | Cap confirmed against the worst-case journey; checkpoint/resume-or-callback decision recorded; adapter behaviour on cap defined + a fail-safe on cap timeout |
+| **R3** | Degraded modes absent (endpoint down/slow/timeout/drop) | TASK-WEB-044 (fail-safe → advisor queue), TASK-INFRA-012 (Architect fallback) | ≥1 degraded mode characterised in the spike + a tested fail-safe route to the advisor queue; Architect behaviour on endpoint-down documented |
+| **R4** | Dual barge-in / end-of-turn logic fights the protocol | TASK-WEB-042 (per-path ownership) | On the Genesys path barge-in/end-of-turn/playback are owned by **Genesys events**; the in-house energy/amplitude detectors are **disabled** there and kept only for WS/WebRTC dev |
+| **R5** | Handoff mapping unproven vs Architect-variable size limits | TASK-BE-034 (handoff transport), TASK-BE-035 (channel envelope) | Architect variable/attribute size+type limits documented; transport decision recorded (recommended `handoff_id` + backend fetch); `EscalationHandoff` stays backend-owned |
+| **R6** | Concurrency + premium limits unquantified (≤5 integrations, 1 stream/session, 1 vCPU) | TASK-WEB-043 (concurrency ceiling), TASK-INFRA-012 (integration count / Architect) | Minimal concurrent-session ceiling measured on a 1-vCPU-class runtime; premium ≤5-integrations impact recorded; per-channel backpressure honoured |
+
+## Observability & latency expectations (ADR-0029 + ADR-0028)
+
+- **Per-leg decomposition (mandatory before any Genesys latency trade-off).** The
+  Genesys round trip adds legs the WS/WebRTC paths do not have: Genesys ingress →
+  Architect Call-Audio-Connector fork → our `wss` inbound → **transcoding** (if PCMU) →
+  STT → backend → TTS → `wss` outbound → transcoding → Genesys egress. Each leg is a
+  slice reported p50/p95; un-instrumented legs are emitted `measured=false` with a
+  reason (US-036 rule), never omitted (TASK-WEB-043).
+- **The ADR-0029 gate (mouth-to-ear p95 ≤ 1.5 s / TTFA p95 ≤ 1.2 s) is re-scored with
+  the Genesys leg included** — while the gate is FAIL, the Audio Connector path stays a
+  measured spike and does **not** move onto the V1 critical path (adversarial review
+  R1). No pilot SLO is claimed on the Genesys path in this sprint.
+- **Correlation-id propagation** — the Genesys `conversationId` / participant id is
+  carried into the OpenTelemetry spans across the full round trip, so the Genesys leg,
+  the runtime, and the backend land in **one trace** (TASK-WEB-043; mirrors the
+  voice→backend deterministic `traceparent` approach).
+- **Codec transcoding is an explicit budget item** — PCMU (µ-law) forces a transcode to
+  the Gradium PCM16 expectation (CPU + latency + quality); L16 maps directly. The spike
+  records which codec the pilot uses and budgets the transcode (TASK-WEB-025/041).
+
+## Risks & Degraded Modes
+
+| Risk / failure mode | Design response (this sprint) |
+|---|---|
+| Our `wss` endpoint down / slow / times out | Architect fail-safe → route straight to the advisor queue; flow resumes cleanly at session end (TASK-WEB-044 + TASK-INFRA-012) |
+| Session dropped mid-call | Bounded reconnect window then fail-safe to advisor; conversation memory preserved backend-side (TASK-WEB-044, ADR-0044 degradation posture) |
+| 15-minute cap hit mid-explanation | Cap-timeout fail-safe + the checkpoint/resume-or-callback decision from the spike (R2 → TASK-WEB-041/044) |
+| Transcoding failure (PCMU) | Fail closed to a safe hand-off; codec confirmed L16 end-to-end where possible to avoid it (TASK-WEB-041) |
+| Genesys premium ≤5 integrations / 1 stream/session / 1 vCPU | Minimal concurrency ceiling + backpressure measured; integration budget tracked (R6 → TASK-WEB-043 + TASK-INFRA-012) |
+| Handoff payload exceeds Architect-variable limits | `handoff_id` + backend fetch keeps the full audited payload backend-side (R5 → TASK-BE-034) |
+| Latency regression pushes the gate further FAIL | Genesys path stays a spike off the critical path until the gate is re-scored PASS (R1 → TASK-WEB-025/043) |
+| Barge-in self-interruption / lost turns from dual logic | Genesys events own barge-in/EOT on the Genesys path; in-house detectors disabled there (R4 → TASK-WEB-042) |
+
+## Exit Criteria / Definition of Done
+
+**Gate outcome (always required):**
+
+- **TASK-WEB-025 delivers a go/no-go report** answering R1–R6 by measurement: isolated
+  Genesys-leg p50/p95 + ADR-0029 re-score; codec (L16/PCMU) confirmed end-to-end;
+  15-minute cap checked against the worst-case billing journey; ≥1 degraded mode
+  characterised; barge-in/end-of-turn ownership decided; minimal concurrency ceiling
+  measured; escalation-handoff transport decided.
+- **ADR-0040 is updated and ADR-0048 moves from Proposed toward Accepted** (or is
+  explicitly parked at Proposed with the NO-GO rationale), and **OQ-006** items the
+  spike resolved are recorded.
+
+**On spike GO (conditional follow-on DoD):**
+
+- A **Genesys-fronted call** reaches the runtime over the Audio Connector `wss`
+  endpoint, gets a grounded backend answer, and returns bot audio — via the Audio
+  Connector transport adapter on the ADR-0047 server (TASK-WEB-041 + TASK-INFRA-012).
+- **Barge-in and end-of-turn on the Genesys path are driven by Genesys events**, with
+  the in-house detectors disabled on that path and unchanged on WS/WebRTC
+  (TASK-WEB-042).
+- The Genesys path **emits per-leg latency slices under one correlation id** and honours
+  a measured concurrency ceiling with backpressure (TASK-WEB-043).
+- At least one **degraded mode is implemented and tested** (endpoint down → advisor
+  queue) with a fail-safe that never leaves the caller stranded (TASK-WEB-044).
+- **Escalation hands off with usable context** through the decided transport
+  (`handoff_id` + backend fetch), the `EscalationHandoff` payload stays backend-owned,
+  and the normalized channel envelope is populated by the Genesys adapter
+  (TASK-BE-034 + TASK-BE-035).
+- The **Genesys boundary holds**: no RAG, billing reasoning, guardrail, escalation
+  policy, handoff content, or memory moved into Genesys (confirmed at adversarial
+  review, ADR-0001/0040).
+
+**Process gates (per ticket, unchanged):**
+
+- Each ticket passes adversarial review ≥ 90% (or explicit residual-risk acceptance),
+  then QA (functional + latency where runtime-affecting), with OpenTelemetry coverage.
+- Passing all gates makes the branch **merge-ready only**. Merge (ticket→sprint and
+  sprint→`feat/restart-from-scratch`) happens **only on the user's explicit request**.
+
+## Open Decisions For The User (OQ-006 the spike must resolve)
+
+These are **not** assumed in this plan — they are surfaced for the decision owner
+(Product / Contact Center / Architecture / Security) and are what the spike must answer
+before any Genesys commitment:
+
+1. **Is full Genesys Audio Connector voice routing required for the pilot, or only a
+   feasibility spike?** (ADR-0020 keeps it optional; this sprint defaults to
+   spike-first.)
+2. **Is Genesys the phone entry point for pilot calls, or only the advisor-handoff
+   target?** (Decides whether the media plane ships in V1 at all.)
+3. **Codec:** PCMU or L16 end to end? (PCMU forces transcoding — a latency/CPU/quality
+   cost.)
+4. **15-minute cap:** does the worst-case billing journey (auth + slow BSS + PDF + hold)
+   fit, or is checkpoint/resume / call-back needed?
+5. **Handoff transport + fields:** confirm `handoff_id` + backend fetch (recommended)
+   vs inline Architect variables; confirm which customer/session identifiers the pilot
+   trust model allows through Genesys.
+6. **Data residency / egress for PII audio** from the Genesys cloud to the runtime VMs —
+   region, encryption, compliance sign-off.
+7. **Concurrency at pilot:** how many simultaneous Genesys sessions, and does the
+   premium ≤5-integrations + 1-vCPU envelope hold that load?
+8. **Single pilot entry:** Genesys vs Twilio (the adversarial review's "pick one" — the
+   other is marked not-tested-in-V1).

@@ -1275,3 +1275,71 @@ Scenario: Voice deploy health gate passes when the bridge is actually healthy
   (`docker inspect --format {{.State.Health.Status}}` + `curl http://<host-ip>:8090/`), then
   finish a blocked node by bumping `IMAGE_TAG` in `/opt/voice-support/voice/.env` (preserve the
   vault-rendered secrets — never hand-write `.env`) and `podman compose up -d --remove-orphans`.
+
+---
+
+## TASK-INFRA-012 - Genesys Architect flow + control/routing plane (Call Audio Connector + advisor-queue routing + wss endpoint exposure)
+
+**Parent:** EPIC-007 (Genesys advisor handoff) / EPIC-012 (pilot deployment)
+**Related decisions:** ADR-0040 (control/routing plane owned by Architect + Platform API), ADR-0048
+(Sprint 13 delivery shape), ADR-0020 (Genesys handoff), ADR-0047 (single async server hosts the `wss`
+endpoint), ADR-0038 (pilot deployment / edge)
+**Depends on:** TASK-WEB-025 (spike **GO** + pilot access), OQ-006 (pilot environment + queue routing
+rules), TASK-WEB-041 (the `wss` endpoint the flow forks to)
+**Classification:** V1 pilot deployment — Genesys control plane config (no business logic)
+**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Priority:** High (Sprint 13; co-developed with TASK-WEB-041) — closes part of **R3/R6**
+**Branch:** `task/TASK-INFRA-012-genesys-architect-flow` (off the sprint branch, when gated)
+
+### Context
+
+ADR-0040 splits Genesys into three planes; the **control/routing plane** — call steering, transfer,
+queue and advisor routing — is owned by **Genesys Architect + the Platform API**, not by our media
+socket. This ticket stands up the Architect flow that forks the call to our Audio Connector `wss`
+endpoint, pauses, then resumes and routes on session end, plus the endpoint exposure/TLS/auth. No
+conversation logic lives here (that stays in the backend, ADR-0001).
+
+> **Edge note (2026-08-27):** the earlier TASK-INFRA-010 (`voice_ws` HAProxy special-case) was
+> **superseded by ADR-0047** — the runtime serves the WebSocket on the single routed port, so HAProxy
+> `mode http` tunnels the upgrade on the existing `voice_bridges` backend with no LB change. The Audio
+> Connector `wss` endpoint rides that same routed port; this ticket does **not** re-open an edge
+> special-case, only the Genesys-side flow + endpoint exposure/auth.
+
+### Scope
+
+- **Architect flow** with the **Call Audio Connector** action: fork the call audio to our `wss`
+  endpoint, pause the flow while streaming, resume when our runtime ends the session.
+- **Advisor-queue routing on escalation/resume**: route to the billing advisor queue with the
+  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-034/035).
+- **Fail-safe route** (pairs with TASK-WEB-044): if our endpoint is unreachable/times out, the flow
+  routes straight to the advisor queue after a defined guard delay.
+- **Endpoint exposure**: reachable `wss://` on the routed port through the existing TLS edge (ADR-0047,
+  no new edge special-case), with the auth the Audio Connector requires; keep the per-IP edge limits.
+- **Integration budget**: track the premium ≤5-Audio-Connector-integrations/org constraint against the
+  pilot (R6).
+- Config + reference flow export are **versioned under `deploy/`** (not merged into the runtime); no
+  secrets in the repo.
+
+### Acceptance
+
+```gherkin
+Scenario: A pilot call is forked to the bot and routed to an advisor on escalation
+  Given an Architect flow with a Call Audio Connector action pointing at our wss endpoint
+  When a pilot caller reaches the flow and the bot cannot resolve the billing question
+  Then the flow forks audio to the bot, pauses, and resumes when the session ends
+  And the caller is routed to the billing advisor queue with the handoff reference attached
+Scenario: The flow fails safe when the bot endpoint is unavailable
+  Given the Call Audio Connector endpoint is unreachable
+  When a call reaches the flow
+  Then the caller is routed straight to the advisor queue after the guard delay
+```
+
+- Architect flow forks/pauses/resumes correctly against the TASK-WEB-041 endpoint.
+- Escalation resume routes to the advisor queue with the handoff reference (TASK-BE-034).
+- Fail-safe route verified (pairs with TASK-WEB-044); premium integration budget recorded.
+- Reference flow/config versioned under `deploy/`; no conversation logic in Genesys.
+
+### Notes
+
+- The Platform API / Architect specifics (variable names, queue ids, auth mechanism) are confirmed by
+  the TASK-WEB-025 spike against the real pilot org (OQ-006); this ticket implements the confirmed shape.

@@ -1443,3 +1443,120 @@ Scenario: LLM candidates are benchmarked on TTFT + quality + cost + residency
 - OpenAI introduces **US chat egress** — a compliance decision (OQ-009), not only latency; may be
   rejected on residency grounds regardless of TTFT.
 - Evidence to reuse: `docs/qa/task-web-036-topk-ab-report.json`, `docs/qa/task-web-035-finalize-budget-report.json`.
+
+---
+
+# Sprint 13 — Genesys handoff (backend)
+
+Backend slices for the Genesys integration (Sprint 13, `sprints/sprint-13-genesys-audio-connector.md`).
+Both are **Proposed and conditional on the TASK-WEB-025 spike GO + OQ-006**. They keep the escalation
+decision and the handoff payload **backend-owned** (ADR-0001/0019) while Genesys stays the
+contact-center system of record. Decisions of record: ADR-0019 (escalation + handoff contract),
+ADR-0009 (channel envelope), ADR-0040/0048 (Genesys planes + delivery shape).
+
+---
+
+## TASK-BE-034 — EscalationHandoff transport contract for Genesys (handoff_id + backend fetch)
+
+**Parent:** EPIC-007 (Genesys advisor handoff)
+**Related decisions:** ADR-0019 (`EscalationHandoff` payload), ADR-0020 (Genesys handoff), ADR-0040
+(context/handoff plane), ADR-0048 (delivery shape), ADR-0009 (channel envelope)
+**Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
+TASK-BE-035 (channel envelope fields the handoff rides on)
+**Classification:** V1 core — backend escalation/handoff (runtime-affecting)
+**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Priority:** High (closes adversarial-review **R5**)
+**Branch:** `task/TASK-BE-034-genesys-handoff-transport` (off the sprint branch, when gated)
+
+### Context
+
+ADR-0019 defines a 14-field `EscalationHandoff` payload (reason, summary, compared periods, evidence,
+citations, unresolved points, recommended next action, identifiers…). The adversarial review (R5)
+warned that Architect input/output variables + conversation attributes have **size/type limits**, so a
+rich handoff carried **inline** risks truncation. ADR-0040 keeps the handoff plane backend-owned. This
+ticket settles the transport contract.
+
+### Scope
+
+- Adopt the reviewed-recommended shape: carry only a **`handoff_id` + `customer_reference`** through
+  the Genesys control plane (Architect variables / conversation attributes), and expose a
+  **backend fetch** the advisor desktop (or a widget) calls to retrieve the full, audited
+  `EscalationHandoff` on demand — keeping the payload backend-owned and auditable, and avoiding the
+  variable-size limits.
+- Validate the decision against the **actual Architect variable/attribute size + type limits** the
+  spike (TASK-WEB-025) measured; if inline fits within a safe margin for a minimal subset, record that
+  as an explicit fallback with the size budget.
+- Keep the escalation **decision** in the backend (ADR-0019 triggers) — Genesys never decides to
+  escalate; it receives context and routes.
+- Audit + trust model: only the customer/session identifiers the pilot trust model allows travel
+  through Genesys; the fetch is access-controlled and logged.
+
+### Acceptance
+
+```gherkin
+Scenario: The advisor receives full handoff context without hitting Genesys variable limits
+  Given the bot escalates a billing conversation
+  When the handoff is prepared
+  Then only a handoff reference and permitted customer/session identifiers travel through Genesys
+  And the advisor retrieves the full audited escalation context from the backend on demand
+Scenario: The handoff decision and payload stay backend-owned
+  Given an escalation is triggered by a backend rule
+  Then Genesys does not compute or alter the escalation reason or content
+```
+
+- Transport decision recorded (`handoff_id` + backend fetch) with the measured Architect size limits.
+- `EscalationHandoff` stays backend-owned + auditable; identifiers gated by the trust model.
+- Backend unit tests (manual fakes, no Mockito) cover the reference build + the fetch access path.
+
+### Notes
+
+- The escalation **wording** the caller hears is unchanged (ADR-0019/guardrail path); this ticket is
+  the machine-to-machine handoff, not the spoken message.
+
+---
+
+## TASK-BE-035 — Normalized channel envelope for the Genesys adapter
+
+**Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
+**Related decisions:** ADR-0009 (independent channel adapters, shared backend), ADR-0019 (handoff),
+ADR-0040/0048, ADR-0010 (industrialization contracts)
+**Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
+**Classification:** V1 core — backend channel contract (runtime-affecting)
+**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Priority:** High (supports **R5**; foundation for TASK-BE-034)
+**Branch:** `task/TASK-BE-035-genesys-channel-envelope` (off the sprint branch, when gated)
+
+### Context
+
+ADR-0009 requires every channel adapter to speak the shared backend contract with channel identity +
+idempotency data, so escalation/routing/memory stay consistent across web, telephony, WhatsApp and
+Genesys without each channel forking rules. The Genesys adapter must populate the normalized channel
+envelope from Genesys identifiers, so the Genesys path is a first-class channel, not a special case.
+
+### Scope
+
+- Populate the shared envelope fields for the Genesys adapter: **`channel`** (genesys),
+  **`external_session_id`** (Genesys conversationId / participant), **`message_id`** (last inbound
+  event id), **`idempotency_key`** (safe retries / duplicate delivery), **`reply_mode`** (voice), and
+  **`escalation_context`** (the handoff reference from TASK-BE-034).
+- Ensure the backend conversation/memory keys off `external_session_id` so a Genesys call keeps one
+  coherent conversation history (no split memory).
+- Keep the envelope **channel-agnostic** — the same contract the web/WS channels already use; no
+  Genesys-specific business logic leaks into the domain (ADR-0009).
+
+### Acceptance
+
+```gherkin
+Scenario: A Genesys call is a first-class channel on the shared contract
+  Given a call arrives over the Genesys Audio Connector adapter
+  When it reaches the backend
+  Then the request carries channel, external_session_id, message_id, idempotency_key, reply_mode
+  And the conversation memory stays coherent for the whole Genesys call
+Scenario: Escalation context rides the envelope
+  Given the call escalates
+  Then the escalation_context (handoff reference) travels on the same normalized envelope
+```
+
+- Envelope fields populated by the Genesys adapter; memory keyed on `external_session_id`.
+- No Genesys-specific rule in the domain; the contract matches the existing channels (ADR-0009).
+- Backend unit tests cover the envelope mapping + idempotent duplicate-delivery handling.

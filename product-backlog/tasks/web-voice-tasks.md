@@ -2458,18 +2458,30 @@ and LB VMs are 1 vCPU. Under concurrent calls this is a scaling and latency risk
 
 ## TASK-WEB-025 - Genesys Audio Connector feasibility spike (investigation only)
 
-**Parent:** EPIC-012
-**Related decisions:** ADR-0040 (Audio Connector as V2V media plane), ADR-0020 (Genesys handoff),
-ADR-0019 (escalation contract), ADR-0029 (mouth-to-ear latency gate), ADR-0025 (barge-in), ADR-0033
-(direct WebRTC transport)
-**Depends on:** OQ-006 (Genesys pilot environment access) — **gated**
+**Parent:** EPIC-012 / EPIC-007 (Genesys advisor handoff)
+**Related decisions:** ADR-0040 (Audio Connector as V2V media plane), **ADR-0048** (Genesys Audio
+Connector Sprint 13 delivery shape — this spike is its gate), ADR-0020 (Genesys handoff), ADR-0019
+(escalation contract), ADR-0029 (mouth-to-ear latency gate), ADR-0025 (barge-in), **ADR-0046**
+(WebSocket primary transport, supersedes ADR-0033), **ADR-0047** (single async HTTP+WS server — the
+runtime foundation the Audio Connector `wss` endpoint builds on), ADR-0043 (transport-agnostic
+session factory)
+**Depends on:** OQ-006 (Genesys pilot environment access + handoff shape) — **gated**
 **Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
-**Status:** Proposed — spike (investigation only), gated by OQ-006
-**Priority:** Low (foundational for the Sprint 13 Genesys go/no-go)
-**Branch:** `task/TASK-WEB-025-genesys-audio-connector-spike` (to create when work starts; ticket
-authored under TASK-DOC-006)
+**Status:** 📋 Proposed — spike (investigation only), gated by OQ-006. **Sprint 13 GATE** (2026-08-27):
+this spike is the first, go/no-go ticket of `sprints/sprint-13-genesys-audio-connector.md`; its GO
+verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-034/035, TASK-INFRA-012).
+**Priority:** High for Sprint 13 (foundational go/no-go; was Low while deferred)
+**Branch:** `task/TASK-WEB-025-genesys-audio-connector-spike` (off `feat/sprint-13-genesys-audio-connector`
+when work starts; ticket authored under TASK-DOC-006)
 **Surfaced by:** `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`
 (Must-fix items R1–R6)
+
+> **Foundation note (2026-08-27):** since this ticket was written, ADR-0046 made WebSocket the
+> primary live transport and ADR-0047 unified the runtime onto a **single async HTTP+WebSocket
+> server on one port** (delivered by TASK-WEB-038, shipped v0.7.0). The throwaway prototype should
+> therefore expose its AudioHook `wss` endpoint on **that** async server (reusing the ADR-0043
+> session factory + the PCM16/16 kHz internal boundary), so the spike measures the real target
+> topology and the follow-on TASK-WEB-041 is a genuine transport-adapter swap, not a separate stack.
 
 ### Context
 
@@ -3632,3 +3644,227 @@ comparable to the WebRTC path.
 
 - Scope corrected 2026-08-26 after the TASK-WEB-039 re-run: the earlier "all six slices
   NOT MEASURED" observation was inaccurate (stale run) — only `channel_ingress` is missing.
+
+---
+
+# Sprint 13 — Genesys Audio Connector + Genesys Integration
+
+Follow-on delivery slices unblocked by the **TASK-WEB-025** go/no-go spike. All four are
+**Proposed and conditional on spike GO + OQ-006**; nothing below commits before the gate.
+Decisions of record: ADR-0040 (updated) + **ADR-0048** (Sprint 13 delivery shape). They build
+on ADR-0046 (WebSocket primary) + ADR-0047 (single async server) + ADR-0043 (session factory).
+Sprint file: `sprints/sprint-13-genesys-audio-connector.md`.
+
+**Shared design invariant (enforced at review):** the Audio Connector media plane is **one more
+transport adapter** on the ADR-0047 async server, reusing the ADR-0043 session factory + the
+PCM16/16 kHz internal boundary; codec conversion lives **inside the adapter**; the Java backend
+keeps ownership of RAG, billing reasoning, guardrails, escalation policy, handoff content and
+memory (ADR-0001). Genesys is the contact-center system of record only.
+
+---
+
+## TASK-WEB-041 - Genesys Audio Connector transport adapter (codec + one stream/session + 15-min cap)
+
+**Parent:** EPIC-007 (Genesys advisor handoff) / EPIC-006 (Voice2Voice foundation)
+**Related decisions:** ADR-0040 (3-plane split), ADR-0048 (delivery shape), ADR-0047 (single async
+server host), ADR-0043 (session factory), ADR-0046 (WebSocket primary), ADR-0025 (barge-in),
+ADR-0029 (latency gate)
+**Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
+drive it end to end)
+**Classification:** V1 voice runtime — Genesys media plane (runtime-affecting)
+**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Priority:** High (Sprint 13 spine, once gated)
+**Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch, when gated)
+
+### Context
+
+ADR-0040 fixes Genesys **Audio Connector** (the bidirectional AudioHook feature) as the target V2V
+media plane; ADR-0046/0047 made the runtime a single async HTTP+WebSocket server that is the natural
+host for the AudioHook `wss://` endpoint. This ticket delivers the media adapter itself — the
+Genesys-facing counterpart of the Sprint 12 browser WebSocket transport — reusing the ADR-0043
+transport-agnostic session factory so the shared session core (STT → backend answer → TTS) is
+unchanged.
+
+### Scope
+
+- Expose an **AudioHook-shaped `wss://` endpoint** on the ADR-0047 async server: JSON control frames
+  + binary audio, handling the Audio Connector session lifecycle (open/close, `playback-started`/
+  `playback-completed`, `BotTurnResponse`) through the pluggable control-signal seam.
+- **Codec adapter (inside the transport):** PCMU (µ-law) ↔ PCM16/16 kHz and L16 ↔ PCM16 conversion
+  so the shared core stays PCM16/16 kHz. Confirm the pilot codec from the spike; if PCMU, budget the
+  transcode against ADR-0029.
+- Honour **one bidirectional stream per session** and the **IVR-channel** shape of Audio Connector.
+- **15-minute cap handling:** implement the spike's decision (graceful end + resume, or
+  checkpoint/call-back) so the call is never silently cut mid-explanation (pairs with TASK-WEB-044).
+- Reuse the ADR-0043 session factory + `BackendAnswerPort` unchanged — no business logic in the
+  adapter (hexagonal boundary).
+
+### Acceptance
+
+```gherkin
+Scenario: A Genesys-fronted call is answered over Audio Connector
+  Given a Genesys Architect Call Audio Connector flow forks a call to our wss endpoint
+  When the caller asks a billing question and pauses
+  Then the runtime transcribes, gets a grounded backend answer, and streams bot audio back
+  And the caller hears the answer within the same Audio Connector session
+Scenario: The pilot codec is handled end to end
+  Given the pilot uses the codec confirmed by TASK-WEB-025 (L16 or PCMU)
+  When audio flows both ways
+  Then it is converted to/from the PCM16/16 kHz internal boundary inside the transport adapter
+  And any PCMU transcoding cost is recorded against the ADR-0029 budget
+```
+
+- One full Genesys→runtime→backend→Genesys turn completes over the Audio Connector session.
+- Codec conversion isolated in the adapter; the shared session core is untouched (regression-locked).
+- 15-minute-cap behaviour implemented per the spike decision; no silent mid-call cut.
+- voice-agent unit + behave suites green; the WS/WebRTC paths are unchanged.
+
+### Notes
+
+- Barge-in/end-of-turn ownership on this path is **not** this ticket — see TASK-WEB-042.
+- Per-leg latency + concurrency + correlation-id are TASK-WEB-043; degraded modes are TASK-WEB-044.
+
+---
+
+## TASK-WEB-042 - Barge-in / end-of-turn ownership per path (Genesys events vs in-house detectors)
+
+**Parent:** EPIC-007 / EPIC-006
+**Related decisions:** ADR-0040 (native events supersede in-house detectors on the Genesys path),
+ADR-0025 (barge-in), ADR-0048, ADR-0046/0043
+**Depends on:** TASK-WEB-041 (the Genesys transport exists), TASK-WEB-025 (spike confirms the events)
+**Classification:** V1 voice runtime (runtime-affecting: control-signal source per path)
+**Status:** 📋 Proposed — conditional on spike GO
+**Priority:** High (closes adversarial-review **R4**)
+**Branch:** `task/TASK-WEB-042-genesys-bargein-ownership` (off the sprint branch, when gated)
+
+### Context
+
+The runtime's bespoke energy/amplitude end-of-turn + barge-in detectors (ADR-0025, TASK-WEB-008)
+coexist with Genesys's protocol-native events (`barge-in`, `playback-started`/`playback-completed`,
+`BotTurnResponse`). The adversarial review (R4) warned that running both on the Genesys path makes the
+runtime fight the protocol → self-interruptions or lost turns. This ticket sets an explicit,
+per-path ownership rule via the ADR-0043 pluggable control-signal seam.
+
+### Scope
+
+- On the **Genesys path**: consume the Genesys native events as the authoritative barge-in /
+  end-of-turn / playback source; **disable** the in-house energy/amplitude detectors there.
+- On the **WS/WebRTC dev path**: keep the in-house detectors unchanged (ADR-0025 point-7 amplitude
+  gate + N-frame confirmation).
+- Make the control-signal source a **per-transport choice** in the seam (no `if genesys` scattered
+  through the core); verify interruption still cancels cleanly (native `InterruptionFrame`).
+
+### Acceptance
+
+```gherkin
+Scenario: Barge-in on the Genesys path is driven by Genesys events
+  Given a call over the Audio Connector transport
+  When Genesys signals a barge-in while the bot is speaking
+  Then the runtime interrupts on the Genesys event
+  And the in-house energy/amplitude detectors do not also fire on that path
+Scenario: The web dev path keeps the in-house detectors
+  Given a call over the WS/WebRTC dev path
+  Then barge-in and end-of-turn still use the in-house detectors unchanged
+```
+
+- Genesys-path barge-in/end-of-turn come solely from Genesys events; no dual firing (test-locked).
+- WS/WebRTC behaviour unchanged; interruption cancels cleanly on both paths.
+
+---
+
+## TASK-WEB-043 - Genesys-path concurrency ceiling + per-channel observability (per-leg latency + correlation id)
+
+**Parent:** EPIC-007 / EPIC-010 (observability, latency & pilot validation)
+**Related decisions:** ADR-0029 (latency gate), ADR-0028 (observability), ADR-0040 (Genesys legs +
+constraints), ADR-0048, TASK-WEB-030 (WS per-slice), TASK-WEB-024 (WebRTC ceiling counterpart)
+**Depends on:** TASK-WEB-041 (transport exists), TASK-WEB-025 (spike ceiling + per-leg method)
+**Classification:** V1 pilot gate (latency + observability) — runtime-affecting
+**Status:** 📋 Proposed — conditional on spike GO
+**Priority:** High (closes adversarial-review **R6** + the R1 measurement instrumentation)
+**Branch:** `task/TASK-WEB-043-genesys-concurrency-observability` (off the sprint branch, when gated)
+
+### Context
+
+The Genesys path is premium and constrained (≤5 integrations/org, one bidirectional stream/session,
+1-vCPU-class runtime) and adds legs the WS/WebRTC paths do not have. The adversarial review (R6) and
+R1 both require a measured concurrency ceiling and a **per-leg** latency decomposition before any
+trade-off. This is the Genesys counterpart of TASK-WEB-024 (WebRTC ceiling) + TASK-WEB-030 (WS
+per-slice).
+
+### Scope
+
+- **Concurrency ceiling + backpressure** on the Genesys transport (mirror `VOICE_MAX_*`): a minimal
+  measured simultaneous-session ceiling; over-ceiling sessions refused safely (no half-open call).
+- **Per-leg latency slices**: Genesys ingress → Architect fork → `wss` inbound → transcode → STT →
+  backend → TTS → `wss` outbound → transcode → Genesys egress, each emitted p50/p95; un-instrumented
+  legs emitted `measured=false` with a reason (US-036 rule), never omitted.
+- **Correlation-id propagation**: carry the Genesys `conversationId` / participant id into the
+  OpenTelemetry spans so the Genesys leg, runtime and backend land in **one trace** (mirror the
+  voice→backend deterministic `traceparent`).
+- Re-score the full round trip against the **ADR-0029** gate with the Genesys leg included; state the
+  verdict explicitly (the path stays a spike off the V1 critical path while the gate is FAIL).
+
+### Acceptance
+
+```gherkin
+Scenario: The Genesys round trip is fully instrumented under one trace
+  Given a call over the Audio Connector transport
+  When the turn completes
+  Then each Genesys leg is reported p50/p95 (or measured=false with a reason)
+  And the Genesys conversationId links the Genesys, runtime and backend spans into one trace
+  And the mouth-to-ear round trip is re-scored against ADR-0029 with an explicit verdict
+Scenario: The Genesys path honours a concurrency ceiling
+  Given the measured simultaneous-session ceiling is reached
+  When another Audio Connector session is offered
+  Then it is refused safely without breaking the in-flight calls
+```
+
+- Minimal ceiling measured on a 1-vCPU-class runtime; premium ≤5-integrations impact recorded.
+- Per-leg slices + one-trace correlation demonstrated; ADR-0029 re-score recorded.
+
+---
+
+## TASK-WEB-044 - Genesys-path degraded modes (fail-safe to the advisor queue)
+
+**Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
+**Related decisions:** ADR-0040 (Architect resumes at session end), ADR-0020 (advisor handoff),
+ADR-0044 (degrade-don't-outage posture), ADR-0048
+**Depends on:** TASK-WEB-041 (transport), TASK-INFRA-012 (Architect fallback route), TASK-WEB-025
+(spike characterises ≥1 degraded mode)
+**Classification:** V1 voice runtime + infra (runtime-affecting: failure behaviour)
+**Status:** 📋 Proposed — conditional on spike GO
+**Priority:** High (closes adversarial-review **R3**)
+**Branch:** `task/TASK-WEB-044-genesys-degraded-modes` (off the sprint branch, when gated)
+
+### Context
+
+The adversarial review (R3) flagged that no degraded mode is defined for the Genesys path today: if
+our `wss` endpoint is down/slow/times out, the caller hits a hard failure. Audio Connector gives a
+natural hook — the Architect flow **resumes** when the streaming session ends — so a fail-safe is
+designable. This ticket makes it explicit and tested.
+
+### Scope
+
+- **Endpoint down / slow / times out** → the runtime ends the session cleanly (with a disconnect
+  reason) so Architect resumes and routes **straight to the advisor queue**; a guard delay defined
+  with Product/Contact-Center.
+- **Session drop** → bounded reconnect window then fail-safe to advisor; backend conversation memory
+  preserved (ADR-0044 posture — degrade, don't outage).
+- **15-minute cap timeout** → graceful end + the checkpoint/resume-or-callback decision from the
+  spike (pairs with TASK-WEB-041, R2).
+- **Transcode failure (PCMU)** → fail closed to a safe hand-off rather than garbled audio.
+- Each degraded mode carries a `voice.call_end` reason and is auditable under the call correlation id.
+
+### Acceptance
+
+```gherkin
+Scenario: The caller is never stranded when our endpoint is unavailable
+  Given an active Audio Connector session
+  When our wss endpoint becomes unavailable or times out
+  Then the streaming session ends with a disconnect reason
+  And the Architect flow resumes and routes the caller to the advisor queue
+  And the failure is recorded with a call-end reason under the correlation id
+```
+
+- At least the endpoint-down mode is implemented + tested end to end (spike characterises it first).
+- No degraded mode leaves the caller in dead air; each is observable/auditable.

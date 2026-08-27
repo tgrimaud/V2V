@@ -176,9 +176,13 @@ turning an aspirational target into an unmeasured contractual promise.
 
 ## OQ-006 - Genesys Handoff Integration Shape
 
-**Status:** Open  
+**Status:** Open — **resolution vehicle = Sprint 13** (`sprints/sprint-13-genesys-audio-connector.md`):
+the **TASK-WEB-025** feasibility spike is scoped to answer the decision items below by measurement
+(codec, 15-min cap, ≥1 degraded mode, handoff transport + Architect variable limits, concurrency,
+data residency), and **ADR-0048** records the target delivery shape gated on that go/no-go. This OQ
+stays Open until the spike reports and the decision owners sign off.  
 **Owner:** Product / Contact Center / Architecture / Security  
-**Impacts:** EPIC-006, EPIC-008, EPIC-009
+**Impacts:** EPIC-006, EPIC-007, EPIC-008, EPIC-009 — Sprint 13
 
 ### Question
 
