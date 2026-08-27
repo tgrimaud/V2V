@@ -7,13 +7,20 @@ deferred** until the benchmark spike **TASK-BE-033** produces the data. Scopes
 **Direction A** of ADR-0029 ("OpenAI as the cascade chat LLM") — not Direction B
 (Realtime speech-to-speech, which stays out of scope per ADR-0012/ADR-0029).
 
-> **Execution status (2026-08-27):** the TASK-BE-033 benchmark harness + billing fixture
-> set + comparison merger are implemented under `scripts/llm_benchmark/`; evidence will be
-> published to `docs/qa/task-be-033-llm-provider-benchmark-evidence.md`. Candidates 1–3
-> (Mistral small/large, co-located Ollama) are measurable via `LLM_PROVIDER` + model env vars;
-> candidate 4 (`gpt-4o-mini`) awaits an OpenAI adapter + `spring-ai-starter-model-openai`
-> dependency (approval gate) and the OQ-009 US-egress compliance call. This ADR stays
-> **Proposed** until the candidate runs produce the comparison table.
+> **Execution status (2026-08-27):** harness + fixtures + merger implemented under
+> `scripts/llm_benchmark/`; all four candidates wired behind the port (OpenAI adapter +
+> `spring-ai-starter-model-openai` landed, user-approved). The **EU/on-prem subset (candidates
+> 1–3) has now been measured** locally — evidence + caveats in
+> `docs/qa/task-be-033-llm-provider-benchmark-evidence.md` (server slices in
+> `docs/qa/task-be-033-comparison-2026-08-27.json`). Findings (server `backend_first_token`
+> p50/p95 ms): `mistral-small` **844/3039** (grounded 1.0, 0 err) — best; `mistral-large`
+> 8789/24108 with **9/15 errors** (API-tier throttling) + 20× cost — **disqualified**;
+> `ollama llama3.1:8b` raw chat token p50 **338 ms** (beats Mistral-small) but
+> `backend_first_token` 2505/8823 is **inflated by single-instance embedding↔chat swap
+> contention**, so its on-prem verdict needs a dedicated-capacity re-measure. **Recommendation:
+> keep `mistral-small` for the pilot; `ollama` = sovereignty fallback to re-measure; OpenAI
+> (candidate 4) unmeasured — no key, OQ-009 US-egress gate.** ADR stays **Proposed** pending
+> user sign-off to flip to Accepted with this recommendation.
 
 ## Context
 

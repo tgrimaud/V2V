@@ -1,6 +1,6 @@
 # TASK-BE-033 — LLM provider/model benchmark evidence (ADR-0045)
 
-**Status:** 🔧 In progress — harness landed, candidate runs pending.
+**Status:** 🔧 In progress — EU/on-prem subset measured (2026-08-27); OpenAI (candidate 4) deferred (no API key, OQ-009).
 **Ticket:** `product-backlog/tasks/backend-hardening-tasks.md` → TASK-BE-033
 **Decision:** ADR-0045 (Proposed → Accepted once this evidence exists).
 **Scope:** ADR-0029 **Direction A** (cascade chat LLM first-token), not Direction B (Realtime S2S).
@@ -44,22 +44,57 @@ largest reducible slice behind the STT tail.
 > with an `OPENAI_API_KEY`); it does **not** authorize pilot use. Selecting OpenAI would require the
 > pilot egress allowlist to add `api.openai.com:443` (ADR-0039) and a US-chat-egress compliance sign-off.
 
-## Results
+## Results (2026-08-27, local EU/on-prem subset)
 
-_Pending — populate from `scripts/llm_benchmark/reports/comparison-<date>.md` after the runs.
-Publish the final comparison JSON + MD here as the versioned evidence._
+Source: `scripts/llm_benchmark/reports/comparison-2026-08-27.md` (per-candidate
+`bench-<label>.json` regenerable via `scripts/llm_benchmark/run_benchmark.py`). Server slices
+from backend `[TELEMETRY]`; 5 FR billing questions × 3 reps (+1 discarded warm-up) = 15 scored
+turns per candidate. Latency cells are **p50 / p95 (ms)**.
 
-| Candidate | llm_first_token p50/p95 | backend_first_token p50/p95 | Δbft p95 vs baseline | grounded | conf | €-flags |
-|---|---|---|---|---|---|---|
-| `mistral-small` | — | — | baseline | — | — | — |
-| `mistral-large` | — | — | — | — | — | — |
-| `ollama` | — | — | — | — | — | — |
-| `openai-gpt-4o-mini` | — | — | — | — | — | — |
+| Candidate | model | llm_first_token | backend_first_token | Δbft p95 vs baseline | grounded | conf | €-flags | err |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| `mistral-small` | `mistral-small-latest` | 401 / 2472 | **844 / 3039** | baseline | 1.0 | 0.756 | 0 | 0 |
+| `mistral-large` | `mistral-large-latest` | 7972 / 22108 | 8789 / 24108 | +21069 | 0.833 | 0.765 | 4 | 9 |
+| `ollama-llama31-8b` | `llama3.1:8b` | 338 / 5028 | 2505 / 8823 | +5784 | 1.0 | 0.756 | 0 | 0 |
+| `openai-gpt-4o-mini` | `gpt-4o-mini` | — | — | — | — | — | — | — |
 
-## Decision (fill on completion)
+## Run conditions & caveats (read before quoting numbers)
 
-_Chosen provider/model (or "keep Mistral small") + rationale across latency / grounding /
-cost / residency (OQ-009). Then move ADR-0045 Proposed → Accepted citing this table._
+- **Environment:** local dev — one laptop Postgres/pgvector (KB 10 163 chunks incl. 1 213 billing)
+  + one **shared** Ollama serving *both* embeddings (`nomic-embed-text`) and, for candidate 3,
+  chat (`llama3.1:8b`). Not the pilot topology; absolute ms are indicative, **not** an SLO claim.
+- **`mistral-large` is disqualified for the latency gate,** on three independent grounds: (1) an
+  order-of-magnitude slower first token (backend p50 8.8 s / p95 24 s); (2) **9/15 turns errored**
+  (`ERR_UPSTREAM`, API-tier throttling of the large model even at 30 s budgets) — the p50/p95 above
+  are over the **6 successful** turns only and understate the real cost; (3) it dropped one grounded
+  answer (0.833) and raised **4 amount-mention flags** (heuristic; more prone to volunteering figures)
+  at **20× the price** ($2/$6 vs $0.10/$0.30). No latency reason to prefer it.
+- **`ollama-llama31-8b`'s `backend_first_token` is contention-polluted, not a pure-chat verdict.**
+  Its raw **chat** first token (`llm_first_token` p50 **338 ms**) actually *beats* Mistral-small's
+  401 ms, but the *preceding* embedding hop fought the chat model for the single Ollama instance:
+  every turn thrashed `llama3.1:8b ↔ nomic-embed-text` model swaps, so the first Ollama run failed
+  **15/15** on embedding `Read timed out` at the default 5 s budget. It only completed after raising
+  `EMBEDDING_TIMEOUT_MS`/`RETRIEVAL_TIMEOUT_MS` to 30 s/35 s — and that swap latency lands in
+  `backend_first_token` (2505/8823), **not** in the model itself. A fair on-prem verdict needs a
+  box with **dedicated chat + embedding capacity** (separate instances or a GPU that keeps both
+  models resident), tracked as a follow-up.
+
+## Decision (recommendation — pending user/ADR sign-off)
+
+- **Keep `mistral-small-latest` for the pilot.** Among the measured EU/on-prem options it is the
+  only one that meets the gate direction (`backend_first_token` p95 ~3.0 s here, consistent with the
+  ~1.4 s live-WS p95), with **perfect grounding, zero errors, zero amount flags**, the lowest cost,
+  and an **already-allowlisted** EU egress. `mistral-large` is rejected (above). `ollama` is
+  **promising** (fastest raw chat token, zero egress) but **unproven** until re-measured on
+  dedicated capacity — it is the recommended sovereignty fallback to validate next, not a pilot swap.
+- **OpenAI (`gpt-4o-mini`) not measured here** (no API key; US egress is an OQ-009 call). The
+  adapter is wired so it can be added to this table without code change once a key + compliance
+  sign-off exist.
+- **Net:** this closes ADR-0045's Direction-A latency question for the EU/on-prem candidates —
+  the chat-model swap is **not** the lever that fixes the ADR-0029 gate (Mistral-small is already
+  near-optimal for a cascade); the dominant remaining slice stays the **STT finalize tail**
+  (TASK-STT-014). Move ADR-0045 Proposed → Accepted as "keep Mistral small; Ollama = sovereignty
+  fallback to re-measure on dedicated capacity; OpenAI gated on OQ-009" once the user confirms.
 
 ## Notes
 

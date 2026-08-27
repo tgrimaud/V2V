@@ -4,8 +4,11 @@ import org.springframework.ai.model.mistralai.autoconfigure.MistralAiChatAutoCon
 import org.springframework.ai.model.mistralai.autoconfigure.MistralAiEmbeddingAutoConfiguration;
 import org.springframework.ai.model.mistralai.autoconfigure.MistralAiModerationAutoConfiguration;
 import org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -18,7 +21,10 @@ import java.security.Security;
 // voice-support.llm.provider), so the Mistral chat/embedding/moderation auto-configurations
 // are excluded — embeddings must stay on Ollama (768d), never Mistral (1024d). The OpenAI
 // starter (TASK-BE-033 benchmark candidate) follows the same rule: its chat model is built
-// manually in LlmConfig and its chat/embedding/moderation auto-configurations are excluded.
+// manually in LlmConfig. ALL of its auto-configurations are excluded — not only chat/embedding/
+// moderation but also audio-speech/audio-transcription/image, because those instantiate eagerly
+// and hard-require spring.ai.openai.api-key, so they crash startup whenever OPENAI_API_KEY is
+// unset (i.e. every non-OpenAI run). The manual chat bean is gated on provider=openai instead.
 @SpringBootApplication(exclude = {
         OllamaChatAutoConfiguration.class,
         MistralAiChatAutoConfiguration.class,
@@ -26,7 +32,10 @@ import java.security.Security;
         MistralAiModerationAutoConfiguration.class,
         OpenAiChatAutoConfiguration.class,
         OpenAiEmbeddingAutoConfiguration.class,
-        OpenAiModerationAutoConfiguration.class
+        OpenAiModerationAutoConfiguration.class,
+        OpenAiAudioSpeechAutoConfiguration.class,
+        OpenAiAudioTranscriptionAutoConfiguration.class,
+        OpenAiImageAutoConfiguration.class
 })
 public class VoiceSupportApplication {
 

@@ -1,0 +1,160 @@
+{
+  "generated": "2026-08-27T09:43:43",
+  "ticket": "TASK-BE-033",
+  "baseline": "mistral-small",
+  "candidates": [
+    {
+      "label": "mistral-large",
+      "model": "mistral-large-latest",
+      "meta": {
+        "residency": "EU (Mistral)",
+        "egress": "api.mistral.ai:443 (already allowlisted)",
+        "hop": "remote cloud",
+        "price_in_per_m": 2.0,
+        "price_out_per_m": 6.0,
+        "pricing_ref": "https://mistral.ai/pricing",
+        "notes": "same residency, larger model"
+      },
+      "client_ttfc": {
+        "n": 6,
+        "p50": 2199.9,
+        "p95": 12274.7,
+        "min": 1644.7,
+        "max": 12274.7,
+        "mean": 6477.2
+      },
+      "client_total": {
+        "n": 6,
+        "p50": 4075.1,
+        "p95": 14721.5,
+        "min": 2304.7,
+        "max": 14721.5,
+        "mean": 7955.6
+      },
+      "server_llm_first_token": {
+        "n": 7,
+        "p50": 7972.0,
+        "p95": 22108.0,
+        "min": 548.0,
+        "max": 22108.0,
+        "mean": 7747.0
+      },
+      "server_backend_first_token": {
+        "n": 7,
+        "p50": 8789.0,
+        "p95": 24108.0,
+        "min": 1637.0,
+        "max": 24108.0,
+        "mean": 8989.3
+      },
+      "grounded_rate": 0.833,
+      "confidence_mean": 0.7654,
+      "amount_mentions_total": 4,
+      "errors": 9,
+      "bft_p95": 24108.0,
+      "delta_bft_p95_vs_baseline": 21069.0
+    },
+    {
+      "label": "mistral-small",
+      "model": "mistral-small-latest",
+      "meta": {
+        "residency": "EU (Mistral)",
+        "egress": "api.mistral.ai:443 (already allowlisted)",
+        "hop": "remote cloud",
+        "price_in_per_m": 0.1,
+        "price_out_per_m": 0.3,
+        "pricing_ref": "https://mistral.ai/pricing",
+        "notes": "current baseline"
+      },
+      "client_ttfc": {
+        "n": 15,
+        "p50": 861.4,
+        "p95": 3044.3,
+        "min": 531.9,
+        "max": 3044.3,
+        "mean": 1047.3
+      },
+      "client_total": {
+        "n": 15,
+        "p50": 1160.2,
+        "p95": 3355.9,
+        "min": 894.1,
+        "max": 3355.9,
+        "mean": 1368.4
+      },
+      "server_llm_first_token": {
+        "n": 16,
+        "p50": 401.0,
+        "p95": 2472.0,
+        "min": 336.0,
+        "max": 2472.0,
+        "mean": 749.6
+      },
+      "server_backend_first_token": {
+        "n": 16,
+        "p50": 844.0,
+        "p95": 3039.0,
+        "min": 527.0,
+        "max": 3039.0,
+        "mean": 1116.3
+      },
+      "grounded_rate": 1.0,
+      "confidence_mean": 0.7563,
+      "amount_mentions_total": 0,
+      "errors": 0,
+      "bft_p95": 3039.0,
+      "delta_bft_p95_vs_baseline": 0.0
+    },
+    {
+      "label": "ollama-llama31-8b",
+      "model": "llama3.1:8b",
+      "meta": {
+        "residency": "on-prem (co-located)",
+        "egress": "none (no chat egress)",
+        "hop": "local",
+        "price_in_per_m": null,
+        "price_out_per_m": null,
+        "pricing_ref": "amortized GPU/CPU infra",
+        "notes": "infra cost + quality unproven on FR billing"
+      },
+      "client_ttfc": {
+        "n": 15,
+        "p50": 2624.0,
+        "p95": 8857.0,
+        "min": 645.9,
+        "max": 8857.0,
+        "mean": 3514.6
+      },
+      "client_total": {
+        "n": 15,
+        "p50": 5712.0,
+        "p95": 12008.0,
+        "min": 3375.8,
+        "max": 12008.0,
+        "mean": 6459.0
+      },
+      "server_llm_first_token": {
+        "n": 16,
+        "p50": 338.0,
+        "p95": 5028.0,
+        "min": 204.0,
+        "max": 5028.0,
+        "mean": 1345.2
+      },
+      "server_backend_first_token": {
+        "n": 16,
+        "p50": 2505.0,
+        "p95": 8823.0,
+        "min": 634.0,
+        "max": 8823.0,
+        "mean": 3387.4
+      },
+      "grounded_rate": 1.0,
+      "confidence_mean": 0.7563,
+      "amount_mentions_total": 0,
+      "errors": 0,
+      "bft_p95": 8823.0,
+      "delta_bft_p95_vs_baseline": 5784.0
+    }
+  ]
+}
