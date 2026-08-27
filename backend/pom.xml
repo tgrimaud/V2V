@@ -139,6 +139,15 @@
             <artifactId>spring-ai-starter-model-mistral-ai</artifactId>
         </dependency>
 
+        <!-- Spring AI: OpenAI chat (gpt-4o-mini) — TASK-BE-033 benchmark candidate 4 (ADR-0045).
+             Same manual-wiring pattern as Mistral/Ollama (chat model built in LlmConfig; the OpenAI
+             chat/embedding/moderation auto-configurations are excluded on the main class so
+             embeddings stay Ollama 768d). US chat egress is an OQ-009 compliance decision. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

@@ -38,7 +38,11 @@ largest reducible slice behind the STT tail.
 | `mistral-small` | `mistral-small-latest` | ✅ baseline | EU | `api.mistral.ai:443` (allowlisted) |
 | `mistral-large` | `mistral-large-latest` | ✅ config/env | EU | `api.mistral.ai:443` (allowlisted) |
 | `ollama` | co-located instruct model | ✅ config/env | on-prem | none |
-| `openai-gpt-4o-mini` | `gpt-4o-mini` | ⏳ needs adapter + `spring-ai-starter-model-openai` dep | US | `api.openai.com:443` (NEW, OQ-009) |
+| `openai-gpt-4o-mini` | `gpt-4o-mini` | ✅ adapter + dep landed (`LLM_PROVIDER=openai` + `OPENAI_API_KEY`) | US | `api.openai.com:443` (NEW, OQ-009) |
+
+> **OQ-009 gate:** the OpenAI adapter makes the candidate _measurable_ for the spike (local run
+> with an `OPENAI_API_KEY`); it does **not** authorize pilot use. Selecting OpenAI would require the
+> pilot egress allowlist to add `api.openai.com:443` (ADR-0039) and a US-chat-egress compliance sign-off.
 
 ## Results
 
