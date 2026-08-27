@@ -1,8 +1,11 @@
 ---
 # Provision the knowledge base assets the backend mounts read-only (TASK-OPS-002).
 # The image does not bundle the KB (DEPLOY-001); Ansible drops the repo's
-# knowledge-base/*.md + articles.csv under KB_HOST_PATH so the first
-# POST /api/knowledge/sync can populate pgvector. Without this the RAG stays empty.
+# knowledge-base/*.md + the CSV corpus ({{ kb_csv_filename }}) under KB_HOST_PATH so the
+# post-deploy POST /api/knowledge/sync (kb_sync.yml) can populate pgvector. Without this
+# the RAG stays empty.
+# ADR-0048 / TASK-OPS-009: the CSV corpus is the FRENCH articles-fr.csv by default (pilot
+# users are French → FR-on-FR retrieval). kb_csv_filename selects the repo-root file.
 
 - name: "Ensure the KB directory exists"
   ansible.builtin.file:
@@ -20,10 +23,10 @@
     group: root
     mode: "0644"
 
-- name: "Copy articles.csv"
+- name: "Copy the CSV article corpus ({{ kb_csv_filename }})"
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../articles.csv"
-    dest: "{{ kb_host_path }}/articles.csv"
+    src: "{{ playbook_dir }}/../../{{ kb_csv_filename }}"
+    dest: "{{ kb_host_path }}/{{ kb_csv_filename }}"
     owner: root
     group: root
     mode: "0644"

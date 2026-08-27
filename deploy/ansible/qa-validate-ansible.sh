@@ -136,8 +136,29 @@ grep -q 'REDISCLI_AUTH=' roles/compose_tier/tasks/health.yml && ! grep -q 'redis
 # --- 9. KB provisioning (self-contained deploy) -------------------------------
 grep -q "include_tasks: kb_assets.yml" roles/compose_tier/tasks/main.yml && ok "KB provisioning wired into the role" || bad "KB provisioning not wired"
 grep -q "tier == 'backend'" roles/compose_tier/tasks/main.yml && ok "KB provisioning gated to the backend tier" || bad "KB provisioning not gated to backend"
-grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "articles.csv" roles/compose_tier/tasks/kb_assets.yml \
-  && ok "KB task copies knowledge-base/ + articles.csv" || bad "KB task missing sources"
+grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "kb_csv_filename" roles/compose_tier/tasks/kb_assets.yml \
+  && ok "KB task copies knowledge-base/ + the CSV corpus (kb_csv_filename)" || bad "KB task missing sources"
+# ADR-0048 / TASK-OPS-009: FR corpus default + post-deploy sync trigger + non-empty verify.
+grep -q 'kb_csv_filename: "articles-fr.csv"' group_vars/backend.yml && grep -q 'kb_csv_language: "fr"' group_vars/backend.yml \
+  && ok "Backend defaults to the French CSV corpus (ADR-0048)" || bad "FR CSV corpus default missing"
+grep -q 'KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}' roles/compose_tier/templates/backend.env.j2 \
+  && grep -q 'KB_CSV_LANGUAGE={{ kb_csv_language }}' roles/compose_tier/templates/backend.env.j2 \
+  && ok "backend.env.j2 wires KB_CSV_PATH + KB_CSV_LANGUAGE from vars" || bad "backend.env.j2 KB CSV wiring missing"
+grep -q "include_tasks: kb_sync.yml" roles/compose_tier/tasks/main.yml \
+  && ok "Post-deploy KB sync wired into the role" || bad "Post-deploy KB sync not wired"
+grep -q 'api/knowledge/sync' roles/compose_tier/tasks/kb_sync.yml \
+  && grep -q 'api/conversation/retrieve' roles/compose_tier/tasks/kb_sync.yml \
+  && ok "KB sync triggers sync + verifies retrieval non-empty" || bad "KB sync task missing sync/verify"
+grep -q 'no_log: true' roles/compose_tier/tasks/kb_sync.yml \
+  && ok "KB sync reads the api key with no_log" || bad "KB sync api-key not no_log-protected"
+# The first CSV sync runs ~15-30 min (CPU embeddings), so it must be fired async and waited
+# on via async_status, then gated on SyncReport.processed (CSV seen, not markdown-only).
+grep -q 'async_status' roles/compose_tier/tasks/kb_sync.yml \
+  && grep -q 'poll: 0' roles/compose_tier/tasks/kb_sync.yml \
+  && ok "KB sync fires async + waits via async_status (slow CPU embed)" || bad "KB sync not async (600s would time out)"
+grep -q 'kb_sync_min_processed' roles/compose_tier/tasks/kb_sync.yml \
+  && grep -q 'json.processed' roles/compose_tier/tasks/kb_sync.yml \
+  && ok "KB sync gates on SyncReport.processed (proves CSV corpus loaded)" || bad "KB sync missing processed gate"
 
 # --- 10. Registry credential hygiene (TASK-OPS-004) ---------------------------
 # The role logs in before the pull; it must also log out afterwards so the token

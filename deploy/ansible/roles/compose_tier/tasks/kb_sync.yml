@@ -1,0 +1,118 @@
+---
+# Post-deploy knowledge-base sync (TASK-OPS-009, ADR-0048). Backend tier only, after the
+# stack is healthy. Triggers POST /api/knowledge/sync so a (re)deploy always populates
+# pgvector from the mounted KB assets (markdown FAQ + the CSV corpus) instead of leaving
+# the RAG markdown-only or empty. Idempotent: unchanged sources are skipped by
+# content_hash, so re-running is a no-op.
+#
+# The api key is read from the rendered .env on the host (never passed on argv / logged):
+# CONVERSATION_API_KEY gates the endpoint (empty => gate open). Runs once from a single
+# backend node — both backend nodes share the same Postgres, so one sync populates the
+# shared store; a second node's run would just be an idempotent no-op.
+#
+# Why async (not one long HTTP call): the CSV corpus (~300 articles) is embedded on the
+# co-located CPU Ollama sidecar, and every article is ALSO domain-classified by an
+# embedding call at parse time (ADR-0030), so a full first sync runs well past any single
+# request timeout (observed ~15-30 min on the pilot). We fire it with poll:0 and wait via
+# async_status, which is resilient to that duration without holding one fragile long socket.
+
+- name: "Read the rendered backend .env (for the api key)"
+  ansible.builtin.slurp:
+    src: "{{ compose_root }}/{{ compose_src }}/.env"
+  register: kb_sync_env_slurp
+  run_once: true
+  no_log: true
+
+- name: "Extract CONVERSATION_API_KEY from the .env"
+  ansible.builtin.set_fact:
+    kb_sync_api_key: >-
+      {{ (kb_sync_env_slurp.content | b64decode).split('\n')
+         | select('match', '^CONVERSATION_API_KEY=')
+         | map('regex_replace', '^CONVERSATION_API_KEY=', '')
+         | first | default('') }}
+  run_once: true
+  no_log: true
+
+- name: "Trigger the KB sync (POST /api/knowledge/sync, async)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ backend_port }}/api/knowledge/sync"
+    method: POST
+    headers:
+      x-api-key: "{{ kb_sync_api_key }}"
+    status_code: 200
+    timeout: "{{ kb_sync_timeout | default(2400) }}"
+  register: kb_sync_job
+  async: "{{ kb_sync_async_seconds | default(2700) }}"
+  poll: 0
+  run_once: true
+  no_log: true
+
+- name: "Wait for the KB sync to finish"
+  ansible.builtin.async_status:
+    jid: "{{ kb_sync_job.ansible_job_id }}"
+  register: kb_sync_result
+  until: kb_sync_result.finished
+  retries: "{{ kb_sync_poll_retries | default(90) }}"
+  delay: "{{ kb_sync_poll_delay | default(30) }}"
+  run_once: true
+  no_log: true
+
+# Non-secret confirmation the sync ran (aggregate counts only, no KB content / no key).
+- name: "Report the KB sync outcome"
+  ansible.builtin.debug:
+    msg: >-
+      KB sync HTTP {{ kb_sync_result.status | default('n/a') }} on {{ inventory_hostname }}:
+      processed={{ kb_sync_result.json.processed | default('?') }}
+      ingested={{ kb_sync_result.json.ingested | default('?') }}
+      skipped={{ kb_sync_result.json.skipped | default('?') }}
+      deleted={{ kb_sync_result.json.deleted | default('?') }}
+  run_once: true
+
+# /api/knowledge/sync returns an aggregate SyncReport { processed, ingested, skipped,
+# deleted } across ALL connectors (markdown + CSV). Gate on `processed` above the
+# markdown-only baseline: it proves the CSV corpus was actually seen/parsed (mounted at
+# KB_CSV_PATH) so the deploy did not silently leave the RAG markdown-only. We gate on
+# processed (not ingested) because an idempotent re-deploy skips unchanged sources
+# (ingested=0, skipped=all) yet is a success.
+- name: "Assert the CSV corpus was processed (not markdown-only)"
+  ansible.builtin.assert:
+    that:
+      - (kb_sync_result.status | default(0) | int) == 200
+      - kb_sync_result.json is defined
+      - (kb_sync_result.json.processed | default(0) | int) >= (kb_sync_min_processed | default(50) | int)
+    fail_msg: >-
+      KB sync processed {{ kb_sync_result.json.processed | default('?') }} documents
+      (< {{ kb_sync_min_processed | default(50) }}) — the CSV corpus was not seen. Check the
+      CSV mount (KB_CSV_PATH -> {{ kb_csv_filename | default('articles-fr.csv') }}) and the
+      sync logs; the RAG may be markdown-only.
+    success_msg: "KB sync processed the full corpus (markdown + CSV)."
+  run_once: true
+
+# Extra pipeline signal: POST /api/conversation/retrieve must answer end-to-end (embedding
+# + pgvector search + audience filter). This is deliberately NOT the "CSV loaded" gate (the
+# always-present markdown FAQ can satisfy retrieval, and the fail-closed audience filter,
+# ADR-0034, legitimately returns 0 chunks for a query with no customer-facing match), so we
+# gate on HTTP 200 (pipeline healthy) and only log the evidence count.
+- name: "Smoke-check retrieval responds (POST /api/conversation/retrieve)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ backend_port }}/api/conversation/retrieve"
+    method: POST
+    headers:
+      x-api-key: "{{ kb_sync_api_key }}"
+    body_format: json
+    body:
+      question: "{{ kb_sync_verify_query | default('problème avec mon téléphone mobile') }}"
+      top_k: 5
+    status_code: 200
+    timeout: 30
+  register: kb_sync_retrieve
+  run_once: true
+  no_log: true
+
+- name: "Report the retrieval smoke-check evidence count"
+  ansible.builtin.debug:
+    msg: >-
+      Retrieval smoke check on {{ inventory_hostname }}: HTTP {{ kb_sync_retrieve.status }},
+      evidence_count={{ kb_sync_retrieve.json.evidence | default([]) | length }},
+      verdict={{ kb_sync_retrieve.json.verdict | default('?') }}
+  run_once: true

@@ -1278,3 +1278,117 @@ this blocked the voice tier; t02 had to be finished manually with
 
 - Non-runtime (deploy tooling only). Backend/redis health paths unchanged.
 - Removes the need for the manual `-e health_url=<service-IP>` workaround on future voice deploys.
+
+---
+
+## TASK-OPS-009 - Deploy must trigger/verify KB sync + FR corpus default
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations) / EPIC-005 (answer engine)
+**Related decisions:** ADR-0048 (bilingual KB corpus + retrieval language scope),
+ADR-0038 (pilot deploy), ADR-0031 (answer language), ADR-0034 (audience filter)
+**Related:** TASK-OPS-002 (Ansible deploy), TASK-BE-013/014 (CSV connector), TASK-BE-034
+(retrieval language filter — target), TASK-BE-035 (rebrand)
+**Depends on:** TASK-OPS-002
+**Classification:** V1 pilot deployment (release correctness + KB content)
+**Status:** 🔧 Implemented on `task/TASK-OPS-009-kb-sync-fr-default` (2026-08-27, off
+`feat/sprint-12-external-voice-websocket`): durable Ansible change (FR corpus default +
+**async** post-deploy sync + `SyncReport.processed` gate) landed; `qa-validate-ansible.sh`
+**76/76** (added 7 checks), YAML + playbook syntax-check clean. The immediate pilot load
+(Part B step 1) was performed operationally out-of-band (see done-tasks 2026-08-27). Pending
+user validation / merge.
+**Priority:** High
+**Branch:** `task/TASK-OPS-009-kb-sync-fr-default`
+
+### Problem
+
+Two gaps made the live pilot RAG **markdown-only** (39 chunks, 3 FR FAQ files) with **zero
+CSV content**, so mobile/support questions such as *"j'ai un problème avec mon téléphone
+mobile"* had no grounded evidence and deflected to an advisor (DEC-002):
+
+1. **The Ansible deploy copies KB assets but never syncs them.**
+   `roles/compose_tier/tasks/kb_assets.yml` drops `knowledge-base/*.md` + the CSV corpus
+   under `KB_HOST_PATH`, but **no task triggers `POST /api/knowledge/sync`** — the initial
+   markdown sync was run manually once, and no CSV was ever synced. A redeploy therefore
+   leaves the RAG empty/markdown-only unless someone remembers the manual step.
+2. **The CSV default was the English `articles.csv`.** Pilot users are French; FR-on-FR
+   retrieval grounds far better than FR-on-EN (ADR-0048).
+
+### Objective
+
+Make a (re)deploy self-sufficient: copy the **French** corpus, tag it `fr`, and **trigger +
+verify** the KB sync post-deploy so the RAG is never left empty/markdown-only.
+
+### Scope (delivered)
+
+- **FR corpus default** (group_vars/backend.yml): `kb_csv_filename: "articles-fr.csv"` +
+  `kb_csv_language: "fr"`; `kb_assets.yml` copies `{{ kb_csv_filename }}`; `backend.env.j2`
+  renders `KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}` + `KB_CSV_LANGUAGE={{ kb_csv_language }}`;
+  `.env.example` mirrors it.
+- **Post-deploy sync** (new `roles/compose_tier/tasks/kb_sync.yml`, backend tier only, after
+  `health.yml`, gated `kb_sync_after_deploy`): reads `CONVERSATION_API_KEY` from the rendered
+  `.env` (`no_log`, never on argv), then fires `POST /api/knowledge/sync` **async** (`poll: 0`)
+  and waits via `async_status` (90 × 30 s = 45 min headroom). **Why async:** the first CSV sync
+  is slow — ~300 articles are embedded on the co-located CPU Ollama sidecar AND each is
+  domain-classified by an embedding call at parse time (ADR-0030), so a full run takes ~15–30 min
+  on the pilot, far past any single-request timeout (a naïve 600 s `uri` call would time out and
+  fail the deploy). **Deploy gate:** assert the aggregate `SyncReport.processed >=
+  kb_sync_min_processed` (default 50; markdown baseline is 3, the FR corpus adds ~300) — this
+  proves the CSV corpus was actually seen/parsed, so the RAG is never silently left markdown-only.
+  We gate on `processed` (not `ingested`) because an idempotent re-deploy skips unchanged sources
+  (`ingested=0`) yet is a success. A `POST /api/conversation/retrieve` call then smoke-checks the
+  pipeline (gated on HTTP 200 + evidence count logged) — deliberately **not** the CSV-loaded gate,
+  since the always-present markdown FAQ can satisfy retrieval and the fail-closed audience filter
+  (ADR-0034) legitimately returns 0 chunks for a query with no customer-facing match.
+- **QA:** `qa-validate-ansible.sh` extended (76/76) — FR default, env wiring, sync wired +
+  verifies, api-key `no_log`, **async + async_status**, **`processed` gate**.
+
+### Acceptance
+
+```gherkin
+Scenario: A redeploy leaves the RAG populated, not markdown-only
+  Given the backend stack is (re)deployed via Ansible
+  When the post-deploy step runs
+  Then POST /api/knowledge/sync is fired async with the api key read from the rendered .env
+    And the play waits for the sync to finish via async_status (no single-request timeout)
+    And the deploy fails if SyncReport.processed is below the CSV baseline (markdown-only)
+
+Scenario: An idempotent re-deploy is a fast no-op
+  Given the CSV corpus is already synced (unchanged content_hash)
+  When the post-deploy sync runs again
+  Then it skips unchanged sources (ingested=0) and still passes the processed gate
+
+Scenario: The pilot CSV corpus is French
+  Then KB_CSV_PATH points at articles-fr.csv and KB_CSV_LANGUAGE is fr
+```
+
+### Residuals / notes
+
+- **Language tag on the interim operational load (ADR-0048):** the immediate pilot load (Part
+  B step 1) dropped `articles-fr.csv` at the already-mounted `articles.csv` path and synced
+  `csv-article` while `KB_CSV_LANGUAGE` was still `en`, so those chunks carry a cosmetic
+  `language=en`. Harmless today (no language filter; answer language per-request). Once
+  **TASK-BE-034** lands, a **forced re-sync** is needed to re-tag `fr` (idempotent sync skips
+  on identical content_hash). A clean redeploy with this ticket's config tags correctly from
+  the start (source_type stays `csv-article`, language `fr`).
+- **Do NOT run a full prod redeploy** solely for this unless clearly safe (known voice
+  health-gate false-negative, TASK-INFRA-011). The operational pilot load (step 1) is the
+  immediate fix; this ticket makes the next planned redeploy durable.
+- **Bilingual target:** when TASK-BE-034 (retrieval language filter) lands, revisit to load
+  both `csv-article` (EN) + `csv-article-fr` (FR).
+- **Corpus is an internal back-office KB (audience boundary, ADR-0034):** the FR corpus is a
+  translation of the Eir operator KB, dominated by agent/back-office procedures. The
+  `KeywordAudienceClassifierAdapter` tags an article `internal` when its title/content matches a
+  marker (`back office`, `vérification d'aptitude`, `r6/ion`, `vaa`, `vrd`), and the customer
+  answer engine is **fail-closed to `audience=customer`**. Observed during the pilot sync: even
+  *"Mobile : Guide de dépannage"* was tagged `internal` (its body references back-office steps),
+  so it is excluded from customer retrieval. Consequence: loading the corpus does **not**
+  guarantee the mobile question grounds — the customer-facing partition may be thin. This is a
+  **KB-quality / audience-tuning** matter tracked under **TASK-BE-035** (rebrand + curate a
+  customer-facing FR corpus), not a deploy defect. The pilot verification (done-tasks 2026-08-27)
+  records the actual customer-retrieval outcome for the mobile query.
+- **Sync is embedding-bound, not a fixed cost:** every article triggers a domain-classification
+  embedding at parse time (ADR-0030) *before* the per-chunk storage embeddings, all on the CPU
+  Ollama sidecar (`ollama_cpus: 1.0`). The vector store therefore stays at the markdown baseline
+  until the whole parse phase completes, then CSV chunks appear per document. This is why the
+  sync is fired async and gated on `SyncReport.processed`, and why `voice-support.embedding.timeout-ms`
+  is raised to 120 s on the backend tier (`java_opts`) for the sync batch.
