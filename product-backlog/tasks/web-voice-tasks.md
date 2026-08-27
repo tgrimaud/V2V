@@ -2459,7 +2459,7 @@ and LB VMs are 1 vCPU. Under concurrent calls this is a scaling and latency risk
 ## TASK-WEB-025 - Genesys Audio Connector feasibility spike (investigation only)
 
 **Parent:** EPIC-012 / EPIC-007 (Genesys advisor handoff)
-**Related decisions:** ADR-0040 (Audio Connector as V2V media plane), **ADR-0048** (Genesys Audio
+**Related decisions:** ADR-0040 (Audio Connector as V2V media plane), **ADR-0049** (Genesys Audio
 Connector Sprint 13 delivery shape — this spike is its gate), ADR-0020 (Genesys handoff), ADR-0019
 (escalation contract), ADR-0029 (mouth-to-ear latency gate), ADR-0025 (barge-in), **ADR-0046**
 (WebSocket primary transport, supersedes ADR-0033), **ADR-0047** (single async HTTP+WS server — the
@@ -2469,7 +2469,7 @@ session factory)
 **Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
 **Status:** 📋 Proposed — spike (investigation only), gated by OQ-006. **Sprint 13 GATE** (2026-08-27):
 this spike is the first, go/no-go ticket of `sprints/sprint-13-genesys-audio-connector.md`; its GO
-verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-034/035, TASK-INFRA-012).
+verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-036/035, TASK-INFRA-012).
 **Priority:** High for Sprint 13 (foundational go/no-go; was Low while deferred)
 **Branch:** `task/TASK-WEB-025-genesys-audio-connector-spike` (off `feat/sprint-13-genesys-audio-connector`
 when work starts; ticket authored under TASK-DOC-006)
@@ -3651,7 +3651,7 @@ comparable to the WebRTC path.
 
 Follow-on delivery slices unblocked by the **TASK-WEB-025** go/no-go spike. All four are
 **Proposed and conditional on spike GO + OQ-006**; nothing below commits before the gate.
-Decisions of record: ADR-0040 (updated) + **ADR-0048** (Sprint 13 delivery shape). They build
+Decisions of record: ADR-0040 (updated) + **ADR-0049** (Sprint 13 delivery shape). They build
 on ADR-0046 (WebSocket primary) + ADR-0047 (single async server) + ADR-0043 (session factory).
 Sprint file: `sprints/sprint-13-genesys-audio-connector.md`.
 
@@ -3666,7 +3666,7 @@ memory (ADR-0001). Genesys is the contact-center system of record only.
 ## TASK-WEB-041 - Genesys Audio Connector transport adapter (codec + one stream/session + 15-min cap)
 
 **Parent:** EPIC-007 (Genesys advisor handoff) / EPIC-006 (Voice2Voice foundation)
-**Related decisions:** ADR-0040 (3-plane split), ADR-0048 (delivery shape), ADR-0047 (single async
+**Related decisions:** ADR-0040 (3-plane split), ADR-0049 (delivery shape), ADR-0047 (single async
 server host), ADR-0043 (session factory), ADR-0046 (WebSocket primary), ADR-0025 (barge-in),
 ADR-0029 (latency gate)
 **Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
@@ -3730,7 +3730,7 @@ Scenario: The pilot codec is handled end to end
 
 **Parent:** EPIC-007 / EPIC-006
 **Related decisions:** ADR-0040 (native events supersede in-house detectors on the Genesys path),
-ADR-0025 (barge-in), ADR-0048, ADR-0046/0043
+ADR-0025 (barge-in), ADR-0049, ADR-0046/0043
 **Depends on:** TASK-WEB-041 (the Genesys transport exists), TASK-WEB-025 (spike confirms the events)
 **Classification:** V1 voice runtime (runtime-affecting: control-signal source per path)
 **Status:** 📋 Proposed — conditional on spike GO
@@ -3776,7 +3776,7 @@ Scenario: The web dev path keeps the in-house detectors
 
 **Parent:** EPIC-007 / EPIC-010 (observability, latency & pilot validation)
 **Related decisions:** ADR-0029 (latency gate), ADR-0028 (observability), ADR-0040 (Genesys legs +
-constraints), ADR-0048, TASK-WEB-030 (WS per-slice), TASK-WEB-024 (WebRTC ceiling counterpart)
+constraints), ADR-0049, TASK-WEB-030 (WS per-slice), TASK-WEB-024 (WebRTC ceiling counterpart)
 **Depends on:** TASK-WEB-041 (transport exists), TASK-WEB-025 (spike ceiling + per-leg method)
 **Classification:** V1 pilot gate (latency + observability) — runtime-affecting
 **Status:** 📋 Proposed — conditional on spike GO
@@ -3828,7 +3828,7 @@ Scenario: The Genesys path honours a concurrency ceiling
 
 **Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
 **Related decisions:** ADR-0040 (Architect resumes at session end), ADR-0020 (advisor handoff),
-ADR-0044 (degrade-don't-outage posture), ADR-0048
+ADR-0044 (degrade-don't-outage posture), ADR-0049
 **Depends on:** TASK-WEB-041 (transport), TASK-INFRA-012 (Architect fallback route), TASK-WEB-025
 (spike characterises ≥1 degraded mode)
 **Classification:** V1 voice runtime + infra (runtime-affecting: failure behaviour)

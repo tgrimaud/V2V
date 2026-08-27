@@ -1281,7 +1281,7 @@ Scenario: Voice deploy health gate passes when the bridge is actually healthy
 ## TASK-INFRA-012 - Genesys Architect flow + control/routing plane (Call Audio Connector + advisor-queue routing + wss endpoint exposure)
 
 **Parent:** EPIC-007 (Genesys advisor handoff) / EPIC-012 (pilot deployment)
-**Related decisions:** ADR-0040 (control/routing plane owned by Architect + Platform API), ADR-0048
+**Related decisions:** ADR-0040 (control/routing plane owned by Architect + Platform API), ADR-0049
 (Sprint 13 delivery shape), ADR-0020 (Genesys handoff), ADR-0047 (single async server hosts the `wss`
 endpoint), ADR-0038 (pilot deployment / edge)
 **Depends on:** TASK-WEB-025 (spike **GO** + pilot access), OQ-006 (pilot environment + queue routing
@@ -1310,7 +1310,7 @@ conversation logic lives here (that stays in the backend, ADR-0001).
 - **Architect flow** with the **Call Audio Connector** action: fork the call audio to our `wss`
   endpoint, pause the flow while streaming, resume when our runtime ends the session.
 - **Advisor-queue routing on escalation/resume**: route to the billing advisor queue with the
-  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-034/035).
+  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-036/035).
 - **Fail-safe route** (pairs with TASK-WEB-044): if our endpoint is unreachable/times out, the flow
   routes straight to the advisor queue after a defined guard delay.
 - **Endpoint exposure**: reachable `wss://` on the routed port through the existing TLS edge (ADR-0047,
@@ -1335,7 +1335,7 @@ Scenario: The flow fails safe when the bot endpoint is unavailable
 ```
 
 - Architect flow forks/pauses/resumes correctly against the TASK-WEB-041 endpoint.
-- Escalation resume routes to the advisor queue with the handoff reference (TASK-BE-034).
+- Escalation resume routes to the advisor queue with the handoff reference (TASK-BE-036).
 - Fail-safe route verified (pairs with TASK-WEB-044); premium integration budget recorded.
 - Reference flow/config versioned under `deploy/`; no conversation logic in Genesys.
 

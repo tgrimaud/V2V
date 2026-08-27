@@ -1456,17 +1456,17 @@ ADR-0009 (channel envelope), ADR-0040/0048 (Genesys planes + delivery shape).
 
 ---
 
-## TASK-BE-034 — EscalationHandoff transport contract for Genesys (handoff_id + backend fetch)
+## TASK-BE-036 — EscalationHandoff transport contract for Genesys (handoff_id + backend fetch)
 
 **Parent:** EPIC-007 (Genesys advisor handoff)
 **Related decisions:** ADR-0019 (`EscalationHandoff` payload), ADR-0020 (Genesys handoff), ADR-0040
-(context/handoff plane), ADR-0048 (delivery shape), ADR-0009 (channel envelope)
+(context/handoff plane), ADR-0049 (delivery shape), ADR-0009 (channel envelope)
 **Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
-TASK-BE-035 (channel envelope fields the handoff rides on)
+TASK-BE-037 (channel envelope fields the handoff rides on)
 **Classification:** V1 core — backend escalation/handoff (runtime-affecting)
 **Status:** 📋 Proposed — conditional on spike GO + OQ-006
 **Priority:** High (closes adversarial-review **R5**)
-**Branch:** `task/TASK-BE-034-genesys-handoff-transport` (off the sprint branch, when gated)
+**Branch:** `task/TASK-BE-036-genesys-handoff-transport` (off the sprint branch, when gated)
 
 ### Context
 
@@ -1515,7 +1515,7 @@ Scenario: The handoff decision and payload stay backend-owned
 
 ---
 
-## TASK-BE-035 — Normalized channel envelope for the Genesys adapter
+## TASK-BE-037 — Normalized channel envelope for the Genesys adapter
 
 **Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
 **Related decisions:** ADR-0009 (independent channel adapters, shared backend), ADR-0019 (handoff),
@@ -1523,8 +1523,8 @@ ADR-0040/0048, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
 **Status:** 📋 Proposed — conditional on spike GO + OQ-006
-**Priority:** High (supports **R5**; foundation for TASK-BE-034)
-**Branch:** `task/TASK-BE-035-genesys-channel-envelope` (off the sprint branch, when gated)
+**Priority:** High (supports **R5**; foundation for TASK-BE-036)
+**Branch:** `task/TASK-BE-037-genesys-channel-envelope` (off the sprint branch, when gated)
 
 ### Context
 
@@ -1538,7 +1538,7 @@ envelope from Genesys identifiers, so the Genesys path is a first-class channel,
 - Populate the shared envelope fields for the Genesys adapter: **`channel`** (genesys),
   **`external_session_id`** (Genesys conversationId / participant), **`message_id`** (last inbound
   event id), **`idempotency_key`** (safe retries / duplicate delivery), **`reply_mode`** (voice), and
-  **`escalation_context`** (the handoff reference from TASK-BE-034).
+  **`escalation_context`** (the handoff reference from TASK-BE-036).
 - Ensure the backend conversation/memory keys off `external_session_id` so a Genesys call keeps one
   coherent conversation history (no split memory).
 - Keep the envelope **channel-agnostic** — the same contract the web/WS channels already use; no

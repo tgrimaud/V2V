@@ -1,4 +1,4 @@
-# ADR-0048: Genesys Audio Connector Sprint 13 Delivery Shape (Spike-Gated)
+# ADR-0049: Genesys Audio Connector Sprint 13 Delivery Shape (Spike-Gated)
 
 ## Status
 
@@ -63,7 +63,7 @@ TASK-WEB-025 go/no-go**:
    conversation attributes, with the full audited `EscalationHandoff` (ADR-0019) fetched
    from the backend on demand** — avoiding Architect variable size limits (R5). Inline
    transport is a documented fallback only if the spike shows a minimal subset fits with a
-   safe margin (TASK-BE-034 + TASK-BE-035).
+   safe margin (TASK-BE-036 + TASK-BE-037).
 
 4. **Barge-in / end-of-turn ownership is per path.** On the **Genesys path** the native
    Genesys events (`barge-in`, `playback-started`/`playback-completed`, `BotTurnResponse`)
@@ -87,7 +87,7 @@ TASK-WEB-025 go/no-go**:
    escalation policy, handoff content, or conversation memory moves into Genesys. Genesys is
    the contact-center system of record; the Java backend is the conversation brain. Genesys
    is one channel behind the normalized envelope (ADR-0009): `channel`, `external_session_id`,
-   `message_id`, `idempotency_key`, `reply_mode`, `escalation_context` (TASK-BE-035).
+   `message_id`, `idempotency_key`, `reply_mode`, `escalation_context` (TASK-BE-037).
 
 ### What the spike (TASK-WEB-025) must resolve before commitment
 
@@ -155,4 +155,4 @@ gate's outputs (also OQ-006 decision items):
 - `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md` (R1–R6)
 - `product-backlog/sprints/sprint-13-genesys-audio-connector.md`
 - `product-backlog/open-questions/v1-open-questions.md` (OQ-006)
-- Tickets: TASK-WEB-025 (gate), TASK-WEB-041/042/043/044, TASK-BE-034/035, TASK-INFRA-012
+- Tickets: TASK-WEB-025 (gate), TASK-WEB-041/042/043/044, TASK-BE-036/035, TASK-INFRA-012

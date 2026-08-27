@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (target). **Delivery shape refined by [ADR-0048](ADR-0048-genesys-audio-connector-sprint-13-delivery-shape.md)**
+Accepted (target). **Delivery shape refined by [ADR-0049](ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md)**
 (Genesys Audio Connector Sprint 13 delivery shape, Proposed — spike-gated).
 
 > **Implementation status (2026-08-07): NOT IMPLEMENTED — target decision.** No
@@ -21,7 +21,7 @@ Accepted (target). **Delivery shape refined by [ADR-0048](ADR-0048-genesys-audio
 > on that server — not a parallel stack. Sprint 13 sequences this behind the
 > **TASK-WEB-025** go/no-go spike; the concrete delivery decisions (media-adapter,
 > handoff-by-reference, per-path barge-in, degraded modes, per-leg latency + concurrency)
-> are recorded in **ADR-0048** and mapped to the R1–R6 Must-fix items.
+> are recorded in **ADR-0049** and mapped to the R1–R6 Must-fix items.
 
 ## Context
 
@@ -131,7 +131,7 @@ the NFR budget and must be tracked, not discovered late:
 
 ## Related Documents
 
-- `docs/architecture/adrs/ADR-0048-genesys-audio-connector-sprint-13-delivery-shape.md`
+- `docs/architecture/adrs/ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md`
 - `docs/architecture/adrs/ADR-0046-websocket-primary-live-voice-transport.md`
 - `docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md`
 - `docs/architecture/adrs/ADR-0020-genesys-handoff-v1-full-audio-connector-optional.md`
