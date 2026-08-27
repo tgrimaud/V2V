@@ -88,8 +88,18 @@ turns per candidate. Latency cells are **p50 / p95 (ms)**.
   **promising** (fastest raw chat token, zero egress) but **unproven** until re-measured on
   dedicated capacity — it is the recommended sovereignty fallback to validate next, not a pilot swap.
 - **OpenAI (`gpt-4o-mini`) not measured here** (no API key; US egress is an OQ-009 call). The
-  adapter is wired so it can be added to this table without code change once a key + compliance
-  sign-off exist.
+  adapter is wired so it can be added to this table **without any code change** once a key exists —
+  re-test with one command and re-merge:
+
+  ```bash
+  OPENAI_API_KEY=sk-... scripts/llm_benchmark/run_local_candidate.sh \
+      openai-gpt-4o-mini openai gpt-4o-mini OPENAI_CHAT_MODEL=gpt-4o-mini
+  python3 scripts/llm_benchmark/compare.py 'scripts/llm_benchmark/reports/bench-*.json' \
+      --out-dir scripts/llm_benchmark/reports   # 4-row table incl. openai-gpt-4o-mini
+  ```
+
+  ADR-0045 is deliberately kept **Proposed** (not force-Accepted) so this re-test can complete the
+  table before the final EU-vs-US decision. Measurement ≠ pilot authorization (OQ-009 still gates use).
 - **Net:** this closes ADR-0045's Direction-A latency question for the EU/on-prem candidates —
   the chat-model swap is **not** the lever that fixes the ADR-0029 gate (Mistral-small is already
   near-optimal for a cascade); the dominant remaining slice stays the **STT finalize tail**

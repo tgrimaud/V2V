@@ -34,25 +34,57 @@ the same 5 FR questions as the TASK-WEB-036 top-k A/B so numbers stay comparable
 The backend selects the provider/model at **startup** (`LLM_PROVIDER` + model env vars), so run
 one candidate, restart the backend for the next, then merge. Each candidate is warm + isolated.
 
+**Prereqs:** Postgres/pgvector up with the KB synced, Ollama up for embeddings
+(`nomic-embed-text`, 768d), a built jar (`cd backend && mvn -q -DskipTests package`), and provider
+creds in the repo-root `.env` or the env.
+
+### One command per candidate (recommended)
+
+`run_local_candidate.sh` boots the jar with the chosen provider, waits for readiness, runs the
+harness against the backend's own log (server `[TELEMETRY]` slices), then stops it. It auto-detects
+a JDK (`$JAVA_HOME` → macOS `java_home` → Maven's runtime) and sources the repo-root `.env`.
+
 ```bash
-# 1. Point the backend at a candidate and (re)start it. Examples:
-#    Mistral small (baseline):  LLM_PROVIDER=mistral-api MISTRAL_CHAT_MODEL=mistral-small-latest
-#    Mistral large:             LLM_PROVIDER=mistral-api MISTRAL_CHAT_MODEL=mistral-large-latest
-#    Co-located Ollama:         LLM_PROVIDER=ollama      OLLAMA_CHAT_MODEL=<model>
-#    OpenAI gpt-4o-mini:        LLM_PROVIDER=openai      OPENAI_CHAT_MODEL=gpt-4o-mini  (needs OPENAI_API_KEY)
-#    (redirect backend stdout to a log so the harness can read server slices)
+# EU baseline + large
+scripts/llm_benchmark/run_local_candidate.sh mistral-small mistral-api mistral-small-latest \
+    MISTRAL_CHAT_MODEL=mistral-small-latest
+scripts/llm_benchmark/run_local_candidate.sh mistral-large mistral-api mistral-large-latest \
+    MISTRAL_CHAT_MODEL=mistral-large-latest LLM_TIMEOUT_MS=30000 LLM_STREAM_TIMEOUT_MS=30000
 
-# 2. Benchmark that candidate:
-python3 scripts/llm_benchmark/run_benchmark.py \
-    --base-url http://localhost:8080 \
-    --label mistral-small --model mistral-small-latest \
-    --reps 3 --telemetry-log /tmp/backend.log \
-    --out-dir scripts/llm_benchmark/reports
+# Co-located Ollama — RAISE the embedding/retrieval budgets: chat + embeddings share one Ollama,
+# so a model swap can exceed the 5 s embedding default and error the turn (see Gotchas).
+scripts/llm_benchmark/run_local_candidate.sh ollama-llama31-8b ollama llama3.1:8b \
+    OLLAMA_CHAT_MODEL=llama3.1:8b EMBEDDING_TIMEOUT_MS=30000 RETRIEVAL_TIMEOUT_MS=35000 \
+    LLM_TIMEOUT_MS=60000 LLM_STREAM_TIMEOUT_MS=60000
 
-# 3. Repeat for every candidate, then merge into the ADR-0045 comparison table:
-python3 scripts/llm_benchmark/compare.py \
-    'scripts/llm_benchmark/reports/bench-*.json' \
+# Merge into the ADR-0045 comparison table:
+python3 scripts/llm_benchmark/compare.py 'scripts/llm_benchmark/reports/bench-*.json' \
     --out-dir scripts/llm_benchmark/reports
+```
+
+### Re-test candidate 4 (OpenAI) when a key is available
+
+The adapter is already wired (`LlmConfig` + `OpenAiAnswerAdapter`, `spring-ai-starter-model-openai`)
+— **no code change needed**. Export a key and run the same script; the result slots straight into
+the 4-row comparison table (`compare.py` already carries the `openai-gpt-4o-mini` metadata).
+
+```bash
+OPENAI_API_KEY=sk-... scripts/llm_benchmark/run_local_candidate.sh \
+    openai-gpt-4o-mini openai gpt-4o-mini OPENAI_CHAT_MODEL=gpt-4o-mini
+python3 scripts/llm_benchmark/compare.py 'scripts/llm_benchmark/reports/bench-*.json' \
+    --out-dir scripts/llm_benchmark/reports   # now includes openai-gpt-4o-mini
+```
+
+> Measurement only. Selecting OpenAI for the **pilot** still needs `api.openai.com:443` on the
+> egress allowlist (ADR-0039) + the OQ-009 US-chat-egress sign-off, independent of TTFT.
+
+### Manual (without the wrapper)
+
+```bash
+# start the backend with the candidate env, redirecting stdout to a log, then:
+python3 scripts/llm_benchmark/run_benchmark.py --base-url http://localhost:8080 \
+    --label mistral-small --model mistral-small-latest --reps 3 \
+    --telemetry-log /tmp/backend.log --out-dir scripts/llm_benchmark/reports
 ```
 
 Outputs (git-ignored working area under `reports/`; publish the final comparison under `docs/qa/`):
@@ -66,6 +98,26 @@ Outputs (git-ignored working area under `reports/`; publish the final comparison
 2. Update **ADR-0045** with the chosen provider/model (or "keep Mistral small") and move it
    Proposed → Accepted, citing the comparison table.
 3. The default provider swap (if any) is a separate change (config/adapter behind the port).
+
+## Gotchas (found during the 2026-08-27 EU/on-prem runs)
+
+- **Keyless OpenAI boot:** the `spring-ai-starter-model-openai` starter also auto-configures
+  audio-speech / audio-transcription / image models that eagerly require `spring.ai.openai.api-key`,
+  so the backend **crashes on startup on every non-OpenAI run** unless the *full* OpenAI auto-config
+  set is excluded. This is already fixed in `VoiceSupportApplication` (all six OpenAI auto-configs
+  excluded; the chat bean is gated on `provider=openai`). Don't re-add only chat/embedding/moderation.
+- **Single-Ollama contention:** with `LLM_PROVIDER=ollama`, chat (`llama3.1:8b`) and the mandatory
+  embeddings (`nomic-embed-text`) hit the **same** Ollama, so each turn thrashes a model swap and the
+  embedding call trips the 5 s default → `ERR_INTERNAL` (`Read timed out`) on ~every turn. Raise
+  `EMBEDDING_TIMEOUT_MS`/`RETRIEVAL_TIMEOUT_MS` (e.g. 30 s/35 s). The swap latency then lands in
+  `backend_first_token`, so that number **overstates** a dedicated-capacity deployment — report the
+  raw `llm_first_token` alongside it, and re-measure on separate chat/embedding capacity for a verdict.
+- **`mistral-large` throttling:** the large model is rate-limited on the dev API tier (many
+  `ERR_UPSTREAM`) and needs raised LLM budgets; even then the p50/p95 are over the *successful*
+  turns only — note the error count next to the latency.
+- **JDK on PATH:** Maven may use a JDK that `java` on the shell PATH can't find. The wrapper resolves
+  it (`$JAVA_HOME` → `/usr/libexec/java_home` → `mvn -v` runtime); if running the jar by hand, set
+  `JAVA_HOME` explicitly.
 
 ## Notes
 
