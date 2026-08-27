@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "description": "Billing fixture set for the TASK-BE-033 LLM provider/model benchmark (ADR-0045). Five FR end-user billing questions, identical to the TASK-WEB-036 top-k A/B set so backend_first_token numbers stay comparable across the two spikes. Text-in through the guarded POST /api/conversation/converse-stream path (real retrieval + guardrails, no STT/TTS noise). All are expected to ground against knowledge-base/billing-faq.md and must not fabricate amounts (DEC-002).",
+  "domain": "billing",
+  "language": "fr",
+  "questions": [
+    {
+      "id": "bill-higher",
+      "question": "Pourquoi ma facture de téléphone est plus élevée que le mois dernier ?",
+      "expect_grounded": true
+    },
+    {
+      "id": "bill-breakdown",
+      "question": "Pouvez-vous m'expliquer en détail les différentes lignes qui composent le montant total de ma facture ?",
+      "expect_grounded": true
+    },
+    {
+      "id": "bill-extra-fees",
+      "question": "Je souhaite comprendre pourquoi des frais supplémentaires apparaissent sur mon relevé ce mois.",
+      "expect_grounded": true
+    },
+    {
+      "id": "bill-payment-plan",
+      "question": "Serait-il possible de mettre en place un échéancier pour étaler le paiement de ma facture ?",
+      "expect_grounded": true
+    },
+    {
+      "id": "bill-cancel",
+      "question": "J'aimerais savoir comment résilier mon abonnement et connaître les frais de résiliation associés.",
+      "expect_grounded": true
+    }
+  ]
+}

@@ -7,6 +7,14 @@ deferred** until the benchmark spike **TASK-BE-033** produces the data. Scopes
 **Direction A** of ADR-0029 ("OpenAI as the cascade chat LLM") — not Direction B
 (Realtime speech-to-speech, which stays out of scope per ADR-0012/ADR-0029).
 
+> **Execution status (2026-08-27):** the TASK-BE-033 benchmark harness + billing fixture
+> set + comparison merger are implemented under `scripts/llm_benchmark/`; evidence will be
+> published to `docs/qa/task-be-033-llm-provider-benchmark-evidence.md`. Candidates 1–3
+> (Mistral small/large, co-located Ollama) are measurable via `LLM_PROVIDER` + model env vars;
+> candidate 4 (`gpt-4o-mini`) awaits an OpenAI adapter + `spring-ai-starter-model-openai`
+> dependency (approval gate) and the OQ-009 US-egress compliance call. This ADR stays
+> **Proposed** until the candidate runs produce the comparison table.
+
 ## Context
 
 The ADR-0029 pilot latency gate (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio`

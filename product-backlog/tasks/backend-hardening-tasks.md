@@ -1395,9 +1395,9 @@ gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
 **Related decisions:** ADR-0045 (this benchmark, Proposed), ADR-0029 (latency gate + Direction A/B), ADR-0026 (LLM behind replaceable ports), ADR-0006/DEC-011 (provider config), ADR-0039 (provider egress), ADR-0012 (cascade control)
 **Depends on:** TASK-WEB-036 (top-k=5, sub-span finding) + TASK-WEB-035 (STT tail capped)
 **Classification:** V1 voice runtime / backend — latency optimisation **spike** (measurement → ADR decision)
-**Status:** 📋 Planned — spike that feeds the ADR-0045 decision (ADR-0045 + this ticket definition merged into sprint-12 `fec413d`, 2026-08-25; execution not started). Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
+**Status:** 🔧 In progress (2026-08-27) — benchmark harness + billing fixture set + ADR-0045 comparison merger landed on `task/TASK-BE-033-llm-provider-benchmark` (`scripts/llm_benchmark/`); QA evidence scaffold at `docs/qa/task-be-033-llm-provider-benchmark-evidence.md`. Candidates 1–3 (Mistral small/large, co-located Ollama) are runnable now via `LLM_PROVIDER` + model env vars (no code change); candidate 4 (`openai-gpt-4o-mini`) needs the OpenAI `LlmPort` adapter + `spring-ai-starter-model-openai` dependency (mandatory tech-lead approval gate + OQ-009 US-egress compliance) before it can be measured. Live candidate runs pending. Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
 **Priority:** High
-**Branch:** `task/TASK-BE-033-llm-provider-benchmark` (to create when work starts)
+**Branch:** `task/TASK-BE-033-llm-provider-benchmark`
 
 ### Context
 
