@@ -1170,3 +1170,43 @@ Postgres (**vlb-ai4cc-t01.prod.lan**), so one sync populates the shared store.
 - `task/TASK-OPS-009-kb-sync-fr-default` — `876619c` (durable Ansible FR default + async KB-sync +
   `processed` gate + qa-validate) and this `done-tasks.md` entry. Pushed. Both off
   `feat/sprint-12-external-voice-websocket`.
+
+## 2026-08-27 — KB bilingual: FR corpus on pilot + retrieval-language-filter target ticket (TASK-BE-034/035, ADR-0048)
+
+**Context:** The live pilot `vector_store` held **only 39 chunks, all `source_type=markdown`/
+`language=fr`** (the 3 FR FAQ files, synced 2026-08-14). **No CSV corpus had ever been synced**
+(`articles.csv` was copied by Ansible but no deploy step triggers `POST /api/knowledge/sync`),
+so mobile questions like *"j'ai un problème avec mon téléphone mobile"* had no grounded evidence
+and correctly deflected to an advisor (DEC-002). Two-part initiative: load the FR corpus on the
+pilot now, and file the bilingual retrieval-language-filter target.
+
+**Summary (this branch — `task/TASK-BE-034-retrieval-language-filter`, off `feat/sprint-12-external-voice-websocket`):**
+
+- **ADR-0048** (Accepted) — bilingual KB corpus strategy + retrieval language scope. Pilot: load
+  the **French** `articles-fr.csv` as the single CSV corpus (FR users → FR-on-FR retrieval; answer
+  language already per-request per ADR-0031), no language filter needed while only one language is
+  loaded. Target: a `language == requestLanguage OR language absent` predicate in
+  `PgVectorStoreAdapter.buildSearchFilter` so the same store serves FR + EN cleanly. Records the
+  accepted residuals (cosmetic `language=en` tag on the interim load → forced re-sync when the
+  filter lands; eir/AT&T brand → rebrand). Alternatives (EN corpus / load-both-now / use the
+  `csv-article-fr` connector needing a vault `.env` edit) documented + rejected.
+- **TASK-BE-034** (Planned, ticket only — **do NOT implement now**): retrieval language filter,
+  mirroring the ADR-0034 audience/domain filter pattern; motivation, scope (predicate + thread
+  language through `VectorSearchPort.search` + update all fakes), Gherkin acceptance (FR-only /
+  EN-only / untagged-included / null-passthrough / audience+domain preserved), OTel note.
+- **TASK-BE-035** (Planned, Low): KB rebrand follow-up — the FR corpus still references
+  eir/eircom/AT&T; target-state needs brand-correct French content.
+
+**Note on branch base:** created off `feat/sprint-12-external-voice-websocket` (the latest
+`feat/sprint-NN-*`; no active sprint branch exists and per instruction the `task/TASK-BE-033`
+branch was not used as base). sprint-12 is behind mainline by ~23 commits, so this branch's ADR
+index/backlog additions are strictly additive (a later merge reconciles with ADR-0046/0047).
+
+### Files changed
+- `docs/architecture/adrs/ADR-0048-bilingual-kb-corpus-and-retrieval-language-scope.md` — new ADR
+- `docs/architecture/adrs/README.md` — ADR-0048 index row
+- `product-backlog/tasks/kb-ingestion-tasks.md` — TASK-BE-034 + TASK-BE-035 (table rows + detailed sections)
+- `product-backlog/backlog-index.md` — TASK-BE-034 + TASK-BE-035 delivery-backlog rows
+- `done-tasks.md` — this entry
+
+**Pilot operation + durable deploy config are tracked separately on `task/TASK-OPS-009-kb-sync-fr-default`.**
