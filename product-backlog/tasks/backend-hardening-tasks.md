@@ -1452,15 +1452,16 @@ Backend slices for the Genesys integration (Sprint 13, `sprints/sprint-13-genesy
 Both are **Proposed and conditional on the TASK-WEB-025 spike GO + OQ-006**. They keep the escalation
 decision and the handoff payload **backend-owned** (ADR-0001/0019) while Genesys stays the
 contact-center system of record. Decisions of record: ADR-0019 (escalation + handoff contract),
-ADR-0009 (channel envelope), ADR-0040/0048 (Genesys planes + delivery shape).
+ADR-0009 (channel envelope), ADR-0040/0049 (Genesys planes + delivery shape).
 
 ---
 
 ## TASK-BE-036 — EscalationHandoff transport contract for Genesys (handoff_id + backend fetch)
 
 **Parent:** EPIC-007 (Genesys advisor handoff)
-**Related decisions:** ADR-0019 (`EscalationHandoff` payload), ADR-0020 (Genesys handoff), ADR-0040
-(context/handoff plane), ADR-0049 (delivery shape), ADR-0009 (channel envelope)
+**Related decisions:** **DEC-013 (escalation handoff by reference — decided)**, ADR-0019
+(`EscalationHandoff` payload), ADR-0020 (Genesys handoff), ADR-0040 (context/handoff plane), ADR-0049
+(delivery shape), ADR-0009 (channel envelope)
 **Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
 TASK-BE-037 (channel envelope fields the handoff rides on)
 **Classification:** V1 core — backend escalation/handoff (runtime-affecting)
@@ -1471,25 +1472,29 @@ TASK-BE-037 (channel envelope fields the handoff rides on)
 ### Context
 
 ADR-0019 defines a 14-field `EscalationHandoff` payload (reason, summary, compared periods, evidence,
-citations, unresolved points, recommended next action, identifiers…). The adversarial review (R5)
-warned that Architect input/output variables + conversation attributes have **size/type limits**, so a
-rich handoff carried **inline** risks truncation. ADR-0040 keeps the handoff plane backend-owned. This
-ticket settles the transport contract.
+citations, unresolved points, recommended next action, identifiers…). **DEC-013 decides the transport
+by reference**: Genesys carries only an opaque **`handoff_id` + minimal routing metadata**; the backend
+**owns and serves the full context/PII** on an audited fetch. Carrying the context **inline** in
+Architect variables / conversation attributes is **rejected on PII / trust-boundary grounds**
+(independent of, and on top of, the Architect variable size/type limits the adversarial review flagged
+as R5). ADR-0040 keeps the handoff plane backend-owned. This ticket implements that decided transport.
 
 ### Scope
 
-- Adopt the reviewed-recommended shape: carry only a **`handoff_id` + `customer_reference`** through
-  the Genesys control plane (Architect variables / conversation attributes), and expose a
-  **backend fetch** the advisor desktop (or a widget) calls to retrieve the full, audited
-  `EscalationHandoff` on demand — keeping the payload backend-owned and auditable, and avoiding the
-  variable-size limits.
-- Validate the decision against the **actual Architect variable/attribute size + type limits** the
-  spike (TASK-WEB-025) measured; if inline fits within a safe margin for a minimal subset, record that
-  as an explicit fallback with the size budget.
+- Implement the decided by-reference shape (**DEC-013**): carry only a **`handoff_id` + the minimal
+  routing metadata** the trust model permits through the Genesys control plane (Architect variables /
+  conversation attributes), and expose a **backend fetch** the advisor desktop (or a widget) calls to
+  retrieve the full, audited `EscalationHandoff` on demand — keeping the payload + PII backend-owned
+  and auditable.
+- The **inline** transport (full context in Genesys variables) is **not** a V1 option — it is rejected
+  on PII/trust-boundary grounds; do not build it as a fallback.
+- The spike (TASK-WEB-025) still measures the **actual Architect variable/attribute size + type limits**
+  — but only to size the minimal routing metadata riding with the `handoff_id` and to confirm which
+  identifiers the pilot trust model allows, not to reconsider inline transport.
 - Keep the escalation **decision** in the backend (ADR-0019 triggers) — Genesys never decides to
-  escalate; it receives context and routes.
-- Audit + trust model: only the customer/session identifiers the pilot trust model allows travel
-  through Genesys; the fetch is access-controlled and logged.
+  escalate; it receives the reference and routes.
+- Audit + trust model: only the `handoff_id` + permitted minimal routing metadata travel through
+  Genesys; the fetch is access-controlled and logged.
 
 ### Acceptance
 
@@ -1504,8 +1509,11 @@ Scenario: The handoff decision and payload stay backend-owned
   Then Genesys does not compute or alter the escalation reason or content
 ```
 
-- Transport decision recorded (`handoff_id` + backend fetch) with the measured Architect size limits.
-- `EscalationHandoff` stays backend-owned + auditable; identifiers gated by the trust model.
+- By-reference transport implemented per **DEC-013** (`handoff_id` + backend fetch); the measured
+  Architect size limits are recorded only to size the minimal routing metadata.
+- Inline context transport is **not** implemented (rejected on PII/trust-boundary grounds); only the
+  `handoff_id` + permitted minimal routing metadata cross the Genesys boundary.
+- `EscalationHandoff` (incl. PII) stays backend-owned + auditable; identifiers gated by the trust model.
 - Backend unit tests (manual fakes, no Mockito) cover the reference build + the fetch access path.
 
 ### Notes
@@ -1519,7 +1527,7 @@ Scenario: The handoff decision and payload stay backend-owned
 
 **Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
 **Related decisions:** ADR-0009 (independent channel adapters, shared backend), ADR-0019 (handoff),
-ADR-0040/0048, ADR-0010 (industrialization contracts)
+ADR-0040/0049, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
 **Status:** 📋 Proposed — conditional on spike GO + OQ-006

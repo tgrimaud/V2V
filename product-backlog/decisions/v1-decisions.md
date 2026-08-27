@@ -300,3 +300,91 @@ benchmarkable), and lets Mistral vs OpenAI be compared once the engine exists.
   providers **and** a swappable embedding provider, with streaming tokens.
 - OpenAI live/POC validation is deferred until credentials are provided; until
   then, functional and latency runs use Mistral (or Ollama offline).
+
+---
+
+## DEC-012 - Genesys Is The Full Phone Entry Point For The Pilot
+
+**Status:** Accepted (user decision) — extends DEC-009; recorded via ADR-0049 and
+ADR-0040; Sprint 13 (`sprints/sprint-13-genesys-audio-connector.md`)  
+**Date:** 2026-08-27
+
+### Decision
+
+For the pilot, **Genesys is the full phone entry point**. Inbound calls ingress via
+Genesys and are routed to the in-house voice runtime over the **Audio Connector**
+(the bidirectional AudioHook feature), and Genesys is also the advisor-handoff target.
+**Full Audio Connector voice routing is the pilot target — not a spike-only option.**
+Telephony as a separate Twilio/SIP entry (US-018) stays **OUT** of Sprint 13.
+
+This supersedes the "optional unless the pilot requires it" posture of DEC-009 **for
+the pilot**: the pilot requires it. DEC-009's boundary rule is unchanged — Genesys
+stays the contact-center system of record and the Java backend keeps the AI
+conversation workflow, RAG, billing reasoning, guardrails, escalation policy, handoff
+content and conversation memory (ADR-0001).
+
+### Important nuance — the latency/feasibility gate is NOT waived
+
+Committing to Genesys as the entry does **not** waive the **TASK-WEB-025** gate.
+TASK-WEB-025 remains the **latency/feasibility go/no-go** on the measured Genesys leg
+against the ADR-0029 mouth-to-ear budget (p95 ≤ 1500 ms). If the spike measures the
+Genesys leg as **gate-failing**, that is an **escalation to the user for a decision**
+(mitigation, re-scope, or timeline) — **not** an auto-proceed onto the V1 critical path
+and **not** a silent drop of the committed direction.
+
+### Rationale
+
+The pilot needs a realistic contact-center entry, and Genesys is the target system of
+record. Deciding the strategic direction now lets Sprint 13 focus the spike on
+measuring feasibility/latency of a committed path rather than re-litigating whether
+Genesys is the entry at all.
+
+### Implication
+
+- Resolves the strategic-direction items of **OQ-006** (full routing required for the
+  pilot = yes; Genesys is the phone entry = yes; single pilot entry = Genesys, US-018
+  deferred).
+- Sprint 13 scope IN explicitly includes **full Genesys voice-entry routing for the
+  pilot**, gated by the spike GO; the follow-on tickets stay conditional on that
+  feasibility result.
+- Residual **OQ-006** technical/compliance items stay open (codec PCMU vs L16; 15-min
+  cap fit + mitigation; PII-audio residency/egress sign-off; pilot concurrency vs the
+  premium ≤5-integrations / 1-vCPU envelope).
+
+---
+
+## DEC-013 - Escalation Handoff Travels By Reference; The Backend Owns The Context/PII
+
+**Status:** Accepted (user decision) — confirms TASK-BE-036; recorded via ADR-0049;
+refines ADR-0019 and ADR-0040  
+**Date:** 2026-08-27
+
+### Decision
+
+The escalation handoff to a human advisor travels **by reference**. Genesys carries
+only an opaque **`handoff_id`** (plus minimal routing metadata); the **backend owns and
+serves the full escalation context and any PII** on an access-controlled, audited fetch.
+
+Carrying the escalation context **inline inside the Genesys event / Architect variables
+is rejected** on **PII / trust-boundary** grounds (independent of, and in addition to,
+the Architect variable size/type limits raised as adversarial-review R5).
+
+### Consequence
+
+The identifiers allowed to travel **through Genesys** are limited to the **opaque
+`handoff_id` + minimal routing metadata** the pilot trust model permits. The full,
+audited `EscalationHandoff` (ADR-0019) never leaves the backend trust boundary; the
+advisor desktop (or a widget) retrieves it from the backend on demand.
+
+### Rationale
+
+Keeping PII and the audited escalation content inside the backend trust boundary is a
+security/compliance requirement, not merely a size optimisation. By-reference also
+sidesteps Architect variable limits as a secondary benefit.
+
+### Implication
+
+- **TASK-BE-036** builds the `handoff_id` + backend-fetch transport; the inline-variable
+  path is **not** a V1 option.
+- The escalation **decision** stays a backend rule (ADR-0019); Genesys receives the
+  reference and routes — it never computes or alters the escalation reason or content.

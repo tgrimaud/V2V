@@ -1310,7 +1310,7 @@ conversation logic lives here (that stays in the backend, ADR-0001).
 - **Architect flow** with the **Call Audio Connector** action: fork the call audio to our `wss`
   endpoint, pause the flow while streaming, resume when our runtime ends the session.
 - **Advisor-queue routing on escalation/resume**: route to the billing advisor queue with the
-  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-036/035).
+  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-036/037).
 - **Fail-safe route** (pairs with TASK-WEB-044): if our endpoint is unreachable/times out, the flow
   routes straight to the advisor queue after a defined guard delay.
 - **Endpoint exposure**: reachable `wss://` on the routed port through the existing TLS edge (ADR-0047,

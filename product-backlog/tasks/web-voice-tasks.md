@@ -2469,7 +2469,7 @@ session factory)
 **Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
 **Status:** 📋 Proposed — spike (investigation only), gated by OQ-006. **Sprint 13 GATE** (2026-08-27):
 this spike is the first, go/no-go ticket of `sprints/sprint-13-genesys-audio-connector.md`; its GO
-verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-036/035, TASK-INFRA-012).
+verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-036/037, TASK-INFRA-012).
 **Priority:** High for Sprint 13 (foundational go/no-go; was Low while deferred)
 **Branch:** `task/TASK-WEB-025-genesys-audio-connector-spike` (off `feat/sprint-13-genesys-audio-connector`
 when work starts; ticket authored under TASK-DOC-006)
