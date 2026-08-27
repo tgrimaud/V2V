@@ -1052,3 +1052,117 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - `deploy/ansible/qa-validate-ansible.sh` — +3 health-probe assertions
 - `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket
 - `product-backlog/backlog-index.md` — TASK-INFRA-011 registry row
+
+## 2026-08-27 — KB bilingual: FR corpus live on the pilot + deploy KB-sync/FR-default (TASK-OPS-009)
+
+**Summary:** Delivered the user-approved "KB bilingual" initiative in two parts. **Pilot (done
+now):** loaded the French knowledge corpus into the live pilot's shared pgvector store so
+mobile/support questions (e.g. *"j'ai un problème avec mon téléphone mobile"*) are now answered
+with grounded French content instead of deflecting to an advisor. **Target (tickets only):** a
+retrieval language filter so one store can serve FR + EN cleanly. Two branches, both pushed,
+**not merged** (user is the final validator).
+
+### Corpus decision (recorded in ADR-0048)
+- **Use the French `articles-fr.csv` as the pilot's single CSV corpus** — pilot users are French,
+  so FR-on-FR retrieval grounds far better than the English `articles.csv`; more mobile rows,
+  cleaner HTML. Answer language is already per-request (ADR-0031), so this is a retrieval-relevance
+  choice, not an answer-language one. **Residual:** the corpus is a machine translation of the Eir
+  KB and still references eir/eircom/AT&T (rebrand → TASK-BE-035).
+
+### Tickets created (Part A)
+- **ADR-0048** *(Accepted)* — bilingual KB corpus + retrieval language scope (pilot single-corpus
+  now; target language predicate). On `task/TASK-BE-034-retrieval-language-filter`.
+- **TASK-BE-034** *(Planned, target)* — add an optional `language == requestLanguage OR language
+  absent` predicate to `PgVectorStoreAdapter.buildSearchFilter`, threaded through
+  `VectorStorePort.search` → retrieval adapter → grounding, mirroring the domain filter. **Not
+  implemented** (target counterpart to the pilot single-corpus approach).
+- **TASK-BE-035** *(Planned, Low)* — KB quality / rebrand: replace eir/AT&T references with the
+  project brand and curate a **customer-facing** FR corpus (see audience finding below).
+- **TASK-OPS-009** *(Implemented, this branch)* — the Ansible deploy now defaults to the FR corpus
+  and triggers + verifies the KB sync post-deploy (durable config; see below).
+
+### Pilot operation (Part B step 1 — minimal-risk, out-of-band, no vault edit, no redeploy)
+Performed on backend node **t03** (`vla-ai4cc-t03.prod.lan`); the two backend nodes share one
+Postgres (**vlb-ai4cc-t01.prod.lan**), so one sync populates the shared store.
+1. Backed up the mounted EN corpus: `sudo cp /opt/voice-support/backend/kb-assets/articles.csv
+   articles.csv.en.bak-2026-08-27`.
+2. `scp` the FR corpus to the host and placed it at the path the backend already reads
+   (`/opt/voice-support/backend/kb-assets/articles.csv` → mounted `/app/kb-assets/articles.csv`,
+   2.33 MB). No vault `.env` edit, no image change, no redeploy (avoids the known voice
+   health-gate false-negative, TASK-INFRA-011).
+3. Triggered the sync from localhost with the api key read server-side (never printed):
+   `KEY=$(sudo grep ^CONVERSATION_API_KEY= …/.env | cut -d= -f2-); curl -s -X POST
+   http://127.0.0.1:8080/api/knowledge/sync -H "x-api-key: $KEY"`.
+   The client `curl` timed out at 600 s (HTTP 000, exit 28) but the **server thread continued**
+   (Spring MVC does not cancel the request on client disconnect), so the sync completed anyway.
+
+### Sync outcome (from the backend log + Postgres)
+- `op=syncAll processed=309 ingested=306 skipped=3 deleted=0` — csv-article **processed=306,
+  ingested=306, total_chunks=5128, duration ≈ 2 h 2 m (7,348,040 ms), 0.7 chunks/sec**; markdown
+  skipped=3 (unchanged); csv-article-fr processed=0 (file not mounted).
+- **Why so slow:** every article triggers an **embedding-based domain classification** at parse
+  time (ADR-0030) *before* the per-chunk storage embeddings, all on the co-located **CPU** Ollama
+  sidecar (`ollama_cpus: 1.0`). The store stayed at the markdown baseline through the whole ~25 min
+  parse phase, then CSV chunks committed per document (39 → 5167 over ~90 min).
+- **`vector_store` before → after:**
+  - Before: **39** chunks — all `source_type=markdown`, `language=fr`, `audience=customer` (the 3
+    FR FAQ files: billing/commercial/telecom).
+  - After: **5167** chunks — `csv-article` **4008 customer** + **1120 internal** (both tagged
+    `language=en`, see residual), plus markdown 39 customer/fr. `kb_source_state`: csv-article
+    306 articles / 5128 chunks; markdown 3 / 39.
+
+### Verification (Part B step 3 — pilot)
+- **`POST /api/conversation/retrieve`** (t03), *"j'ai un problème avec mon téléphone mobile"*:
+  `answerable=true verdict=PASS`, **5 grounded customer chunks** (mobile data/call problems, device
+  troubleshooting *"Appareils mobiles … dépannage de base"*, handset/network) — content that did
+  not exist before. **t04** returns the same (`PASS`, shared store confirmed on both nodes).
+- **`POST /api/conversation/converse`** (t03), same mobile question, `language=fr`: after one
+  transient `ERR_UPSTREAM` (Mistral LLM, not retrieval), retries returned a **grounded French
+  troubleshooting answer** (confidence ≈ 0.83) — *"quel est le problème précis … réinitialisation
+  du réseau … mise à jour de localisation …"* — **no deflection to an advisor** (the pilot goal).
+- **Billing spot-check** *"Pourquoi ma facture a augmenté ce mois-ci ?"*: grounded French answer
+  (confidence ≈ 0.74) — existing FAQ behavior preserved.
+
+### Durable deploy config (Part B step 2 / TASK-OPS-009 — committed, not executed)
+- `group_vars/backend.yml`: `kb_csv_filename=articles-fr.csv`, `kb_csv_language=fr`, and async
+  sync tunables (`kb_sync_timeout/async_seconds/poll_retries/poll_delay/min_processed`).
+- `backend.env.j2` + `.env.example`: render `KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}` +
+  `KB_CSV_LANGUAGE={{ kb_csv_language }}`.
+- New `roles/compose_tier/tasks/kb_sync.yml` (backend tier, post-health, `no_log` api key): fires
+  `POST /api/knowledge/sync` **async** (`poll: 0`) and waits via `async_status` — a single 600 s
+  `uri` call would time out on the ~2 h CPU sync. Gates on `SyncReport.processed ≥ 50` (proves the
+  CSV corpus was seen, works on idempotent re-deploys where `ingested=0`); `/retrieve` is a soft
+  pipeline smoke check (HTTP 200 + evidence count), not the CSV gate. `qa-validate-ansible.sh`
+  **76/76** (added async + `processed`-gate checks); YAML/playbook syntax-check clean.
+
+### Findings / residuals
+- **Corpus is an internal back-office KB (audience boundary, ADR-0034 fail-closed to
+  `audience=customer`):** ~22% of chunks (1120/5128) are tagged `internal` by the keyword classifier
+  (`back office`, `vaa`, `vrd`, `r6/ion`, `vérification d'aptitude`) and excluded from customer
+  retrieval — including *"Mobile : Guide de dépannage"* (its body cites back-office steps). The
+  remaining 78% customer chunks are enough to ground the tested mobile/billing questions, but a
+  brand-correct, customer-curated FR corpus is the proper target → **TASK-BE-035**.
+- **`language=en` on the loaded chunks (cosmetic):** the interim load reused the already-mounted
+  `articles.csv` path while the running container's `KB_CSV_LANGUAGE` was still `en`, so the French
+  chunks carry `language=en`. Harmless today (no retrieval language filter; answer language is
+  per-request). A **forced re-sync** (once TASK-BE-034 lands) or a clean redeploy with the new FR
+  config re-tags them `fr`.
+- **Domain = `general` for the CSV chunks:** the `EmbeddingDomainClassifierAdapter` anchors are
+  English (ADR-0030) embedded against French content → below the 0.55 threshold → `general`.
+  Retrieval is unaffected: the voice path retrieves cross-domain by design (BUG-007, domain=null).
+- **Transient `ERR_UPSTREAM`:** the mobile `/converse` hit one Mistral upstream error before
+  succeeding on retry — a known transient, not a KB/grounding issue.
+
+### Not done (deliberate)
+- **No full prod redeploy** (the operational sync is the immediate fix; redeploy carries the voice
+  health-gate false-negative risk, TASK-INFRA-011). The durable Ansible change is ticketed and
+  committed for the next planned redeploy.
+- **TASK-BE-034 not implemented** (target-only per the mission).
+- **No branch merged** — both ticket branches are pushed and pending user validation.
+
+### Branches / commits
+- `task/TASK-BE-034-retrieval-language-filter` — `ecf8b15` (ADR-0048 + TASK-BE-034/035 tickets +
+  backlog rows). Pushed.
+- `task/TASK-OPS-009-kb-sync-fr-default` — `876619c` (durable Ansible FR default + async KB-sync +
+  `processed` gate + qa-validate) and this `done-tasks.md` entry. Pushed. Both off
+  `feat/sprint-12-external-voice-websocket`.
