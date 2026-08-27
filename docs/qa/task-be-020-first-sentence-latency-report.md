@@ -174,3 +174,51 @@ The remaining gate mirrors the WEB-035/036 + ADR-0037 lever-2 procedure:
 
 Until that live p95 is captured, **no pilot SLO is claimed**; this ticket delivers the
 implementation + unit tests + adversarial review + OTel only.
+
+## Live measurement (2026-08-27, local full stack, real providers)
+
+Measured on the merged sprint-12 state (this lever + TASK-STT-014), local full stack with
+**real** providers (Gradium STT/TTS + Mistral chat + Ollama `nomic-embed-text` embeddings,
+pgvector `vector_store` = 10 163 rows). Backend `:8080`, voice runtime `:8090`, WebRTC
+streaming path, headless `scripts/webrtc_live_client.py` driving DTX-safe clips (5 French
+billing questions padded with a low-amplitude noise tail). Per-slice via
+`scripts/streaming_latency_report.py`. **Warm** only (per-connect warm-up on); a cold-JVM
+turn-1 isolation was not run, so BE-020's designed cold effect is only partially exercised.
+
+**Lever wiring confirmed:**
+- `POST /warm-up` → `{"stream_warmed":true,"fully_warmed":true}` with the reactive path
+  actually exercised: a `warmup_stream success` telemetry slice was emitted at connect
+  (~406–613 ms) **only** in the AFTER config.
+- BEFORE (`warmup.stream-enabled=false`) emitted **no** `warmup_stream` slice (the flag bound
+  via `--voice-support.conversation.warmup.stream-enabled=false`; the response still reports
+  `stream_warmed=true` by design — "nothing left cold by us").
+
+**`backend_first_token` slice (the slice this lever targets):**
+
+| Config | p50 | p95 | n |
+|---|---:|---:|---:|
+| BEFORE (stream-warmup OFF) | 828 ms | 1792 ms | 12 |
+| AFTER (stream-warmup ON) | 872 ms | 1146 ms | 36 |
+
+- **p50 is flat** (828 → 872 ms) — expected and consistent with the ticket: warm-steady
+  first-token is dominated by RAG + the model's own first-sentence time (TASK-BE-033), which
+  this lever does **not** touch.
+- **p95 tail drops ~646 ms** (1792 → 1146 ms), consistent with pre-paying the reactive
+  streaming path's JIT + connection off the critical path. **Caveat:** small/asymmetric
+  samples (BEFORE n=12, AFTER n=36; the AFTER call set fragmented into more turns via the
+  STT-014 early-accept + noise-tail interaction, see TASK-STT-014 report), and warm-only, so
+  the p95 delta is **indicative, not conclusive**. The cold turn-1 isolation (fresh JVM A/B)
+  remains the clean way to size the lever and is still recommended.
+
+**Composite (AFTER, warm):** `time_to_first_audio` p50 1569 / p95 1835 ms;
+mouth-to-ear p50 1919 / p95 2185 ms.
+
+**ADR-0029 gate: FAIL** in both configs. Even the AFTER **p50** mouth-to-ear (1919 ms)
+exceeds the 1500 ms primary gate; p95 2185 ms. Budget breakdown (AFTER p50): end_of_turn
+350 + STT finalize 344 + **backend first-token 872 (~45 %)** + TTS first-audio 361 +
+runtime egress ~0. The dominant remaining cost is the **model first-token** → **TASK-BE-033**
+(model choice), out of scope for this lever. This lever is a real p95-tail reduction on the
+backend slice but does not, on its own, bring mouth-to-ear under the ADR-0029 gate.
+
+Raw evidence: `/tmp/report_before.json`, `/tmp/report_after.json` on the measurement host
+(not committed). No numbers fabricated.

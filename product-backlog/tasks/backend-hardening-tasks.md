@@ -818,16 +818,20 @@ DEC-002 (no invented / ungrounded amounts — must stay enforced per sentence)
 first vetted sentence, so the backend's time-to-first-vetted-sentence is directly on the
 critical path.
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** 🔵 **Implemented — pending live latency re-measurement (QA gate).** Created 2026-07-31
+**Status:** 🟢 **Implemented + merged into sprint 12 + live-measured (2026-08-27).** Created 2026-07-31
 from the TASK-WEB-020 cold/combined live passes; implemented 2026-08-27 on
-`task/TASK-BE-020-first-sentence-latency` (off `feat/sprint-12-external-voice-websocket`).
-Lever: **warm the reactive LLM streaming path** at connect-time warm-up (the `.stream()`/WebClient
-path the TASK-BE-017 sync `.call()` warm-up left cold — the ADR-0037 turn-1 JIT residual on
-`converse-stream`). Adversarial self-review **93/100** (Pass, no blocking), `mvn test` **401**
-green + ArchUnit OK. DEC-002 unchanged (contract + incremental-delivery tests green). Report:
-`docs/qa/task-be-020-first-sentence-latency-report.md`. **Remaining:** live A/B micro-benchmark +
-streaming pass on real Gradium+Mistral infra (see report §"Pending live measurement"); no SLO
-claimed until that p95 is captured.
+`task/TASK-BE-020-first-sentence-latency`, merged `--no-ff` into
+`feat/sprint-12-external-voice-websocket`. Lever: **warm the reactive LLM streaming path** at
+connect-time warm-up (the `.stream()`/WebClient path the TASK-BE-017 sync `.call()` warm-up left
+cold — the ADR-0037 turn-1 JIT residual on `converse-stream`). Adversarial self-review **93/100**
+(Pass, no blocking), `mvn test` **401** green + ArchUnit OK. DEC-002 unchanged (contract +
+incremental-delivery tests green). **Live A/B (local, real Gradium+Mistral+Ollama, warm):
+`backend_first_token` p50 flat (828→872 ms, as designed — model-dominated, TASK-BE-033), p95 tail
+−646 ms (1792→1146 ms) with the reactive path warmed (`warmup_stream` slice confirmed ON, absent
+OFF).** Report `docs/qa/task-be-020-first-sentence-latency-report.md` §"Live measurement". Effect
+is real but **does not, alone, bring mouth-to-ear under ADR-0029** (AFTER p50 1919 / p95 2185 ms >
+1500 ms gate — model first-token dominates → TASK-BE-033). **Remaining:** clean cold-JVM turn-1
+isolation to size the lever precisely (warm-only + fragmented AFTER sample ⇒ p95 delta indicative).
 **Priority:** Medium
 **Branch:** `task/TASK-BE-020-first-sentence-latency`
 
