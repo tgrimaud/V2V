@@ -1287,15 +1287,22 @@ this blocked the voice tier; t02 had to be finished manually with
 **Related decisions:** ADR-0048 (bilingual KB corpus + retrieval language scope),
 ADR-0038 (pilot deploy), ADR-0031 (answer language), ADR-0034 (audience filter)
 **Related:** TASK-OPS-002 (Ansible deploy), TASK-BE-013/014 (CSV connector), TASK-BE-034
-(retrieval language filter — target), TASK-BE-035 (rebrand)
+(retrieval language filter — target)
 **Depends on:** TASK-OPS-002
 **Classification:** V1 pilot deployment (release correctness + KB content)
 **Status:** 🔧 Implemented on `task/TASK-OPS-009-kb-sync-fr-default` (2026-08-27, off
 `feat/sprint-12-external-voice-websocket`): durable Ansible change (FR corpus default +
 **async** post-deploy sync + `SyncReport.processed` gate) landed; `qa-validate-ansible.sh`
 **76/76** (added 7 checks), YAML + playbook syntax-check clean. The immediate pilot load
-(Part B step 1) was performed operationally out-of-band (see done-tasks 2026-08-27). Pending
-user validation / merge.
+(Part B step 1) was performed operationally out-of-band (see done-tasks 2026-08-27).
+**Adversarial review 96/100 (Pass, 2026-08-27)** — contracts verified against backend source
+(`SyncReport.processed = documents.size()` → an idempotent re-deploy still passes the gate;
+`x-api-key` gate on `/api/knowledge/**` + `/retrieve`; global `SNAKE_CASE` Jackson so the
+`top_k` body + `json.*` reads resolve). Two non-blocking maintainability findings fixed
+(dropped `no_log` on the `async_status` wait so a failed sync is diagnosable; read-only
+retrieval smoke-check marked `changed_when: false`); `qa-validate-ansible.sh` re-run **76/76**.
+Report: [`docs/qa/task-ops-009-kb-sync-fr-default-adversarial-review.md`](../../docs/qa/task-ops-009-kb-sync-fr-default-adversarial-review.md).
+Pending user validation / merge.
 **Priority:** High
 **Branch:** `task/TASK-OPS-009-kb-sync-fr-default`
 
@@ -1383,9 +1390,12 @@ Scenario: The pilot CSV corpus is French
   *"Mobile : Guide de dépannage"* was tagged `internal` (its body references back-office steps),
   so it is excluded from customer retrieval. Consequence: loading the corpus does **not**
   guarantee the mobile question grounds — the customer-facing partition may be thin. This is a
-  **KB-quality / audience-tuning** matter tracked under **TASK-BE-035** (rebrand + curate a
-  customer-facing FR corpus), not a deploy defect. The pilot verification (done-tasks 2026-08-27)
-  records the actual customer-retrieval outcome for the mobile query.
+  **KB-quality / audience-tuning** matter (curate the customer-facing FR partition), not a deploy
+  defect — and **not** a branding issue: the Eir brand in the corpus is intentional and correct
+  (the content is Eir's and the product's purpose is to answer Eir customer problems), so no
+  rebrand is needed (the earlier TASK-BE-035 rebrand follow-up is cancelled). The pilot
+  verification (done-tasks 2026-08-27) records the actual customer-retrieval outcome for the
+  mobile query.
 - **Sync is embedding-bound, not a fixed cost:** every article triggers a domain-classification
   embedding at parse time (ADR-0030) *before* the per-chunk storage embeddings, all on the CPU
   Ollama sidecar (`ollama_cpus: 1.0`). The vector store therefore stays at the markdown baseline

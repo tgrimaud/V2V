@@ -1066,8 +1066,9 @@ retrieval language filter so one store can serve FR + EN cleanly. Two branches, 
 - **Use the French `articles-fr.csv` as the pilot's single CSV corpus** — pilot users are French,
   so FR-on-FR retrieval grounds far better than the English `articles.csv`; more mobile rows,
   cleaner HTML. Answer language is already per-request (ADR-0031), so this is a retrieval-relevance
-  choice, not an answer-language one. **Residual:** the corpus is a machine translation of the Eir
-  KB and still references eir/eircom/AT&T (rebrand → TASK-BE-035).
+  choice, not an answer-language one. The corpus is a French translation of the Eir KB and
+  references eir/eircom/AT&T **by design** — the content is Eir's and the product answers Eir
+  customer problems, so the brand is expected and correct (no rebrand; TASK-BE-035 cancelled).
 
 ### Tickets created (Part A)
 - **ADR-0048** *(Accepted)* — bilingual KB corpus + retrieval language scope (pilot single-corpus
@@ -1076,8 +1077,10 @@ retrieval language filter so one store can serve FR + EN cleanly. Two branches, 
   absent` predicate to `PgVectorStoreAdapter.buildSearchFilter`, threaded through
   `VectorStorePort.search` → retrieval adapter → grounding, mirroring the domain filter. **Not
   implemented** (target counterpart to the pilot single-corpus approach).
-- **TASK-BE-035** *(Planned, Low)* — KB quality / rebrand: replace eir/AT&T references with the
-  project brand and curate a **customer-facing** FR corpus (see audience finding below).
+- **TASK-BE-035** *(Cancelled / Won't do, 2026-08-27)* — KB rebrand follow-up. Cancelled per the
+  product decision: the Eir brand is intentional — the corpus originates from Eir and the product
+  answers Eir customer problems, so no rebrand is needed. (Curating a richer customer-facing FR
+  partition remains a separate KB-quality matter, not a rebrand.)
 - **TASK-OPS-009** *(Implemented, this branch)* — the Ansible deploy now defaults to the FR corpus
   and triggers + verifies the KB sync post-deploy (durable config; see below).
 
@@ -1140,8 +1143,9 @@ Postgres (**vlb-ai4cc-t01.prod.lan**), so one sync populates the shared store.
   `audience=customer`):** ~22% of chunks (1120/5128) are tagged `internal` by the keyword classifier
   (`back office`, `vaa`, `vrd`, `r6/ion`, `vérification d'aptitude`) and excluded from customer
   retrieval — including *"Mobile : Guide de dépannage"* (its body cites back-office steps). The
-  remaining 78% customer chunks are enough to ground the tested mobile/billing questions, but a
-  brand-correct, customer-curated FR corpus is the proper target → **TASK-BE-035**.
+  remaining 78% customer chunks are enough to ground the tested mobile/billing questions; curating
+  a richer customer-facing FR partition is a KB-quality follow-up (not a rebrand — the Eir brand is
+  intentional and correct; TASK-BE-035 cancelled).
 - **`language=en` on the loaded chunks (cosmetic):** the interim load reused the already-mounted
   `articles.csv` path while the running container's `KB_CSV_LANGUAGE` was still `en`, so the French
   chunks carry `language=en`. Harmless today (no retrieval language filter; answer language is

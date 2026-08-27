@@ -60,7 +60,9 @@ kb_host_path: "{{ compose_root }}/backend/kb-assets"
 # (articles-fr.csv) as the single CSV source: pilot users are French, so FR-on-FR
 # retrieval grounds mobile/support questions that otherwise deflect to an advisor.
 # Answer language is already per-request (ADR-0031), so this only affects retrieval
-# relevance. articles-fr.csv still references eir/AT&T (rebrand = TASK-BE-035). The
+# relevance. articles-fr.csv references eir/eircom/AT&T by design — the content comes from
+# the Eir KB and the product answers Eir customer problems, so the brand is expected and
+# correct (no rebrand needed; the earlier TASK-BE-035 rebrand follow-up is cancelled). The
 # bilingual target (load both corpora + a retrieval language filter) is TASK-BE-034.
 # kb_csv_filename is the repo-root file Ansible copies and the container reads via
 # KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}.

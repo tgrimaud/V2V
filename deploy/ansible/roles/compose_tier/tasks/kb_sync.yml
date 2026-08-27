@@ -47,6 +47,9 @@
   run_once: true
   no_log: true
 
+# Not no_log: async_status polls by job id only — its args carry no api key, and the uri
+# module result never echoes the request header. Keeping it visible surfaces the HTTP
+# status/body of a failed sync so the assert below (and the operator) can diagnose it.
 - name: "Wait for the KB sync to finish"
   ansible.builtin.async_status:
     jid: "{{ kb_sync_job.ansible_job_id }}"
@@ -55,7 +58,6 @@
   retries: "{{ kb_sync_poll_retries | default(90) }}"
   delay: "{{ kb_sync_poll_delay | default(30) }}"
   run_once: true
-  no_log: true
 
 # Non-secret confirmation the sync ran (aggregate counts only, no KB content / no key).
 - name: "Report the KB sync outcome"
@@ -107,7 +109,8 @@
     timeout: 30
   register: kb_sync_retrieve
   run_once: true
-  no_log: true
+  changed_when: false          # read-only grounding probe: never a state change
+  no_log: true                 # args carry the api-key header
 
 - name: "Report the retrieval smoke-check evidence count"
   ansible.builtin.debug:
