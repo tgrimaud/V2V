@@ -8,8 +8,9 @@
   language handling), ADR-0032 (retrieval quality strategy — Proposed), ADR-0034 (KB
   audience boundary, fail-closed customer filter), OQ-008 (retrieval quality)
 - **Tickets:** TASK-BE-034 (retrieval language filter — target), TASK-OPS-009 (deploy
-  KB sync trigger + FR corpus default — pilot durable config), TASK-BE-035 (KB rebrand
-  follow-up), TASK-BE-013/014/015/017 (CSV connectors + answer language + FR translation)
+  KB sync trigger + FR corpus default — pilot durable config), TASK-BE-013/014/015/017
+  (CSV connectors + answer language + FR translation). TASK-BE-035 (KB rebrand follow-up) was
+  **cancelled** (2026-08-27): the Eir brand is intentional — see Consequences.
 
 ## Context
 
@@ -97,10 +98,13 @@ let each query retrieve only its own language plus untagged/`general` chunks.
   source or a content change) is required. TASK-OPS-009 makes `KB_CSV_LANGUAGE=fr` +
   `KB_CSV_PATH=articles-fr.csv` the durable default so a clean redeploy tags correctly, and
   TASK-BE-034's rollout notes the re-tag requirement.
-- **Residual — brand (accepted, tracked as TASK-BE-035):** `articles-fr.csv` is a
-  *translation of the eir corpus* and still references eir/eircom/AT&T rather than the
-  "telecom-exemple" brand. Acceptable for a pilot that validates grounding behaviour; a
-  brand-correct French corpus is required before wider/production use.
+- **Brand — Eir corpus is by design (not a residual):** `articles-fr.csv` is a French
+  *translation of the Eir corpus* and legitimately references eir/eircom/AT&T. This is expected
+  and correct: the content originates from Eir and the product's purpose is to answer **Eir
+  customer** problems, so Eir-branded wording in answers is on-brand, not a defect. No rebrand is
+  required — the earlier rebrand follow-up (TASK-BE-035) is **cancelled** (2026-08-27). The FR
+  corpus choice is driven purely by **language + quality** (FR-on-FR retrieval relevance, cleaner
+  HTML, more mobile coverage), with no brand reservation.
 - **Retrieval precision (OQ-008):** a single FR corpus avoids EN+FR mixing now; the target
   filter (TASK-BE-034) restores clean per-language scoping when both corpora are loaded.
 - **Audience boundary preserved:** the fail-closed `audience==customer` filter (ADR-0034)

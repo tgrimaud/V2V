@@ -1187,15 +1187,17 @@ pilot now, and file the bilingual retrieval-language-filter target.
   language already per-request per ADR-0031), no language filter needed while only one language is
   loaded. Target: a `language == requestLanguage OR language absent` predicate in
   `PgVectorStoreAdapter.buildSearchFilter` so the same store serves FR + EN cleanly. Records the
-  accepted residuals (cosmetic `language=en` tag on the interim load → forced re-sync when the
-  filter lands; eir/AT&T brand → rebrand). Alternatives (EN corpus / load-both-now / use the
+  accepted residual (cosmetic `language=en` tag on the interim load → forced re-sync when the
+  filter lands). The Eir/AT&T brand in the corpus is **intentional** (content is Eir's; the
+  product answers Eir customer problems), not a residual. Alternatives (EN corpus / load-both-now / use the
   `csv-article-fr` connector needing a vault `.env` edit) documented + rejected.
 - **TASK-BE-034** (Planned, ticket only — **do NOT implement now**): retrieval language filter,
   mirroring the ADR-0034 audience/domain filter pattern; motivation, scope (predicate + thread
   language through `VectorSearchPort.search` + update all fakes), Gherkin acceptance (FR-only /
   EN-only / untagged-included / null-passthrough / audience+domain preserved), OTel note.
-- **TASK-BE-035** (Planned, Low): KB rebrand follow-up — the FR corpus still references
-  eir/eircom/AT&T; target-state needs brand-correct French content.
+- **TASK-BE-035** (Cancelled / Won't do, 2026-08-27): KB rebrand follow-up. Cancelled per the
+  product decision — the Eir/eircom/AT&T brand is intentional (the corpus originates from Eir and
+  the product answers Eir customer problems), so no rebrand is needed.
 
 **Note on branch base:** created off `feat/sprint-12-external-voice-websocket` (the latest
 `feat/sprint-NN-*`; no active sprint branch exists and per instruction the `task/TASK-BE-033`

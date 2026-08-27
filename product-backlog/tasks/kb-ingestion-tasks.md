@@ -23,7 +23,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — ✅ merged into `feat/restart-from-scratch` (2026-08-13). EPIC-005 / ADR-0032 |
 | TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **STRICTLY NEUTRAL, default OFF** (`ab-query-norm-2026-08-13.md`): greeting hypothesis **disproven** — stripping "Bonjour," leaves "internet est très lent chez moi." which still misses the answer, so `sup-fr-slow` is a **core-phrasing** recall miss, not a greeting one. 0 regression / 0 gain (recall@8 0.90, stability 0.79 on/off). Kept as tested env-toggle; real lever = phrasing-robust recall. 354 backend green. **✅ Merged into `feat/restart-from-scratch` (2026-08-13)**. EPIC-005 / ADR-0032 / OQ-008 |
 | TASK-BE-034 | Retrieval **language filter** — optional `language == requestLanguage OR language absent` predicate in `buildSearchFilter` (mirrors the domain predicate), threaded through `VectorSearchPort.search(...)` → retrieval adapter → grounding, so one pgvector store serves FR + EN cleanly | V1 quality (RAG / bilingual) | TASK-BE-013/014/015, TASK-BE-034's ADR-0048 | 📋 Planned (2026-08-27) — **TARGET counterpart to the ADR-0048 pilot single-corpus approach**; not implemented now. Enables loading both `csv-article` (EN) + `csv-article-fr` (FR) without EN/FR top-K mixing. EPIC-005 / ADR-0048 / ADR-0031 / ADR-0034 / OQ-008 |
-| TASK-BE-035 | KB quality / **rebrand** follow-up — `articles-fr.csv` is a translation of the eir corpus and still references eir/eircom/AT&T; target-state needs brand-correct French content ("telecom-exemple") | V1 quality (KB content) | TASK-OPS-009 (FR corpus live on pilot) | 📋 Planned (2026-08-27) — lower priority; filed so the pilot's brand caveat (ADR-0048) is tracked. Not a blocker for validating grounding behaviour. EPIC-005 / ADR-0048 |
+| TASK-BE-035 | ~~KB quality / **rebrand** follow-up — `articles-fr.csv` still references eir/eircom/AT&T~~ | V1 quality (KB content) | TASK-OPS-009 (FR corpus live on pilot) | ❌ **Cancelled / Won't do** (2026-08-27) — the Eir brand is intentional: the corpus originates from Eir and the product answers Eir customer problems, so no rebrand is needed. EPIC-005 / ADR-0048 |
 
 ---
 
@@ -813,14 +813,22 @@ Scenario: Domain and audience behaviour preserved
 
 ---
 
-## TASK-BE-035 — KB Quality / Rebrand Follow-up (French corpus still eir/AT&T)
+## TASK-BE-035 — KB Quality / Rebrand Follow-up (French corpus still eir/AT&T) — ❌ Cancelled / Won't do
 
 **Parent:** EPIC-005 (Answer engine / knowledge base)
-**Related decision:** ADR-0048 (records this as an accepted pilot residual)
-**Related:** TASK-BE-017 (FR translation of the eir corpus), TASK-OPS-009 (loads it on pilot)
+**Related decision:** ADR-0048 (documents the Eir brand as intentional / by design)
+**Related:** TASK-BE-017 (FR translation of the Eir corpus), TASK-OPS-009 (loads it on pilot)
 **Classification:** V1 quality (KB content) — content, not code
-**Status:** 📋 Planned (2026-08-27) — filed to track the ADR-0048 brand caveat. Lower priority.
+**Status:** ❌ **Cancelled / Won't do** (2026-08-27) — the Eir brand is intentional: the corpus
+originates from Eir and the product answers Eir customer problems, so no rebrand is needed. The
+original context below is kept for history.
 **Priority:** Low
+
+> **Cancellation rationale (2026-08-27):** this ticket rested on the assumption that the
+> eir/eircom/AT&T references are a defect to fix. That assumption is wrong — the corpus *is* the
+> Eir knowledge base and the product exists to answer Eir customer problems, so the brand is
+> expected and correct. No rebrand is planned. (Curating a richer *customer-facing* FR partition,
+> if ever needed, is a separate KB-quality/audience-tuning matter, not a rebrand.)
 
 ### Context
 
