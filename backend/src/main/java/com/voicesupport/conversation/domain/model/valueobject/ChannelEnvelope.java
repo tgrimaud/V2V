@@ -56,17 +56,22 @@ public record ChannelEnvelope(
         return notBlank(idempotencyKey) || notBlank(messageId);
     }
 
-    // Stable de-duplication key: the explicit idempotency key when present, otherwise derived from
-    // channel + external_session_id + message_id so a duplicate delivery of the same inbound event
-    // resolves to the same key. Null when there is no idempotency signal.
+    // Stable de-duplication key, always namespaced by channel + external_session_id so two channels
+    // or sessions reusing the same counter space (e.g. a per-session message counter) never collide
+    // into a false duplicate (TASK-BE-037 review #4). Uses the explicit idempotency key when present,
+    // otherwise the message id. Null when there is no idempotency signal.
     public String effectiveIdempotencyKey() {
         if (notBlank(idempotencyKey)) {
-            return idempotencyKey;
+            return namespaced(idempotencyKey);
         }
         if (notBlank(messageId)) {
-            return String.join(":", nullToEmpty(channel), nullToEmpty(externalSessionId), messageId);
+            return namespaced(messageId);
         }
         return null;
+    }
+
+    private String namespaced(String key) {
+        return String.join(":", nullToEmpty(channel), nullToEmpty(externalSessionId), key);
     }
 
     private static String sanitize(String value) {

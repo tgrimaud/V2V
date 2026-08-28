@@ -60,14 +60,38 @@ class ChannelEnvelopeTest {
     }
 
     @Test
-    void prefers_the_explicit_idempotency_key_when_present() {
+    void namespaces_the_explicit_idempotency_key_by_channel_and_session() {
         // GIVEN a delivery carrying an explicit idempotency key
         // WHEN the effective key is derived
-        // THEN the explicit key is used verbatim
+        // THEN it is namespaced by channel + session so two channels/sessions reusing the same
+        // counter space cannot collide into a false duplicate (TASK-BE-037 review #4)
         ChannelEnvelope envelope = ChannelEnvelope.of("genesys", "s9", "evt-1", "idem-42", "voice", null);
 
         assertThat(envelope.hasIdempotencySignal()).isTrue();
-        assertThat(envelope.effectiveIdempotencyKey()).isEqualTo("idem-42");
+        assertThat(envelope.effectiveIdempotencyKey()).isEqualTo("genesys:s9:idem-42");
+    }
+
+    @Test
+    void the_same_explicit_key_on_two_sessions_resolves_to_distinct_effective_keys() {
+        // GIVEN the same bare idempotency key reused by two distinct sessions
+        ChannelEnvelope sessionA = ChannelEnvelope.of("genesys", "s-a", null, "idem-1", "voice", null);
+        ChannelEnvelope sessionB = ChannelEnvelope.of("genesys", "s-b", null, "idem-1", "voice", null);
+
+        // WHEN their effective keys are derived
+        // THEN they differ, so they are not falsely de-duplicated against each other
+        assertThat(sessionA.effectiveIdempotencyKey()).isNotEqualTo(sessionB.effectiveIdempotencyKey());
+    }
+
+    @Test
+    void a_normal_conversation_id_passes_through_sanitize_unchanged_into_the_memory_key() {
+        // GIVEN a normal control-free conversation id (≤200 chars, e.g. a UUID) used as the session
+        String uuid = "550e8400-e29b-41d4-a716-446655440000";
+
+        // WHEN the envelope is built with it as the session id
+        ChannelEnvelope envelope = ChannelEnvelope.of("web", uuid, null, null, "voice", null);
+
+        // THEN sanitize leaves it byte-for-byte identical as the conversation/memory key
+        assertThat(envelope.conversationKey()).isEqualTo(uuid);
     }
 
     @Test
