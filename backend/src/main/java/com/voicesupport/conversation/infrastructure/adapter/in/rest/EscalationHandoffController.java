@@ -55,10 +55,11 @@ public class EscalationHandoffController {
     public ResponseEntity<Object> fetch(
             @Parameter(description = "Opaque hand-off reference minted on escalation.")
             @PathVariable("handoff_id") String handoffId) {
-        Optional<EscalationHandoff> found = fetchEscalationHandoffUseCase.fetch(HandoffId.of(handoffId));
+        HandoffId id = HandoffId.of(handoffId);
+        Optional<EscalationHandoff> found = fetchEscalationHandoffUseCase.fetch(id);
         return found
                 .<ResponseEntity<Object>>map(handoff ->
-                        ResponseEntity.ok(EscalationHandoffResponse.from(HandoffId.of(handoffId), handoff)))
+                        ResponseEntity.ok(EscalationHandoffResponse.from(id, handoff)))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ErrorResponse.of(ERR_NOT_FOUND, MSG_NOT_FOUND, CorrelationId.current())));
     }

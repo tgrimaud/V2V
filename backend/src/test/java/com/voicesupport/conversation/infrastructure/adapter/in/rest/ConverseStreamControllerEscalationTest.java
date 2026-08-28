@@ -99,6 +99,9 @@ class ConverseStreamControllerEscalationTest {
         assertThat(body).contains("\"handoff_id\"");
         assertThat(body).contains("\"reason_code\":\"low_confidence\"");
         assertThat(body).contains("\"priority\":\"normal\"");
+        // AND neither the raw customer question (PII) nor the customer session reference ride the SSE body
+        assertThat(body).doesNotContain("Pourquoi ma facture a augmenté ?");
+        assertThat(body).doesNotContain("genesys-conv-9");
     }
 
     private String dispatchBody(String json) throws Exception {
