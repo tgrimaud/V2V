@@ -49,6 +49,11 @@ GOLDEN_API_KEY = "SGVsbG8sIEkgYW0gdGhlIEFQSSBrZXkh"
 GOLDEN_SECRET_B64 = "TXlTdXBlclNlY3JldEtleVRlbGxOby0xITJAMyM0JDU="
 GOLDEN_SIGNATURE = "sig1=:NZBwyBHRRyRoeLqy1IzOa9VYBuI8TgMFt2GRDkDuJh4=:"
 GOLDEN_TARGET = "/api/v1/voicebiometrics/ws"
+# `created` carried by the golden Signature-Input. Freshness (Major B) age-bounds `created`,
+# so the tests that must ACCEPT the golden vector run the clock near it (60s later, inside
+# the default 300s window) — the signature base / recomputed digest is untouched.
+GOLDEN_CREATED = 1641013200
+GOLDEN_NOW = float(GOLDEN_CREATED + 60)
 GOLDEN_INPUT = (
     'sig1=("@request-target" "@authority" "audiohook-organization-id" '
     '"audiohook-session-id" "audiohook-correlation-id" "x-api-key");'
@@ -83,9 +88,51 @@ def _golden_config() -> GenesysAuthConfig:
 
 
 def _authenticator(config: GenesysAuthConfig, recorder: TelemetryRecorder | None = None,
-                   now: float = 1_700_000_000.0) -> GenesysConnectionAuthenticator:
+                   now: float = GOLDEN_NOW) -> GenesysConnectionAuthenticator:
     shared = recorder or TelemetryRecorder()
     return GenesysConnectionAuthenticator(config, telemetry_factory=lambda: shared, now=lambda: now)
+
+
+# --- Freshness / replay signing helper (Major B) --------------------------------------
+# Signs a request over a fixed component set with a configurable created/expires/nonce so
+# the freshness + nonce policy can be exercised with real, valid HMAC signatures. Uses an
+# authority_override so `@authority` resolves deterministically without a Host header.
+_FRESH_COMPONENTS = [
+    "@request-target", "@authority", "audiohook-organization-id",
+    "audiohook-session-id", "x-api-key",
+]
+
+
+def _signing_config() -> GenesysAuthConfig:
+    return GenesysAuthConfig(
+        api_key=GOLDEN_API_KEY,
+        secret=base64.b64decode(GOLDEN_SECRET_B64),
+        authority_override="test-authority",
+    )
+
+
+def _signed_request(config: GenesysAuthConfig, *, created=None, expires=9999999999,
+                    nonce=None, raw_path: str = "/genesys/audiohook") -> "_FakeRequest":
+    params = f'keyid="{config.api_key}";alg="hmac-sha256"'
+    if created is not None:
+        params += f";created={int(created)}"
+    if expires is not None:
+        params += f";expires={int(expires)}"
+    if nonce is not None:
+        params += f';nonce="{nonce}"'
+    raw_params = "(" + " ".join(f'"{c}"' for c in _FRESH_COMPONENTS) + ");" + params
+    headers = {
+        "X-API-KEY": config.api_key,
+        "Audiohook-Organization-Id": "org-1",
+        "Audiohook-Session-Id": "sess-1",
+    }
+    sig_input = SignatureInput("sig1", _FRESH_COMPONENTS, raw_params, {}, b"")
+    base = build_signature_base(_FakeRequest(headers, raw_path=raw_path), sig_input,
+                                config.authority_override)
+    digest = hmac.new(config.secret, base.encode(), hashlib.sha256).digest()
+    headers["Signature-Input"] = f"sig1={raw_params}"
+    headers["Signature"] = f"sig1=:{base64.b64encode(digest).decode()}:"
+    return _FakeRequest(headers, raw_path=raw_path)
 
 
 class GenesysGoldenVectorTest(unittest.TestCase):
@@ -164,6 +211,14 @@ class GenesysAuthPolicyTest(unittest.TestCase):
         # WHEN verified THEN the (otherwise valid) signature is rejected as expired
         self.assertEqual(auth.authenticate(_FakeRequest(_golden_headers())).outcome, OUTCOME_BAD_SIGNATURE)
 
+    def test_non_ascii_api_key_degrades_to_a_clean_rejection_not_500(self) -> None:
+        # GIVEN a request whose X-API-KEY is non-ASCII (str compare_digest would raise, Minor 2)
+        auth = _authenticator(_golden_config())
+        # WHEN verified THEN it is a clean missing-key rejection (401), never an unhandled 500
+        result = auth.authenticate(_FakeRequest(_golden_headers(**{"X-API-KEY": "clé-secrète"})))
+        self.assertEqual(result.outcome, OUTCOME_MISSING_KEY)
+        self.assertEqual(result.http_status, 401)
+
 
 class GenesysAuthTelemetryTest(unittest.TestCase):
     def _secrets_absent(self, recorder: TelemetryRecorder) -> None:
@@ -178,7 +233,7 @@ class GenesysAuthTelemetryTest(unittest.TestCase):
         shared = TelemetryRecorder()
         logged: list[TelemetryRecorder] = []
         auth = GenesysConnectionAuthenticator(
-            _golden_config(), telemetry_factory=lambda: shared, log=logged.append, now=lambda: 1_700_000_000.0
+            _golden_config(), telemetry_factory=lambda: shared, log=logged.append, now=lambda: GOLDEN_NOW
         )
         # WHEN it authenticates
         auth.authenticate(_FakeRequest(_golden_headers(), query={"conversationId": "conv-1"}))
@@ -189,6 +244,9 @@ class GenesysAuthTelemetryTest(unittest.TestCase):
         self.assertEqual(event.attributes["auth_scope"], "conversation")
         metric = next(m for m in shared.metrics() if m.name == AUTH_OUTCOME_METRIC)
         self.assertEqual((metric.value, metric.attributes["outcome"]), (1.0, OUTCOME_ACCEPTED))
+        # Major C: the metric label set is EXACTLY the bounded pair {channel, outcome} —
+        # correlation_id (per-connection, unbounded) must NOT appear as a metric attribute.
+        self.assertEqual(set(metric.attributes.keys()), {"channel", "outcome"})
         self.assertEqual(logged, [shared])
         self._secrets_absent(shared)
 
@@ -212,12 +270,89 @@ class GenesysAuthTelemetryTest(unittest.TestCase):
         self.assertEqual(event.attributes["correlation_id"], "30b0e395-84d3-4570-ac13-9a62d8f514c0")
 
 
+class GenesysAuthExporterFlushTest(unittest.TestCase):
+    """Major A: the per-attempt telemetry must be FLUSHED through the exporter in prod, not
+    merely recorded into a recorder the default no-op then drops."""
+
+    @staticmethod
+    def _outcomes(recorder: TelemetryRecorder) -> tuple[str, str]:
+        event = next(e for e in recorder.events() if e.name == AUTH_EVENT)
+        metric = next(m for m in recorder.metrics() if m.name == AUTH_OUTCOME_METRIC)
+        return event.attributes["outcome"], metric.attributes["outcome"]
+
+    def test_exporter_receives_outcome_event_and_metric_on_accept_and_reject(self) -> None:
+        # GIVEN an authenticator whose flush hook is a capturing exporter (prod wires the
+        # real stderr + OTLP export; the field default is a no-op that would discard it)
+        exported: list[TelemetryRecorder] = []
+        auth = GenesysConnectionAuthenticator(
+            _golden_config(), log=exported.append, now=lambda: GOLDEN_NOW
+        )
+        # WHEN one accepted then one rejected connection authenticate
+        auth.authenticate(_FakeRequest(_golden_headers()))
+        auth.authenticate(_FakeRequest(_golden_headers(Signature="sig1=:AAAA:")))
+        # THEN the exporter RECEIVED an auth-outcome event + metric for each (not just recorded)
+        self.assertEqual(len(exported), 2)
+        self.assertEqual(
+            [self._outcomes(rec) for rec in exported],
+            [(OUTCOME_ACCEPTED, OUTCOME_ACCEPTED), (OUTCOME_BAD_SIGNATURE, OUTCOME_BAD_SIGNATURE)],
+        )
+
+
+class GenesysFreshnessReplayTest(unittest.TestCase):
+    """Major B: `expires` mandatory, `created` age-bounded, `nonce` replay-protected."""
+
+    def _auth(self) -> GenesysConnectionAuthenticator:
+        return _authenticator(_signing_config())  # default clock is GOLDEN_NOW
+
+    def test_signature_without_expires_is_rejected(self) -> None:
+        # GIVEN a validly signed request that carries NO `expires` param
+        request = _signed_request(_signing_config(), created=GOLDEN_CREATED, expires=None)
+        # WHEN verified THEN it is rejected (expires mandatory) via the bad-signature outcome
+        self.assertEqual(self._auth().authenticate(request).outcome, OUTCOME_BAD_SIGNATURE)
+
+    def test_stale_created_beyond_max_age_is_rejected(self) -> None:
+        # GIVEN a signed request whose `created` is an hour older than the clock (>300s)
+        request = _signed_request(_signing_config(), created=GOLDEN_NOW - 3600)
+        # WHEN verified THEN the stale signature is rejected
+        self.assertEqual(self._auth().authenticate(request).outcome, OUTCOME_BAD_SIGNATURE)
+
+    def test_future_created_beyond_skew_is_rejected(self) -> None:
+        # GIVEN a signed request whose `created` is an hour in the future
+        request = _signed_request(_signing_config(), created=GOLDEN_NOW + 3600)
+        # WHEN verified THEN it is rejected (future beyond the allowed skew)
+        self.assertEqual(self._auth().authenticate(request).outcome, OUTCOME_BAD_SIGNATURE)
+
+    def test_fresh_unique_nonce_is_accepted(self) -> None:
+        # GIVEN a fresh, validly signed request carrying an unseen nonce
+        request = _signed_request(_signing_config(), created=GOLDEN_CREATED, nonce="unique-1")
+        # WHEN verified THEN it is accepted
+        self.assertEqual(self._auth().authenticate(request).outcome, OUTCOME_ACCEPTED)
+
+    def test_created_absent_with_expires_present_is_accepted(self) -> None:
+        # GIVEN a signed request with `expires` present but NO `created` (created optional)
+        request = _signed_request(_signing_config(), created=None, expires=9999999999)
+        # WHEN verified THEN it is accepted (matches the far-expires golden posture)
+        self.assertEqual(self._auth().authenticate(request).outcome, OUTCOME_ACCEPTED)
+
+    def test_replayed_nonce_is_rejected_on_second_use(self) -> None:
+        # GIVEN one authenticator and a signed request carrying a nonce
+        auth = self._auth()
+        request = _signed_request(_signing_config(), created=GOLDEN_CREATED, nonce="replay-me")
+        # WHEN the identical nonce is presented twice
+        first = auth.authenticate(request)
+        second = auth.authenticate(request)
+        # THEN the first is accepted and the replay is rejected as a bad signature
+        self.assertEqual(first.outcome, OUTCOME_ACCEPTED)
+        self.assertEqual(second.outcome, OUTCOME_BAD_SIGNATURE)
+
+
 class GenesysAuthConfigEnvTest(unittest.TestCase):
     _KEYS = (
         "GENESYS_AUDIOHOOK_API_KEY",
         "GENESYS_AUDIOHOOK_SECRET",
         "GENESYS_AUDIOHOOK_API_KEY_HEADER",
-        "GENESYS_AUDIOHOOK_SIGNATURE_MAX_AGE_S",
+        "GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S",
+        "GENESYS_AUDIOHOOK_NONCE_CACHE_SIZE",
         "GENESYS_AUDIOHOOK_AUTHORITY",
     )
 
@@ -290,7 +425,9 @@ _HANDLER_COMPONENTS = [
     "audiohook-session-id",
     "x-api-key",
 ]
-_HANDLER_PARAMS = f'keyid="{GOLDEN_API_KEY}";alg="hmac-sha256";created=1;expires=9999999999'
+# created anchored to GOLDEN_CREATED so it is fresh under the handler tests' GOLDEN_NOW clock
+# (Major B age bound); no nonce here, so the replay cache does not apply on this path.
+_HANDLER_PARAMS = f'keyid="{GOLDEN_API_KEY}";alg="hmac-sha256";created={GOLDEN_CREATED};expires=9999999999'
 
 
 def _sign_headers(config: GenesysAuthConfig, base_headers: dict, raw_path: str) -> dict:

@@ -52,10 +52,15 @@ def _golden_headers(**overrides) -> dict:
     return headers
 
 
+# Freshness (Major B) age-bounds the golden `created=1641013200`, so the accepted/telemetry
+# scenarios run the clock 60s after it (inside the 300s window); canonicalization is unchanged.
+_GOLDEN_NOW = 1641013200.0 + 60
+
+
 def _authenticator(context, config: GenesysAuthConfig) -> GenesysConnectionAuthenticator:
     context.recorder = TelemetryRecorder()
     return GenesysConnectionAuthenticator(
-        config, telemetry_factory=lambda: context.recorder, now=lambda: 1_700_000_000.0
+        config, telemetry_factory=lambda: context.recorder, now=lambda: _GOLDEN_NOW
     )
 
 
