@@ -35,9 +35,9 @@ ADR-0043.
 merged into the sprint branch — **TASK-WEB-026…030 merged**, **TASK-WEB-031 functional
 GO / latency SCORED = ADR-0029 FAIL**, **TASK-INFRA-010 still Planned** (edge wiring).
 Additional latency + KB + deploy scope also landed on the branch (see *Scope Added During
-The Sprint* below). The sprint is **not yet closed**: at closure this file, the
-`backlog-index.md` sprint registry and `done-tasks.md` must be flipped to ✅ Done in the
-same session (a fast-forward merge carries no closure commit).
+The Sprint* below). The sprint is **closed (2026-08-25, released v0.6.0)** — this file's
+Status header, the `backlog-index.md` sprint registry, `done-tasks.md` and the roadmap row
+below all read ✅ Done.
 
 **Sprint branch:** `feat/sprint-12-external-voice-websocket` (forked from
 `feat/restart-from-scratch` at sprint start, 2026-08-24). Two-level branch model as before:
@@ -58,7 +58,7 @@ sprint branch merges only on the user's explicit request.
 |---|---|---|
 | Sprint 10 | Pilot-readiness latency & perceived latency | ✅ Done (closed 2026-07-31) |
 | Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | ✅ Done (closed 2026-08-24) |
-| **Sprint 12** | **External voice via interim WebSocket audio (Genesys-ready)** | 🚧 In progress (started 2026-08-24) |
+| **Sprint 12** | **External voice via interim WebSocket audio (Genesys-ready)** | ✅ Done (closed 2026-08-25, v0.6.0) |
 | Sprint 13 (tentative) | Telephony channel (US-018) + Genesys Audio Connector + advisor handoff (EPIC-007/012) | Planned — gated by OQ-006 |
 | Sprint 14 (tentative, was 12) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
