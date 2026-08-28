@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("InMemoryDeliveryDeduplicationAdapter.registerIfNew")
+@DisplayName("InMemoryDeliveryDeduplicationAdapter registerIfNew + release")
 class InMemoryDeliveryDeduplicationAdapterTest {
 
     @Test
@@ -44,5 +44,34 @@ class InMemoryDeliveryDeduplicationAdapterTest {
 
         // THEN k1 is forgotten (re-registers as new) — bounded-store trade-off
         assertThat(store.registerIfNew("k1")).isTrue();
+    }
+
+    @Test
+    void release_then_reregister_is_new() {
+        // GIVEN a store where a key is registered and its repeat is seen as a duplicate
+        var store = new InMemoryDeliveryDeduplicationAdapter(1000);
+        assertThat(store.registerIfNew("idem-1")).isTrue();
+        assertThat(store.registerIfNew("idem-1")).isFalse();
+
+        // WHEN the reserved key is released (e.g. its turn failed)
+        store.release("idem-1");
+
+        // THEN the freed key registers as new again so a legitimate retry is reprocessed
+        assertThat(store.registerIfNew("idem-1")).isTrue();
+    }
+
+    @Test
+    void releasing_an_absent_or_blank_key_is_a_safe_no_op_and_does_not_evict_a_different_key() {
+        // GIVEN a store holding one reserved key
+        var store = new InMemoryDeliveryDeduplicationAdapter(1000);
+        store.registerIfNew("idem-kept");
+
+        // WHEN never-registered, null and blank keys are released
+        store.release("idem-never");
+        store.release(null);
+        store.release("   ");
+
+        // THEN the retained key is untouched — still a duplicate, no accidental eviction
+        assertThat(store.registerIfNew("idem-kept")).isFalse();
     }
 }
