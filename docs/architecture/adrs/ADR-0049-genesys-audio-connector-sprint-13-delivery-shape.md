@@ -34,6 +34,25 @@ signed off. **Refines** [ADR-0040](ADR-0040-genesys-audio-connector-v2v-media-pl
 Source review: `docs/architecture/reviews/genesys-audio-connector-adversarial-review-2026-08-07.md`
 (Must-fix R1–R6). Sprint: `product-backlog/sprints/sprint-13-genesys-audio-connector.md`.
 
+### Spike outcome hook (TASK-WEB-025) — status still Proposed (do not flip yet)
+
+- **2026-08-28 — synthetic-first partial measurement (DEC-014).** The TASK-WEB-025 spike ran on
+  **synthetic / non-PII audio only** and produced a **NO-GO-pending** result: the ADR-0029
+  mouth-to-ear re-score is a **definitive FAIL at the measured floor** — the in-house base
+  (p95 2.76 s, TASK-WEB-039) already exceeds the 1.5 s gate before any Genesys leg is added, while
+  the Genesys transport+transcode overhead is small (L16 ~3.3 ms p95; PCMU ~17.4 ms p95). Codec:
+  prefer **L16** end to end. Concurrency at target 3: pure-Python transcode serializes on 1 vCPU
+  (~2.96×) → a native codec is required (R6). Report:
+  `docs/qa/task-web-025-genesys-audio-connector-spike-report.md`.
+- **This ADR stays `Proposed`.** The synthetic run does not, by itself, satisfy the gate: the
+  Genesys cloud legs (ingress / Architect fork / egress), the negotiated codec, the 15-min cap and
+  native barge-in/EOT events are **unmeasured** (need the live org). Per DEC-012 the FAIL floor is a
+  **user decision** (mitigation / re-scope / timeline), not an auto-proceed.
+- **Flip Proposed → Accepted only when** (a) the live-org measurement lands with a re-scored
+  **GO** against ADR-0029, and (b) the residual OQ-006 items (codec confirmed, 15-min cap fit,
+  PII-audio residency sign-off, concurrency within the premium ≤5 / 1-vCPU envelope) sign off. On a
+  sustained NO-GO, park this ADR at `Proposed` with the report as the rationale.
+
 ## Context
 
 ADR-0040 fixed the *target* Genesys integration as a three-plane split (media / control /
