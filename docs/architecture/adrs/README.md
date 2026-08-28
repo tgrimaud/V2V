@@ -6,9 +6,9 @@ ADRs capture structural decisions that should remain visible beyond code, chats,
 diagrams, and planning notes. When a decision changes, create a new ADR and mark
 the previous one as superseded instead of rewriting history.
 
-> **Note (built vs target, refreshed 2026-08-05):** an ADR status of `Accepted`
+> **Note (built vs target, refreshed 2026-08-28 for the Sprint 12 branch
+> `feat/sprint-12-external-voice-websocket`):** an ADR status of `Accepted`
 > records an accepted **target decision**, not necessarily that it is implemented.
-> As of the Sprint 11 branch (`feat/sprint-11-remote-deployment`):
 >
 > - **Built:** the two-service voice loop (ADR-0021/0022/0023/0024/0025/0033/0035),
 >   the backend conversation engine, RAG and observability
@@ -16,18 +16,37 @@ the previous one as superseded instead of rewriting history.
 >   taxonomy (ADR-0018/0029), **Redis-backed sessions** (ADR-0008, Sprint 11
 >   TASK-BE-021), the **backend↔runtime Flow A SSE style** (ADR-0036),
 >   **first-sentence streaming** (ADR-0037 — `VOICE_BACKEND_STREAM` default-ON
->   since TASK-WEB-022; the ADR-0029 end-of-turn gate still applies), and the
->   **pilot deployment** stack (ADR-0038/0039).
+>   since TASK-WEB-022; the ADR-0029 end-of-turn gate still applies), the
+>   **pilot deployment** stack (ADR-0038/0039), the **Liquibase schema split**
+>   (ADR-0041), the **pilot data-tier resilience / graceful Redis degradation**
+>   (ADR-0044, TASK-BE-030), and — new on Sprint 12 — the **interim WebSocket audio
+>   transport** for external-browser voice (ADR-0043, TASK-WEB-026…031, merged into
+>   the sprint branch). The **bilingual KB corpus** decision (ADR-0048) is Accepted
+>   and applied for the pilot (single FR corpus load).
+> - **Pilot decision (accepted, applied as config/topology, no feature code):** the
+>   **no-TURN external-media** stance (ADR-0042 — the WebSocket path replaces a TURN
+>   relay).
 > - **Target-only — NOT implemented in code yet:** billing/BSS
 >   (ADR-0003/0004/0005/0017), **multi-agent routing** (ADR-0015 — no
 >   `IntentClassifier`/`AgentProfile` on this branch), Genesys/escalation handoff
->   (ADR-0019/0020), and omnichannel contracts (ADR-0009/0010/0011).
-> - **Accepted, scheduled — not built yet:** ADR-0043 (interim WebSocket audio
->   transport for external browser voice, Genesys-ready — Sprint 12).
-> - **Proposed (not decided/built):** ADR-0032.
+>   (ADR-0019/0020) including the **Genesys Audio Connector media plane** (ADR-0040 —
+>   Sprint 13, gated by OQ-006), and omnichannel contracts (ADR-0009/0010/0011).
+> - **Proposed (not decided/built):** ADR-0032 (retrieval-quality / vector-store
+>   strategy) and ADR-0045 (LLM provider/model benchmark for backend first-token —
+>   decision deferred to the TASK-BE-033 spike).
 >
 > Implementation status is tracked in `product-backlog/backlog-index.md` and the
-> full adversarial review `docs/architecture/reviews/full-adversarial-review-2026-08-05.md`.
+> 2026-08-28 pre-sprint adversarial reviews under `docs/qa/`.
+
+> **Reserved / cross-branch IDs.** The local ADR files jump **ADR-0045 → ADR-0048**:
+> **ADR-0046 and ADR-0047 are allocated on mainline (`feat/restart-from-scratch`) and
+> other active branches**, not present on this Sprint 12 branch — this is a numbering
+> gap, not a lost ADR. Because this branch was cut ~23 commits behind mainline, any
+> **new** ADR id (and likewise `TASK-*` / `BUG-*` / `US-*` ids) MUST be checked across
+> **all** branches (mainline + every active `feat/sprint-NN-*` and `task/*` branch)
+> before allocation, so a "next free" number picked off one branch does not collide at
+> merge. Reconciliation of the branch-local ADR-0048 / TASK-BE-034/035 against mainline
+> is tracked at Sprint 12 closure.
 
 ## Index
 

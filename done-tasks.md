@@ -1212,3 +1212,107 @@ index/backlog additions are strictly additive (a later merge reconciles with ADR
 - `done-tasks.md` — this entry
 
 **Pilot operation + durable deploy config are tracked separately on `task/TASK-OPS-009-kb-sync-fr-default`.**
+
+## 2026-08-27 — Revert TASK-STT-014 (partial-quiet early STT finalization) from sprint 12 — measured harmful, QA finding kept
+
+**Branch:** `feat/sprint-12-external-voice-websocket` (worked directly in the main tree; no other agents running).
+
+**Decision (user-approved):** remove the STT-014 runtime code from sprint-12. The live A/B (2026-08-27,
+real Gradium+Mistral+Ollama, warm) proved the partial-quiet early-finalization lever harmful: at
+`VOICE_STT_PARTIAL_QUIET_MS=300` it drops the trailing word on ~100 % of engagements
+(`finalize_reconcile.extra_words≈1`, `reconciled_match=0`, 14/14) for only ~99 ms median saved, and
+the gain vanishes by ~350 ms (Gradium's ~800 ms `delay_in_frames` lookahead). A Gradium dead-end not
+worth carrying as dead code. The QA finding is kept as the durable record; the ticket is marked
+**Rejected**.
+
+**Git approach:** forward reverse-apply of *just the code* — `git checkout c180223 -- <7 files>`
+(the pre-STT-014 / TASK-BE-020 sprint tip), leaving the QA report + backlog docs to be hand-edited so
+the finding is preserved. Did **not** revert the whole merge commit `5418b61` (that would also have
+dropped the QA report and the later evidence commit `cfbf1a9`). The evidence commit `cfbf1a9` and the
+QA report both survive.
+
+**Runtime code restored to pre-STT-014 state (`c180223`):**
+- `voice-agent/stt_validation/streaming.py` (removed `wait_progress` + `_progress` event)
+- `voice-agent/web_voice/streaming_stt_processor.py` (removed `_await_with_quiet`, `_finalize_early`, `_reconcile`, drain, telemetry)
+- `voice-agent/web_voice/session_factory.py` (removed `_partial_quiet_config` / `VOICE_STT_PARTIAL_QUIET_MS`)
+- `voice-agent/tests/test_streaming_stt_processor.py` (removed the 5 STT-014 unit tests)
+- `voice-agent/features/streaming_stt.feature` + `features/steps/streaming_stt_steps.py` (removed the 1 STT-014 behave scenario + steps)
+- `docs/observability/voice-journey-timing.md` (removed the STT-014 finalize-early/reconcile slice entries)
+
+**Kept (durable record):**
+- `docs/qa/task-stt-014-finalize-tail-qa.md` — full report incl. the live §7 finding; status header updated to "❌ REJECTED — measured harmful; runtime code reverted".
+- `product-backlog/tasks/stt-followup-tasks.md` + `product-backlog/backlog-index.md` — TASK-STT-014 marked ❌ Rejected.
+- The `task/TASK-STT-014-stt-finalize-tail` ticket branch — **preserved, not deleted**.
+
+**Tests (post-revert, all green):** backend `mvn test` **403** (unaffected), voice-agent unittest
+**568** (was 573), behave **17 features / 46 scenarios / 209 steps** (was 47 / 214). No dangling
+references to `VOICE_STT_PARTIAL_QUIET_MS` / `finalize_early` / `finalize_reconcile` /
+`_await_with_quiet` / `wait_progress` remain in shipped code or `docs/observability`.
+
+## 2026-08-28 — Pre-sprint adversarial review (4 areas) + documentation-gate remediation
+
+**Branch:** `feat/sprint-12-external-voice-websocket` (documentation-only; user-authorized commit + push).
+
+**Context — full 2026-08-28 adversarial review before the next sprints open.** Four
+read-only reviews were run and their reports committed under `docs/qa/`:
+
+- `adversarial-review-2026-08-28-backend.md` — **96/100, CLEAN.**
+- `adversarial-review-2026-08-28-voice-runtime.md` — **96/100, CLEAN.**
+- `adversarial-review-2026-08-28-deploy-observability.md` — **87/100, CLEAN** (1 Major: the
+  loopback voice health-gate false-negative; 6 minors).
+- `adversarial-review-2026-08-28-docs-architecture.md` — **82/100, NOT-CLEAN (conditional)** — 1
+  blocker (cross-branch ID-allocation risk) + 4 majors + 4 minors, all fast doc edits.
+
+Only the **documentation gate** (docs-architecture report + the deploy Major #1 ticketing item)
+was actioned in this session. No code, tests, YAML, Ansible or compose files were touched.
+
+**Remediation performed (docs only):**
+
+- **Blocker / M-4 — ID numbering hygiene (no history rewrite).** Added a **"Reserved /
+  cross-branch IDs"** note to `docs/architecture/adrs/README.md` explaining the ADR-0045 → ADR-0048
+  jump (ADR-0046/0047 live on mainline `feat/restart-from-scratch` + other branches, not here) and
+  requiring cross-branch checks before allocating any new ADR/TASK/BUG/US id. Added an equivalent
+  **"ID allocation rule"** note near the top of `product-backlog/backlog-index.md`. Verified no
+  within-branch duplicate id (ADR headings + registry rows unique).
+- **M-1 — TASK-BE-020 status contradiction.** `backlog-index.md` said "To do (future)"; reconciled
+  to the detail file (`backend-hardening-tasks.md`) = **🟢 Implemented + merged into sprint 12 +
+  live-measured (2026-08-27)**, preserving the "ADR-0029 gate still FAIL → TASK-BE-033" caveat.
+- **M-2 — Sprint-12 file stale.** `sprints/sprint-12-external-voice-websocket.md` showed all
+  tickets 📋 Planned. Reconciled the ticket table to `backlog-index.md` (WEB-026…030 merged,
+  WEB-031 functional-GO/latency-FAIL, INFRA-010 Planned) + added a **"Scope Added During The
+  Sprint"** table (BE-020, STT-014 ❌ Rejected, WEB-032/035/036, BE-033, OPS-009, BE-034/035,
+  INFRA-011, ADR-0045/0048) and a "Delivered so far" status note.
+- **M-3 — ADR README built-vs-target refresh.** Re-dated to the Sprint 12 branch; moved **ADR-0043
+  to Built**; categorized the uncategorized **ADR-0040 (target-only, Sprint 13) / 0042 (pilot
+  decision) / 0044 (Built) / 0045 (Proposed) / 0048 (Accepted/applied)**.
+- **Deploy Major #1 — health-gate ticket.** The loopback voice health-gate false-negative is
+  **already allocated cross-branch as TASK-INFRA-011** (defined on mainline + sprint-13; dedicated
+  branch `task/TASK-INFRA-011-voice-health-container-probe`; only forward-referenced in prose here).
+  Rather than mint a **duplicate** `TASK-OPS-011` (which would be the exact cross-branch collision
+  this gate is closing), **registered the existing TASK-INFRA-011 on sprint-12**: full ticket body
+  in `tasks/deployment-tasks.md` + a registry row in `backlog-index.md`, mirroring mainline.
+  Recommended fix recorded: repoint `health_url` off loopback (host LAN IP or
+  `podman inspect …Health.Status`); interim CLAUDE.md workaround referenced.
+- **Minors.** m-1 reordered BUG-015 before BUG-016 in the bugs table; m-2 added a cross-note in
+  `decisions/v1-decisions.md` distinguishing `DEC-###` from the "global-review decision #n" loop;
+  m-3 added a Sprint-13 note (reference ADR-0040/0042/0043 — do not mint "ADR-0049"); m-4
+  (English-only) was PASS, no change.
+
+**Regressions checked (unchanged, confirmed):** TASK-STT-014 still ❌ Rejected everywhere; the
+ADR-0029 latency gate still reads FAIL everywhere; no within-branch duplicate ADR/TASK id.
+
+### Files changed
+- `docs/architecture/adrs/README.md` — built-vs-target refresh + reserved/cross-branch ID note
+- `product-backlog/backlog-index.md` — ID-allocation note, TASK-BE-020 status, TASK-INFRA-011 row, BUG-015/016 reorder, Sprint-13 ADR note
+- `product-backlog/sprints/sprint-12-external-voice-websocket.md` — ticket table reconciled + scope-added table + status note
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket body
+- `product-backlog/decisions/v1-decisions.md` — DEC vs global-review numbering cross-note
+- `done-tasks.md` — this entry
+- `docs/qa/adversarial-review-2026-08-28-{backend,voice-runtime,deploy-observability,docs-architecture}.md` — the four review reports (committed)
+
+### Follow-ups (out of scope — no tickets created here)
+- Code/infra minors from the CLEAN reviews were **deliberately left**: line-budget refactors
+  (backend), floating image tags (`redis:7-alpine`, dev `pgvector:pg16`/`ollama:latest`), the
+  dev-only plaintext Postgres password, redis-password-in-argv, and the manual Liquibase bootstrap
+  step. These are hygiene/reproducibility items with no runtime or security impact on the
+  Ansible-driven pilot path; ticket them if/when they become blocking.

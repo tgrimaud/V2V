@@ -31,6 +31,14 @@ Decision #1 of the 2026-08-15 global-review decision loop (posture **B**:
 interim WebSocket audio path) recorded in ADR-0042 (update) and specified by
 ADR-0043.
 
+**Delivered so far (as of 2026-08-28):** the WebSocket transport core is built and
+merged into the sprint branch — **TASK-WEB-026…030 merged**, **TASK-WEB-031 functional
+GO / latency SCORED = ADR-0029 FAIL**, **TASK-INFRA-010 still Planned** (edge wiring).
+Additional latency + KB + deploy scope also landed on the branch (see *Scope Added During
+The Sprint* below). The sprint is **not yet closed**: at closure this file, the
+`backlog-index.md` sprint registry and `done-tasks.md` must be flipped to ✅ Done in the
+same session (a fast-forward merge carries no closure commit).
+
 **Sprint branch:** `feat/sprint-12-external-voice-websocket` (forked from
 `feat/restart-from-scratch` at sprint start, 2026-08-24). Two-level branch model as before:
 ticket branches fork from and merge back into the sprint branch (`--no-ff`); the
@@ -74,16 +82,39 @@ sprint branch merges only on the user's explicit request.
 
 | Ticket | Title | Role | Status |
 |---|---|---|---|
-| TASK-WEB-026 | ADR-0043 + design spike: WebSocket audio transport socle (pipecat `WebsocketServerTransport` sans FastAPI vs hand-rolled WS upgrade on the stdlib server) + JSON-control/binary-PCM framing, on the shared async loop | Decide (architecture) | 📋 Planned |
-| TASK-WEB-027 | Transport-agnostic **session factory**: extract session-building out of `WebRtcSignalingService`; WebRTC + WebSocket (+ future Genesys) become thin transport adapters over one `StreamingVoiceSession`; PCM16/16 kHz internal boundary, codec conversion inside adapters | Refactor (capitalisation) | 📋 Planned |
-| TASK-WEB-028 | Browser WebSocket voice client: `ws.html` + `ws.js` (AudioWorklet mic capture → PCM16 frames over `wss`; return-audio playback via `pcm-worklet.js`); language selected at connect; safe failure surfaces | Build (frontend) | 📋 Planned |
-| TASK-WEB-029 | Barge-in / end-of-turn on the WebSocket path via the **pluggable control-signal seam** (energy/amplitude detectors + 350 ms hold reused; ADR-0025 point-7 amplitude gate applies; verify interruption cancels cleanly over WS) | Build (runtime) | 📋 Planned |
-| TASK-WEB-030 | Session capacity ceiling + backpressure + **per-slice OpenTelemetry** on the WebSocket path (reuse `VOICE_MAX_*`, `voice.webrtc.*`-equivalent gauges, one correlation id/call) | Build (runtime + observability) | 📋 Planned |
+| TASK-WEB-026 | ADR-0043 + design spike: WebSocket audio transport socle (pipecat `WebsocketServerTransport` sans FastAPI vs hand-rolled WS upgrade on the stdlib server) + JSON-control/binary-PCM framing, on the shared async loop | Decide (architecture) | ✅ Merged into sprint 12 (2026-08-24, `f6e4214`; adversarial 94/100 + QA GO) |
+| TASK-WEB-027 | Transport-agnostic **session factory**: extract session-building out of `WebRtcSignalingService`; WebRTC + WebSocket (+ future Genesys) become thin transport adapters over one `StreamingVoiceSession`; PCM16/16 kHz internal boundary, codec conversion inside adapters | Refactor (capitalisation) | ✅ Merged into sprint 12 (2026-08-24, `9026577`; adversarial 95/100 + QA GO) |
+| TASK-WEB-028 | Browser WebSocket voice client: `ws.html` + `ws.js` (AudioWorklet mic capture → PCM16 frames over `wss`; return-audio playback via `pcm-worklet.js`); language selected at connect; safe failure surfaces | Build (frontend) | ✅ Merged into sprint 12 (2026-08-24, `f5652fc`; adversarial 93/100 + QA GO; user-validated live) |
+| TASK-WEB-029 | Barge-in / end-of-turn on the WebSocket path via the **pluggable control-signal seam** (energy/amplitude detectors + 350 ms hold reused; ADR-0025 point-7 amplitude gate applies; verify interruption cancels cleanly over WS) | Build (runtime) | ✅ Merged into sprint 12 (2026-08-24, `d67bccd`; adversarial 93/100 + QA GO) |
+| TASK-WEB-030 | Session capacity ceiling + backpressure + **per-slice OpenTelemetry** on the WebSocket path (reuse `VOICE_MAX_*`, `voice.webrtc.*`-equivalent gauges, one correlation id/call) | Build (runtime + observability) | ✅ Merged into sprint 12 (2026-08-25, `b5b075a`; adversarial 91/100 + QA GO, 1 Medium residual → WEB-031) |
 | TASK-INFRA-010 | HAProxy edge: `wss` upgrade routing to the bridge (Connection: upgrade, long-lived timeouts, sticky to a bridge for the call), deploy env + docs; no TURN | Wire (infra) | 📋 Planned |
-| TASK-WEB-031 | QA: functional validation + **per-slice latency report** on the WebSocket path (mouth-to-ear p95 vs ADR-0029) + degraded-behaviour note (TCP head-of-line, weaker AEC) | QA | 📋 Planned |
+| TASK-WEB-031 | QA: functional validation + **per-slice latency report** on the WebSocket path (mouth-to-ear p95 vs ADR-0029) + degraded-behaviour note (TCP head-of-line, weaker AEC) | QA | ⚠️ Functional GO / latency SCORED = ADR-0029 FAIL (2026-08-25 warm 16-call real-provider sample: m2e p95 3675 ms, TTFA p95 3325 ms; no pilot SLO claimed on WS) |
 
 Full ticket details live in `tasks/web-voice-tasks.md` (TASK-WEB-026…031) and
 `tasks/deployment-tasks.md` (TASK-INFRA-010).
+
+## Scope Added During The Sprint
+
+Work that landed on the sprint-12 branch beyond the original WebSocket-transport plan
+(mirrors `backlog-index.md`; this is the authoritative per-ticket status — see that
+registry for the full evidence wording):
+
+| Ticket | Theme | Status (per backlog-index) |
+|---|---|---|
+| TASK-BE-020 | Latency lever — backend time-to-first-vetted-sentence (reactive-stream warm-up) | 🟢 Implemented + merged into sprint 12 + live-measured (2026-08-27); ADR-0029 gate still FAIL → TASK-BE-033 |
+| TASK-STT-014 | Latency lever — STT finalize-tail early finalization | ❌ Rejected — measured harmful; runtime code reverted from sprint-12 (QA finding kept) |
+| TASK-WEB-032 | Reference warm WebRTC m2e measurement vs ADR-0029 | ✅ Measured 2026-08-25 = ADR-0029 FAIL (m2e p95 3743 ms; bottleneck transport-independent) |
+| TASK-WEB-035 | Latency lever — STT time-to-final tail (bounded finalize budget) | 🟢 Implemented + live re-scored + merged into sprint 12 (2026-08-25); STT tail p95 4042→1224 ms; gate still FAIL |
+| TASK-WEB-036 | Latency lever — backend first-token (top-k 8→5) | 🟡 Lever A done + measured (2026-08-25); backend first-token p95 −47%; Lever B → ADR-0045 / TASK-BE-033 |
+| TASK-BE-033 | Latency lever B — LLM provider/model benchmark spike | 📋 Planned (ADR-0045 + ticket def merged into sprint-12; execution not started) |
+| TASK-OPS-009 | Deploy triggers/verifies KB sync + FR corpus default | 🔧 Implemented (2026-08-27); pending user validation/merge |
+| TASK-BE-034 | Retrieval language filter (bilingual target) | 📋 Planned (ticket only — target counterpart to ADR-0048) |
+| TASK-BE-035 | KB rebrand follow-up | ❌ Cancelled / Won't do (Eir brand intentional) |
+| TASK-INFRA-011 | Fix the voice deploy health-gate podman loopback false-negative | 📋 Planned (registered on sprint-12 2026-08-28 from the deploy adversarial review; id reused from mainline) |
+
+New ADRs on this branch: **ADR-0045** (Proposed — LLM provider/model benchmark) and
+**ADR-0048** (Accepted — bilingual KB corpus + retrieval language scope). See the ADR
+index reservation note: **ADR-0046/0047** are allocated on mainline, not on this branch.
 
 ## Genesys-readiness checklist (capitalisation — enforced at review)
 
