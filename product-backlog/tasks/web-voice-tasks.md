@@ -2467,7 +2467,7 @@ runtime foundation the Audio Connector `wss` endpoint builds on), ADR-0043 (tran
 session factory)
 **Depends on:** OQ-006 (Genesys pilot environment access + handoff shape) — **gated**
 **Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
-**Status:** 📋 Proposed — spike (investigation only), gated by OQ-006. **Sprint 13 GATE** (2026-08-27):
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `bb25bdd`, 2026-08-28) — spike delivered, **GO-for-build (DEC-015)**; QA-ready on the sprint branch (sprint still in progress, not closed). **Sprint 13 GATE** (2026-08-27):
 this spike is the first, go/no-go ticket of `sprints/sprint-13-genesys-audio-connector.md`; its GO
 verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-036/037, TASK-INFRA-012).
 **Priority:** High for Sprint 13 (foundational go/no-go; was Low while deferred)
@@ -3672,8 +3672,8 @@ ADR-0029 (latency gate)
 **Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
 drive it end to end)
 **Classification:** V1 voice runtime — Genesys media plane (runtime-affecting)
-**Status:** ✅ Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
-`task/TASK-WEB-041-genesys-audio-connector-adapter`; awaiting user validation/merge. Live
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `4f2a1c6`, 2026-08-28) — QA-ready on the sprint branch (sprint still in progress). Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
+`task/TASK-WEB-041-genesys-audio-connector-adapter`. Live
 Genesys-leg latency re-score (R1) still needs a live org; barge-in/EOT wiring is TASK-WEB-042.
 **Priority:** High (Sprint 13 spine, once gated)
 **Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch)

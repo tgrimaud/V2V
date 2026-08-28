@@ -1574,7 +1574,7 @@ Scenario: The handoff decision and payload stay backend-owned
 ADR-0040/0049, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
-**Status:** 🔧 In Progress — backend contract implemented + adversarial-review remediation applied on
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `ec5672c`, 2026-08-28) — QA-ready on the sprint branch (sprint still in progress). Backend contract implemented + adversarial-review remediation applied on
 `task/TASK-BE-037-normalized-channel-envelope` (off `feat/sprint-13-genesys-audio-connector`); `mvn test`
 green (432, ArchUnit incl.). Pending re-run of adversarial review + QA + user validation. The Python Genesys
 adapter that *populates* the envelope is out of scope (voice runtime, TASK-WEB-041); this ticket delivers the
