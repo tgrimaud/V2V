@@ -1418,10 +1418,10 @@ Scenario: The pilot CSV corpus is French
 endpoint), ADR-0038 (pilot deployment / edge)
 **Depends on:** TASK-WEB-025 (spike **GO** + pilot access), OQ-006 (pilot environment + queue routing
 rules), TASK-WEB-041 (the `wss` endpoint the flow forks to)
-**Classification:** V1 pilot deployment — Genesys control plane config (no business logic)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Classification:** V1 pilot deployment — Genesys control plane config (no business logic) + voice-runtime connection auth
+**Status:** 🧪 Prep implemented on branch `task/TASK-INFRA-012-genesys-audiohook-auth` (off `feat/sprint-13-genesys-audio-connector`); AudioHook connection auth (API key + HMAC-SHA256 signature) + Architect flow control/routing contract scaffolded; exact header/secret + `@request-target`/`@authority` behind the edge + Architect wiring pending live Genesys measurement; awaiting adversarial review + user merge (not merged)
 **Priority:** High (Sprint 13; co-developed with TASK-WEB-041) — closes part of **R3/R6**
-**Branch:** `task/TASK-INFRA-012-genesys-architect-flow` (off the sprint branch, when gated)
+**Branch:** `task/TASK-INFRA-012-genesys-audiohook-auth` (off the sprint branch)
 
 ### Context
 
@@ -1475,6 +1475,39 @@ Scenario: The flow fails safe when the bot endpoint is unavailable
 
 - The Platform API / Architect specifics (variable names, queue ids, auth mechanism) are confirmed by
   the TASK-WEB-025 spike against the real pilot org (OQ-006); this ticket implements the confirmed shape.
+
+### Increment (2026-08-28) — Prep: AudioHook connection auth + Architect flow contract
+
+Deterministically-knowable half implemented now (the AudioHook connection-auth scheme is a known
+protocol); anything needing the live Genesys tenant / negotiated shared secret is marked
+`TODO(TASK-INFRA-012: live-measurement)`. **ADR-0001 held — voice-runtime + docs only, zero backend
+files changed.**
+
+- **Voice-runtime auth (new):** `voice-agent/web_voice/genesys_auth.py` (policy + fail-closed config +
+  telemetry) and `voice-agent/web_voice/genesys_signature.py` (IETF HTTP Message Signatures
+  canonicalization, `alg="hmac-sha256"`). Verifies `X-API-KEY` (constant-time) + the `Signature` /
+  `Signature-Input` HMAC over the covered components, keyed by `GENESYS_AUDIOHOOK_SECRET` (base64), with
+  `hmac.compare_digest`. Canonicalization is locked against the **official Genesys golden vector**
+  (unit test reproduces the published signature byte-for-byte).
+- **Wiring:** `genesys_app.py` verifies auth **before** the WS upgrade (401/503 on failure, no session
+  built); `server.py` always attaches an env-built authenticator when `--genesys` is enabled and
+  **fails closed** with a structured warning when key/secret are unconfigured. Origin allowlist kept as
+  defense-in-depth.
+- **Telemetry (mandatory):** bounded-cardinality auth-outcome event + metric on the Genesys channel
+  (`accepted` / `rejected_bad_signature` / `rejected_missing_key` / `rejected_not_configured`),
+  connection-scoped correlation (Genesys session id → deterministic traceparent when no conversationId
+  yet). **No secret / signature / API key / PII in any span, metric or log** (asserted by test).
+- **Contract doc (new):** `docs/integrations/genesys-architect-flow-contract.md` — the Architect
+  control/routing plane: fork/pause/resume vocabulary, by-reference handoff (`escalation_context =
+  {handoff_id, reason_code, priority}`) routed to the advisor queue via
+  `GET /api/conversation/escalation-handoffs/{handoff_id}` (TASK-BE-036), fail-safe branch, and the
+  TO-CONFIRM table (DID, queue, egress ranges, auth header casing, variable limits) with owners.
+- **Tests:** `tests/test_genesys_auth.py` (17 unit) + `features/genesys_connection_auth.feature`
+  (5 scenarios) — valid accepted, tampered/invalid rejected, missing key, fail-closed unconfigured,
+  telemetry-without-leak. Full suite green: 677 unit / 18 features · 51 scenarios · 225 steps.
+- **TODO(live-measurement) seams:** exact API-key header casing, the signed `@request-target` /
+  `@authority` as seen behind the pilot HAProxy edge, the negotiated shared secret, and the org-id
+  allowlist — all env-configurable so live values drop in without a code change.
 
 ---
 
