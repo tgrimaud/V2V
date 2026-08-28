@@ -64,7 +64,18 @@ connection auth that the runtime now verifies **before building the session** (T
 | Auth: API key header | `X-API-KEY: <api-key>` | header name configurable (`GENESYS_AUDIOHOOK_API_KEY_HEADER`, default `X-API-KEY`) — **TO CONFIRM** exact casing on the live tenant |
 | Auth: signature | `Signature` + `Signature-Input` (IETF HTTP Message Signatures, `alg="hmac-sha256"`) over the covered components (`@request-target`, `@authority`, `audiohook-organization-id`, `audiohook-session-id`, `audiohook-correlation-id`, `x-api-key`) | scheme implemented; **shared secret TO CONFIRM** (negotiated with the Genesys admin) |
 | Shared secret | configured Genesys-side (integration credentials) + runtime-side (`GENESYS_AUDIOHOOK_SECRET`, base64) | **TO CONFIRM** |
-| Fail-closed | if the runtime endpoint is enabled but no key + secret is configured it **refuses every connection** (`rejected_not_configured`) — never opens | implemented |
+| Freshness | after the HMAC is verified, the signature MUST carry `expires` (absent/stale/future → refused); when `created` is present its age is bounded to `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S` (default 300s) with a small clock skew | implemented |
+| Replay | a reused `nonce` is refused via a bounded in-memory cache (`GENESYS_AUDIOHOOK_NONCE_CACHE_SIZE`, default 10000, FIFO eviction) | implemented |
+| Fail-closed | if the runtime endpoint is enabled but no key + secret is configured it **refuses every connection** (`rejected_not_configured`) — never opens; the handler also requires an authenticator so a forgotten wiring fails closed | implemented |
+
+> **Freshness / replay policy.** `expires` is mandatory (a missing/stale/future one is
+> rejected via the ordinary bad-signature outcome, so no unbounded label is added). `created`
+> and `nonce` stay OPTIONAL: the published Genesys golden vector carries a far-future
+> `expires` and a fixed `created`, so it remains admissible when the clock is near that
+> `created`; the signature base / canonicalization is unchanged. The nonce cache is bounded
+> and safe for the single async handler thread. The **exact** `expires` / `created` / `nonce`
+> and skew the live tenant emits are **TODO(TASK-INFRA-012: live-measurement)** — all
+> env-tunable, so live values drop in without a code change.
 
 > **`@request-target` / `@authority` note.** Behind the pilot HAProxy edge the signed
 > request-target path and authority may be rewritten before reaching the bridge. The runtime

@@ -1509,6 +1509,41 @@ files changed.**
   `@authority` as seen behind the pilot HAProxy edge, the negotiated shared secret, and the org-id
   allowlist — all env-configurable so live values drop in without a code change.
 
+### Increment (2026-08-28) — Adversarial-review remediation (80/100 → fixed 3 Majors + 2 minors)
+
+The review scored the prep 80/100 (blocked). All findings addressed; still voice-runtime + docs
+only (ADR-0001 held — zero backend files). Full suite green: **685 unit / 18 features · 51
+scenarios · 225 steps**.
+
+- **Major A (telemetry discarded in prod):** `server.py` now builds the authenticator with the
+  REAL exporter — `genesys_authenticator_from_env(log=genesys_log_telemetry)` (stderr + OTLP, the
+  same path the session handler uses) instead of the no-op default, so the mandatory per-attempt
+  auth-outcome event/metric is actually flushed at runtime. New test injects a capturing exporter
+  and asserts it RECEIVES the event + metric on BOTH an accepted and a rejected attempt.
+- **Major B (replay/freshness ENFORCED):** new `voice-agent/web_voice/genesys_replay.py`
+  (`signature_is_fresh` + bounded FIFO `NonceCache`). Policy now: `expires` is **mandatory**
+  (absent/stale/future → rejected via the existing bad-signature outcome, no unbounded label);
+  `created`, when present, is age-bounded to `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S` (default
+  **300s**, small clock skew) — repaired from the old logic that merely EXTENDED the `expires`
+  grace; a reused `nonce` is rejected via a cap of `GENESYS_AUDIOHOOK_NONCE_CACHE_SIZE` (default
+  **10000**). `created`/`nonce` stay OPTIONAL so the golden vector (far `expires`) stays
+  byte-identical (clock anchored near its `created`); canonicalization untouched. Regression tests:
+  missing `expires`, stale/future `created`, replayed `nonce`, fresh unique nonce accepted,
+  created-absent accepted, golden still green.
+- **Major C (unbounded-cardinality metric):** dropped `correlation_id` from `AUTH_OUTCOME_METRIC`
+  (kept it on the event/span); the metric label set is now exactly `{channel, outcome}` (asserted).
+- **Minor 1 (insecure default):** `make_genesys_handler` now REQUIRES `authenticator` (always
+  authenticates) so a forgotten wiring fails CLOSED; production behaviour unchanged (server always
+  passes one). Transport-only tests pass an explicit accept-all double.
+- **Minor 2 (non-ASCII API key → 500):** API-key compare is now byte-based
+  (`.encode("utf-8")`), so a non-ASCII `X-API-KEY` degrades to a clean 401 (`rejected_missing_key`),
+  never a 500.
+- **Module budget:** freshness/nonce extracted to `genesys_replay.py`; `genesys_auth.py` stays
+  under the 200-non-blank-line budget (193). Env var renamed to the reviewed
+  `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S`.
+- **Docs:** freshness/replay policy + remaining `TODO(TASK-INFRA-012: live-measurement)` added to
+  `genesys_auth.py` docstring and `docs/integrations/genesys-architect-flow-contract.md`.
+
 ---
 
 ## TASK-OPS-010 - Bridge active-session `/drain` endpoint + deploy wiring
