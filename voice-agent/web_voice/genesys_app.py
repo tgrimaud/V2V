@@ -15,9 +15,12 @@ What this adapter owns (the transport boundary):
   Architect resumes and routes to the advisor queue — never a silent mid-call cut (R2). If
   the drain wedges (a stuck STT/TTS provider), it is force-stopped after a bounded grace so
   the concurrency slot + WS are ALWAYS freed at cap+grace (review Major #1).
-- An Origin allowlist (anti-CSWSH) mirroring `/ws`; combined with the default-off posture
-  (`--genesys off`) this keeps the endpoint closed until AudioHook signature/HMAC
-  verification lands under TASK-INFRA-012 (review Major #2 / ADR-0049).
+- AudioHook **connection authentication** (TASK-INFRA-012): an optional
+  `GenesysConnectionAuthenticator` verifies the Genesys API key + HMAC-SHA256 signature
+  BEFORE the WS is upgraded (fail-closed when enabled-but-unconfigured); the Origin
+  allowlist (anti-CSWSH) mirroring `/ws` stays as defense-in-depth. Combined with the
+  default-off posture (`--genesys off`) the endpoint is closed unless explicitly enabled
+  AND authenticated (review Major #2 / ADR-0049).
 - Per-channel OpenTelemetry: session/gauge/cap events labelled `genesys_audio_connector`,
   plus a deterministic `traceparent` derived from the Genesys `conversationId` so the
   Genesys leg + runtime + backend land in one trace (per-leg transcode spans come from
@@ -36,6 +39,7 @@ from pipecat.utils.security.allowed_origins import is_origin_allowed
 from voice_common.telemetry import TelemetryRecorder
 
 from .envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL, ChannelEnvelope
+from .genesys_auth import GenesysConnectionAuthenticator
 from .genesys_barge_in_eot import GenesysCallControl, wire_genesys_call_control
 from .genesys_cap import cancel_cap, schedule_cap
 from .genesys_config import (
@@ -70,6 +74,7 @@ WS_POLICY_VIOLATION = 1008
 def make_genesys_handler(
     factory: SessionFactory,
     *,
+    authenticator: GenesysConnectionAuthenticator,
     max_sessions: int = DEFAULT_MAX_GENESYS_SESSIONS,
     wire_codec: str | None = None,
     max_session_s: float = DEFAULT_MAX_SESSION_S,
@@ -79,13 +84,22 @@ def make_genesys_handler(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
     log: Callable[[TelemetryRecorder], None] = genesys_log_telemetry,
-) -> Callable[[web.Request], Awaitable[web.WebSocketResponse]]:
-    """Build the `GET /genesys/audiohook` handler: one session per connection, N concurrent."""
+) -> Callable[[web.Request], Awaitable[web.StreamResponse]]:
+    """Build the `GET /genesys/audiohook` handler: one session per connection, N concurrent.
+
+    `authenticator` is REQUIRED so a forgotten wiring fails CLOSED (review Minor 1): the
+    AudioHook connection auth (API key + HMAC signature) is verified BEFORE the WS upgrade;
+    a failure returns the HTTP status the outcome maps to (401/503) and never builds a
+    session (TASK-INFRA-012). Pass an unconfigured authenticator to refuse every connection.
+    """
     active = _ActiveSessions()
     ceiling = max_sessions if max_sessions > 0 else DEFAULT_MAX_GENESYS_SESSIONS
     codec = wire_codec or genesys_codec_config()
 
-    async def handler(request: web.Request) -> web.WebSocketResponse:
+    async def handler(request: web.Request) -> web.StreamResponse:
+        result = authenticator.authenticate(request)
+        if not result.ok:
+            return web.Response(status=result.http_status)
         websocket = web.WebSocketResponse()
         await websocket.prepare(request)
         if allowed_origins and not is_origin_allowed(
