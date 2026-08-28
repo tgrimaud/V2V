@@ -1,0 +1,266 @@
+{
+  "audio": "synthetic / non-PII only (DEC-014 synthetic-first)",
+  "base_mouth_to_ear_p95_ms": 2760.0,
+  "blocked_on_live_org": [
+    "genesys_ingress / architect_fork / genesys_egress cloud legs (TASK-INFRA-012)",
+    "codec confirmed end-to-end on the pilot org (PCMU vs L16)",
+    "15-minute cap vs the worst-case billing journey",
+    "PII-audio residency/egress sign-off (Security/Compliance, OQ-006)"
+  ],
+  "codecs": [
+    {
+      "adr_0029_rescore": {
+        "base_mouth_to_ear_p95_ms": 2760.0,
+        "gate_p95_ms": 1500.0,
+        "genesys_transport_overhead": {
+          "count": 50,
+          "max_ms": 17.452,
+          "min_ms": 16.596,
+          "p50_ms": 16.962,
+          "p95_ms": 17.384,
+          "p99_ms": 17.452
+        },
+        "measured_floor_p95_ms": 2777.384,
+        "reason": "measured floor 2777.384 ms already exceeds the 1500.0 ms gate; the unmeasured Genesys cloud legs (ingress/fork/egress) can only add \u2014 definitive FAIL",
+        "status": "fail"
+      },
+      "codec": "PCMU",
+      "example_traceparent": "00-120e4976e2f08127d92d21d3cb3a9a71-05ffbb3d4a24bebe-01",
+      "per_leg": [
+        {
+          "latency": null,
+          "leg": "genesys_ingress",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        },
+        {
+          "latency": null,
+          "leg": "architect_fork",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 0.006,
+            "min_ms": 0.003,
+            "p50_ms": 0.004,
+            "p95_ms": 0.004,
+            "p99_ms": 0.006
+          },
+          "leg": "wss_inbound",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 4.273,
+            "min_ms": 3.987,
+            "p50_ms": 4.155,
+            "p95_ms": 4.251,
+            "p99_ms": 4.273
+          },
+          "leg": "transcode_in",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": null,
+          "leg": "stt",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": null,
+          "leg": "backend",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": null,
+          "leg": "tts",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 13.238,
+            "min_ms": 12.488,
+            "p50_ms": 12.812,
+            "p95_ms": 13.153,
+            "p99_ms": 13.238
+          },
+          "leg": "transcode_out",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 0.001,
+            "min_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.001,
+            "p99_ms": 0.001
+          },
+          "leg": "wss_outbound",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": null,
+          "leg": "genesys_egress",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        }
+      ],
+      "transport_overhead_samples": 50
+    },
+    {
+      "adr_0029_rescore": {
+        "base_mouth_to_ear_p95_ms": 2760.0,
+        "gate_p95_ms": 1500.0,
+        "genesys_transport_overhead": {
+          "count": 50,
+          "max_ms": 3.339,
+          "min_ms": 3.131,
+          "p50_ms": 3.269,
+          "p95_ms": 3.332,
+          "p99_ms": 3.339
+        },
+        "measured_floor_p95_ms": 2763.332,
+        "reason": "measured floor 2763.332 ms already exceeds the 1500.0 ms gate; the unmeasured Genesys cloud legs (ingress/fork/egress) can only add \u2014 definitive FAIL",
+        "status": "fail"
+      },
+      "codec": "L16",
+      "example_traceparent": "00-58b00926c4157b2c7d4dfd32b762ee04-170732af1dfd2909-01",
+      "per_leg": [
+        {
+          "latency": null,
+          "leg": "genesys_ingress",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        },
+        {
+          "latency": null,
+          "leg": "architect_fork",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 0.004,
+            "min_ms": 0.003,
+            "p50_ms": 0.003,
+            "p95_ms": 0.004,
+            "p99_ms": 0.004
+          },
+          "leg": "wss_inbound",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 1.929,
+            "min_ms": 1.803,
+            "p50_ms": 1.892,
+            "p95_ms": 1.925,
+            "p99_ms": 1.929
+          },
+          "leg": "transcode_in",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": null,
+          "leg": "stt",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": null,
+          "leg": "backend",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": null,
+          "leg": "tts",
+          "measured": false,
+          "note": "reuse the existing ADR-0029 WS pilot base (not re-measured in this spike) \u2014 TASK-WEB-043",
+          "source": "in-house-reuse"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 1.429,
+            "min_ms": 1.31,
+            "p50_ms": 1.38,
+            "p95_ms": 1.42,
+            "p99_ms": 1.429
+          },
+          "leg": "transcode_out",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": {
+            "count": 50,
+            "max_ms": 0.0,
+            "min_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0
+          },
+          "leg": "wss_outbound",
+          "measured": true,
+          "note": null,
+          "source": "synthetic-prototype"
+        },
+        {
+          "latency": null,
+          "leg": "genesys_egress",
+          "measured": false,
+          "note": "requires the live Genesys org (Architect Call-Audio-Connector flow) \u2014 TASK-INFRA-012",
+          "source": "live-genesys-org"
+        }
+      ],
+      "transport_overhead_samples": 50
+    }
+  ],
+  "concurrency": {
+    "codec": "PCMU",
+    "concurrent_wall_ms": 115.038,
+    "note": "3 concurrent sessions took 2.96x a single session's wall time. Pure-Python transcode is CPU-bound (GIL-serialized), so on a 1-vCPU-class runtime concurrent Genesys sessions ~serialize the transcode CPU; ratio ~= sessions confirms the R6 1-vCPU concern (a production transcode would move to a C codec / native lib).",
+    "serialization_ratio": 2.96,
+    "single_session_ms": 38.865,
+    "target_sessions": 3
+  },
+  "sample": {
+    "answer_ms": 4000,
+    "caller_ms": 2000,
+    "turns_per_codec": 50
+  },
+  "spike": "TASK-WEB-025"
+}

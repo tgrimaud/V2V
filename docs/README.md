@@ -53,6 +53,7 @@
 - Release process (repeatable deploy/rollback, authored in Sprint 11): [`operations/release-process.md`](operations/release-process.md)
 - Backup / restore runbook (RPO/RTO, TASK-OPS-008): [`operations/backup-restore.md`](operations/backup-restore.md)
 - Pilot request flow (eir-ai4cc-tst): [`operations/flow-requests-eir-ai4cc-tst.md`](operations/flow-requests-eir-ai4cc-tst.md)
+- Genesys Audio Connector live cloud-leg measurement runbook (TASK-WEB-025): [`operations/genesys-live-measurement-runbook.md`](operations/genesys-live-measurement-runbook.md)
 - QA reports index: [`qa/`](qa/)
 - Observability notes: [`observability/`](observability/)
 - Operational backlog: [`operations/backlog.md`](operations/backlog.md)
