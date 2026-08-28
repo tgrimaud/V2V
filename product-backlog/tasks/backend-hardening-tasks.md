@@ -1574,9 +1574,12 @@ Scenario: The handoff decision and payload stay backend-owned
 ADR-0040/0049, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Status:** 🔧 In Progress — backend contract implemented on `task/TASK-BE-037-normalized-channel-envelope`
+(off `feat/sprint-13-genesys-audio-connector`); `mvn test` green (422). Pending adversarial review + QA +
+user validation. The Python Genesys adapter that *populates* the envelope is out of scope (voice runtime,
+TASK-WEB-041); this ticket delivers the backend-side contract the adapter targets.
 **Priority:** High (supports **R5**; foundation for TASK-BE-036)
-**Branch:** `task/TASK-BE-037-genesys-channel-envelope` (off the sprint branch, when gated)
+**Branch:** `task/TASK-BE-037-normalized-channel-envelope` (off the sprint branch)
 
 ### Context
 
@@ -1612,3 +1615,37 @@ Scenario: Escalation context rides the envelope
 - Envelope fields populated by the Genesys adapter; memory keyed on `external_session_id`.
 - No Genesys-specific rule in the domain; the contract matches the existing channels (ADR-0009).
 - Backend unit tests cover the envelope mapping + idempotent duplicate-delivery handling.
+
+### Implementation note (2026-08-28)
+
+Backend-only, hexagonal, no channel-specific rule in the domain (ADR-0009 / ADR-0001 hold). What landed:
+
+- **Domain value objects** (`conversation/domain/model/valueobject/`):
+  - `ChannelEnvelope` (pure record) — the 6 envelope fields `channel`, `external_session_id`,
+    `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`. Normalizing factory `of(...)`
+    strips control chars, trims, length-bounds (≤200) and lowercases the channel; blank optionals → null;
+    unknown `reply_mode` is rejected. Helpers: `conversationKey()` (the memory key = external session id),
+    `hasIdempotencySignal()`, `effectiveIdempotencyKey()` (explicit key, else derived
+    `channel:external_session_id:message_id`).
+  - `ReplyMode` enum (`voice`/`text`) — null/blank → `VOICE`; unknown → `IllegalArgumentException` (→ 400).
+- **Port + service:** `DeliveryDeduplicationPort` (out) + `IdempotentDeliveryGuard` (domain service) —
+  de-duplicates only when an idempotency signal is present, so the existing web path is untouched.
+- **Adapter + wiring:** `InMemoryDeliveryDeduplicationAdapter` (bounded LRU) wired in `ConversationConfig`
+  (`deliveryDeduplicationPort`, `idempotentDeliveryGuard`; cap via
+  `voice-support.conversation.idempotency.max-keys`). Per-context config, not a global `DomainServiceConfig`
+  (this repo uses the context-first Hive layout).
+- **Contract plug-in:** `ConverseRequest` gains the 5 optional snake_case envelope fields (global Jackson
+  SNAKE_CASE strategy) + `toEnvelope()` (prefers `external_session_id`, falls back to `conversation_id`).
+  `ConverseController` builds the envelope, keys memory on `conversationKey()`, and short-circuits a
+  duplicate delivery to a safe listen prompt (no reprocess / no double memory append). `ConverseStreamSession`
+  keys streaming memory on the same envelope key. Existing `/api/conversation/*` contracts and the null-domain
+  voice contract are unchanged (envelope fields optional).
+- **Runtime-affecting → OTel/logs:** new `voice_support.channel_delivery` counter (channel + reply_mode +
+  duplicate) and `[CHANNEL]` structured log carrying the correlation id; `[CONVERSE]`/`[CONVERSE-STREAM]`
+  logs now report the resolved `session_key`.
+- **Tests (manual fakes, no Mockito):** `ChannelEnvelopeTest`, `ReplyModeTest`, `IdempotentDeliveryGuardTest`,
+  `InMemoryDeliveryDeduplicationAdapterTest`, `ConverseControllerEnvelopeTest` (memory keying + duplicate),
+  and snake_case wire round-trip + duplicate tests in `ConverseControllerTest`. Full suite: 422 pass.
+- **Out of scope (unchanged):** the Python Genesys adapter that fills the envelope (TASK-WEB-041) and the
+  handoff transport that produces `escalation_context` (TASK-BE-036). Streaming duplicate short-circuit is a
+  follow-up (batch `/converse` covers idempotent duplicate handling for V1).
