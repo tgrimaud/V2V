@@ -1574,9 +1574,13 @@ Scenario: The handoff decision and payload stay backend-owned
 ADR-0040/0049, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Status:** 🔧 In Progress — backend contract implemented + adversarial-review remediation applied on
+`task/TASK-BE-037-normalized-channel-envelope` (off `feat/sprint-13-genesys-audio-connector`); `mvn test`
+green (432, ArchUnit incl.). Pending re-run of adversarial review + QA + user validation. The Python Genesys
+adapter that *populates* the envelope is out of scope (voice runtime, TASK-WEB-041); this ticket delivers the
+backend-side contract the adapter targets.
 **Priority:** High (supports **R5**; foundation for TASK-BE-036)
-**Branch:** `task/TASK-BE-037-genesys-channel-envelope` (off the sprint branch, when gated)
+**Branch:** `task/TASK-BE-037-normalized-channel-envelope` (off the sprint branch)
 
 ### Context
 
@@ -1612,3 +1616,74 @@ Scenario: Escalation context rides the envelope
 - Envelope fields populated by the Genesys adapter; memory keyed on `external_session_id`.
 - No Genesys-specific rule in the domain; the contract matches the existing channels (ADR-0009).
 - Backend unit tests cover the envelope mapping + idempotent duplicate-delivery handling.
+
+### Implementation note (2026-08-28)
+
+Backend-only, hexagonal, no channel-specific rule in the domain (ADR-0009 / ADR-0001 hold). What landed:
+
+- **Domain value objects** (`conversation/domain/model/valueobject/`):
+  - `ChannelEnvelope` (pure record) — the 6 envelope fields `channel`, `external_session_id`,
+    `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`. Normalizing factory `of(...)`
+    strips control chars, trims, length-bounds (≤200) and lowercases the channel; blank optionals → null;
+    unknown `reply_mode` is rejected. Helpers: `conversationKey()` (the memory key = external session id),
+    `hasIdempotencySignal()`, `effectiveIdempotencyKey()` (explicit key, else derived
+    `channel:external_session_id:message_id`).
+  - `ReplyMode` enum (`voice`/`text`) — null/blank → `VOICE`; unknown → `IllegalArgumentException` (→ 400).
+- **Port + service:** `DeliveryDeduplicationPort` (out) + `IdempotentDeliveryGuard` (domain service) —
+  de-duplicates only when an idempotency signal is present, so the existing web path is untouched.
+- **Adapter + wiring:** `InMemoryDeliveryDeduplicationAdapter` (bounded LRU) wired in `ConversationConfig`
+  (`deliveryDeduplicationPort`, `idempotentDeliveryGuard`; cap via
+  `voice-support.conversation.idempotency.max-keys`). Per-context config, not a global `DomainServiceConfig`
+  (this repo uses the context-first Hive layout).
+- **Contract plug-in:** `ConverseRequest` gains the 5 optional snake_case envelope fields (global Jackson
+  SNAKE_CASE strategy) + `toEnvelope()` (prefers `external_session_id`, falls back to `conversation_id`).
+  `ConverseController` builds the envelope, keys memory on `conversationKey()`, and short-circuits a
+  duplicate delivery to a safe listen prompt (no reprocess / no double memory append). `ConverseStreamSession`
+  keys streaming memory on the same envelope key. Existing `/api/conversation/*` contracts and the null-domain
+  voice contract are unchanged (envelope fields optional).
+- **Runtime-affecting → OTel/logs:** new `voice_support.channel_delivery` counter (channel + reply_mode +
+  duplicate) and `[CHANNEL]` structured log carrying the correlation id; `[CONVERSE]`/`[CONVERSE-STREAM]`
+  logs now report the resolved `session_key`.
+- **Tests (manual fakes, no Mockito):** `ChannelEnvelopeTest`, `ReplyModeTest`, `IdempotentDeliveryGuardTest`,
+  `InMemoryDeliveryDeduplicationAdapterTest`, `ConverseControllerEnvelopeTest` (memory keying + duplicate),
+  and snake_case wire round-trip + duplicate tests in `ConverseControllerTest`. Full suite: 422 pass.
+- **Out of scope (unchanged):** the Python Genesys adapter that fills the envelope (TASK-WEB-041) and the
+  handoff transport that produces `escalation_context` (TASK-BE-036).
+
+### Adversarial-review remediation (2026-08-28)
+
+Applied to clear the ≥90 gate. `mvn test` green (432, ArchUnit incl.); `git diff --check` clean. Nothing
+merged (user is final validator).
+
+- **[Major #1] Idempotent dedup on the streaming path.** `/converse-stream` (the primary voice path —
+  `VOICE_BACKEND_STREAM` on by default) now runs the same guard as batch `/converse`. `ConverseStreamSession`
+  is wired with `IdempotentDeliveryGuard`; a duplicate delivery is short-circuited to the safe listen prompt
+  with **no** LLM call, no memory append and no double answer, preserving the SSE `chunk`/`done`/`error`
+  contract and the null-domain voice contract. New test `ConverseStreamControllerEnvelopeTest` proves the
+  underlying stream is opened **0** times on a duplicate (counting fake `ConverseStreamUseCase`).
+- **[Major #2] `genesys` added to the metrics channel allow-list.** `BackendTelemetry.DEFAULT_ALLOWED_CHANNELS`
+  is now `web,web_voice,phone,whatsapp,genesys,api` (still env-overridable via
+  `voice-support.observability.allowed-channels`), so a Genesys delivery is tagged `channel=genesys` in
+  `voice_support.channel_delivery` / `voice_support.slice` instead of collapsing to `other`. New test
+  `keepsGenesysChannelFirstClass` in `BackendTelemetryTest`.
+- **[Major #3] Retry-after-failure dedup semantics.** The key is now **confirmed on success / released on
+  failure** rather than committed on receipt. `DeliveryDeduplicationPort` gains `release(key)`
+  (`InMemoryDeliveryDeduplicationAdapter` evicts under the same lock); `IdempotentDeliveryGuard` gains
+  `releaseOnFailure(envelope)`. `isDuplicate` still reserves atomically (`registerIfNew`), so two in-flight
+  identical deliveries do not both process; the reservation is dropped when the turn throws so a legitimate
+  retry (e.g. upstream 503) with the same `idempotency_key` is reprocessed. Wired into **both** `/converse`
+  (try/catch → release → rethrow) and `/converse-stream` (release in `run()`'s finally, only for a
+  reservation this session actually made). Tests: `IdempotentDeliveryGuardTest` (released→reprocessed,
+  confirmed→deduped, no-signal release no-op) and `ConverseControllerEnvelopeTest`
+  (`reprocesses_a_retry_with_the_same_idempotency_key_after_the_first_turn_fails`).
+- **[Minor] Namespaced explicit idempotency keys.** `ChannelEnvelope.effectiveIdempotencyKey()` now returns
+  `channel:external_session_id:<key>` for explicit keys too (matching the derived branch), so two
+  channels/sessions reusing the same counter space cannot falsely dedupe. Tests updated/added in
+  `ChannelEnvelopeTest` (namespaced key + distinct-sessions).
+- **[Minor] Added tests.** Unknown `reply_mode` → **400 `ERR_400`** (generic message, rejected value never
+  echoed) on **both** `/converse` (`ConverseControllerReplyModeTest`) and `/converse-stream`
+  (`ConverseStreamControllerReplyModeTest`, resolved synchronously before a stream opens); a regression
+  pinning that a normal control-free `conversation_id` (UUID, ≤200) maps **unchanged** through `sanitize()`
+  into the memory key (`ChannelEnvelopeTest`).
+- **Correctly deferred (unchanged):** `escalation_context` consumption (TASK-BE-036); the `:`-in-field
+  low-risk collision (optional, not escaped).

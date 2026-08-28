@@ -1,13 +1,12 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
-import com.voicesupport.shared.config.JacksonConfig;
-import com.voicesupport.shared.exception.UpstreamUnavailableException;
-import com.voicesupport.shared.observability.BackendTelemetry;
-import com.voicesupport.shared.observability.CorrelationId;
-import com.voicesupport.shared.web.rest.GlobalExceptionHandler;
+import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
+import com.voicesupport.shared.config.JacksonConfig;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.web.rest.GlobalExceptionHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,19 +21,15 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// When the LLM/dependency is unavailable, /converse surfaces a sanitized 503 ERR_UPSTREAM
-// carrying the runtime correlation id (TASK-BE-012). The voice runtime degrades that to a safe
-// spoken turn on its side; the failure stays observable and leaks no internal detail.
+// TASK-BE-037 review #4: an unknown reply_mode is a caller error. It must map to a sanitized 400
+// ERR_400 with a generic message, never echoing the rejected value (log/response injection guard).
 @WebMvcTest(controllers = ConverseController.class)
 @Import({GlobalExceptionHandler.class, JacksonConfig.class})
-@DisplayName("ConverseController degraded mode (upstream unavailable)")
-class ConverseDegradedTest {
-
-    private static final String LEAK_MARKER = "mistral-internal:443 timeout SECRET-key";
+@DisplayName("ConverseController reply_mode validation (TASK-BE-037)")
+class ConverseControllerReplyModeTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -43,9 +38,7 @@ class ConverseDegradedTest {
     static class Config {
         @Bean
         ConverseUseCase converseUseCase() {
-            return (transcript, conversationId) -> {
-                throw new UpstreamUnavailableException("call failed " + LEAK_MARKER);
-            };
+            return (transcript, conversationId) -> GeneratedAnswer.grounded("ok", 0.8);
         }
 
         @Bean
@@ -60,20 +53,20 @@ class ConverseDegradedTest {
     }
 
     @Test
-    @DisplayName("an upstream failure yields a sanitized 503 with the runtime correlation id and no leak")
-    void upstreamFailureIsSanitized503() throws Exception {
+    void an_unknown_reply_mode_is_rejected_with_a_sanitized_400() throws Exception {
+        // GIVEN a delivery carrying an unsupported reply_mode
+        // WHEN it reaches /converse
         MvcResult result = mockMvc.perform(post("/api/conversation/converse")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"transcript\":\"Pourquoi ma facture change ?\","
-                                + "\"conversation_id\":\"c1\",\"correlation_id\":\"corr-degraded\",\"channel\":\"web\"}"))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error_code").value("ERR_UPSTREAM"))
-                .andExpect(jsonPath("$.correlation_id").value("corr-degraded"))
-                .andExpect(header().string(CorrelationId.HEADER, "corr-degraded"))
+                        .content("{\"transcript\":\"Bonjour\",\"channel\":\"genesys\","
+                                + "\"reply_mode\":\"smoke-signal\"}"))
+                // THEN it is a generic 400 ERR_400 that never echoes the rejected value
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error_code").value("ERR_400"))
+                .andExpect(jsonPath("$.message").value("The request is invalid."))
                 .andReturn();
 
-        String body = result.getResponse().getContentAsString();
-        assertFalse(body.contains("mistral-internal"), "response leaked an internal host");
-        assertFalse(body.contains("SECRET-key"), "response leaked a secret-like token");
+        assertFalse(result.getResponse().getContentAsString().contains("smoke-signal"),
+                "response echoed the rejected reply_mode");
     }
 }

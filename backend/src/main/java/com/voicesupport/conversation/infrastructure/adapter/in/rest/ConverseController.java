@@ -1,7 +1,9 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.observability.Slices;
@@ -41,14 +43,17 @@ public class ConverseController {
     private static final String LISTEN_PROMPT = "Je vous écoute, posez-moi votre question.";
 
     private final ConverseUseCase converseUseCase;
+    private final IdempotentDeliveryGuard idempotentDeliveryGuard;
     private final BackendTelemetry telemetry;
     private final ApiKeyGuard apiKeyGuard;
 
     public ConverseController(
             ConverseUseCase converseUseCase,
+            IdempotentDeliveryGuard idempotentDeliveryGuard,
             BackendTelemetry telemetry,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseUseCase = converseUseCase;
+        this.idempotentDeliveryGuard = idempotentDeliveryGuard;
         this.telemetry = telemetry;
         this.apiKeyGuard = new ApiKeyGuard(apiKey);
     }
@@ -73,29 +78,56 @@ public class ConverseController {
         if (!apiKeyGuard.authorized(providedKey)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        // Align backend logs/metrics with the runtime's correlation id (authoritative, from the
-        // body) and the originating channel, so this turn's slices share one id end to end, and
-        // echo that id back (overwriting the filter's default) for runtime -> backend continuity.
-        CorrelationId.set(request.correlationId());
-        CorrelationId.setChannel(request.channel());
-        httpResponse.setHeader(CorrelationId.HEADER, CorrelationId.current());
+        ChannelEnvelope envelope = request.toEnvelope();
+        establishContext(request, envelope, httpResponse);
         if (!request.hasTranscript()) {
             return ResponseEntity.ok(ConverseResponse.of(LISTEN_PROMPT));
         }
-        long start = System.nanoTime();
-        // A missing/blank conversation id is treated as stateless (no shared memory bucket):
-        // the memory adapter returns empty history and skips persistence, so callers that omit
-        // the id can never see each other's turns.
-        GeneratedAnswer answer = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
-                () -> converseUseCase.converse(request.transcript(), request.conversationId(), request.language()));
-        logTurn(request, answer, elapsedMs(start));
-        return ResponseEntity.ok(ConverseResponse.from(answer));
+        if (idempotentDeliveryGuard.isDuplicate(envelope)) {
+            telemetry.recordChannelDelivery(envelope.replyMode().code(), true);
+            return ResponseEntity.ok(ConverseResponse.of(LISTEN_PROMPT));
+        }
+        return answerReleasingOnFailure(request, envelope);
     }
 
-    private void logTurn(ConverseRequest request, GeneratedAnswer answer, long durationMs) {
-        log.info("[CONVERSE] channel={} conversation_id={} correlation_id={} grounded={} confidence={} "
+    // Confirms the idempotency reservation only when the turn completes: a failure (e.g. upstream
+    // 503) releases the reserved key so a legitimate retry with the same idempotency_key is
+    // reprocessed instead of being swallowed as a duplicate (TASK-BE-037 review #3).
+    private ResponseEntity<ConverseResponse> answerReleasingOnFailure(
+            ConverseRequest request, ChannelEnvelope envelope) {
+        try {
+            return answer(request, envelope);
+        } catch (RuntimeException e) {
+            idempotentDeliveryGuard.releaseOnFailure(envelope);
+            throw e;
+        }
+    }
+
+    // Aligns backend logs/metrics with the runtime's correlation id (authoritative, from the body)
+    // and the normalized channel, so this turn's slices share one id end to end, and echoes that id
+    // back (overwriting the filter's default) for runtime -> backend continuity.
+    private void establishContext(
+            ConverseRequest request, ChannelEnvelope envelope, HttpServletResponse httpResponse) {
+        CorrelationId.set(request.correlationId());
+        CorrelationId.setChannel(envelope.channel());
+        httpResponse.setHeader(CorrelationId.HEADER, CorrelationId.current());
+    }
+
+    private ResponseEntity<ConverseResponse> answer(ConverseRequest request, ChannelEnvelope envelope) {
+        telemetry.recordChannelDelivery(envelope.replyMode().code(), false);
+        long start = System.nanoTime();
+        // Memory keys on the envelope's conversation key (external_session_id, falling back to
+        // conversation_id) so a Genesys call stays one conversation; a blank key is stateless.
+        GeneratedAnswer generated = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
+                () -> converseUseCase.converse(request.transcript(), envelope.conversationKey(), request.language()));
+        logTurn(request, envelope, generated, elapsedMs(start));
+        return ResponseEntity.ok(ConverseResponse.from(generated));
+    }
+
+    private void logTurn(ConverseRequest request, ChannelEnvelope envelope, GeneratedAnswer answer, long durationMs) {
+        log.info("[CONVERSE] channel={} session_key={} correlation_id={} grounded={} confidence={} "
                         + "chars={} duration_ms={}",
-                nullSafe(request.channel()), nullSafe(request.conversationId()), nullSafe(request.correlationId()),
+                nullSafe(envelope.channel()), nullSafe(envelope.conversationKey()), nullSafe(request.correlationId()),
                 answer.grounded(), formatConfidence(answer.confidence()),
                 answer.text() != null ? answer.text().length() : 0, durationMs);
     }

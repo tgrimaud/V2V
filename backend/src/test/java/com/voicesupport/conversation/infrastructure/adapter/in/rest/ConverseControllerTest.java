@@ -2,6 +2,8 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
+import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
@@ -36,6 +38,11 @@ class ConverseControllerTest {
         @Bean
         ConverseUseCase converseUseCase() {
             return (transcript, conversationId) -> GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
+        }
+
+        @Bean
+        IdempotentDeliveryGuard idempotentDeliveryGuard() {
+            return new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000));
         }
 
         @Bean
@@ -101,5 +108,38 @@ class ConverseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.text").value("Je vous écoute, posez-moi votre question."))
                 .andExpect(jsonPath("$.confidence").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("binds the snake_case channel envelope (external_session_id, reply_mode, …) — TASK-BE-037")
+    void bindsChannelEnvelope() throws Exception {
+        // GIVEN a Genesys delivery on the normalized envelope (snake_case wire fields)
+        // WHEN it reaches the backend
+        // THEN it is a first-class channel turn answered on the shared contract
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transcript\":\"Pourquoi ma facture change ?\",\"channel\":\"genesys\","
+                                + "\"correlation_id\":\"corr-1\",\"external_session_id\":\"genesys-conv-9\","
+                                + "\"message_id\":\"evt-1\",\"idempotency_key\":\"idem-1\",\"reply_mode\":\"voice\","
+                                + "\"escalation_context\":\"handoff-7\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("La proration explique l'écart."));
+    }
+
+    @Test
+    @DisplayName("a duplicate delivery (same idempotency_key) is not answered twice — TASK-BE-037")
+    void duplicateDeliveryIsShortCircuited() throws Exception {
+        String delivery = "{\"transcript\":\"Pourquoi ma facture change ?\",\"channel\":\"genesys\","
+                + "\"external_session_id\":\"genesys-conv-dup\",\"idempotency_key\":\"idem-dup\"}";
+
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON).content(delivery))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("La proration explique l'écart."));
+
+        mockMvc.perform(post("/api/conversation/converse")
+                        .contentType(MediaType.APPLICATION_JSON).content(delivery))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("Je vous écoute, posez-moi votre question."));
     }
 }

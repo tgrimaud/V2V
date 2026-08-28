@@ -1,12 +1,12 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
-import com.voicesupport.conversation.domain.model.TokenStream;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.web.rest.GlobalExceptionHandler;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,25 +16,26 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Same endpoint with an api-key configured: a request without the matching x-api-key header is
-// rejected synchronously (401) before any stream is opened.
-@WebMvcTest(ConverseStreamController.class)
-@Import(JacksonConfig.class)
-@TestPropertySource(properties = "voice-support.conversation.api-key=secret")
-@DisplayName("ConverseStreamController SSE contract (api-key enforced)")
-class ConverseStreamControllerAuthTest {
+// TASK-BE-037 review #4: the streaming endpoint must reject an unknown reply_mode the same way as
+// batch /converse — a sanitized 400 ERR_400, resolved synchronously (the envelope is built on the
+// request thread) so it never opens a stream and never echoes the rejected value.
+@WebMvcTest(controllers = ConverseStreamController.class)
+@Import({GlobalExceptionHandler.class, JacksonConfig.class})
+@DisplayName("ConverseStreamController reply_mode validation (TASK-BE-037)")
+class ConverseStreamControllerReplyModeTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -43,7 +44,7 @@ class ConverseStreamControllerAuthTest {
     static class Config {
         @Bean
         ConverseStreamUseCase converseStreamUseCase() {
-            return (transcript, conversationId) -> streamOf();
+            return (transcript, conversationId) -> onChunk -> GeneratedAnswer.grounded("ok", 0.9);
         }
 
         @Bean
@@ -60,29 +61,24 @@ class ConverseStreamControllerAuthTest {
         ExecutorService sseStreamExecutor() {
             return new NoopExecutorService();
         }
-
-        private static TokenStream streamOf() {
-            return onChunk -> GeneratedAnswer.grounded("ok", 0.9);
-        }
     }
 
     @Test
-    @DisplayName("without the matching x-api-key the request is rejected with 401")
-    void rejectsMissingApiKey() throws Exception {
-        mockMvc.perform(post("/api/conversation/converse-stream")
+    void an_unknown_reply_mode_is_rejected_with_a_sanitized_400_before_a_stream_opens() throws Exception {
+        // GIVEN a streaming delivery carrying an unsupported reply_mode
+        // WHEN it reaches /converse-stream
+        MvcResult result = mockMvc.perform(post("/api/conversation/converse-stream")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"transcript\":\"Bonjour\",\"channel\":\"web\"}"))
-                .andExpect(status().isUnauthorized());
-    }
+                        .content("{\"transcript\":\"Bonjour\",\"channel\":\"genesys\","
+                                + "\"reply_mode\":\"smoke-signal\"}"))
+                // THEN it is a generic 400 ERR_400 that never echoes the rejected value
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error_code").value("ERR_400"))
+                .andExpect(jsonPath("$.message").value("The request is invalid."))
+                .andReturn();
 
-    @Test
-    @DisplayName("with the matching x-api-key the stream is opened (async started)")
-    void acceptsMatchingApiKey() throws Exception {
-        mockMvc.perform(post("/api/conversation/converse-stream")
-                        .header("x-api-key", "secret")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"transcript\":\"Bonjour\",\"channel\":\"web\"}"))
-                .andExpect(request().asyncStarted());
+        assertFalse(result.getResponse().getContentAsString().contains("smoke-signal"),
+                "response echoed the rejected reply_mode");
     }
 
     static class NoopExecutorService extends AbstractExecutorService {

@@ -12,13 +12,16 @@ import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.in.WarmUpUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
+import com.voicesupport.conversation.domain.port.out.DeliveryDeduplicationPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
+import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
+import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.ConversationTurnStore;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.RedisConversationMemoryAdapter;
@@ -125,6 +128,22 @@ public class ConversationConfig {
         log.info("[CONVERSATION-MEMORY] store=memory max-turns={} max-conversations={} — process-local (single node)",
                 maxTurns, maxConversations);
         return new InMemoryConversationMemoryAdapter(maxTurns, maxConversations);
+    }
+
+    // Normalized channel envelope de-duplication (TASK-BE-037, ADR-0009): a process-local bounded
+    // LRU of recently-seen idempotency keys so an at-least-once channel (e.g. the Genesys Audio
+    // Connector) that re-delivers the same inbound event is not answered twice. Only deliveries
+    // carrying an idempotency signal are de-duplicated, so the current web path is unaffected. A
+    // shared store (Redis/DB) can replace this behind DeliveryDeduplicationPort for multi-node.
+    @Bean
+    public DeliveryDeduplicationPort deliveryDeduplicationPort(
+            @Value("${voice-support.conversation.idempotency.max-keys:100000}") int maxKeys) {
+        return new InMemoryDeliveryDeduplicationAdapter(maxKeys);
+    }
+
+    @Bean
+    public IdempotentDeliveryGuard idempotentDeliveryGuard(DeliveryDeduplicationPort deliveryDeduplicationPort) {
+        return new IdempotentDeliveryGuard(deliveryDeduplicationPort);
     }
 
     @Bean
