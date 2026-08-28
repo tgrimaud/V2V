@@ -1316,3 +1316,42 @@ ADR-0029 latency gate still reads FAIL everywhere; no within-branch duplicate AD
   dev-only plaintext Postgres password, redis-password-in-argv, and the manual Liquibase bootstrap
   step. These are hygiene/reproducibility items with no runtime or security impact on the
   Ansible-driven pilot path; ticket them if/when they become blocking.
+
+## 2026-08-28 — Forward-port BUG-017 backlog onto v0.7.0 mainline + prune 3 redundant branches
+
+Backlog/docs-only port. The retired `fix/BUG-017-voice-turn-hang` branch had a single genuinely
+unique commit (`4617fa9` — "file BUG-017 (voice turn stuck in thinking) + 3 P1 fix tickets"); its
+other 7 commits were the OPS-009/BE-034/ADR-0048 tail already on `feat/restart-from-scratch`. No
+fix **code** existed anywhere — BUG-017 was an OPEN P1 bug (voice turn hangs in "thinking"; no
+wall-clock turn deadline) plus a 3-ticket fix plan. That record was not yet on the mainline, so it
+was re-filed here with collision-free ids, and the three redundant branches were pruned.
+
+### ID collision resolution (checked across `feat/restart-from-scratch`, `feat/sprint-13-genesys-audio-connector`, `task/TASK-BE-033-llm-provider-benchmark`, `task/TASK-INFRA-011-voice-health-container-probe`, `task/TASK-OPS-006-pin-actions-sha`, `main`)
+
+| Original id | New id | Reason |
+|---|---|---|
+| BUG-017 | **BUG-018** | BUG-017 is already taken on the mainline by a *different* bug (barge-in count anomaly on headless WS turns). Next free BUG id = 018 (max anywhere was 017). |
+| TASK-WEB-037 | **TASK-WEB-045** | 037 is taken by the v0.7.0 aiohttp single-port track. Next free TASK-WEB (max anywhere = 044 on sprint-13) = 045. |
+| TASK-WEB-038 | **TASK-WEB-046** | 038 is taken by the v0.7.0 aiohttp single-port track. Next free TASK-WEB = 046. |
+| TASK-OPS-010 | **TASK-OPS-010** (kept) | Verified free on every checked branch (a real gap: OPS-009 and OPS-011 exist, 010 did not). No collision, so kept to preserve cross-references and fill the gap. |
+
+Cross-references inside the ported tickets were rewritten to the new ids (BUG-018, TASK-WEB-045/046);
+each renumbered ticket carries a one-line "originally filed as … renumbered to avoid collision" note.
+Statuses preserved as filed: 📋 Planned / P1, planning-only, not implemented.
+
+### Files created / edited
+- `product-backlog/bugs/BUG-018-voice-turn-stuck-in-thinking-until-refresh.md` — new bug ticket (re-filed from `4617fa9`, ids updated)
+- `product-backlog/tasks/web-voice-tasks.md` — appended TASK-WEB-045 + TASK-WEB-046 ticket bodies
+- `product-backlog/tasks/deployment-tasks.md` — appended TASK-OPS-010 ticket body
+- `product-backlog/backlog-index.md` — registry rows: BUG-018 (Bugs table) + TASK-WEB-045 / TASK-WEB-046 / TASK-OPS-010 (Technical Tasks table)
+- `done-tasks.md` — this entry
+
+### Branch prune (local + remote, `-D`, user-approved; not ancestors of restart)
+- `fix/BUG-017-voice-turn-hang` — unique backlog content now ported; the rest was already on restart
+- `task/TASK-INFRA-011-voice-health-container-probe` — content already on restart (TASK-INFRA-011 implemented + registered)
+- `task/TASK-OPS-006-pin-actions-sha` — superseded (content on restart)
+
+Left untouched: `main`, `feat/restart-from-scratch`, `feat/sprint-13-genesys-audio-connector`,
+`task/TASK-BE-033-llm-provider-benchmark`. No force-push, no history rewrite. Ported via a short
+`chore/port-bug-017-backlog` branch merged `--no-ff` into `feat/restart-from-scratch` (chore branch
+deleted locally after merge, never pushed).

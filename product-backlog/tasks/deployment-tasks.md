@@ -1402,3 +1402,86 @@ Scenario: The pilot CSV corpus is French
   until the whole parse phase completes, then CSV chunks appear per document. This is why the
   sync is fired async and gated on `SyncReport.processed`, and why `voice-support.embedding.timeout-ms`
   is raised to 120 s on the backend tier (`java_opts`) for the sync batch.
+
+---
+
+## TASK-OPS-010 - Bridge active-session `/drain` endpoint + deploy wiring
+
+> **ID note:** Originally filed as **TASK-OPS-010** on the retired `fix/BUG-017-voice-turn-hang`
+> branch. The id was verified **free** on the mainline (no other `TASK-OPS-010` exists across the
+> active branches), so it is kept unchanged; only its BUG/WEB cross-references were renumbered
+> (BUG-017 → BUG-018, TASK-WEB-037/038 → TASK-WEB-045/046) to match the ported tickets.
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** ADR-0038 (pilot deployment), ADR-0025 (native barge-in / audio drain the bridge already uses per-turn)
+**Related:** BUG-018 (stuck-in-thinking incident — P1 fix #3), TASK-OPS-002 (Ansible session-draining hook, grace-only today), TASK-INFRA-007 (LB drain/enable via HAProxy admin socket — stops NEW calls, not live ones), TASK-INFRA-011 (known voice health-gate loopback false-negative), TASK-WEB-008 (per-turn audio `drain()`)
+**Depends on:** TASK-OPS-002 (compose deploy + drain hook), TASK-INFRA-007 (LB drain wiring)
+**Classification:** V1 pilot deployment (release correctness) + voice runtime
+**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Priority:** High
+**Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (to create when work starts)
+**Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a bridge recreate / deploy / HAProxy failover mid-turn can hard-cut a live call and strand the UI, because there is no active-session drain.
+
+### Context
+
+The voice bridge has **no active-session `/drain` endpoint** — this is a documented gap in
+`deploy/ansible/group_vars/voice.yml` ("The bridge has no active-session endpoint yet, so
+draining is best-effort … A hard 'wait until 0 active calls' still needs a bridge /drain
+endpoint (follow-up)"). Today a redeploy relies on three best-effort levers only:
+`serial: 1` (one bridge recreates at a time so the VIP peer keeps serving), the
+TASK-INFRA-007 LB drain hook (stops **new** calls hitting the node via the HAProxy admin
+socket), and a bounded `voice_drain_grace_seconds` grace window. None of these **wait for
+in-flight calls to finish**, so a call still in progress when the grace window elapses is
+hard-cut with no terminal signal — one of the ways BUG-018's "stuck in thinking" can occur
+during a deploy/failover. Note: the existing `drain()` in `web_voice/streaming_runtime.py` /
+`webrtc_signaling.py` (TASK-WEB-008 / ADR-0025) drains a **single turn's** TTS audio buffer;
+it is **not** a session-level graceful-drain for deploys.
+
+### Objective
+
+Add a graceful active-session drain to the bridge and wire it into the Ansible voice deploy
+so a bridge recreate/deploy/failover lets live calls wind down (bounded) instead of
+hard-cutting them, replacing the grace-only ceiling documented in `group_vars/voice.yml`.
+
+### Scope
+
+- **Bridge:** an active-session drain capability (e.g. a control endpoint / signal) that
+  stops accepting new sessions and reports when in-flight sessions have drained, so the
+  deploy can wait for "0 active calls" up to a bounded timeout before recreate; on timeout,
+  end remaining calls gracefully (emit the terminal control signal per TASK-WEB-046) rather
+  than a silent hard-cut. Reuse the existing active-session accounting
+  (`voice_max_webrtc_sessions` gauge / WS active-session gauge) rather than new state.
+- **Deploy wiring:** call the bridge drain before recreate in the Ansible voice deploy
+  (`roles/compose_tier`), superseding the grace-only path; keep it fail-safe (a drain
+  failure degrades to today's grace behaviour, never aborts the whole play — consistent
+  with the `voice_lb_socket_hosts` opt-in safety net).
+- **Health-gate interaction:** account for the known voice HTTP health-gate loopback
+  false-negative (TASK-INFRA-011) so the drain step does not compound a false abort during
+  a rolling deploy; confirm health out-of-band as documented.
+- **Docs:** update `deploy/ansible/group_vars/voice.yml` (remove the "no /drain endpoint
+  yet" caveat), `docs/operations/release-process.md` and the first-deploy runbook.
+- OpenTelemetry: record the drain outcome (sessions drained vs force-ended, elapsed) so a
+  deploy that cut a live call is observable.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A redeploy during an active call drains rather than hard-cuts
+  Given an active voice call on a bridge that is being recreated by the deploy
+  When the voice deploy runs against that bridge
+  Then the bridge stops accepting new sessions
+    And the deploy waits for the in-flight call to finish (up to a bounded timeout)
+    And the call is not hard-cut mid-turn before the container recreates
+
+Scenario: Drain is fail-safe
+  Given the bridge drain cannot complete (endpoint error or timeout exceeded)
+  Then remaining calls are ended gracefully with a terminal signal
+    And the deploy degrades to the grace-window behaviour without aborting the whole play
+```
+
+### Out Of Scope
+
+- The backend/runtime wall-clock turn deadline (TASK-WEB-045) and the browser watchdog
+  (TASK-WEB-046) — sibling BUG-018 P1 fixes.
+- Repointing the health gate off loopback (TASK-INFRA-011) — only accounted for here, not
+  fixed.
