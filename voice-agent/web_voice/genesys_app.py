@@ -36,7 +36,8 @@ from pipecat.utils.security.allowed_origins import is_origin_allowed
 from voice_common.telemetry import TelemetryRecorder
 
 from .envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL, ChannelEnvelope
-from .genesys_cap import DrainOnce, cancel_cap, schedule_cap, wire_disconnect_drain
+from .genesys_barge_in_eot import GenesysCallControl, wire_genesys_call_control
+from .genesys_cap import cancel_cap, schedule_cap
 from .genesys_config import (
     CLIENT_DISCONNECTED_EVENT,
     DEFAULT_CAP_DRAIN_GRACE_S,
@@ -44,6 +45,7 @@ from .genesys_config import (
     DEFAULT_MAX_SESSION_S,
     emit_gauge,
     genesys_codec_config,
+    genesys_conversation_id,
     record_started,
     reject,
 )
@@ -63,12 +65,6 @@ _logger = logging.getLogger(__name__)
 GENESYS_ROUTE = "/genesys/audiohook"
 # WS close code for an Origin the allowlist refuses (anti-CSWSH), matching `/ws`.
 WS_POLICY_VIOLATION = 1008
-
-
-def _conversation_id(request: web.Request) -> str | None:
-    """The Genesys conversationId from the AudioHook handshake (query, best-effort)."""
-    query = request.query
-    return query.get("conversationId") or query.get("conversation_id") or None
 
 
 def make_genesys_handler(
@@ -160,18 +156,20 @@ async def _serve_genesys_connection(
     """Own one Genesys audio session end to end (build -> run -> cap/teardown -> dump)."""
     telemetry = telemetry_factory()
     envelope = ChannelEnvelope.for_genesys_turn(
-        conversation_id=_conversation_id(request), language=default_language
+        conversation_id=genesys_conversation_id(request), language=default_language
     )
     cid = envelope.correlation_id
     serializer = _build_serializer(wire_codec, sample_rate, telemetry, cid)
     transport = _build_transport(websocket, serializer, sample_rate)
-    session, _ = factory.build_session(transport, envelope, telemetry)
-    drain = DrainOnce()
-    wire_disconnect_drain(transport, session, drain)
+    # farewell (ADR-0035) is wired to the drain teardown + voice.call_end reason (TASK-WEB-042).
+    session, farewell = factory.build_session(transport, envelope, telemetry)
+    control = wire_genesys_call_control(transport, session, farewell, telemetry, cid)
     active.count += 1
     record_started(telemetry, cid, envelope, wire_codec, active.count, max_sessions)
-    drain.cap = schedule_cap(session, drain, telemetry, cid, max_session_s, cap_drain_grace_s)
-    await _run_and_teardown(session, telemetry, cid, active, max_sessions, drain.cap, log)
+    control.drain.cap = schedule_cap(
+        session, control.drain, telemetry, cid, max_session_s, cap_drain_grace_s, on_cap=control.on_cap
+    )
+    await _run_and_teardown(session, telemetry, cid, active, max_sessions, control, log)
 
 
 async def _run_and_teardown(
@@ -180,7 +178,7 @@ async def _run_and_teardown(
     cid: str,
     active: _ActiveSessions,
     max_sessions: int,
-    cap: asyncio.Task | None,
+    control: GenesysCallControl,
     log: Callable[[TelemetryRecorder], None],
 ) -> None:
     try:
@@ -190,7 +188,9 @@ async def _run_and_teardown(
     except Exception:  # noqa: BLE001 - one failed turn must not raise out of the handler
         _logger.error("genesys session run failed", exc_info=True)
     finally:
-        cancel_cap(cap)
+        cancel_cap(control.drain.cap)
+        # Attribute the ending (TASK-WEB-042): no-op if farewell/cap already recorded a reason.
+        control.record_default()
         active.count = max(0, active.count - 1)
         telemetry.record(
             CLIENT_DISCONNECTED_EVENT, correlation_id=cid, channel=GENESYS_AUDIO_CONNECTOR_CHANNEL

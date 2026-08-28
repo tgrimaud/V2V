@@ -51,6 +51,15 @@ REASON_CAPACITY = "capacity"
 REASON_CAP_REACHED = "cap_reached"
 REASON_CAP_DRAIN_TIMEOUT = "cap_drain_timeout"
 
+# End-of-call telemetry vocabulary for the Genesys path (TASK-WEB-042). Same event name +
+# reason values as the WebRTC/WS path (webrtc_signaling `voice.call_end`) so call endings
+# aggregate across channels; always emitted with channel=genesys_audio_connector. The cap path
+# reuses REASON_CAP_REACHED above. The AudioHook transport surfaces a single "peer went away"
+# signal (no clean stop-vs-drop split like WebRTC), so it records one honest disconnect reason.
+CALL_END_EVENT = "voice.call_end"
+REASON_CUSTOMER_FAREWELL = "customer_farewell"
+REASON_CLIENT_DISCONNECT = "client_disconnect"
+
 
 def genesys_max_sessions_config() -> int:
     """Resolve the Genesys concurrency ceiling (DEC-014 target 3; env override)."""
@@ -167,6 +176,16 @@ async def reject(
     emit_gauge(telemetry, cid, active.count, max_sessions, "rejected")
     log(telemetry)
     await websocket.close(code=WS_TRY_AGAIN_LATER)
+
+
+def genesys_conversation_id(request: web.Request) -> str | None:
+    """The Genesys conversationId from the AudioHook handshake (query, best-effort).
+
+    Extracted from `genesys_app.py` (module-budget split) so the handler module stays lean;
+    the id becomes the turn correlation id + the deterministic one-trace `traceparent`.
+    """
+    query = request.query
+    return query.get("conversationId") or query.get("conversation_id") or None
 
 
 def _positive_int_env(env_var: str, default: int) -> int:

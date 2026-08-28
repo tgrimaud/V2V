@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from voice_common.telemetry import TelemetryRecorder
 
@@ -51,15 +51,24 @@ class DrainOnce:
         return True
 
 
-def wire_disconnect_drain(transport: Any, session: Any, drain: DrainOnce) -> None:
+def wire_disconnect_drain(
+    transport: Any,
+    session: Any,
+    drain: DrainOnce,
+    on_disconnect: Callable[[], None] | None = None,
+) -> None:
     """Drain the session when the peer disconnects so `session.run()` returns on its own.
 
     Cancels a still-pending cap first so the cap timer and the disconnect can never both
-    drain the same session (double-drain guard).
+    drain the same session (double-drain guard). `on_disconnect` (TASK-WEB-042) records the
+    call-end reason at the true trigger (the peer going away) before the drain; it is a plain
+    sync callback so it never blocks the teardown.
     """
 
     @transport.event_handler("on_client_disconnected")
     async def _on_disconnected(_transport, _client) -> None:  # noqa: ANN001 - pipecat callback
+        if on_disconnect is not None:
+            on_disconnect()
         cancel_cap(drain.cap)
         try:
             await drain.drain(session)
@@ -74,11 +83,19 @@ def schedule_cap(
     cid: str,
     max_session_s: float,
     grace: float,
+    on_cap: Callable[[], None] | None = None,
 ) -> asyncio.Task | None:
-    """Arm the graceful 15-min cap timer, or None when disabled (max_session_s <= 0)."""
+    """Arm the graceful 15-min cap timer, or None when disabled (max_session_s <= 0).
+
+    `on_cap` (TASK-WEB-042) records the call-end reason when the cap is actually reached,
+    before the graceful drain, so a cap-ended call is attributed as `cap_reached` and not as
+    a generic client disconnect.
+    """
     if max_session_s <= 0:
         return None
-    return asyncio.ensure_future(_cap_after(session, drain, telemetry, cid, max_session_s, grace))
+    return asyncio.ensure_future(
+        _cap_after(session, drain, telemetry, cid, max_session_s, grace, on_cap)
+    )
 
 
 async def _cap_after(
@@ -88,12 +105,15 @@ async def _cap_after(
     cid: str,
     delay: float,
     grace: float,
+    on_cap: Callable[[], None] | None = None,
 ) -> None:
     """At the cap, record it and drain gracefully within a hard grace bound (never a cut)."""
     try:
         await asyncio.sleep(delay)
     except asyncio.CancelledError:
         return
+    if on_cap is not None:
+        on_cap()
     telemetry.record(
         SESSION_CAP_EVENT,
         correlation_id=cid,
