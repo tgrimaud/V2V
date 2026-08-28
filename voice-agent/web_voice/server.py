@@ -15,6 +15,7 @@ coexist and produce identical output. The STT/TTS provider is selected with
 import argparse
 import base64
 import json
+import logging
 import os
 import socketserver
 import sys
@@ -53,6 +54,8 @@ from .runtime import (  # noqa: E402
     VoiceTurnProcessor,
     build_turn_processor,
 )
+
+_logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OPENAPI_PATH = Path(__file__).resolve().parent / "openapi.yaml"
@@ -516,15 +519,17 @@ def _build_genesys_handler(args, ingress, egress, backend):
 
     Rides aiohttp's own `WebSocketResponse` (no extra package), reusing the shared
     `SessionFactory` (transport label `genesys`) exactly like `/ws`. The endpoint is
-    **default-off** (`--genesys off`): until AudioHook signature/HMAC verification lands
-    (TASK-INFRA-012), it must stay closed + network-isolated, and even when explicitly
-    enabled (`auto`/`on`) it enforces an Origin allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`)
-    mirroring `/ws` (review Major #2 / ADR-0049). Concurrency, codec, the graceful 15-minute
-    cap and its hard drain grace are env-tunable (TASK-WEB-041 / ADR-0049).
+    **default-off** (`--genesys off`). When enabled (`auto`/`on`) it always attaches an
+    AudioHook connection authenticator (API key + HMAC signature, TASK-INFRA-012) and an
+    Origin allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`) as defense-in-depth. If enabled but
+    no API key + shared secret is configured the authenticator **fails closed** (refuses
+    every connection) — never opens (review Major #2 / ADR-0049). Concurrency, codec, the
+    graceful 15-minute cap and its hard drain grace are env-tunable (TASK-WEB-041).
     """
     if getattr(args, "genesys", "off") == "off":
         return None
     from .genesys_app import make_genesys_handler
+    from .genesys_auth import genesys_authenticator_from_env
     from .genesys_config import (
         genesys_allowed_origins_config,
         genesys_cap_drain_grace_s_config,
@@ -534,6 +539,14 @@ def _build_genesys_handler(args, ingress, egress, backend):
     )
     from .websocket_signaling import ws_language_config
 
+    authenticator = genesys_authenticator_from_env()
+    if not authenticator.configured:
+        _logger.warning(
+            "genesys endpoint enabled but AudioHook auth is unconfigured; failing CLOSED "
+            "(every connection refused). Set %s + %s to enable.",
+            "GENESYS_AUDIOHOOK_API_KEY",
+            "GENESYS_AUDIOHOOK_SECRET",
+        )
     return make_genesys_handler(
         _build_ws_session_factory(args, ingress, egress, backend, transport_label="genesys"),
         default_language=ws_language_config(),
@@ -542,6 +555,7 @@ def _build_genesys_handler(args, ingress, egress, backend):
         max_session_s=genesys_max_session_s_config(),
         cap_drain_grace_s=genesys_cap_drain_grace_s_config(),
         allowed_origins=genesys_allowed_origins_config(),
+        authenticator=authenticator,
     )
 
 
@@ -767,10 +781,10 @@ def _parse_args() -> argparse.Namespace:
         "--genesys",
         choices=("auto", "on", "off"),
         default=os.environ.get("VOICE_GENESYS", "off"),
-        help="Genesys Audio Connector `wss` endpoint (TASK-WEB-041): default 'off' (the "
-        "endpoint is NOT exposed until AudioHook signature/HMAC auth lands under "
-        "TASK-INFRA-012 and must stay network-isolated); 'auto'/'on' mount GET "
-        "/genesys/audiohook on the aiohttp server with an Origin allowlist "
+        help="Genesys Audio Connector `wss` endpoint (TASK-WEB-041): default 'off'. "
+        "'auto'/'on' mount GET /genesys/audiohook on the aiohttp server with AudioHook "
+        "connection auth (API key + HMAC signature, TASK-INFRA-012: GENESYS_AUDIOHOOK_API_KEY "
+        "+ GENESYS_AUDIOHOOK_SECRET — fails CLOSED if unset) plus an Origin allowlist "
         "(VOICE_GENESYS_ALLOWED_ORIGINS). Codec (VOICE_GENESYS_CODEC, default L16), "
         "concurrency (VOICE_GENESYS_MAX_SESSIONS, default 3), the 15-min cap "
         "(VOICE_GENESYS_MAX_SESSION_S) and its drain grace "
