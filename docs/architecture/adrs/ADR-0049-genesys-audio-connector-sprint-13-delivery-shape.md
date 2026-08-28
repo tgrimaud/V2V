@@ -145,6 +145,28 @@ code changed** (ADR-0001 held):
   (at the cap the session is *drained* — trailing partial finalized, answer spoken — then
   ended so Architect resumes; never a silent mid-call cut, R2). Per-channel OpenTelemetry
   (session/gauge/cap events + a deterministic `conversationId → traceparent`, one trace).
+  The cap/drain machinery lives in `genesys_cap.py`; the constants, env resolvers and
+  telemetry emitters in `genesys_config.py` (module-budget split, review remediation).
+
+### Review remediation (TASK-WEB-041, 2026-08-28)
+
+The 2026-08-28 adversarial code review raised two Major findings, both now closed in the
+runtime (still ADR-0001-clean — no backend code):
+
+- **Hard-bounded cap drain (Major #1).** At the cap the drain is wrapped in
+  `asyncio.wait_for(drain, timeout=grace)`; if the drain wedges (a stuck STT/TTS provider)
+  the session is force-`stop()`ped after the grace and a `voice.genesys.session_cap_forced`
+  event is recorded, so the concurrency slot + WS are **always** freed at cap+grace and can
+  never be held indefinitely. The grace is env-tunable (`VOICE_GENESYS_CAP_DRAIN_GRACE_MS`,
+  default 5 s). A `DrainOnce` guard ensures the cap timer and the peer-disconnect handler
+  never both drain the same session.
+- **Endpoint exposure posture (Major #2, security).** The endpoint is now **default-off**
+  (`--genesys off` / `VOICE_GENESYS=off`) and, when explicitly enabled, enforces an Origin
+  allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`) mirroring `/ws`. **AudioHook signature / HMAC
+  / API-key verification of the Genesys leg is owned by TASK-INFRA-012** (live-org endpoint
+  exposure); until it lands the endpoint MUST stay **default-off and network-isolated**, and
+  the Origin allowlist is the reversible in-runtime guard. This is the recorded sign-off for
+  the deferral, not a silent gap.
 - `genesys_framing.py` — subclasses the AudioHook-shaped `WebSocketAudioSerializer`, reusing
   its whole control channel and overriding only the audio path; emits `genesys.transcode.in`
   / `.out` per-leg spans.
