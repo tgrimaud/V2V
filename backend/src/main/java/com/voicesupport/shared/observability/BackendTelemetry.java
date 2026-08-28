@@ -32,6 +32,7 @@ public class BackendTelemetry {
     private static final String ANSWER_LANGUAGE = "voice_support.answer_language";
     private static final String GUARDRAIL_BLOCK = "voice_support.guardrail_block";
     private static final String CHANNEL_DELIVERY = "voice_support.channel_delivery";
+    private static final String ESCALATION_HANDOFF = "voice_support.escalation_handoff";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
     private static final String CHANNEL_NONE = "n/a";
@@ -152,6 +153,25 @@ public class BackendTelemetry {
                 .increment();
         log.info("[CHANNEL] channel={} reply_mode={} duplicate={} correlation_id={}",
                 channel, safeReplyMode, duplicate, CorrelationId.current());
+    }
+
+    // Escalation hand-off observability (TASK-BE-036 / DEC-013): counts the by-reference hand-off
+    // lifecycle (voice_support.escalation_handoff, tagged outcome created|fetched|not_found +
+    // reason_code + channel) plus a [HANDOFF] structured log with the correlation id and the opaque
+    // handoff_id. The handoff_id (a UUID) and reason_code are non-PII; the summary, last user message
+    // and customer reference are never recorded here — they stay behind the audited fetch (ADR-0040).
+    public void recordEscalationHandoff(String outcome, String reasonCode, String handoffId) {
+        String channel = normalizeChannel(CorrelationId.currentChannel());
+        String safeOutcome = outcome == null || outcome.isBlank() ? "n/a" : outcome;
+        String safeReason = reasonCode == null || reasonCode.isBlank() ? "n/a" : reasonCode;
+        Counter.builder(ESCALATION_HANDOFF)
+                .tag("outcome", safeOutcome)
+                .tag("reason_code", safeReason)
+                .tag("channel", channel)
+                .register(registry)
+                .increment();
+        log.info("[HANDOFF] outcome={} reason_code={} channel={} handoff_id={} correlation_id={}",
+                safeOutcome, safeReason, channel, CorrelationId.sanitize(handoffId), CorrelationId.current());
     }
 
     public <T> T time(String slice, String provider, Supplier<T> work) {

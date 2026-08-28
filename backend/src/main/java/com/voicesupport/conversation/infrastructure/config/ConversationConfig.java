@@ -2,6 +2,7 @@ package com.voicesupport.conversation.infrastructure.config;
 
 import com.voicesupport.conversation.application.service.AnswerService;
 import com.voicesupport.conversation.application.service.ConversationService;
+import com.voicesupport.conversation.application.service.EscalationHandoffService;
 import com.voicesupport.conversation.application.service.RetrievalGroundingService;
 import com.voicesupport.conversation.application.service.StreamingConversationService;
 import com.voicesupport.conversation.application.service.WarmUpService;
@@ -13,14 +14,17 @@ import com.voicesupport.conversation.domain.port.in.WarmUpUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.DeliveryDeduplicationPort;
+import com.voicesupport.conversation.domain.port.out.EscalationHandoffPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
+import com.voicesupport.conversation.domain.service.EscalationHandoffFactory;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
+import com.voicesupport.conversation.infrastructure.adapter.out.handoff.InMemoryEscalationHandoffAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.ConversationTurnStore;
 import com.voicesupport.conversation.infrastructure.adapter.out.memory.InMemoryConversationMemoryAdapter;
@@ -36,6 +40,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -144,6 +149,33 @@ public class ConversationConfig {
     @Bean
     public IdempotentDeliveryGuard idempotentDeliveryGuard(DeliveryDeduplicationPort deliveryDeduplicationPort) {
         return new IdempotentDeliveryGuard(deliveryDeduplicationPort);
+    }
+
+    // Escalation hand-off transport store (TASK-BE-036, DEC-013 / ADR-0040): the audited
+    // EscalationHandoff payload (incl. PII) stays backend-owned in a process-local bounded LRU; only
+    // the minted handoff_id + non-PII routing metadata cross the channel. A shared store (Redis/DB)
+    // can replace this behind EscalationHandoffPort for multi-node without touching the domain.
+    @Bean
+    public EscalationHandoffPort escalationHandoffPort(
+            @Value("${voice-support.conversation.handoff.max-handoffs:100000}") int maxHandoffs) {
+        return new InMemoryEscalationHandoffAdapter(maxHandoffs);
+    }
+
+    @Bean
+    public EscalationHandoffFactory escalationHandoffFactory() {
+        return new EscalationHandoffFactory();
+    }
+
+    // Single service implementing both the prepare (store + reference) and fetch (by-reference)
+    // use cases; Spring injects it wherever PrepareEscalationHandoffUseCase or
+    // FetchEscalationHandoffUseCase is required. System UTC clock stamps created_at (ADR-0019).
+    @Bean
+    public EscalationHandoffService escalationHandoffService(
+            EscalationHandoffFactory escalationHandoffFactory,
+            EscalationHandoffPort escalationHandoffPort,
+            BackendTelemetry backendTelemetry) {
+        return new EscalationHandoffService(
+                escalationHandoffFactory, escalationHandoffPort, Clock.systemUTC(), backendTelemetry);
     }
 
     @Bean
