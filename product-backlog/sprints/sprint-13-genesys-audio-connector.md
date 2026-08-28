@@ -185,7 +185,7 @@ the user's explicit request at sprint closure.
 | 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | 📋 Proposed |
 | 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | 📋 Proposed |
 | 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | 📋 Proposed |
-| 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | 📋 Proposed |
+| 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | 🧪 Implemented (`mvn test` 458 green, ArchUnit incl.); pending adversarial review + QA + user validation, not merged |
 | 7 | TASK-BE-037 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | 🔧 In Progress (backend contract done, mvn test green; review/QA pending) |
 | 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure | Wire (infra/config) | spike GO + OQ-006 | 📋 Proposed |
 
