@@ -6,9 +6,9 @@ ADRs capture structural decisions that should remain visible beyond code, chats,
 diagrams, and planning notes. When a decision changes, create a new ADR and mark
 the previous one as superseded instead of rewriting history.
 
-> **Note (built vs target, refreshed 2026-08-05):** an ADR status of `Accepted`
+> **Note (built vs target, refreshed 2026-08-28 for the Sprint 12 branch
+> `feat/sprint-12-external-voice-websocket`):** an ADR status of `Accepted`
 > records an accepted **target decision**, not necessarily that it is implemented.
-> As of the Sprint 11 branch (`feat/sprint-11-remote-deployment`):
 >
 > - **Built:** the two-service voice loop (ADR-0021/0022/0023/0024/0025/0033/0035),
 >   the backend conversation engine, RAG and observability
@@ -16,18 +16,37 @@ the previous one as superseded instead of rewriting history.
 >   taxonomy (ADR-0018/0029), **Redis-backed sessions** (ADR-0008, Sprint 11
 >   TASK-BE-021), the **backend↔runtime Flow A SSE style** (ADR-0036),
 >   **first-sentence streaming** (ADR-0037 — `VOICE_BACKEND_STREAM` default-ON
->   since TASK-WEB-022; the ADR-0029 end-of-turn gate still applies), and the
->   **pilot deployment** stack (ADR-0038/0039).
+>   since TASK-WEB-022; the ADR-0029 end-of-turn gate still applies), the
+>   **pilot deployment** stack (ADR-0038/0039), the **Liquibase schema split**
+>   (ADR-0041), the **pilot data-tier resilience / graceful Redis degradation**
+>   (ADR-0044, TASK-BE-030), and — new on Sprint 12 — the **interim WebSocket audio
+>   transport** for external-browser voice (ADR-0043, TASK-WEB-026…031, merged into
+>   the sprint branch). The **bilingual KB corpus** decision (ADR-0048) is Accepted
+>   and applied for the pilot (single FR corpus load).
+> - **Pilot decision (accepted, applied as config/topology, no feature code):** the
+>   **no-TURN external-media** stance (ADR-0042 — the WebSocket path replaces a TURN
+>   relay).
 > - **Target-only — NOT implemented in code yet:** billing/BSS
 >   (ADR-0003/0004/0005/0017), **multi-agent routing** (ADR-0015 — no
 >   `IntentClassifier`/`AgentProfile` on this branch), Genesys/escalation handoff
->   (ADR-0019/0020), and omnichannel contracts (ADR-0009/0010/0011).
-> - **Accepted, scheduled — not built yet:** ADR-0043 (interim WebSocket audio
->   transport for external browser voice, Genesys-ready — Sprint 12).
-> - **Proposed (not decided/built):** ADR-0032.
+>   (ADR-0019/0020) including the **Genesys Audio Connector media plane** (ADR-0040 —
+>   Sprint 13, gated by OQ-006), and omnichannel contracts (ADR-0009/0010/0011).
+> - **Proposed (not decided/built):** ADR-0032 (retrieval-quality / vector-store
+>   strategy) and ADR-0045 (LLM provider/model benchmark for backend first-token —
+>   decision deferred to the TASK-BE-033 spike).
 >
 > Implementation status is tracked in `product-backlog/backlog-index.md` and the
-> full adversarial review `docs/architecture/reviews/full-adversarial-review-2026-08-05.md`.
+> 2026-08-28 pre-sprint adversarial reviews under `docs/qa/`.
+
+> **Reserved / cross-branch IDs.** The local ADR files jump **ADR-0045 → ADR-0048**:
+> **ADR-0046 and ADR-0047 are allocated on mainline (`feat/restart-from-scratch`) and
+> other active branches**, not present on this Sprint 12 branch — this is a numbering
+> gap, not a lost ADR. Because this branch was cut ~23 commits behind mainline, any
+> **new** ADR id (and likewise `TASK-*` / `BUG-*` / `US-*` ids) MUST be checked across
+> **all** branches (mainline + every active `feat/sprint-NN-*` and `task/*` branch)
+> before allocation, so a "next free" number picked off one branch does not collide at
+> merge. Reconciliation of the branch-local ADR-0048 / TASK-BE-034/035 against mainline
+> is tracked at Sprint 12 closure.
 
 ## Index
 
@@ -80,3 +99,4 @@ the previous one as superseded instead of rewriting history.
 | [ADR-0045](ADR-0045-llm-provider-model-benchmark-for-backend-first-token.md) | Proposed | **LLM provider/model benchmark for backend first-token (cascade chat, Lever B).** After WEB-035 capped the STT tail and WEB-036 (top-k 8→5) showed LLM first-token is ~87% of `backend_first_token`, the backend first-token (p95 ~1199 ms) is the largest remaining reducible slice of the ADR-0029 gate and is model-inherent. Scopes ADR-0029 **Direction A** only (cascade chat LLM, not Realtime S2S): benchmark **Mistral small/large + a co-located Ollama model + OpenAI gpt-4o-mini** on TTFT + grounding/quality + cost + data residency, keeping the choice behind the replaceable `LlmPort` (ADR-0026). **Decision deferred** to the data from the spike **TASK-BE-033**; ADR moves to Accepted once a provider/model is selected. |
 | [ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md) | Accepted (target — impl. pending TASK-WEB-038) | **Unify the voice runtime onto a single async HTTP+WebSocket server on one port** (aiohttp preferred, spike-gated), running on the existing background asyncio loop and serving the static UI, `/api/voice/*` REST and the live-audio WebSocket upgrade together. **Refines** ADR-0022 (reverses its stdlib/"no FastAPI" constraint now that ADR-0046 made WebSocket primary and the stdlib server is the blocker). Once HTTP+WS share one routed port, **HAProxy `mode http` tunnels the upgrade on the existing `voice_bridges` backend with no LB config change** → the TASK-WEB-037/INFRA-010 `voice_ws` ACL/backend + `firewall_extra_ports:[8091]` become **removable** and the platform-team edge dependency disappears; it also **lifts the one-call-per-bridge cap** (`SingleClientWebsocketServerTransport`) and is the right foundation for the Genesys Audio Connector `wss://` endpoint (ADR-0040). Business logic unchanged (transport/adapter-layer change; ADR-0043 session factory reused); batch `/turn` contract preserved + re-tested; re-validate the ADR-0029 latency gate after. TASK-WEB-037 stays the interim **bridge**; this ADR is the **destination**. |
 | [ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md) | Accepted | **WebSocket is the primary V1 live voice transport; WebRTC demoted to optional same-subnet/dev.** Supersedes ADR-0033. Rationale: the V1 production ingress is Genesys-mediated and Genesys streams call audio over `wss://` (Audio Connector / AudioHook, ADR-0040), external-browser WebRTC audio fails without TURN — deliberately unprovisioned (ADR-0042) — and the v0.6.0 pilot proved WebRTC media cannot traverse the containerised bridges (only `8090/tcp` published, container-internal ICE candidates, no UDP path). The AudioHook-shaped WebSocket path (ADR-0043) reaches externally over TCP through the HAProxy edge with **no TURN** and is the direct substrate for Genesys Audio Connector. WebRTC is retained (not deleted) as the on-net low-latency dev option (native AEC/jitter/Opus); Pipecat+Gradium (ADR-0002) and the modular cascade (ADR-0012) are unchanged. Puts the `wss` edge routing (**TASK-INFRA-010**) + `ws.js` same-origin fix on the V1 critical path (**TASK-WEB-037**). |
+| [ADR-0048](ADR-0048-bilingual-kb-corpus-and-retrieval-language-scope.md) | Accepted | **Bilingual KB corpus strategy + retrieval language scope.** Pilot (now): load the **French** `articles-fr.csv` as the single CSV corpus (FR users → FR-on-FR retrieval grounds mobile/support questions that today deflect; answer language is already per-request per ADR-0031), no language filter needed while only one language is loaded. Target (later, **TASK-BE-034**): a `language == requestLanguage OR language absent` predicate in `PgVectorStoreAdapter.buildSearchFilter`, threaded through `VectorSearchPort.search(...)`, so the same pgvector store serves FR **and** EN (`csv-article` EN + `csv-article-fr` FR) cleanly. Residuals: FR chunks loaded at the `csv-article` path while `KB_CSV_LANGUAGE=en` carry a cosmetic `language=en` tag (matters only once TASK-BE-034 lands → forced re-sync to re-tag; TASK-OPS-009 sets `KB_CSV_LANGUAGE=fr` durably). The Eir/AT&T brand in the FR corpus is intentional (content is Eir's; the product answers Eir customer problems), not a residual — the rebrand follow-up TASK-BE-035 is cancelled. Audience fail-closed filter (ADR-0034) unchanged. |

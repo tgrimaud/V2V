@@ -1024,3 +1024,295 @@ levers. All 12 tickets were validated by the user and merged into the sprint bra
 - Merge commit + `product-backlog/tasks/web-voice-tasks.md` — TASK-WEB-037/038 status → merged (v0.7.0) + deployed
 - `done-tasks.md` — this release/deploy entry
 - Tag `v0.7.0` (git) + images `0.7.0` (GHCR, CI-built)
+
+## 2026-08-26 — TASK-INFRA-011: voice deploy health gate probes the container verdict, not host loopback
+
+**Summary:**
+
+- Fixed the recurring voice rolling-deploy hang (surfaced during the **v0.6.0** deploy): the Ansible
+  health gate probed `http://127.0.0.1:8090/` from the host with `ansible.builtin.uri`, but the bridge's
+  published port returns `000` on host loopback and its management interface is firewalld source-scoped
+  (TASK-OPS-004), so each attempt timed out (30 retries × ~30s) → ~15 min hang → play abort
+  (`serial:1` + `max_fail_percentage:0`). t02 had needed a manual `-e health_url=<service-IP>` override.
+- **Fix:** poll the **container's own health verdict** — `roles/compose_tier/tasks/health.yml` runs
+  `docker inspect --format {{.State.Health.Status}} <name>` until `healthy` when `health_container_name`
+  is set. The container `HEALTHCHECK` curls `localhost:8090` inside the container namespace → immune to
+  host interface/firewall/loopback quirks. Go template escaped with `{% raw %}…{% endraw %}`.
+- `group_vars/voice.yml` sets `health_container_name: voice-support-bridge`; the HTTP `uri` probe is kept
+  as the **fallback** (backend loopback `:8080` works), mutually gated, preserving the QA contract.
+- **Validated live:** re-ran the voice deploy on t01/t02 with the committed config — container-health gate
+  passes immediately, loopback HTTP probe skipped, `failed=0`, no override, no hang. `--syntax-check` clean;
+  `qa-validate-ansible.sh` **72/72** (+3 assertions). Non-runtime (deploy tooling only).
+- Branch `task/TASK-INFRA-011-voice-health-container-probe` off `feat/restart-from-scratch` (no sprint open);
+  committed `7256dfc`, pushed. Merge pending explicit user request.
+
+### Files changed
+- `deploy/ansible/roles/compose_tier/tasks/health.yml` — added container-health probe; gated both probes
+- `deploy/ansible/group_vars/voice.yml` — `health_container_name: voice-support-bridge`, `health_url` demoted to fallback
+- `deploy/ansible/qa-validate-ansible.sh` — +3 health-probe assertions
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket
+- `product-backlog/backlog-index.md` — TASK-INFRA-011 registry row
+
+## 2026-08-27 — KB bilingual: FR corpus live on the pilot + deploy KB-sync/FR-default (TASK-OPS-009)
+
+**Summary:** Delivered the user-approved "KB bilingual" initiative in two parts. **Pilot (done
+now):** loaded the French knowledge corpus into the live pilot's shared pgvector store so
+mobile/support questions (e.g. *"j'ai un problème avec mon téléphone mobile"*) are now answered
+with grounded French content instead of deflecting to an advisor. **Target (tickets only):** a
+retrieval language filter so one store can serve FR + EN cleanly. Two branches, both pushed,
+**not merged** (user is the final validator).
+
+### Corpus decision (recorded in ADR-0048)
+- **Use the French `articles-fr.csv` as the pilot's single CSV corpus** — pilot users are French,
+  so FR-on-FR retrieval grounds far better than the English `articles.csv`; more mobile rows,
+  cleaner HTML. Answer language is already per-request (ADR-0031), so this is a retrieval-relevance
+  choice, not an answer-language one. The corpus is a French translation of the Eir KB and
+  references eir/eircom/AT&T **by design** — the content is Eir's and the product answers Eir
+  customer problems, so the brand is expected and correct (no rebrand; TASK-BE-035 cancelled).
+
+### Tickets created (Part A)
+- **ADR-0048** *(Accepted)* — bilingual KB corpus + retrieval language scope (pilot single-corpus
+  now; target language predicate). On `task/TASK-BE-034-retrieval-language-filter`.
+- **TASK-BE-034** *(Planned, target)* — add an optional `language == requestLanguage OR language
+  absent` predicate to `PgVectorStoreAdapter.buildSearchFilter`, threaded through
+  `VectorStorePort.search` → retrieval adapter → grounding, mirroring the domain filter. **Not
+  implemented** (target counterpart to the pilot single-corpus approach).
+- **TASK-BE-035** *(Cancelled / Won't do, 2026-08-27)* — KB rebrand follow-up. Cancelled per the
+  product decision: the Eir brand is intentional — the corpus originates from Eir and the product
+  answers Eir customer problems, so no rebrand is needed. (Curating a richer customer-facing FR
+  partition remains a separate KB-quality matter, not a rebrand.)
+- **TASK-OPS-009** *(Implemented, this branch)* — the Ansible deploy now defaults to the FR corpus
+  and triggers + verifies the KB sync post-deploy (durable config; see below).
+
+### Pilot operation (Part B step 1 — minimal-risk, out-of-band, no vault edit, no redeploy)
+Performed on backend node **t03** (`vla-ai4cc-t03.prod.lan`); the two backend nodes share one
+Postgres (**vlb-ai4cc-t01.prod.lan**), so one sync populates the shared store.
+1. Backed up the mounted EN corpus: `sudo cp /opt/voice-support/backend/kb-assets/articles.csv
+   articles.csv.en.bak-2026-08-27`.
+2. `scp` the FR corpus to the host and placed it at the path the backend already reads
+   (`/opt/voice-support/backend/kb-assets/articles.csv` → mounted `/app/kb-assets/articles.csv`,
+   2.33 MB). No vault `.env` edit, no image change, no redeploy (avoids the known voice
+   health-gate false-negative, TASK-INFRA-011).
+3. Triggered the sync from localhost with the api key read server-side (never printed):
+   `KEY=$(sudo grep ^CONVERSATION_API_KEY= …/.env | cut -d= -f2-); curl -s -X POST
+   http://127.0.0.1:8080/api/knowledge/sync -H "x-api-key: $KEY"`.
+   The client `curl` timed out at 600 s (HTTP 000, exit 28) but the **server thread continued**
+   (Spring MVC does not cancel the request on client disconnect), so the sync completed anyway.
+
+### Sync outcome (from the backend log + Postgres)
+- `op=syncAll processed=309 ingested=306 skipped=3 deleted=0` — csv-article **processed=306,
+  ingested=306, total_chunks=5128, duration ≈ 2 h 2 m (7,348,040 ms), 0.7 chunks/sec**; markdown
+  skipped=3 (unchanged); csv-article-fr processed=0 (file not mounted).
+- **Why so slow:** every article triggers an **embedding-based domain classification** at parse
+  time (ADR-0030) *before* the per-chunk storage embeddings, all on the co-located **CPU** Ollama
+  sidecar (`ollama_cpus: 1.0`). The store stayed at the markdown baseline through the whole ~25 min
+  parse phase, then CSV chunks committed per document (39 → 5167 over ~90 min).
+- **`vector_store` before → after:**
+  - Before: **39** chunks — all `source_type=markdown`, `language=fr`, `audience=customer` (the 3
+    FR FAQ files: billing/commercial/telecom).
+  - After: **5167** chunks — `csv-article` **4008 customer** + **1120 internal** (both tagged
+    `language=en`, see residual), plus markdown 39 customer/fr. `kb_source_state`: csv-article
+    306 articles / 5128 chunks; markdown 3 / 39.
+
+### Verification (Part B step 3 — pilot)
+- **`POST /api/conversation/retrieve`** (t03), *"j'ai un problème avec mon téléphone mobile"*:
+  `answerable=true verdict=PASS`, **5 grounded customer chunks** (mobile data/call problems, device
+  troubleshooting *"Appareils mobiles … dépannage de base"*, handset/network) — content that did
+  not exist before. **t04** returns the same (`PASS`, shared store confirmed on both nodes).
+- **`POST /api/conversation/converse`** (t03), same mobile question, `language=fr`: after one
+  transient `ERR_UPSTREAM` (Mistral LLM, not retrieval), retries returned a **grounded French
+  troubleshooting answer** (confidence ≈ 0.83) — *"quel est le problème précis … réinitialisation
+  du réseau … mise à jour de localisation …"* — **no deflection to an advisor** (the pilot goal).
+- **Billing spot-check** *"Pourquoi ma facture a augmenté ce mois-ci ?"*: grounded French answer
+  (confidence ≈ 0.74) — existing FAQ behavior preserved.
+
+### Durable deploy config (Part B step 2 / TASK-OPS-009 — committed, not executed)
+- `group_vars/backend.yml`: `kb_csv_filename=articles-fr.csv`, `kb_csv_language=fr`, and async
+  sync tunables (`kb_sync_timeout/async_seconds/poll_retries/poll_delay/min_processed`).
+- `backend.env.j2` + `.env.example`: render `KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}` +
+  `KB_CSV_LANGUAGE={{ kb_csv_language }}`.
+- New `roles/compose_tier/tasks/kb_sync.yml` (backend tier, post-health, `no_log` api key): fires
+  `POST /api/knowledge/sync` **async** (`poll: 0`) and waits via `async_status` — a single 600 s
+  `uri` call would time out on the ~2 h CPU sync. Gates on `SyncReport.processed ≥ 50` (proves the
+  CSV corpus was seen, works on idempotent re-deploys where `ingested=0`); `/retrieve` is a soft
+  pipeline smoke check (HTTP 200 + evidence count), not the CSV gate. `qa-validate-ansible.sh`
+  **76/76** (added async + `processed`-gate checks); YAML/playbook syntax-check clean.
+
+### Findings / residuals
+- **Corpus is an internal back-office KB (audience boundary, ADR-0034 fail-closed to
+  `audience=customer`):** ~22% of chunks (1120/5128) are tagged `internal` by the keyword classifier
+  (`back office`, `vaa`, `vrd`, `r6/ion`, `vérification d'aptitude`) and excluded from customer
+  retrieval — including *"Mobile : Guide de dépannage"* (its body cites back-office steps). The
+  remaining 78% customer chunks are enough to ground the tested mobile/billing questions; curating
+  a richer customer-facing FR partition is a KB-quality follow-up (not a rebrand — the Eir brand is
+  intentional and correct; TASK-BE-035 cancelled).
+- **`language=en` on the loaded chunks (cosmetic):** the interim load reused the already-mounted
+  `articles.csv` path while the running container's `KB_CSV_LANGUAGE` was still `en`, so the French
+  chunks carry `language=en`. Harmless today (no retrieval language filter; answer language is
+  per-request). A **forced re-sync** (once TASK-BE-034 lands) or a clean redeploy with the new FR
+  config re-tags them `fr`.
+- **Domain = `general` for the CSV chunks:** the `EmbeddingDomainClassifierAdapter` anchors are
+  English (ADR-0030) embedded against French content → below the 0.55 threshold → `general`.
+  Retrieval is unaffected: the voice path retrieves cross-domain by design (BUG-007, domain=null).
+- **Transient `ERR_UPSTREAM`:** the mobile `/converse` hit one Mistral upstream error before
+  succeeding on retry — a known transient, not a KB/grounding issue.
+
+### Not done (deliberate)
+- **No full prod redeploy** (the operational sync is the immediate fix; redeploy carries the voice
+  health-gate false-negative risk, TASK-INFRA-011). The durable Ansible change is ticketed and
+  committed for the next planned redeploy.
+- **TASK-BE-034 not implemented** (target-only per the mission).
+- **No branch merged** — both ticket branches are pushed and pending user validation.
+
+### Branches / commits
+- `task/TASK-BE-034-retrieval-language-filter` — `ecf8b15` (ADR-0048 + TASK-BE-034/035 tickets +
+  backlog rows). Pushed.
+- `task/TASK-OPS-009-kb-sync-fr-default` — `876619c` (durable Ansible FR default + async KB-sync +
+  `processed` gate + qa-validate) and this `done-tasks.md` entry. Pushed. Both off
+  `feat/sprint-12-external-voice-websocket`.
+
+## 2026-08-27 — KB bilingual: FR corpus on pilot + retrieval-language-filter target ticket (TASK-BE-034/035, ADR-0048)
+
+**Context:** The live pilot `vector_store` held **only 39 chunks, all `source_type=markdown`/
+`language=fr`** (the 3 FR FAQ files, synced 2026-08-14). **No CSV corpus had ever been synced**
+(`articles.csv` was copied by Ansible but no deploy step triggers `POST /api/knowledge/sync`),
+so mobile questions like *"j'ai un problème avec mon téléphone mobile"* had no grounded evidence
+and correctly deflected to an advisor (DEC-002). Two-part initiative: load the FR corpus on the
+pilot now, and file the bilingual retrieval-language-filter target.
+
+**Summary (this branch — `task/TASK-BE-034-retrieval-language-filter`, off `feat/sprint-12-external-voice-websocket`):**
+
+- **ADR-0048** (Accepted) — bilingual KB corpus strategy + retrieval language scope. Pilot: load
+  the **French** `articles-fr.csv` as the single CSV corpus (FR users → FR-on-FR retrieval; answer
+  language already per-request per ADR-0031), no language filter needed while only one language is
+  loaded. Target: a `language == requestLanguage OR language absent` predicate in
+  `PgVectorStoreAdapter.buildSearchFilter` so the same store serves FR + EN cleanly. Records the
+  accepted residual (cosmetic `language=en` tag on the interim load → forced re-sync when the
+  filter lands). The Eir/AT&T brand in the corpus is **intentional** (content is Eir's; the
+  product answers Eir customer problems), not a residual. Alternatives (EN corpus / load-both-now / use the
+  `csv-article-fr` connector needing a vault `.env` edit) documented + rejected.
+- **TASK-BE-034** (Planned, ticket only — **do NOT implement now**): retrieval language filter,
+  mirroring the ADR-0034 audience/domain filter pattern; motivation, scope (predicate + thread
+  language through `VectorSearchPort.search` + update all fakes), Gherkin acceptance (FR-only /
+  EN-only / untagged-included / null-passthrough / audience+domain preserved), OTel note.
+- **TASK-BE-035** (Cancelled / Won't do, 2026-08-27): KB rebrand follow-up. Cancelled per the
+  product decision — the Eir/eircom/AT&T brand is intentional (the corpus originates from Eir and
+  the product answers Eir customer problems), so no rebrand is needed.
+
+**Note on branch base:** created off `feat/sprint-12-external-voice-websocket` (the latest
+`feat/sprint-NN-*`; no active sprint branch exists and per instruction the `task/TASK-BE-033`
+branch was not used as base). sprint-12 is behind mainline by ~23 commits, so this branch's ADR
+index/backlog additions are strictly additive (a later merge reconciles with ADR-0046/0047).
+
+### Files changed
+- `docs/architecture/adrs/ADR-0048-bilingual-kb-corpus-and-retrieval-language-scope.md` — new ADR
+- `docs/architecture/adrs/README.md` — ADR-0048 index row
+- `product-backlog/tasks/kb-ingestion-tasks.md` — TASK-BE-034 + TASK-BE-035 (table rows + detailed sections)
+- `product-backlog/backlog-index.md` — TASK-BE-034 + TASK-BE-035 delivery-backlog rows
+- `done-tasks.md` — this entry
+
+**Pilot operation + durable deploy config are tracked separately on `task/TASK-OPS-009-kb-sync-fr-default`.**
+
+## 2026-08-27 — Revert TASK-STT-014 (partial-quiet early STT finalization) from sprint 12 — measured harmful, QA finding kept
+
+**Branch:** `feat/sprint-12-external-voice-websocket` (worked directly in the main tree; no other agents running).
+
+**Decision (user-approved):** remove the STT-014 runtime code from sprint-12. The live A/B (2026-08-27,
+real Gradium+Mistral+Ollama, warm) proved the partial-quiet early-finalization lever harmful: at
+`VOICE_STT_PARTIAL_QUIET_MS=300` it drops the trailing word on ~100 % of engagements
+(`finalize_reconcile.extra_words≈1`, `reconciled_match=0`, 14/14) for only ~99 ms median saved, and
+the gain vanishes by ~350 ms (Gradium's ~800 ms `delay_in_frames` lookahead). A Gradium dead-end not
+worth carrying as dead code. The QA finding is kept as the durable record; the ticket is marked
+**Rejected**.
+
+**Git approach:** forward reverse-apply of *just the code* — `git checkout c180223 -- <7 files>`
+(the pre-STT-014 / TASK-BE-020 sprint tip), leaving the QA report + backlog docs to be hand-edited so
+the finding is preserved. Did **not** revert the whole merge commit `5418b61` (that would also have
+dropped the QA report and the later evidence commit `cfbf1a9`). The evidence commit `cfbf1a9` and the
+QA report both survive.
+
+**Runtime code restored to pre-STT-014 state (`c180223`):**
+- `voice-agent/stt_validation/streaming.py` (removed `wait_progress` + `_progress` event)
+- `voice-agent/web_voice/streaming_stt_processor.py` (removed `_await_with_quiet`, `_finalize_early`, `_reconcile`, drain, telemetry)
+- `voice-agent/web_voice/session_factory.py` (removed `_partial_quiet_config` / `VOICE_STT_PARTIAL_QUIET_MS`)
+- `voice-agent/tests/test_streaming_stt_processor.py` (removed the 5 STT-014 unit tests)
+- `voice-agent/features/streaming_stt.feature` + `features/steps/streaming_stt_steps.py` (removed the 1 STT-014 behave scenario + steps)
+- `docs/observability/voice-journey-timing.md` (removed the STT-014 finalize-early/reconcile slice entries)
+
+**Kept (durable record):**
+- `docs/qa/task-stt-014-finalize-tail-qa.md` — full report incl. the live §7 finding; status header updated to "❌ REJECTED — measured harmful; runtime code reverted".
+- `product-backlog/tasks/stt-followup-tasks.md` + `product-backlog/backlog-index.md` — TASK-STT-014 marked ❌ Rejected.
+- The `task/TASK-STT-014-stt-finalize-tail` ticket branch — **preserved, not deleted**.
+
+**Tests (post-revert, all green):** backend `mvn test` **403** (unaffected), voice-agent unittest
+**568** (was 573), behave **17 features / 46 scenarios / 209 steps** (was 47 / 214). No dangling
+references to `VOICE_STT_PARTIAL_QUIET_MS` / `finalize_early` / `finalize_reconcile` /
+`_await_with_quiet` / `wait_progress` remain in shipped code or `docs/observability`.
+
+## 2026-08-28 — Pre-sprint adversarial review (4 areas) + documentation-gate remediation
+
+**Branch:** `feat/sprint-12-external-voice-websocket` (documentation-only; user-authorized commit + push).
+
+**Context — full 2026-08-28 adversarial review before the next sprints open.** Four
+read-only reviews were run and their reports committed under `docs/qa/`:
+
+- `adversarial-review-2026-08-28-backend.md` — **96/100, CLEAN.**
+- `adversarial-review-2026-08-28-voice-runtime.md` — **96/100, CLEAN.**
+- `adversarial-review-2026-08-28-deploy-observability.md` — **87/100, CLEAN** (1 Major: the
+  loopback voice health-gate false-negative; 6 minors).
+- `adversarial-review-2026-08-28-docs-architecture.md` — **82/100, NOT-CLEAN (conditional)** — 1
+  blocker (cross-branch ID-allocation risk) + 4 majors + 4 minors, all fast doc edits.
+
+Only the **documentation gate** (docs-architecture report + the deploy Major #1 ticketing item)
+was actioned in this session. No code, tests, YAML, Ansible or compose files were touched.
+
+**Remediation performed (docs only):**
+
+- **Blocker / M-4 — ID numbering hygiene (no history rewrite).** Added a **"Reserved /
+  cross-branch IDs"** note to `docs/architecture/adrs/README.md` explaining the ADR-0045 → ADR-0048
+  jump (ADR-0046/0047 live on mainline `feat/restart-from-scratch` + other branches, not here) and
+  requiring cross-branch checks before allocating any new ADR/TASK/BUG/US id. Added an equivalent
+  **"ID allocation rule"** note near the top of `product-backlog/backlog-index.md`. Verified no
+  within-branch duplicate id (ADR headings + registry rows unique).
+- **M-1 — TASK-BE-020 status contradiction.** `backlog-index.md` said "To do (future)"; reconciled
+  to the detail file (`backend-hardening-tasks.md`) = **🟢 Implemented + merged into sprint 12 +
+  live-measured (2026-08-27)**, preserving the "ADR-0029 gate still FAIL → TASK-BE-033" caveat.
+- **M-2 — Sprint-12 file stale.** `sprints/sprint-12-external-voice-websocket.md` showed all
+  tickets 📋 Planned. Reconciled the ticket table to `backlog-index.md` (WEB-026…030 merged,
+  WEB-031 functional-GO/latency-FAIL, INFRA-010 Planned) + added a **"Scope Added During The
+  Sprint"** table (BE-020, STT-014 ❌ Rejected, WEB-032/035/036, BE-033, OPS-009, BE-034/035,
+  INFRA-011, ADR-0045/0048) and a "Delivered so far" status note.
+- **M-3 — ADR README built-vs-target refresh.** Re-dated to the Sprint 12 branch; moved **ADR-0043
+  to Built**; categorized the uncategorized **ADR-0040 (target-only, Sprint 13) / 0042 (pilot
+  decision) / 0044 (Built) / 0045 (Proposed) / 0048 (Accepted/applied)**.
+- **Deploy Major #1 — health-gate ticket.** The loopback voice health-gate false-negative is
+  **already allocated cross-branch as TASK-INFRA-011** (defined on mainline + sprint-13; dedicated
+  branch `task/TASK-INFRA-011-voice-health-container-probe`; only forward-referenced in prose here).
+  Rather than mint a **duplicate** `TASK-OPS-011` (which would be the exact cross-branch collision
+  this gate is closing), **registered the existing TASK-INFRA-011 on sprint-12**: full ticket body
+  in `tasks/deployment-tasks.md` + a registry row in `backlog-index.md`, mirroring mainline.
+  Recommended fix recorded: repoint `health_url` off loopback (host LAN IP or
+  `podman inspect …Health.Status`); interim CLAUDE.md workaround referenced.
+- **Minors.** m-1 reordered BUG-015 before BUG-016 in the bugs table; m-2 added a cross-note in
+  `decisions/v1-decisions.md` distinguishing `DEC-###` from the "global-review decision #n" loop;
+  m-3 added a Sprint-13 note (reference ADR-0040/0042/0043 — do not mint "ADR-0049"); m-4
+  (English-only) was PASS, no change.
+
+**Regressions checked (unchanged, confirmed):** TASK-STT-014 still ❌ Rejected everywhere; the
+ADR-0029 latency gate still reads FAIL everywhere; no within-branch duplicate ADR/TASK id.
+
+### Files changed
+- `docs/architecture/adrs/README.md` — built-vs-target refresh + reserved/cross-branch ID note
+- `product-backlog/backlog-index.md` — ID-allocation note, TASK-BE-020 status, TASK-INFRA-011 row, BUG-015/016 reorder, Sprint-13 ADR note
+- `product-backlog/sprints/sprint-12-external-voice-websocket.md` — ticket table reconciled + scope-added table + status note
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-011 ticket body
+- `product-backlog/decisions/v1-decisions.md` — DEC vs global-review numbering cross-note
+- `done-tasks.md` — this entry
+- `docs/qa/adversarial-review-2026-08-28-{backend,voice-runtime,deploy-observability,docs-architecture}.md` — the four review reports (committed)
+
+### Follow-ups (out of scope — no tickets created here)
+- Code/infra minors from the CLEAN reviews were **deliberately left**: line-budget refactors
+  (backend), floating image tags (`redis:7-alpine`, dev `pgvector:pg16`/`ollama:latest`), the
+  dev-only plaintext Postgres password, redis-password-in-argv, and the manual Liquibase bootstrap
+  step. These are hygiene/reproducibility items with no runtime or security impact on the
+  Ansible-driven pilot path; ticket them if/when they become blocking.

@@ -22,6 +22,8 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). **✅ Merged into `feat/restart-from-scratch` (2026-08-13)**. EPIC-005 / ADR-0032 / OQ-008 |
 | TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — ✅ merged into `feat/restart-from-scratch` (2026-08-13). EPIC-005 / ADR-0032 |
 | TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **STRICTLY NEUTRAL, default OFF** (`ab-query-norm-2026-08-13.md`): greeting hypothesis **disproven** — stripping "Bonjour," leaves "internet est très lent chez moi." which still misses the answer, so `sup-fr-slow` is a **core-phrasing** recall miss, not a greeting one. 0 regression / 0 gain (recall@8 0.90, stability 0.79 on/off). Kept as tested env-toggle; real lever = phrasing-robust recall. 354 backend green. **✅ Merged into `feat/restart-from-scratch` (2026-08-13)**. EPIC-005 / ADR-0032 / OQ-008 |
+| TASK-BE-034 | Retrieval **language filter** — optional `language == requestLanguage OR language absent` predicate in `buildSearchFilter` (mirrors the domain predicate), threaded through `VectorSearchPort.search(...)` → retrieval adapter → grounding, so one pgvector store serves FR + EN cleanly | V1 quality (RAG / bilingual) | TASK-BE-013/014/015, TASK-BE-034's ADR-0048 | 📋 Planned (2026-08-27) — **TARGET counterpart to the ADR-0048 pilot single-corpus approach**; not implemented now. Enables loading both `csv-article` (EN) + `csv-article-fr` (FR) without EN/FR top-K mixing. EPIC-005 / ADR-0048 / ADR-0031 / ADR-0034 / OQ-008 |
+| TASK-BE-035 | ~~KB quality / **rebrand** follow-up — `articles-fr.csv` still references eir/eircom/AT&T~~ | V1 quality (KB content) | TASK-OPS-009 (FR corpus live on pilot) | ❌ **Cancelled / Won't do** (2026-08-27) — the Eir brand is intentional: the corpus originates from Eir and the product answers Eir customer problems, so no rebrand is needed. EPIC-005 / ADR-0048 |
 
 ---
 
@@ -709,3 +711,153 @@ grounded French content and fall back less often — without touching the Englis
 - Domain classifier anchors are English; FR articles are classified on their own embedding —
   distribution may drift slightly vs the EN source (acceptable for dev).
 - Mistral rate/throughput on 306 articles: script batches/paces calls and is resumable.
+
+---
+
+## TASK-BE-034 — Retrieval Language Filter (bilingual store, target)
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related decision:** ADR-0048 (bilingual KB corpus + retrieval language scope — this ticket
+is its TARGET counterpart), ADR-0031 (answer language), ADR-0034 (audience fail-closed
+filter — the pattern this mirrors), ADR-0032 / OQ-008 (retrieval quality)
+**Related:** TASK-BE-013/014 (CSV connectors), TASK-BE-015/017 (answer language + FR corpus),
+TASK-OPS-009 (pilot single-corpus FR deploy — the interim approach this supersedes)
+**Classification:** V1 quality (RAG / bilingual) — runtime-affecting (needs observability note)
+**Status:** 📋 Planned (2026-08-27) — ticket only, **do NOT implement now**. It is the target
+that lets the same pgvector store serve FR and EN cleanly once both corpora are loaded.
+**Priority:** Medium
+**Branch (when scheduled):** `task/TASK-BE-034-retrieval-language-filter`
+
+### Motivation
+
+Today generation is bilingual (ADR-0031: each turn is answered in the customer's FR/EN
+language regardless of the retrieved chunk's language) but **retrieval is not
+language-scoped**. `PgVectorStoreAdapter.buildSearchFilter` filters on `audience`
+(customer, fail-closed — ADR-0034) AND optionally `domain` (`domain == X OR general`); there
+is **no language predicate**, and `VectorSearchPort.search(query, domain, topK)` has no
+language parameter. Each chunk already carries `language` metadata
+(`putIfPresent(metadata, "language", document.language())` in `PgVectorStoreAdapter`), so the
+data is present — only the query-side filter is missing.
+
+The pilot (ADR-0048 / TASK-OPS-009) works around this by loading a **single FR corpus**, so
+there is nothing to mix. But the moment both `csv-article` (EN) and `csv-article-fr` (FR) are
+ingested into the same store, every query mixes EN and FR chunks in the same top-K,
+polluting FR precision (and vice-versa). This ticket adds the missing predicate so a
+bilingual store is clean.
+
+### Scope
+
+- Add an **optional language predicate** to `PgVectorStoreAdapter.buildSearchFilter`,
+  mirroring `domainOp`: `language == requestLanguage OR (language absent)`. A null/blank
+  request language means **no language restriction** (backward-compatible). The "language
+  absent" leg keeps untagged/legacy chunks retrievable (fail-open on the *language* axis,
+  unlike the fail-closed audience axis — untagged content must stay reachable, matching the
+  domain `OR general` intent).
+- Thread the request/answer language through the read path:
+  `VectorSearchPort.search(query, domain, topK)` → add a `language` argument (or an overload)
+  → `KnowledgeRetrievalService` → `InProcKnowledgeRetrievalAdapter` →
+  `KnowledgeRetrievalPort.retrieve(...)` from the conversation side. The conversation layer
+  already resolves `AnswerLanguage` per turn (ADR-0031 `LanguageDetector`); pass that code
+  (`fr`/`en`) down. **Update every implementer + test fake** of the changed ports (per the
+  CLAUDE.md gotcha: adding a method to an out port breaks fakes).
+- Env-toggle so it can be enabled per deployment (e.g.
+  `voice-support.knowledge.retrieval.language-filter.enabled`, default off until validated),
+  consistent with the MMR / query-normalization toggles.
+- Preserve `/answer` + `/retrieve` caller-supplied domain behaviour; the voice
+  `/converse` + `/converse-stream` path stays cross-domain by design (BUG-007) — language is
+  an orthogonal axis to domain, so both compose.
+
+### Out of scope
+
+- Loading the EN corpus on the pilot (that is a deploy/product decision once this lands).
+- Any change to the audience or domain filters, or to answer-language selection (ADR-0031).
+- Re-tagging existing chunks (a forced re-sync concern owned by TASK-OPS-009 / the rollout).
+
+### Acceptance criteria
+
+```gherkin
+Scenario: A French query retrieves French and untagged chunks only
+  Given the store holds csv-article (language=en) and csv-article-fr (language=fr) chunks
+    And some legacy chunks have no language metadata
+  When a turn resolves the answer language to French and retrieval runs with the filter on
+  Then only chunks tagged language=fr OR with no language are returned
+    And no language=en chunk appears in the top-K
+
+Scenario: An English query retrieves English and untagged chunks only
+  When a turn resolves the answer language to English and retrieval runs with the filter on
+  Then only chunks tagged language=en OR with no language are returned
+
+Scenario: No language restriction preserves current behaviour
+  Given no request language is supplied (null/blank)
+  Then retrieval returns chunks regardless of language (backward-compatible)
+
+Scenario: Domain and audience behaviour preserved
+  Then the audience==customer fail-closed filter and the domain==X OR general filter
+    still apply exactly as today, AND-combined with the language predicate
+```
+
+- Regression tests cover: FR-only, EN-only, untagged-included, null-language passthrough, and
+  that the audience + domain filters are unchanged (extend `PgVectorStoreAdapter` tests + the
+  retrieval-service tests; keep `mvn test` infra-free with fakes).
+- **OpenTelemetry:** the retrieval slice already records provider/outcome/latency; add the
+  resolved language as a low-cardinality attribute/label on the retrieval span/metric, or
+  explicitly mark it not-applicable with rationale. No new slice.
+- `git diff --check` clean; ArchUnit unchanged (domain stays pure).
+
+### Notes
+
+- This is the **TARGET** counterpart to ADR-0048's pilot single-corpus approach. When it
+  lands, the bilingual rollout is: ingest both corpora, enable the filter, and force a
+  re-sync so FR chunks carry `language=fr` (the pilot's interim load tagged them `en` — see
+  ADR-0048 residual + TASK-OPS-009).
+
+---
+
+## TASK-BE-035 — KB Quality / Rebrand Follow-up (French corpus still eir/AT&T) — ❌ Cancelled / Won't do
+
+**Parent:** EPIC-005 (Answer engine / knowledge base)
+**Related decision:** ADR-0048 (documents the Eir brand as intentional / by design)
+**Related:** TASK-BE-017 (FR translation of the Eir corpus), TASK-OPS-009 (loads it on pilot)
+**Classification:** V1 quality (KB content) — content, not code
+**Status:** ❌ **Cancelled / Won't do** (2026-08-27) — the Eir brand is intentional: the corpus
+originates from Eir and the product answers Eir customer problems, so no rebrand is needed. The
+original context below is kept for history.
+**Priority:** Low
+
+> **Cancellation rationale (2026-08-27):** this ticket rested on the assumption that the
+> eir/eircom/AT&T references are a defect to fix. That assumption is wrong — the corpus *is* the
+> Eir knowledge base and the product exists to answer Eir customer problems, so the brand is
+> expected and correct. No rebrand is planned. (Curating a richer *customer-facing* FR partition,
+> if ever needed, is a separate KB-quality/audience-tuning matter, not a rebrand.)
+
+### Context
+
+`articles-fr.csv` (loaded on the pilot per ADR-0048 / TASK-OPS-009 to ground French mobile
+and support questions) is a **machine translation of the eir corpus** (TASK-BE-017). It still
+references the source operator's brand — **eir / eircom / AT&T** — rather than the
+project's "telecom-exemple" brand. This is acceptable for a pilot whose purpose is to
+validate *grounding behaviour* (does a mobile question retrieve mobile content and get a
+French, grounded answer?), but the brand names would surface in real answers.
+
+### Objective
+
+Produce brand-correct French KB content for target-state use: either rebrand the translated
+corpus (replace operator/brand references with the project brand and correct
+operator-specific facts) or source a native French, brand-appropriate corpus.
+
+### Scope / considerations
+
+- Decide rebrand-in-place (deterministic brand-token substitution + a human review pass) vs
+  a fresh brand-correct FR corpus.
+- Preserve `document_id`s if rebranding in place so the idempotent sync/ledger diff behaves
+  (content change → re-ingest of the affected rows).
+- Licensing / PII review of the third-party operator content before any non-pilot use
+  (already flagged as an open item in TASK-BE-013).
+- Re-sync after content changes (content_hash changes → automatic re-ingest).
+
+### Acceptance
+
+- The French corpus used beyond the pilot contains no source-operator brand references
+  (eir/eircom/AT&T) where the project brand is expected; a spot-check of mobile/billing
+  answers shows brand-correct wording.
+- Not a blocker for the pilot grounding validation (ADR-0048).

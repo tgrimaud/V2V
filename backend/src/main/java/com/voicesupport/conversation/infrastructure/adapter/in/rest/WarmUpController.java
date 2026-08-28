@@ -47,8 +47,9 @@ public class WarmUpController {
     })
     public ResponseEntity<WarmUpResponse> warmUp() {
         WarmUpResult result = warmUpUseCase.warmUp();
-        log.info("[WARMUP] embedding_warmed={} llm_warmed={} duration_ms={} correlation_id={}",
-                result.embeddingWarmed(), result.llmWarmed(), result.durationMs(), CorrelationId.current());
+        log.info("[WARMUP] embedding_warmed={} llm_warmed={} stream_warmed={} duration_ms={} correlation_id={}",
+                result.embeddingWarmed(), result.llmWarmed(), result.streamWarmed(),
+                result.durationMs(), CorrelationId.current());
         return ResponseEntity.ok(WarmUpResponse.from(result));
     }
 }

@@ -151,15 +151,21 @@ public class ConversationConfig {
     // Connect-time warm-up of the embedding + LLM (TASK-BE-017 / ADR-0037): the voice runtime calls
     // POST /api/conversation/warm-up on WebRTC connect so the first real turn is warm (lever 2). The
     // warm query is configurable per deployment/language; it touches no conversation memory.
+    // stream-enabled (TASK-BE-020, default on) also warms the reactive streaming path used by
+    // converse-stream — a distinct HTTP client the synchronous warm-up leaves cold; passing a null
+    // streaming generator when disabled skips it without penalising fullyWarmed.
     @Bean
     public WarmUpUseCase warmUpUseCase(
             KnowledgeRetrievalPort knowledgeRetrievalPort,
             AnswerGeneratorPort answerGeneratorPort,
+            StreamingAnswerGeneratorPort streamingAnswerGeneratorPort,
             BackendTelemetry backendTelemetry,
             @Value("${voice-support.conversation.warmup.query:hello}") String warmQuery,
+            @Value("${voice-support.conversation.warmup.stream-enabled:true}") boolean streamEnabled,
             @Value("${voice-support.conversation.default-language:en}") String defaultLanguage) {
-        return new WarmUpService(knowledgeRetrievalPort, answerGeneratorPort, backendTelemetry,
-                warmQuery, AnswerLanguage.fromCode(defaultLanguage));
+        StreamingAnswerGeneratorPort streamGenerator = streamEnabled ? streamingAnswerGeneratorPort : null;
+        return new WarmUpService(knowledgeRetrievalPort, answerGeneratorPort, streamGenerator,
+                backendTelemetry, warmQuery, AnswerLanguage.fromCode(defaultLanguage));
     }
 
     // Bounded daemon pool for SSE stream workers (TASK-BE-007): each /converse-stream turn holds a

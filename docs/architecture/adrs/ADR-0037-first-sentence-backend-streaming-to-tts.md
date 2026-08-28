@@ -235,6 +235,14 @@ Mistral call + JVM JIT produced an 8.5 s call-1); with warm-up it is **bounded t
 **Residual finding:** `/warm-up` warms embedding + LLM but **not** the full converse
 critical path (RAG/pgvector, guardrail, sentence emitter), leaving ~300 ms of turn-1 JIT —
 **follow-up:** have `/warm-up` run a full dummy converse so those paths warm off-path too.
+**Partially closed (TASK-BE-020, 2026-08-27):** the residual turn-1 JIT on `converse-stream`
+is dominated by the **reactive streaming client** (`chatClient.stream()` / WebClient), a
+distinct HTTP client the synchronous `.call()` warm-up leaves cold. `WarmUpService` now also
+warms the `StreamingAnswerGeneratorPort` at connect (`warmup_stream` slice, `stream_warmed`
+flag, `warmup.stream-enabled` default on), side-effect-free (no memory) — closing the streaming
+slice of this residual without a full dummy converse (which would touch memory). Pure-CPU
+grounding/guardrail/segmenter JIT is sub-ms and left as-is. Live re-measurement pending
+(`docs/qa/task-be-020-first-sentence-latency-report.md`).
 Lever 2 is a **turn-1-only** win and **does not move the ADR-0029 gate alone** — lever 1
 remains decisive. STT pre-warm stays **opt-in** (positive but small live sample, n=2),
 ready to flip default-on after a larger sample.
@@ -261,7 +269,9 @@ ready to flip default-on after a larger sample.
   (retrieval) + the LLM once, touches no conversation memory, discards the output, is
   repeatable and non-blocking (a warm-up miss returns 200 with per-model flags false), and
   records `warmup_embedding` / `warmup_llm` latency slices — this is the endpoint the
-  TASK-WEB-021 connect trigger consumes. For lever 1, the investigation confirmed
+  TASK-WEB-021 connect trigger consumes. **TASK-BE-020 (2026-08-27)** adds a `warmup_stream`
+  slice + `stream_warmed` flag: it also warms the reactive streaming client (`chatClient.stream()`)
+  the sync warm-up left cold, still memory-free, `warmup.stream-enabled` default on. For lever 1, the investigation confirmed
   `converse-stream` (SSE, ADR-0013) **already** emits guardrail-vetted sentences one at a
   time via `GuardedSentenceEmitter` (DEC-002 enforced backend-side, no contract change
   needed), locked by a service-level incremental-delivery contract test in

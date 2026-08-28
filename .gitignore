@@ -45,3 +45,8 @@ Thumbs.db
 
 # draw.io desktop backup/lock files
 .$*.drawio.bkp
+
+# TASK-BE-033 LLM provider benchmark output — kept local (harness lives on the
+# unmerged task/TASK-BE-033-llm-provider-benchmark spike branch; reports are
+# machine-specific run artifacts, not versioned).
+scripts/llm_benchmark/reports/

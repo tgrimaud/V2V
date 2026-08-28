@@ -4,7 +4,15 @@
 tier: "voice"
 compose_src: "voice"
 
-# HTTP health probed after `up -d` (GET / serves the SPA, returns 200).
+# Readiness is verified via the CONTAINER healthcheck (TASK-INFRA-011), not a
+# host-side HTTP probe: the bridge publishes 8090 on the 192.168.x service IP but
+# returns 000 on host loopback and is firewalld source-scoped on the management
+# interface, so `curl http://127.0.0.1:8090/` from the host false-failed and aborted
+# the rolling deploy. The container's own HEALTHCHECK curls localhost:8090 inside the
+# container namespace, so `docker inspect .State.Health.Status` is the reliable gate.
+health_container_name: "voice-support-bridge"
+# Fallback HTTP probe (used only if health_container_name is unset). Kept for
+# reference; not used while the container-health gate above is active.
 health_url: "http://127.0.0.1:8090/"
 
 voice_bind: "0.0.0.0"

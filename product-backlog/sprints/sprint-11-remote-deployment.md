@@ -192,13 +192,13 @@ sprint's scope**; the deferred set is tracked but **out of execution** this spri
 | BUG-008 | Failed TTS spans pollute `tts_first_audio` p95 | ✅ Merged into sprint-11 (2026-08-05): first-audio span emitted success-only (interrupted/failed carry elapsed on event), semantics documented; voice-agent 464 unittest green |
 | TASK-WEB-024 | WebRTC concurrency ceiling + backpressure + drop per-turn batch loop | ✅ Merged into sprint-11 (2026-08-07, branch `task/TASK-WEB-024-webrtc-backpressure`): session cap `VOICE_MAX_WEBRTC_SESSIONS` (default 8) → offers past it get **503 + Retry-After** (renegotiations never capped); `voice.webrtc.active_sessions` gauge + `voice.webrtc.session_rejected` event; batch `PipecatTurnProcessor` reuses one persistent `BackgroundEventLoop` instead of `asyncio.run` per turn. QA voice-agent **487** unittest (+11) + **169** behave, `qa-validate-ansible.sh` **69/69**. Runtime-affecting (gauge/event) |
 | TASK-WEB-023 | Streaming provider protocols (Gradium unlock) | ✅ Merged into sprint-11 (2026-08-07, branch `task/TASK-WEB-023-streaming-provider-protocols`): `runtime_checkable` `StreamingSttProvider`/`StreamingTtsProvider` + session protocols, per-provider streaming registry (`register_streaming_provider`/`supports_streaming`), `server.py` selection keyed off `supports_streaming()` not `== GRADIUM`, fake-vendor conformance + selection tests; QA 484 unittest / 169 behave green |
+| TASK-OPS-006 | SHA-pin GitHub Actions + Dependabot (supply-chain) | ✅ Implemented (2026-08-06, branch `task/TASK-OPS-006-pin-actions-sha`): 8 third-party `uses:` repinned to commit SHAs (`# vX.Y.Z` kept), `.github/dependabot.yml` (github-actions, grouped PRs) added; QA `qa-validate-workflows.sh` **27/27** + `actionlint` clean. Not runtime-affecting. Pending review/merge |
 
 ### Tracked but out of this sprint's execution (deferred)
 
 | Ticket | Title |
 |---|---|
 | TASK-BE-026 | Retries on idempotent reads + LLM circuit breaker |
-| TASK-OPS-006 | SHA-pin GitHub Actions + Dependabot (already ticketed) |
 | TASK-INFRA-005 | Validate WebRTC signaling stickiness at the voice LB |
 
 ## Open inputs (collected incrementally)
