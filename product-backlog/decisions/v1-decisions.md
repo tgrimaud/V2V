@@ -395,3 +395,45 @@ sidesteps Architect variable limits as a secondary benefit.
   path is **not** a V1 option.
 - The escalation **decision** stays a backend rule (ADR-0019); Genesys receives the
   reference and routes — it never computes or alters the escalation reason or content.
+
+---
+
+## DEC-014 - Genesys Spike Runs Synthetic-First; Pilot Concurrency Target = 3; Pilot Env Available
+
+**Status:** Accepted (user decision) — scopes the TASK-WEB-025 spike; refines OQ-006 residual
+items; recorded via ADR-0049 and `sprints/sprint-13-genesys-audio-connector.md`  
+**Date:** 2026-08-28
+
+### Decision
+
+Three inputs to the Sprint 13 Genesys feasibility spike (TASK-WEB-025) are now fixed:
+
+1. **Synthetic-first PII-audio posture.** The spike runs on **synthetic / non-PII audio
+   only**. The **real-PII egress sign-off** (data residency / encryption / compliance for PII
+   audio leaving the Genesys cloud to the runtime VMs) is a **parallel open item owned by
+   Security / Compliance** — it is **NOT a blocker for the spike** and stays OPEN in OQ-006
+   (and remains aligned with OQ-009's production-gate posture).
+2. **Pilot concurrency target = 3 concurrent Genesys sessions.** The spike must check this
+   target fits the Genesys **premium ≤5-integrations / 1-vCPU-class runtime** envelope (R6).
+3. **Genesys pilot environment is available now** — a pilot org with Architect access exists,
+   so the live-measurement steps (Call Audio Connector fork/pause/resume flow + billing
+   advisor-queue routing) can be run by a human once the throwaway prototype is ready.
+
+### Rationale
+
+Deciding the PII posture up front keeps the spike unblocked (synthetic audio needs no
+compliance sign-off) while keeping the real-PII decision visible and owned, so the spike is
+not silently treated as a compliance clearance. A concrete concurrency **target** (3) lets the
+spike produce a pass/fail against the premium envelope instead of an open-ended ceiling. Pilot
+access availability confirms the live-org measurement is a scheduling matter, not a blocker.
+
+### Implication
+
+- **TASK-WEB-025** is scoped to synthetic audio; its report measures what synthetic runs can
+  prove and lists exactly what still needs the **live Genesys org** (human-run Architect steps).
+- The spike's concurrency check targets **3 concurrent sessions** on a 1-vCPU-class runtime and
+  records the premium ≤5-integrations impact.
+- **OQ-006** keeps the **PII-audio residency / egress** item OPEN (owner: Security / Compliance,
+  parallel track); the concurrency and env items are updated with the target and availability.
+- This decision does **not** waive the ADR-0029 latency gate or DEC-012/013 — a spike NO-GO still
+  escalates to the user (DEC-012), and the handoff stays by-reference (DEC-013).

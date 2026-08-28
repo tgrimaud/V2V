@@ -185,14 +185,26 @@ Architect-variable context **rejected** on PII/trust-boundary grounds).
 **Resolution vehicle for the rest = Sprint 13** (`sprints/sprint-13-genesys-audio-connector.md`):
 the **TASK-WEB-025** spike remains the **latency/feasibility gate** (deciding Genesys as the entry does
 **not** waive it — a gate-fail escalates to the user, it does not auto-proceed), and **ADR-0049** records
-the delivery shape. **Residual OPEN items** (owners):
+the delivery shape.
+
+**✅ Additionally decided by the user (2026-08-28, DEC-014):**
+- **Spike PII posture = synthetic-first** — the TASK-WEB-025 spike runs on **synthetic / non-PII audio
+  only**; the real-PII egress sign-off is a **parallel** item (see the residual list), **not** a spike
+  blocker.
+- **Pilot concurrency target = 3** concurrent Genesys sessions — the spike checks this fits the premium
+  **≤5-integrations / 1-vCPU** envelope.
+- **Genesys pilot environment is available now** (org + Architect access) — the live-measurement steps
+  can be human-run once the throwaway prototype is ready.
+
+**Residual OPEN items** (owners):
 - **Codec — PCMU vs L16 end to end** + transcode budget — *spike (TASK-WEB-025)*.
 - **15-minute cap fit** vs the worst-case billing journey + mitigation (checkpoint/resume or call-back)
   — *spike (TASK-WEB-025)*.
 - **PII-audio residency / egress** from the Genesys cloud to the runtime VMs (region, encryption,
-  compliance sign-off) — **user (Security / Compliance)**.
+  compliance sign-off) — **user (Security / Compliance)**. **Still OPEN — parallel track, not a spike
+  blocker (DEC-014).** Aligned with OQ-009 (production data-protection gate).
 - **Pilot concurrency** vs the premium **≤5-integrations / 1-vCPU** envelope — *spike (TASK-WEB-025) +
-  product*.
+  product*. **Target set = 3 concurrent sessions (DEC-014); the spike verifies the fit.**
 
 This OQ stays Open until those residual items report and the decision owners sign off.  
 **Owner:** Product / Contact Center / Architecture / Security  

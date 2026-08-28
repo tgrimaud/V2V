@@ -48,18 +48,20 @@ gate) + ADR-0025 (barge-in).
 
 ## Status
 
-**Status:** 📋 **Planned** (created 2026-08-27) — **strategic direction decided**
-(DEC-012 Genesys = full pilot entry; DEC-013 handoff by reference); implementation
-gated by **OQ-006** (Genesys pilot environment access + residual technical/compliance
-items) and by the **TASK-WEB-025** latency/feasibility go/no-go (a gate-fail escalates
-to the user; it does not auto-proceed or drop the direction). Planning only at
-creation: sprint definition + tickets + ADRs, **no runtime code**.
+**Status:** 🚧 **In progress** (kicked off 2026-08-28) — **strategic direction decided**
+(DEC-012 Genesys = full pilot entry; DEC-013 handoff by reference; **DEC-014** spike
+synthetic-first + concurrency target 3 + pilot env available); implementation gated by
+**OQ-006** (residual technical/compliance items) and by the **TASK-WEB-025**
+latency/feasibility go/no-go (a gate-fail escalates to the user; it does not auto-proceed
+or drop the direction). **TASK-WEB-025** (feasibility spike, investigation-only) is the
+active ticket.
 
 **Sprint branch:** `feat/sprint-13-genesys-audio-connector` (forked from
-`feat/restart-from-scratch`, 2026-08-27). Two-level branch model: ticket branches
-fork from and merge back into this sprint branch (`git merge --no-ff`); the sprint
-branch merges into `feat/restart-from-scratch` only on the user's explicit request at
-sprint closure.
+`feat/restart-from-scratch`, 2026-08-27; **synced with mainline 2026-08-28 via
+`--no-ff` merge `8b9bc5a`** so the rebuilt `backend/` + `voice-agent/` are present).
+Two-level branch model: ticket branches fork from and merge back into this sprint branch
+(`git merge --no-ff`); the sprint branch merges into `feat/restart-from-scratch` only on
+the user's explicit request at sprint closure.
 
 ## Roadmap Context
 
@@ -76,7 +78,7 @@ sprint closure.
 |---|---|---|
 | Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | ✅ Done (2026-08-24) |
 | Sprint 12 | External voice via interim WebSocket audio (Genesys-ready) | ✅ Done (2026-08-25, v0.6.0) |
-| **Sprint 13** | **Genesys Audio Connector + Genesys integration** | 📋 Planned — gated by OQ-006 + TASK-WEB-025 |
+| **Sprint 13** | **Genesys Audio Connector + Genesys integration** | 🚧 In progress — TASK-WEB-025 spike (synthetic-first) |
 | Sprint 14 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
 ## Why now (state that justifies the sprint)
@@ -161,7 +163,7 @@ sprint closure.
 
 | # | Ticket | Title | Role | Gate | Status |
 |---|---|---|---|---|---|
-| 1 | TASK-WEB-025 | Genesys Audio Connector **feasibility spike** (investigation only) — go/no-go | Investigate (the gate) | OQ-006 | 📋 Proposed |
+| 1 | TASK-WEB-025 | Genesys Audio Connector **feasibility spike** (investigation only) — go/no-go | Investigate (the gate) | OQ-006 | 🚧 In progress (synthetic-first, DEC-014) |
 | 2 | TASK-WEB-041 | Genesys **Audio Connector transport adapter** on the ADR-0047 server — codec (PCMU/L16 ↔ PCM16) + one stream/session + 15-min cap | Build (runtime) | spike GO | 📋 Proposed |
 | 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | 📋 Proposed |
 | 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | 📋 Proposed |
@@ -304,6 +306,16 @@ Source: `docs/architecture/reviews/genesys-audio-connector-adversarial-review-20
 4. **Single pilot entry = Genesys** (**DEC-012**) — Twilio/SIP (US-018) deferred, marked
    not-tested-in-V1.
 
+**✅ Decided by the user (2026-08-28, DEC-014):**
+
+5. **Spike PII posture = synthetic-first** — TASK-WEB-025 runs on **synthetic / non-PII
+   audio only**. The real-PII egress sign-off is a **parallel** Security/Compliance item,
+   **NOT a spike blocker**, and stays OPEN in OQ-006.
+6. **Pilot concurrency target = 3** concurrent Genesys sessions — the spike checks this
+   fits the premium **≤5-integrations / 1-vCPU** envelope (R6).
+7. **Genesys pilot environment is available now** (org + Architect access) — the
+   live-measurement steps are human-runnable once the throwaway prototype is ready.
+
 **⏳ Still open — surfaced for the decision owner; the spike (or the named owner) must
 resolve before the Genesys path is accepted:**
 
@@ -314,6 +326,8 @@ resolve before the Genesys path is accepted:**
 3. **Which customer/session identifiers** the pilot trust model allows as the minimal
    routing metadata alongside the `handoff_id`. *(spike — TASK-WEB-025)*
 4. **Data residency / egress for PII audio** from the Genesys cloud to the runtime VMs —
-   region, encryption, compliance sign-off. **(user — Security / Compliance)**
-5. **Concurrency at pilot:** how many simultaneous Genesys sessions, and does the premium
-   ≤5-integrations + 1-vCPU envelope hold that load? *(spike — TASK-WEB-025 + product)*
+   region, encryption, compliance sign-off. **(user — Security / Compliance)** — **still
+   OPEN, parallel track, not a spike blocker (DEC-014)**; the spike runs synthetic-only.
+5. **Concurrency at pilot:** the **target is 3 concurrent Genesys sessions (DEC-014)**; the
+   spike verifies it holds within the premium ≤5-integrations + 1-vCPU envelope. *(spike —
+   TASK-WEB-025 + product)*
