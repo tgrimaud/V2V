@@ -39,7 +39,11 @@ factory and the PCM16/16 kHz internal boundary — **not** a parallel stack.
 full Audio Connector voice routing is the pilot target, US-018 deferred — the
 TASK-WEB-025 latency/feasibility gate still applies), **DEC-013** (escalation handoff
 travels **by reference** — `handoff_id` + backend fetch; inline context rejected on
-PII/trust-boundary grounds), ADR-0040 (Genesys Audio Connector 3-plane split — updated
+PII/trust-boundary grounds), **DEC-014** (spike synthetic-first; concurrency target 3;
+pilot env available), **DEC-015** (**DECOUPLE** — the ADR-0029 latency gate is decoupled
+from the Genesys connector build; the build proceeds while the gate is tracked as a
+separate latency workstream; no Genesys-path SLO claim until the base latency closes),
+ADR-0040 (Genesys Audio Connector 3-plane split — updated
 this sprint), **ADR-0049** (Genesys Audio Connector Sprint 13 delivery shape — new,
 Proposed/spike-gated on technical feasibility). Builds on ADR-0046 (WebSocket primary
 transport) + ADR-0047 (single async server) + ADR-0043 (session factory) +
@@ -50,11 +54,24 @@ gate) + ADR-0025 (barge-in).
 
 **Status:** 🚧 **In progress** (kicked off 2026-08-28) — **strategic direction decided**
 (DEC-012 Genesys = full pilot entry; DEC-013 handoff by reference; **DEC-014** spike
-synthetic-first + concurrency target 3 + pilot env available); implementation gated by
-**OQ-006** (residual technical/compliance items) and by the **TASK-WEB-025**
-latency/feasibility go/no-go (a gate-fail escalates to the user; it does not auto-proceed
-or drop the direction). **TASK-WEB-025** (feasibility spike, investigation-only) is the
-active ticket.
+synthetic-first + concurrency target 3 + pilot env available). Implementation gated by
+**OQ-006** (residual technical/compliance items).
+
+**Spike outcome + gate posture (2026-08-28, DEC-015 — DECOUPLE).** The **TASK-WEB-025**
+feasibility spike is **delivered** (go/no-go report + synthetic latency artifact). It
+returned a **NO-GO against ADR-0029** — a **FAIL at the measured floor** — but the failure
+is **base-latency-driven, not Genesys-driven**: the Genesys transport/transcode is cheap
+(**L16 ~3.3 ms / PCMU ~17.4 ms** p95 overhead), while the pre-existing in-house
+mouth-to-ear base (p95 **~2.76 s**, TASK-WEB-039) already exceeds the 1.5 s budget before
+any Genesys leg. The user **resolved the DEC-012 escalation as DECOUPLE (DEC-015)**: the
+**Genesys connector build proceeds** (spike is **GO-for-build**), and the **ADR-0029 gate
+is tracked as a separate latency workstream** (documented **FAIL**, owned by TASK-BE-033
+model choice / OpenAI key + TASK-STT-014 + TASK-BE-020). **No SLO is claimed on the Genesys
+path** until the base latency comes under budget and ADR-0029 is re-scored PASS. The
+follow-on build tickets are therefore **unblocked from the gate** but remain conditional on
+**OQ-006 pilot access + the live-org cloud-leg measurement** (runbook:
+`docs/operations/genesys-live-measurement-runbook.md`), which completes what the synthetic
+spike could not (Genesys cloud legs, negotiated codec, 15-min cap, native barge-in/EOT).
 
 **Sprint branch:** `feat/sprint-13-genesys-audio-connector` (forked from
 `feat/restart-from-scratch`, 2026-08-27; **synced with mainline 2026-08-28 via
@@ -315,6 +332,18 @@ Source: `docs/architecture/reviews/genesys-audio-connector-adversarial-review-20
    fits the premium **≤5-integrations / 1-vCPU** envelope (R6).
 7. **Genesys pilot environment is available now** (org + Architect access) — the
    live-measurement steps are human-runnable once the throwaway prototype is ready.
+
+**✅ Decided by the user (2026-08-28, DEC-015 — resolves the TASK-WEB-025 escalation):**
+
+8. **DECOUPLE the ADR-0029 gate from the Genesys build.** The spike NO-GO (escalated under
+   DEC-012) is resolved: the **Genesys connector build proceeds** (TASK-WEB-041 + follow-ons
+   are unblocked from the gate) and the **ADR-0029 gate is a separate latency workstream**
+   (documented **FAIL**, owned by TASK-BE-033 model choice / OpenAI key + TASK-STT-014 +
+   TASK-BE-020). **No Genesys-path SLO** is claimed until the base latency closes and ADR-0029
+   is re-scored PASS. ADR-0049 **stays Proposed** — build authorized under the decouple; the
+   flip to Accepted still needs the live-org re-score (GO) + OQ-006 sign-off. The build tickets
+   remain conditional on **OQ-006 pilot access + the live-org measurement** (see the runbook
+   `docs/operations/genesys-live-measurement-runbook.md`), not on an ADR-0029 PASS.
 
 **⏳ Still open — surfaced for the decision owner; the spike (or the named owner) must
 resolve before the Genesys path is accepted:**

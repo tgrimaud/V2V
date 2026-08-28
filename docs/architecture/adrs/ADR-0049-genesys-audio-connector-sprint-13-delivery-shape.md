@@ -48,10 +48,20 @@ Source review: `docs/architecture/reviews/genesys-audio-connector-adversarial-re
   Genesys cloud legs (ingress / Architect fork / egress), the negotiated codec, the 15-min cap and
   native barge-in/EOT events are **unmeasured** (need the live org). Per DEC-012 the FAIL floor is a
   **user decision** (mitigation / re-scope / timeline), not an auto-proceed.
+- **2026-08-28 — user decision: DECOUPLE (DEC-015).** The DEC-012 escalation is resolved: the
+  **Genesys connector build proceeds** (TASK-WEB-041 + follow-ons are unblocked from the ADR-0029
+  gate), and the **ADR-0029 gate is tracked as a separate latency workstream** (documented FAIL,
+  owned by TASK-BE-033 model choice / OpenAI key + TASK-STT-014 + TASK-BE-020) — because the FAIL is
+  driven by the in-house base, not the (de-risked) Genesys transport. **The build is authorized
+  under this decouple decision, but this ADR remains `Proposed`** and **no Genesys-path SLO is
+  claimed** until the base latency closes and ADR-0029 is re-scored PASS. See
+  `product-backlog/decisions/v1-decisions.md#dec-015` and the live-measurement runbook
+  `docs/operations/genesys-live-measurement-runbook.md`.
 - **Flip Proposed → Accepted only when** (a) the live-org measurement lands with a re-scored
   **GO** against ADR-0029, and (b) the residual OQ-006 items (codec confirmed, 15-min cap fit,
   PII-audio residency sign-off, concurrency within the premium ≤5 / 1-vCPU envelope) sign off. On a
-  sustained NO-GO, park this ADR at `Proposed` with the report as the rationale.
+  sustained NO-GO, park this ADR at `Proposed` with the report as the rationale. **The DEC-015
+  decouple authorizes the build; it does not pre-satisfy this Accepted condition.**
 
 ## Context
 
@@ -203,5 +213,8 @@ gate's outputs (also OQ-006 decision items):
 - `product-backlog/sprints/sprint-13-genesys-audio-connector.md`
 - `product-backlog/open-questions/v1-open-questions.md` (OQ-006)
 - `product-backlog/decisions/v1-decisions.md` — **DEC-012** (Genesys = full pilot entry),
-  **DEC-013** (escalation handoff by reference)
+  **DEC-013** (escalation handoff by reference), **DEC-014** (spike synthetic-first),
+  **DEC-015** (DECOUPLE — ADR-0029 gate decoupled from the Genesys build)
+- `docs/operations/genesys-live-measurement-runbook.md` — live-org cloud-leg measurement procedure
+- `docs/qa/task-web-025-genesys-audio-connector-spike-report.md` — spike go/no-go report
 - Tickets: TASK-WEB-025 (gate), TASK-WEB-041/042/043/044, TASK-BE-036/037, TASK-INFRA-012

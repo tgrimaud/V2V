@@ -3,12 +3,14 @@
 This file keeps the product-readable decision summary. The authoritative
 architecture decisions are the ADRs under `docs/architecture/adrs/`.
 
-> **Two distinct "decision" numberings — do not conflate.** `DEC-001…DEC-011` below is
+> **Two distinct "decision" numberings — do not conflate.** `DEC-001…DEC-015` below is
 > the durable product decision log. The **"global-review decision #1…#9"** referenced in
 > `backlog-index.md`, `done-tasks.md` and the 2026-08-15 review are a **separate,
 > review-local numbering** (the items of that adversarial-review remediation loop, e.g.
 > ADR-0043/0044, TASK-BE-030/031/032, TASK-WEB-032/033/034); they are **not** `DEC-###`
-> entries and do not extend this log. `DEC-012`/`DEC-013` do not exist.
+> entries and do not extend this log. The `DEC-041-a`/`DEC-041-b` sub-labels used in US-041
+> / ADR-0035 are **story-local** decision tags (they mirror the story id) and are likewise
+> **not** part of this global sequence.
 
 ## DEC-001 - V1 Focuses On Invoice Explanation
 
@@ -437,3 +439,56 @@ access availability confirms the live-org measurement is a scheduling matter, no
   parallel track); the concurrency and env items are updated with the target and availability.
 - This decision does **not** waive the ADR-0029 latency gate or DEC-012/013 — a spike NO-GO still
   escalates to the user (DEC-012), and the handoff stays by-reference (DEC-013).
+
+---
+
+## DEC-015 - ADR-0029 Latency Gate Decoupled From The Genesys Connector Build
+
+**Status:** Accepted (user decision) — **resolves the TASK-WEB-025 NO-GO escalation raised under
+DEC-012**; keeps ADR-0049 Proposed (build authorized, not yet Accepted); recorded via
+`sprints/sprint-13-genesys-audio-connector.md` and the spike report
+`docs/qa/task-web-025-genesys-audio-connector-spike-report.md`
+
+**Date:** 2026-08-28
+
+### Decision
+
+**DECOUPLE.** The **ADR-0029 mouth-to-ear latency gate** is decoupled from the **Genesys Audio
+Connector connector build**. The TASK-WEB-025 spike NO-GO — escalated to the user under DEC-012 —
+is resolved as follows:
+
+1. **The Genesys connector build proceeds now** (TASK-WEB-041 and the follow-on Genesys tickets),
+   treating the ADR-0029 gate as a **separate latency workstream** rather than a build blocker.
+2. **The ADR-0029 gate stays a documented FAIL** and is tracked independently against the in-house
+   base-latency levers — primarily **TASK-BE-033** (backend chat-model choice / OpenAI key), plus
+   **TASK-STT-014** (STT finalize tail) and **TASK-BE-020** (backend first token).
+3. **No SLO claim is made on the Genesys path** until the in-house base latency comes under budget
+   and ADR-0029 is re-scored PASS.
+
+### Rationale
+
+The spike proved the Genesys transport/transcode is **cheap and feasible** (L16 **~3.3 ms**, PCMU
+**~17.4 ms** p95 overhead) — the media plane is **de-risked**. The ADR-0029 FAIL is attributable
+**entirely to the pre-existing in-house mouth-to-ear base** (p95 **~2.76 s**, TASK-WEB-039), which
+already exceeds the **1.5 s** budget **before any Genesys leg is added**. Because the failure is
+**base-latency-driven, not Genesys-driven**, holding the de-risked Genesys integration hostage to
+an unrelated latency track would stall independently valuable work. Building now while the
+base-latency levers proceed in parallel is the faster path to a pilot-ready Genesys entry, without
+overclaiming performance.
+
+### Implication
+
+- **Build proceeds:** TASK-WEB-041/042/043/044, TASK-BE-036/037 and TASK-INFRA-012 are **unblocked
+  from the ADR-0029 gate**. They remain conditional on **OQ-006 pilot access** and the **live-org
+  measurement** for their live behaviour (cloud legs, negotiated codec, 15-min cap, native
+  barge-in/EOT), **not** on an ADR-0029 PASS.
+- **The gate is a separate latency workstream** owned by **TASK-BE-033** (model choice / OpenAI key)
+  + **TASK-STT-014** + **TASK-BE-020**. Its status stays **FAIL** and is **re-scored, not waived**.
+- **No Genesys-path SLO** is claimed until the base latency closes; the Genesys path stays a
+  measured integration off any SLO claim until a re-scored ADR-0029 PASS lands.
+- **ADR-0049 stays `Proposed`.** The build is **authorized under this decouple decision**; the flip
+  to **Accepted** still requires the **live-org re-score (GO)** + **OQ-006 sign-off** (codec, 15-min
+  cap, PII-audio residency, concurrency within the premium ≤5 / 1-vCPU envelope).
+- **Does not waive DEC-012/013/014:** Genesys stays the full pilot entry (DEC-012), the handoff
+  stays by reference (DEC-013), and the spike stayed synthetic-first (DEC-014). This decision is the
+  **explicit user resolution** of the DEC-012 escalation, not a bypass of it.
