@@ -108,7 +108,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         telemetry.recordAnswerLanguage(null, language.code());
         String message = decision.fallbackMessage();
         onChunk.accept(message);
-        return GeneratedAnswer.fallback(message);
+        return GeneratedAnswer.fallback(message, decision.verdict());
     }
 
     private double bestScore(List<RetrievedEvidence> evidence) {
