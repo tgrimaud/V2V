@@ -40,6 +40,10 @@ SESSION_STARTED_EVENT = "voice.genesys.session_started"
 CLIENT_CONNECTED_EVENT = "voice.genesys.client_connected"
 CLIENT_DISCONNECTED_EVENT = "voice.genesys.client_disconnected"
 ACTIVE_SESSIONS_METRIC = "voice.genesys.active_sessions"
+# Backpressure counter (TASK-WEB-043): every WS 1013 capacity refusal emits one sample so
+# refusals are aggregatable per channel by the OTel exporter / latency report, not only
+# visible as a one-off event.
+SESSION_REJECTED_METRIC = "voice.genesys.session_rejected"
 SESSION_REJECTED_EVENT = "voice.genesys.session_rejected"
 SESSION_CAP_EVENT = "voice.genesys.session_cap"
 SESSION_CAP_FORCED_EVENT = "voice.genesys.session_cap_forced"
@@ -150,6 +154,14 @@ async def reject(
         channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
         reason=REASON_CAPACITY,
         active_sessions=active.count,
+        max_sessions=max_sessions,
+    )
+    telemetry.metric(
+        SESSION_REJECTED_METRIC,
+        1.0,
+        correlation_id=cid,
+        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
+        reason=REASON_CAPACITY,
         max_sessions=max_sessions,
     )
     emit_gauge(telemetry, cid, active.count, max_sessions, "rejected")

@@ -39,6 +39,7 @@ from web_voice.genesys_config import (  # noqa: E402
     SESSION_CAP_EVENT,
     SESSION_CAP_FORCED_EVENT,
     SESSION_REJECTED_EVENT,
+    SESSION_REJECTED_METRIC,
     SESSION_STARTED_EVENT,
     WS_TRY_AGAIN_LATER,
     genesys_allowed_origins_config,
@@ -221,6 +222,32 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         self.assertEqual(event.attributes["reason"], REASON_CAPACITY)
         self.assertEqual(event.attributes["channel"], GENESYS_AUDIO_CONNECTOR_CHANNEL)
         self.assertTrue(_gauge(rejected[0], "rejected"))
+        factory.sessions[0].release()
+        await first.close()
+        await second.close()
+
+    async def test_over_capacity_refusal_emits_the_backpressure_counter_metric(self) -> None:
+        # GIVEN a handler capped at one concurrent Genesys session
+        logged: list[TelemetryRecorder] = []
+        factory = _FakeFactory()
+        handler = make_genesys_handler(factory, max_sessions=1, log=logged.append)
+        client = await self._serve(handler)
+        first = await client.ws_connect("/genesys/audiohook?conversationId=a")
+        await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
+        # WHEN a second concurrent call is refused (WS 1013 backpressure)
+        second = await client.ws_connect("/genesys/audiohook?conversationId=b")
+        await asyncio.wait_for(second.receive(), timeout=10)
+        # THEN the refusal is also counted as an aggregatable per-channel backpressure metric
+        refused = [
+            metric
+            for recorder in logged
+            for metric in recorder.metrics()
+            if metric.name == SESSION_REJECTED_METRIC
+        ]
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(refused[0].value, 1.0)
+        self.assertEqual(refused[0].attributes["channel"], GENESYS_AUDIO_CONNECTOR_CHANNEL)
+        self.assertEqual(refused[0].attributes["reason"], REASON_CAPACITY)
         factory.sessions[0].release()
         await first.close()
         await second.close()

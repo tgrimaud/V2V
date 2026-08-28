@@ -48,8 +48,8 @@ from .genesys_config import (
     reject,
 )
 from .genesys_framing import GenesysAudioConnectorSerializer
+from .genesys_timing import genesys_log_telemetry
 from .session_factory import SessionFactory
-from .session_telemetry import log_telemetry
 from .websocket_app import (
     DEFAULT_SAMPLE_RATE,
     AiohttpWebsocketParams,
@@ -82,7 +82,7 @@ def make_genesys_handler(
     default_language: str | None = None,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
-    log: Callable[[TelemetryRecorder], None] = log_telemetry,
+    log: Callable[[TelemetryRecorder], None] = genesys_log_telemetry,
 ) -> Callable[[web.Request], Awaitable[web.WebSocketResponse]]:
     """Build the `GET /genesys/audiohook` handler: one session per connection, N concurrent."""
     active = _ActiveSessions()
