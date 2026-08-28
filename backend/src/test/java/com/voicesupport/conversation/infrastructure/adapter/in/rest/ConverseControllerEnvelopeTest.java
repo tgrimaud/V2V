@@ -4,6 +4,7 @@ import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
+import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // Directly exercises the TASK-BE-037 envelope wiring in ConverseController: memory keys on the
 // normalized channel envelope (external_session_id, falling back to conversation_id) and a
@@ -79,6 +81,30 @@ class ConverseControllerEnvelopeTest {
         assertThat(second.getBody().text()).isEqualTo(LISTEN_PROMPT);
     }
 
+    @Test
+    void reprocesses_a_retry_with_the_same_idempotency_key_after_the_first_turn_fails() {
+        // GIVEN a use case that fails the first turn then succeeds, over a real dedup guard
+        var flaky = new FlakyConverseUseCase();
+        var flakyController = new ConverseController(
+                flaky,
+                new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
+                new BackendTelemetry(new SimpleMeterRegistry()),
+                "");
+        ConverseRequest delivery = new ConverseRequest(
+                "Pourquoi ma facture ?", null, "corr-1", "genesys", null,
+                "genesys-conv-9", "evt-1", "idem-42", "voice", null);
+
+        // WHEN the first delivery fails and the same key is retried
+        assertThatThrownBy(() -> flakyController.converse(delivery, null, new MockHttpServletResponse()))
+                .isInstanceOf(UpstreamUnavailableException.class);
+        ResponseEntity<ConverseResponse> retry =
+                flakyController.converse(delivery, null, new MockHttpServletResponse());
+
+        // THEN the retry is reprocessed (reservation released on failure), not swallowed as a duplicate
+        assertThat(flaky.calls).isEqualTo(2);
+        assertThat(retry.getBody().text()).isEqualTo("La proration explique l'écart.");
+    }
+
     private static final class CapturingConverseUseCase implements ConverseUseCase {
         private String lastConversationId;
         private int calls;
@@ -92,6 +118,24 @@ class ConverseControllerEnvelopeTest {
         public GeneratedAnswer converse(String transcript, String conversationId, String forcedLanguage) {
             this.lastConversationId = conversationId;
             this.calls++;
+            return GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
+        }
+    }
+
+    private static final class FlakyConverseUseCase implements ConverseUseCase {
+        private int calls;
+
+        @Override
+        public GeneratedAnswer converse(String transcript, String conversationId) {
+            return converse(transcript, conversationId, null);
+        }
+
+        @Override
+        public GeneratedAnswer converse(String transcript, String conversationId, String forcedLanguage) {
+            this.calls++;
+            if (calls == 1) {
+                throw new UpstreamUnavailableException("upstream 503");
+            }
             return GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
         }
     }

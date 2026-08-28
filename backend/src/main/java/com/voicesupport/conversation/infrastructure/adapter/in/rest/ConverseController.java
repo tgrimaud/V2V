@@ -87,7 +87,20 @@ public class ConverseController {
             telemetry.recordChannelDelivery(envelope.replyMode().code(), true);
             return ResponseEntity.ok(ConverseResponse.of(LISTEN_PROMPT));
         }
-        return answer(request, envelope);
+        return answerReleasingOnFailure(request, envelope);
+    }
+
+    // Confirms the idempotency reservation only when the turn completes: a failure (e.g. upstream
+    // 503) releases the reserved key so a legitimate retry with the same idempotency_key is
+    // reprocessed instead of being swallowed as a duplicate (TASK-BE-037 review #3).
+    private ResponseEntity<ConverseResponse> answerReleasingOnFailure(
+            ConverseRequest request, ChannelEnvelope envelope) {
+        try {
+            return answer(request, envelope);
+        } catch (RuntimeException e) {
+            idempotentDeliveryGuard.releaseOnFailure(envelope);
+            throw e;
+        }
     }
 
     // Aligns backend logs/metrics with the runtime's correlation id (authoritative, from the body)

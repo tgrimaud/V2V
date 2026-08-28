@@ -35,4 +35,16 @@ public class InMemoryDeliveryDeduplicationAdapter implements DeliveryDeduplicati
             return seen.put(idempotencyKey, PRESENT) == null;
         }
     }
+
+    // Drops a previously-reserved key so a turn that failed and is legitimately retried with the
+    // same idempotency key is reprocessed instead of being swallowed as a duplicate (TASK-BE-037).
+    @Override
+    public void release(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return;
+        }
+        synchronized (seen) {
+            seen.remove(idempotencyKey);
+        }
+    }
 }
