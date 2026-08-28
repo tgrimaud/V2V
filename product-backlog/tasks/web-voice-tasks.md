@@ -3787,9 +3787,11 @@ on-wire byte order, `conversationId` header/open-frame carrier, crude resampling
 ADR-0025 (barge-in), ADR-0049, ADR-0046/0043
 **Depends on:** TASK-WEB-041 (the Genesys transport exists), TASK-WEB-025 (spike confirms the events)
 **Classification:** V1 voice runtime (runtime-affecting: control-signal source per path)
-**Status:** 📋 Proposed — conditional on spike GO
+**Status:** 🚧 Prep implemented on branch `task/TASK-WEB-042-genesys-barge-in-eot`; live-org
+barge-in/EOT validation pending the Genesys measurement run; awaiting adversarial review + user
+merge.
 **Priority:** High (closes adversarial-review **R4**)
-**Branch:** `task/TASK-WEB-042-genesys-bargein-ownership` (off the sprint branch, when gated)
+**Branch:** `task/TASK-WEB-042-genesys-barge-in-eot` (off `feat/sprint-13-genesys-audio-connector`)
 
 ### Context
 
@@ -3823,6 +3825,61 @@ Scenario: The web dev path keeps the in-house detectors
 
 - Genesys-path barge-in/end-of-turn come solely from Genesys events; no dual firing (test-locked).
 - WS/WebRTC behaviour unchanged; interruption cancels cleanly on both paths.
+
+### Implementation note (prep increment, 2026-08-28)
+
+Delivered as a **preparation increment** — everything deterministically knowable now, with the
+live-Genesys-Architect integration points scaffolded + clearly marked, not claimed done. The
+live-org barge-in/EOT/native-event validation is gated on the upcoming Genesys measurement run
+(`docs/operations/genesys-live-measurement-runbook.md`).
+
+**Reused, not forked (ADR-0043/0047):** the Genesys transport already builds the SHARED
+`StreamingSttProcessor` + `CallEndFarewellProcessor` through the unchanged `SessionFactory`, so on
+the Genesys path barge-in (Pipecat `broadcast_interruption()` + bot-speaking gate + ADR-0025
+amplitude/N-frame sustained-onset, env-tunable via `VOICE_BARGE_IN_THRESHOLD`/`VOICE_BARGE_IN_FRAMES`)
+and end-of-turn (`StreamingEndOfTurnDetector` + `_silence_window_config()` / `PILOT_END_OF_TURN_SILENCE_MS`)
+are already active and per-channel labelled (`channel=genesys_audio_connector`) with zero new detector code.
+
+**Added (Genesys-specific wiring):**
+- `web_voice/genesys_barge_in_eot.py` — (1) a per-transport native control-signal **SOURCE seam**
+  (`GenesysControlSignalSource` + `genesys_control_source_factory`) + `VOICE_GENESYS_CONTROL_MODE`
+  config (`detector` default / `native`); (2) `GenesysCallControl` — idempotent, first-trigger-wins
+  `voice.call_end` reason recorder (`customer_farewell` > `cap_reached` > `client_disconnect`) + the
+  ADR-0035 confirmation-turn → existing drain teardown wiring (no bespoke close path). No PII in
+  spans/metrics/logs (reason + correlation id + optional signal only).
+- `genesys_config.py` — call-end telemetry vocab (`voice.call_end`, reasons) + `genesys_conversation_id`.
+- `genesys_cap.py` — `on_disconnect`/`on_cap` reason callbacks so the true trigger records the reason.
+- `genesys_app.py` — captures the farewell, wires call-end, records the reason at every teardown path.
+- `server.py` — threads the Genesys control-source factory through the shared session factory.
+
+**TODO(TASK-WEB-042: live-measurement) seams left open** (deterministically unknowable now):
+- `GenesysControlSignalSource._EVENT_TYPE_MAP` is **empty** — the confirmed native AudioHook control
+  event names/shapes (candidates: `barge-in`, `playback-started`/`playback-completed`,
+  `BotTurnResponse`) must be captured from the live Architect flow (DEC-015). Until then `native`
+  mode is an **idle seam** and `detector` mode (default) keeps the in-house detectors authoritative,
+  so the path works with NO native events today.
+- When the live events land: populate the map AND disable the in-house detectors on this path
+  (flip to `native`) so the two never both fire (ADR-0049 point 4 / R4).
+
+### Follow-up note (ADR-0049 R4 co-location, 2026-08-28)
+
+To keep the R4 fix atomic, the two edits that must happen together are now co-located and guarded:
+- A code `TODO(TASK-WEB-042: R4 - populate map AND disable in-house detectors together)` sits
+  directly at `GenesysControlSignalSource._EVENT_TYPE_MAP`, so whoever populates the map sees the
+  requirement to disable the in-house detectors on the Genesys path in the same change (activation
+  can never double-fire).
+- A startup **WARN** is emitted from the control-source factory when `VOICE_GENESYS_CONTROL_MODE=native`
+  resolves to an EMPTY event map: it states the native seam is idle and the in-house detectors remain
+  authoritative (no PII). This makes an accidental `native`-with-empty-map deploy loud instead of
+  silently doing nothing. Covered by `test_native_mode_warns_when_event_map_is_empty` /
+  `test_detector_mode_does_not_warn`.
+
+**Tests (all pass):** 18 focused unit tests in `tests/test_genesys_barge_in_eot.py` (barge-in fires
+on sustained loud onset + rejects residual-echo spikes on the Genesys channel; EOT flush on the
+silence window with Genesys channel labelling; control-mode config; idle vs wired native seam;
+idle-native-seam startup WARN fires only in `native`+empty-map; call-end reasons idempotent/first-wins
++ drain wiring). Full suite: **678 unittest OK**,
+**behave 17 features / 46 scenarios / 209 steps passed**. ADR-0001 held: 0 backend/`.java` files.
 
 ---
 

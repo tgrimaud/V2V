@@ -488,7 +488,9 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
     return ws_signaling, owned_loop
 
 
-def _build_ws_session_factory(args, ingress, egress, backend, transport_label="websocket"):
+def _build_ws_session_factory(
+    args, ingress, egress, backend, transport_label="websocket", control_signal_source_factory=None
+):
     """Build the transport-agnostic `SessionFactory` shared by the WS + Genesys transports.
 
     The interim `SingleClientWebsocketServerTransport` (`:8091`), the aiohttp-native
@@ -496,6 +498,8 @@ def _build_ws_session_factory(args, ingress, egress, backend, transport_label="w
     (TASK-WEB-041) differ only in the transport they pass to `build_session`; the session
     core is identical (ADR-0043, TASK-WEB-027). `transport_label` is stamped on the
     channel-egress span so a per-slice report can split `websocket` from `genesys`.
+    `control_signal_source_factory` is the per-path native-event seam (TASK-WEB-029/042):
+    None keeps the in-house detectors authoritative; the Genesys path may inject its own.
     """
     from .session_factory import SessionFactory
 
@@ -508,6 +512,7 @@ def _build_ws_session_factory(args, ingress, egress, backend, transport_label="w
         streaming_providers_by_language=_streaming_stt_by_language(args),
         streaming_tts_providers_by_language=_streaming_tts_by_language(args),
         transport_label=transport_label,
+        control_signal_source_factory=control_signal_source_factory,
     )
 
 
@@ -525,6 +530,10 @@ def _build_genesys_handler(args, ingress, egress, backend):
     if getattr(args, "genesys", "off") == "off":
         return None
     from .genesys_app import make_genesys_handler
+    from .genesys_barge_in_eot import (
+        genesys_control_mode_config,
+        genesys_control_source_factory,
+    )
     from .genesys_config import (
         genesys_allowed_origins_config,
         genesys_cap_drain_grace_s_config,
@@ -534,8 +543,16 @@ def _build_genesys_handler(args, ingress, egress, backend):
     )
     from .websocket_signaling import ws_language_config
 
+    control_factory = genesys_control_source_factory(genesys_control_mode_config())
     return make_genesys_handler(
-        _build_ws_session_factory(args, ingress, egress, backend, transport_label="genesys"),
+        _build_ws_session_factory(
+            args,
+            ingress,
+            egress,
+            backend,
+            transport_label="genesys",
+            control_signal_source_factory=control_factory,
+        ),
         default_language=ws_language_config(),
         max_sessions=genesys_max_sessions_config(),
         wire_codec=genesys_codec_config(),
