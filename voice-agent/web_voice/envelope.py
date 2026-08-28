@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 WEB_VOICE_CHANNEL = "web_voice"
+# Genesys Audio Connector media plane (TASK-WEB-041, ADR-0049/0009). One more channel
+# behind the normalized envelope; the backend stays the conversation brain (ADR-0001).
+GENESYS_AUDIO_CONNECTOR_CHANNEL = "genesys_audio_connector"
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,30 @@ class ChannelEnvelope:
             external_session_id=external_session_id or str(uuid4()),
             message_id=str(uuid4()),
             correlation_id=correlation_id or str(uuid4()),
+            language=language or None,
+        )
+
+    @classmethod
+    def for_genesys_turn(
+        cls,
+        conversation_id: str | None = None,
+        external_session_id: str | None = None,
+        correlation_id: str | None = None,
+        language: str | None = None,
+    ) -> "ChannelEnvelope":
+        """Envelope for a Genesys Audio Connector call (TASK-WEB-041).
+
+        The Genesys ``conversationId`` is carried as both the conversation id and the
+        correlation id (unless overridden) so a single deterministic ``traceparent``
+        stitches the Genesys leg, the runtime and the backend into one trace.
+        """
+        conversation = conversation_id or str(uuid4())
+        return cls(
+            channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
+            conversation_id=conversation,
+            external_session_id=external_session_id or conversation,
+            message_id=str(uuid4()),
+            correlation_id=correlation_id or conversation,
             language=language or None,
         )
 
