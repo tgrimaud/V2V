@@ -1,7 +1,10 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
+import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.config.JacksonConfig;
@@ -60,6 +63,11 @@ class ConverseStreamControllerReplyModeTest {
         @Bean
         ExecutorService sseStreamExecutor() {
             return new NoopExecutorService();
+        }
+
+        @Bean
+        PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase() {
+            return command -> EscalationHandoffReference.of(HandoffId.of("handoff-test"), command.reason());
         }
     }
 

@@ -5,7 +5,10 @@ import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.web.rest.GlobalExceptionHandler;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
+import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -51,6 +54,11 @@ class ConverseDegradedTest {
         @Bean
         IdempotentDeliveryGuard idempotentDeliveryGuard() {
             return new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000));
+        }
+
+        @Bean
+        PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase() {
+            return command -> EscalationHandoffReference.of(HandoffId.of("handoff-test"), command.reason());
         }
 
         @Bean

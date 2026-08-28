@@ -1,7 +1,10 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
+import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
@@ -24,11 +27,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ConverseControllerEnvelopeTest {
 
     private static final String LISTEN_PROMPT = "Je vous écoute, posez-moi votre question.";
+    private static final PrepareEscalationHandoffUseCase PREPARE_HANDOFF =
+            command -> EscalationHandoffReference.of(HandoffId.of("handoff-test"), command.reason());
 
     private final CapturingConverseUseCase useCase = new CapturingConverseUseCase();
     private final ConverseController controller = new ConverseController(
             useCase,
             new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
+            PREPARE_HANDOFF,
             new BackendTelemetry(new SimpleMeterRegistry()),
             "");
 
@@ -88,6 +94,7 @@ class ConverseControllerEnvelopeTest {
         var flakyController = new ConverseController(
                 flaky,
                 new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
+                PREPARE_HANDOFF,
                 new BackendTelemetry(new SimpleMeterRegistry()),
                 "");
         ConverseRequest delivery = new ConverseRequest(
