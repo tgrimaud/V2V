@@ -3672,9 +3672,11 @@ ADR-0029 (latency gate)
 **Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
 drive it end to end)
 **Classification:** V1 voice runtime — Genesys media plane (runtime-affecting)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Status:** ✅ Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
+`task/TASK-WEB-041-genesys-audio-connector-adapter`; awaiting user validation/merge. Live
+Genesys-leg latency re-score (R1) still needs a live org; barge-in/EOT wiring is TASK-WEB-042.
 **Priority:** High (Sprint 13 spine, once gated)
-**Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch, when gated)
+**Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch)
 
 ### Context
 
@@ -3723,6 +3725,26 @@ Scenario: The pilot codec is handled end to end
 
 - Barge-in/end-of-turn ownership on this path is **not** this ticket — see TASK-WEB-042.
 - Per-leg latency + concurrency + correlation-id are TASK-WEB-043; degraded modes are TASK-WEB-044.
+
+### Implementation (2026-08-28)
+
+Delivered in the voice runtime only (`voice-agent/web_voice/`); **no backend code changed**
+(ADR-0001 held). See the ADR-0049 "Implementation status" note for the design.
+
+- **Adapter** `genesys_app.py` — `GET /genesys/audiohook` on the ADR-0047 single async server;
+  one bidirectional stream/session via the unchanged ADR-0043 `SessionFactory`; concurrency
+  ceiling (default 3, `VOICE_GENESYS_MAX_SESSIONS`) with WS 1013 backpressure; **graceful
+  15-min cap** (`VOICE_GENESYS_MAX_SESSION_S`) that *drains* the session (never a silent cut);
+  per-channel OTel (session/gauge/cap events) + deterministic `conversationId → traceparent`.
+- **Serializer** `genesys_framing.py` — subclasses the AudioHook `WebSocketAudioSerializer`,
+  overriding only the audio path; `genesys.transcode.in`/`.out` per-leg spans.
+- **Native codec** `genesys_codec.py` — numpy-vectorized PCMU/L16 ↔ PCM16/16 kHz (prefer
+  L16). Resolves **R6**: three concurrent transcodes now run faster than three sequential
+  (`conc3/seq3 ≈ 0.45–0.54`) because numpy releases the GIL, vs the spike's ~2.96× pure-Python
+  serialization. `numpy` was already transitive (`opencv-python`) → zero new wheels.
+- **Tests:** `tests/test_genesys_codec.py` (round-trip + concurrency-3), `test_genesys_framing.py`,
+  `test_genesys_app.py`. Full suite green: 628 unittest, 17 behave features / 46 scenarios.
+- The spike (`voice-agent/spikes/genesys_audiohook/`) is kept intact as evidence.
 
 ---
 
