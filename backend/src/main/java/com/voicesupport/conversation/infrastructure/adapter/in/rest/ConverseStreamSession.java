@@ -1,6 +1,7 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.TokenStream;
+import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
@@ -37,6 +38,7 @@ class ConverseStreamSession {
     private final ConverseStreamUseCase converseStreamUseCase;
     private final BackendTelemetry telemetry;
     private final ConverseRequest request;
+    private final ChannelEnvelope envelope;
     private final String correlationId;
     private final long startNanos = System.nanoTime();
     private boolean firstChunkSent;
@@ -51,12 +53,13 @@ class ConverseStreamSession {
         this.converseStreamUseCase = converseStreamUseCase;
         this.telemetry = telemetry;
         this.request = request;
+        this.envelope = request.toEnvelope();
         this.correlationId = correlationId;
     }
 
     void run() {
         CorrelationId.set(correlationId);
-        CorrelationId.setChannel(request.channel());
+        CorrelationId.setChannel(envelope.channel());
         String outcome = "success";
         try {
             stream();
@@ -80,8 +83,11 @@ class ConverseStreamSession {
             send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
             return;
         }
+        telemetry.recordChannelDelivery(envelope.replyMode().code(), false);
+        // Memory keys on the envelope's conversation key (external_session_id, falling back to
+        // conversation_id) so a Genesys streaming call stays one coherent conversation.
         TokenStream tokenStream = converseStreamUseCase.converseStream(
-                request.transcript(), request.conversationId(), request.language());
+                request.transcript(), envelope.conversationKey(), request.language());
         GeneratedAnswer answer = tokenStream.consume(this::onChunk);
         send("done", StreamDoneEvent.from(answer));
         logTurn(answer);
@@ -119,9 +125,9 @@ class ConverseStreamSession {
     }
 
     private void logTurn(GeneratedAnswer answer) {
-        log.info("[CONVERSE-STREAM] channel={} conversation_id={} correlation_id={} grounded={} confidence={} "
+        log.info("[CONVERSE-STREAM] channel={} session_key={} correlation_id={} grounded={} confidence={} "
                         + "chars={} duration_ms={}",
-                nullSafe(request.channel()), nullSafe(request.conversationId()), nullSafe(request.correlationId()),
+                nullSafe(envelope.channel()), nullSafe(envelope.conversationKey()), nullSafe(request.correlationId()),
                 answer.grounded(), formatConfidence(answer.confidence()),
                 answer.text() != null ? answer.text().length() : 0, elapsed().toMillis());
     }
