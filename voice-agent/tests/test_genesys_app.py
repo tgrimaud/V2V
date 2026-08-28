@@ -24,24 +24,28 @@ from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_common.trace_context import derive_traceparent  # noqa: E402
 from web_voice.envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL  # noqa: E402
-from web_voice.genesys_app import (  # noqa: E402
+from web_voice.genesys_app import WS_POLICY_VIOLATION, make_genesys_handler  # noqa: E402
+from web_voice.genesys_cap import DrainOnce, cancel_cap, schedule_cap  # noqa: E402
+from web_voice.genesys_config import (  # noqa: E402
     ACTIVE_SESSIONS_METRIC,
     CLIENT_CONNECTED_EVENT,
     CLIENT_DISCONNECTED_EVENT,
+    DEFAULT_CAP_DRAIN_GRACE_S,
     DEFAULT_MAX_GENESYS_SESSIONS,
     DEFAULT_MAX_SESSION_S,
+    REASON_CAP_DRAIN_TIMEOUT,
     REASON_CAP_REACHED,
     REASON_CAPACITY,
     SESSION_CAP_EVENT,
+    SESSION_CAP_FORCED_EVENT,
     SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
     WS_TRY_AGAIN_LATER,
-    _cancel_cap,
-    _schedule_cap,
+    genesys_allowed_origins_config,
+    genesys_cap_drain_grace_s_config,
     genesys_codec_config,
     genesys_max_session_s_config,
     genesys_max_sessions_config,
-    make_genesys_handler,
 )
 
 
@@ -86,6 +90,42 @@ class _FakeFactory:
 
     def build_session(self, transport, envelope, telemetry):
         session = _FakeSession()
+        self.sessions.append(session)
+        self.envelopes.append(envelope)
+        return session, None
+
+
+class _WedgedDrainSession:
+    """A session whose `run()` blocks until `stop()`, but whose `drain()` never completes.
+
+    Models a stuck STT/TTS provider at the cap: only the hard `stop()` bound can free the
+    concurrency slot + WS (review Major #1 — the bounded cap drain).
+    """
+
+    def __init__(self) -> None:
+        self.ran = False
+        self.stopped = False
+        self._release = asyncio.Event()
+
+    async def run(self) -> None:
+        self.ran = True
+        await self._release.wait()
+
+    async def drain(self) -> None:
+        await asyncio.Event().wait()  # never set: drain wedges forever
+
+    async def stop(self) -> None:
+        self.stopped = True
+        self._release.set()
+
+
+class _WedgedDrainFactory:
+    def __init__(self) -> None:
+        self.sessions: list[_WedgedDrainSession] = []
+        self.envelopes: list[object] = []
+
+    def build_session(self, transport, envelope, telemetry):
+        session = _WedgedDrainSession()
         self.sessions.append(session)
         self.envelopes.append(envelope)
         return session, None
@@ -186,6 +226,43 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         await second.close()
 
 
+class GenesysOriginAllowlistTest(GenesysHandlerServeMixin):
+    async def test_disallowed_origin_is_refused_with_ws_1008_and_never_builds_a_session(self) -> None:
+        # GIVEN a handler with an Origin allowlist set (endpoint enabled but guarded)
+        factory = _FakeFactory()
+        handler = make_genesys_handler(
+            factory, allowed_origins=["https://allowed.example"], log=lambda _r: None
+        )
+        client = await self._serve(handler)
+        # WHEN a call arrives from a disallowed Origin
+        websocket = await client.ws_connect(
+            "/genesys/audiohook", headers={"Origin": "https://evil.example"}
+        )
+        message = await asyncio.wait_for(websocket.receive(), timeout=10)
+        # THEN it is closed with WS 1008 (policy violation) and never reaches the factory
+        self.assertIn(message.type, (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED))
+        self.assertEqual(websocket.close_code, WS_POLICY_VIOLATION)
+        self.assertEqual(len(factory.sessions), 0)
+        await websocket.close()
+
+    async def test_allowed_origin_passes_the_allowlist_and_builds_a_session(self) -> None:
+        # GIVEN the same allowlist
+        factory = _FakeFactory()
+        handler = make_genesys_handler(
+            factory, allowed_origins=["https://allowed.example"], log=lambda _r: None
+        )
+        client = await self._serve(handler)
+        # WHEN a call arrives from an allowed Origin
+        websocket = await client.ws_connect(
+            "/genesys/audiohook?conversationId=ok", headers={"Origin": "https://allowed.example"}
+        )
+        await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
+        # THEN the session is built and runs
+        self.assertEqual(len(factory.sessions), 1)
+        factory.sessions[0].release()
+        await websocket.close()
+
+
 class GenesysCapTest(GenesysHandlerServeMixin):
     async def test_reaching_the_cap_drains_the_session_gracefully(self) -> None:
         # GIVEN a handler with a very short call cap and a shared recorder
@@ -206,6 +283,31 @@ class GenesysCapTest(GenesysHandlerServeMixin):
         self.assertEqual(cap.attributes["channel"], GENESYS_AUDIO_CONNECTOR_CHANNEL)
         self.assertTrue(factory.sessions[0].drained)
         self.assertIn(CLIENT_DISCONNECTED_EVENT, _names(shared))
+        await websocket.close()
+
+    async def test_wedged_drain_at_the_cap_is_force_stopped_so_the_slot_is_freed(self) -> None:
+        # GIVEN a short cap + short drain grace and a session whose drain() never completes
+        shared = TelemetryRecorder()
+        logged: list[TelemetryRecorder] = []
+        factory = _WedgedDrainFactory()
+        handler = make_genesys_handler(
+            factory, max_sessions=2, max_session_s=0.05, cap_drain_grace_s=0.05,
+            telemetry_factory=lambda: shared, log=logged.append,
+        )
+        client = await self._serve(handler)
+        # WHEN the cap fires but the drain wedges past the grace bound
+        websocket = await client.ws_connect("/genesys/audiohook?conversationId=wedged")
+        await _wait_for(lambda: bool(logged), timeout=10)
+        # THEN the drain is force-stopped (hard bound), so the slot is ALWAYS freed at
+        # cap+grace: run() returned, the session was stopped, the closed gauge reads 0,
+        # a forced-cap event is recorded and the WS is closed — never held indefinitely
+        self.assertTrue(factory.sessions[0].stopped)
+        self.assertIn(SESSION_CAP_FORCED_EVENT, _names(shared))
+        forced = next(e for e in shared.events() if e.name == SESSION_CAP_FORCED_EVENT)
+        self.assertEqual(forced.attributes["reason"], REASON_CAP_DRAIN_TIMEOUT)
+        self.assertEqual(_gauge(shared, "closed")[0].value, 0.0)
+        message = await asyncio.wait_for(websocket.receive(), timeout=10)
+        self.assertIn(message.type, (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED))
         await websocket.close()
 
     async def test_a_call_ending_before_the_cap_records_no_cap_event(self) -> None:
@@ -231,11 +333,32 @@ class GenesysCapTest(GenesysHandlerServeMixin):
 class GenesysCapSchedulingUnitTest(unittest.TestCase):
     def test_scheduling_is_disabled_when_cap_is_non_positive(self) -> None:
         # GIVEN a disabled cap (max_session_s <= 0) THEN no timer task is armed
-        self.assertIsNone(_schedule_cap(object(), TelemetryRecorder(), "cid", 0))
-        self.assertIsNone(_schedule_cap(object(), TelemetryRecorder(), "cid", -1))
+        self.assertIsNone(schedule_cap(object(), DrainOnce(), TelemetryRecorder(), "cid", 0, 5.0))
+        self.assertIsNone(schedule_cap(object(), DrainOnce(), TelemetryRecorder(), "cid", -1, 5.0))
 
     def test_cancelling_a_missing_cap_is_a_no_op(self) -> None:
-        _cancel_cap(None)  # must not raise
+        cancel_cap(None)  # must not raise
+
+
+class GenesysDrainOnceUnitTest(unittest.IsolatedAsyncioTestCase):
+    async def test_drain_runs_once_even_when_cap_and_disconnect_both_call_it(self) -> None:
+        # GIVEN a session counting its drain() calls and a shared drain guard
+        class _CountingSession:
+            def __init__(self) -> None:
+                self.drains = 0
+
+            async def drain(self) -> None:
+                self.drains += 1
+
+        session = _CountingSession()
+        guard = DrainOnce()
+        # WHEN two callers (the cap timer AND the peer disconnect) both try to drain
+        first = await guard.drain(session)
+        second = await guard.drain(session)
+        # THEN the session is drained exactly once (no double-drain)
+        self.assertTrue(first)
+        self.assertFalse(second)
+        self.assertEqual(session.drains, 1)
 
 
 class GenesysConfigTest(unittest.TestCase):
@@ -245,7 +368,9 @@ class GenesysConfigTest(unittest.TestCase):
             for key in (
                 "VOICE_GENESYS_MAX_SESSIONS",
                 "VOICE_GENESYS_MAX_SESSION_S",
+                "VOICE_GENESYS_CAP_DRAIN_GRACE_MS",
                 "VOICE_GENESYS_CODEC",
+                "VOICE_GENESYS_ALLOWED_ORIGINS",
             )
         }
 
@@ -281,6 +406,25 @@ class GenesysConfigTest(unittest.TestCase):
         os.environ["VOICE_GENESYS_CODEC"] = "opus"  # unsupported -> default
         self.assertEqual(genesys_codec_config(), "L16")
 
+    def test_cap_drain_grace_defaults_and_converts_ms_to_seconds(self) -> None:
+        os.environ.pop("VOICE_GENESYS_CAP_DRAIN_GRACE_MS", None)
+        self.assertEqual(genesys_cap_drain_grace_s_config(), DEFAULT_CAP_DRAIN_GRACE_S)
+        os.environ["VOICE_GENESYS_CAP_DRAIN_GRACE_MS"] = "2000"
+        self.assertEqual(genesys_cap_drain_grace_s_config(), 2.0)
+        for bad in ("garbage", "0", "-5"):
+            os.environ["VOICE_GENESYS_CAP_DRAIN_GRACE_MS"] = bad
+            self.assertEqual(genesys_cap_drain_grace_s_config(), DEFAULT_CAP_DRAIN_GRACE_S)
+
+    def test_allowed_origins_defaults_to_none_and_parses_csv(self) -> None:
+        os.environ.pop("VOICE_GENESYS_ALLOWED_ORIGINS", None)
+        self.assertIsNone(genesys_allowed_origins_config())
+        os.environ["VOICE_GENESYS_ALLOWED_ORIGINS"] = ""  # empty -> None (allow all: dev)
+        self.assertIsNone(genesys_allowed_origins_config())
+        os.environ["VOICE_GENESYS_ALLOWED_ORIGINS"] = " https://a.example , https://b.example "
+        self.assertEqual(
+            genesys_allowed_origins_config(), ["https://a.example", "https://b.example"]
+        )
+
 
 class BuildGenesysHandlerBranchTest(unittest.TestCase):
     """server.py `_build_genesys_handler`: `--genesys off` disables it; auto/on enable it."""
@@ -298,6 +442,16 @@ class BuildGenesysHandlerBranchTest(unittest.TestCase):
 
         handler = _build_genesys_handler(self._args("off"), object(), object(), object())
         self.assertIsNone(handler)
+
+    def test_missing_genesys_attribute_defaults_off_yields_no_handler(self) -> None:
+        # GIVEN args with no `genesys` attribute at all (locks the safe default-off posture)
+        from types import SimpleNamespace
+
+        from web_voice.server import _build_genesys_handler
+
+        args = SimpleNamespace(stt_mode="batch", tts_mode="batch", provider="fixture")
+        # WHEN / THEN the endpoint is NOT built (default off, review Major #2)
+        self.assertIsNone(_build_genesys_handler(args, object(), object(), object()))
 
     def test_genesys_auto_and_on_yield_a_callable_handler(self) -> None:
         from web_voice.server import _build_genesys_handler

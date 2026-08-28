@@ -10,10 +10,14 @@ and no business logic lives here (ADR-0001 boundary holds).
 What this adapter owns (the transport boundary):
 - PCMU/L16 <-> PCM16/16 kHz codec, inside `GenesysAudioConnectorSerializer` (prefer L16).
 - A concurrency ceiling (default 3, the DEC-014 pilot target) with WS 1013 backpressure.
-- A graceful **15-minute call cap**: at the cap the session is *drained* (a trailing
-  partial is finalized, the answer is spoken) then ended cleanly so Architect resumes and
-  routes to the advisor queue — never a silent mid-call cut (R2). The resume/callback
-  policy and the endpoint-down fail-safe are TASK-WEB-044 + TASK-INFRA-012.
+- A graceful **15-minute call cap** with a HARD duration bound: at the cap the session is
+  *drained* (a trailing partial is finalized, the answer is spoken) then ended cleanly so
+  Architect resumes and routes to the advisor queue — never a silent mid-call cut (R2). If
+  the drain wedges (a stuck STT/TTS provider), it is force-stopped after a bounded grace so
+  the concurrency slot + WS are ALWAYS freed at cap+grace (review Major #1).
+- An Origin allowlist (anti-CSWSH) mirroring `/ws`; combined with the default-off posture
+  (`--genesys off`) this keeps the endpoint closed until AudioHook signature/HMAC
+  verification lands under TASK-INFRA-012 (review Major #2 / ADR-0049).
 - Per-channel OpenTelemetry: session/gauge/cap events labelled `genesys_audio_connector`,
   plus a deterministic `traceparent` derived from the Genesys `conversationId` so the
   Genesys leg + runtime + backend land in one trace (per-leg transcode spans come from
@@ -24,47 +28,41 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any, Awaitable, Callable
 
 from aiohttp import web
+from pipecat.utils.security.allowed_origins import is_origin_allowed
 
 from voice_common.telemetry import TelemetryRecorder
-from voice_common.trace_context import derive_traceparent
 
 from .envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL, ChannelEnvelope
+from .genesys_cap import DrainOnce, cancel_cap, schedule_cap, wire_disconnect_drain
+from .genesys_config import (
+    CLIENT_DISCONNECTED_EVENT,
+    DEFAULT_CAP_DRAIN_GRACE_S,
+    DEFAULT_MAX_GENESYS_SESSIONS,
+    DEFAULT_MAX_SESSION_S,
+    emit_gauge,
+    genesys_codec_config,
+    record_started,
+    reject,
+)
 from .genesys_framing import GenesysAudioConnectorSerializer
 from .session_factory import SessionFactory
 from .session_telemetry import log_telemetry
 from .websocket_app import (
     DEFAULT_SAMPLE_RATE,
-    WS_TRY_AGAIN_LATER,
     AiohttpWebsocketParams,
     AiohttpWebsocketTransport,
     _ActiveSessions,
     _safe_stop,
-    _wire_disconnect_drain,
 )
 
 _logger = logging.getLogger(__name__)
 
 GENESYS_ROUTE = "/genesys/audiohook"
-# DEC-014 pilot target = 3 concurrent Genesys sessions (checked vs premium <=5 / 1 vCPU).
-DEFAULT_MAX_GENESYS_SESSIONS = 3
-# AudioHook's documented per-session cap; graceful end at the boundary (R2).
-DEFAULT_MAX_SESSION_S = 900.0
-MAX_SESSIONS_ENV_VAR = "VOICE_GENESYS_MAX_SESSIONS"
-MAX_SESSION_S_ENV_VAR = "VOICE_GENESYS_MAX_SESSION_S"
-CODEC_ENV_VAR = "VOICE_GENESYS_CODEC"
-
-SESSION_STARTED_EVENT = "voice.genesys.session_started"
-CLIENT_CONNECTED_EVENT = "voice.genesys.client_connected"
-CLIENT_DISCONNECTED_EVENT = "voice.genesys.client_disconnected"
-ACTIVE_SESSIONS_METRIC = "voice.genesys.active_sessions"
-SESSION_REJECTED_EVENT = "voice.genesys.session_rejected"
-SESSION_CAP_EVENT = "voice.genesys.session_cap"
-REASON_CAPACITY = "capacity"
-REASON_CAP_REACHED = "cap_reached"
+# WS close code for an Origin the allowlist refuses (anti-CSWSH), matching `/ws`.
+WS_POLICY_VIOLATION = 1008
 
 
 def _conversation_id(request: web.Request) -> str | None:
@@ -79,6 +77,8 @@ def make_genesys_handler(
     max_sessions: int = DEFAULT_MAX_GENESYS_SESSIONS,
     wire_codec: str | None = None,
     max_session_s: float = DEFAULT_MAX_SESSION_S,
+    cap_drain_grace_s: float = DEFAULT_CAP_DRAIN_GRACE_S,
+    allowed_origins: list[str] | None = None,
     default_language: str | None = None,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
@@ -92,8 +92,13 @@ def make_genesys_handler(
     async def handler(request: web.Request) -> web.WebSocketResponse:
         websocket = web.WebSocketResponse()
         await websocket.prepare(request)
+        if allowed_origins and not is_origin_allowed(
+            request.headers.get("Origin", ""), allowed_origins
+        ):
+            await websocket.close(code=WS_POLICY_VIOLATION)
+            return websocket
         if active.count >= ceiling:
-            await _reject(websocket, active, ceiling, telemetry_factory, log)
+            await reject(websocket, active, ceiling, telemetry_factory, log)
             return websocket
         await _serve_genesys_connection(
             websocket,
@@ -103,6 +108,7 @@ def make_genesys_handler(
             max_sessions=ceiling,
             wire_codec=codec,
             max_session_s=max_session_s,
+            cap_drain_grace_s=cap_drain_grace_s,
             default_language=default_language,
             sample_rate=sample_rate,
             telemetry_factory=telemetry_factory,
@@ -145,6 +151,7 @@ async def _serve_genesys_connection(
     max_sessions: int,
     wire_codec: str,
     max_session_s: float,
+    cap_drain_grace_s: float,
     default_language: str | None,
     sample_rate: int,
     telemetry_factory: Callable[[], TelemetryRecorder],
@@ -159,36 +166,12 @@ async def _serve_genesys_connection(
     serializer = _build_serializer(wire_codec, sample_rate, telemetry, cid)
     transport = _build_transport(websocket, serializer, sample_rate)
     session, _ = factory.build_session(transport, envelope, telemetry)
-    _wire_disconnect_drain(transport, session)
+    drain = DrainOnce()
+    wire_disconnect_drain(transport, session, drain)
     active.count += 1
-    _record_started(telemetry, cid, envelope, wire_codec, active.count, max_sessions)
-    cap = _schedule_cap(session, telemetry, cid, max_session_s)
-    await _run_and_teardown(session, telemetry, cid, active, max_sessions, cap, log)
-
-
-def _record_started(
-    telemetry: TelemetryRecorder,
-    cid: str,
-    envelope: ChannelEnvelope,
-    wire_codec: str,
-    active_count: int,
-    max_sessions: int,
-) -> None:
-    telemetry.record(
-        SESSION_STARTED_EVENT,
-        correlation_id=cid,
-        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        wire_codec=wire_codec,
-        traceparent=derive_traceparent(cid),
-        effective_language=envelope.language or "auto",
-    )
-    telemetry.record(
-        CLIENT_CONNECTED_EVENT,
-        correlation_id=cid,
-        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        conversation_id=envelope.conversation_id,
-    )
-    _emit_gauge(telemetry, cid, active_count, max_sessions, "accepted")
+    record_started(telemetry, cid, envelope, wire_codec, active.count, max_sessions)
+    drain.cap = schedule_cap(session, drain, telemetry, cid, max_session_s, cap_drain_grace_s)
+    await _run_and_teardown(session, telemetry, cid, active, max_sessions, drain.cap, log)
 
 
 async def _run_and_teardown(
@@ -207,115 +190,11 @@ async def _run_and_teardown(
     except Exception:  # noqa: BLE001 - one failed turn must not raise out of the handler
         _logger.error("genesys session run failed", exc_info=True)
     finally:
-        _cancel_cap(cap)
+        cancel_cap(cap)
         active.count = max(0, active.count - 1)
         telemetry.record(
             CLIENT_DISCONNECTED_EVENT, correlation_id=cid, channel=GENESYS_AUDIO_CONNECTOR_CHANNEL
         )
-        _emit_gauge(telemetry, cid, active.count, max_sessions, "closed")
+        emit_gauge(telemetry, cid, active.count, max_sessions, "closed")
         log(telemetry)
         await _safe_stop(session)
-
-
-def _schedule_cap(
-    session: Any, telemetry: TelemetryRecorder, cid: str, max_session_s: float
-) -> asyncio.Task | None:
-    """Arm the graceful 15-min cap timer, or None when disabled (max_session_s <= 0)."""
-    if max_session_s <= 0:
-        return None
-    return asyncio.ensure_future(_cap_after(session, telemetry, cid, max_session_s))
-
-
-async def _cap_after(session: Any, telemetry: TelemetryRecorder, cid: str, delay: float) -> None:
-    """At the cap, record it and drain the session gracefully (never a silent cut)."""
-    try:
-        await asyncio.sleep(delay)
-    except asyncio.CancelledError:
-        return
-    telemetry.record(
-        SESSION_CAP_EVENT,
-        correlation_id=cid,
-        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        reason=REASON_CAP_REACHED,
-        max_session_s=delay,
-    )
-    try:
-        await session.drain()
-    except Exception:  # noqa: BLE001 - drain is best-effort; run() still returns on teardown
-        _logger.debug("genesys cap drain failed", exc_info=True)
-
-
-def _cancel_cap(cap: asyncio.Task | None) -> None:
-    if cap is not None and not cap.done():
-        cap.cancel()
-
-
-async def _reject(
-    websocket: web.WebSocketResponse,
-    active: _ActiveSessions,
-    max_sessions: int,
-    telemetry_factory: Callable[[], TelemetryRecorder],
-    log: Callable[[TelemetryRecorder], None],
-) -> None:
-    """Refuse an over-capacity connection with WS 1013 and record the refusal evidence."""
-    telemetry = telemetry_factory()
-    cid = ChannelEnvelope.for_genesys_turn().correlation_id
-    telemetry.record(
-        SESSION_REJECTED_EVENT,
-        correlation_id=cid,
-        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        reason=REASON_CAPACITY,
-        active_sessions=active.count,
-        max_sessions=max_sessions,
-    )
-    _emit_gauge(telemetry, cid, active.count, max_sessions, "rejected")
-    log(telemetry)
-    await websocket.close(code=WS_TRY_AGAIN_LATER)
-
-
-def _emit_gauge(
-    telemetry: TelemetryRecorder, cid: str, active_count: int, max_sessions: int, outcome: str
-) -> None:
-    telemetry.metric(
-        ACTIVE_SESSIONS_METRIC,
-        float(active_count),
-        correlation_id=cid,
-        channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        outcome=outcome,
-        max_sessions=max_sessions,
-    )
-
-
-def genesys_max_sessions_config() -> int:
-    """Resolve the Genesys concurrency ceiling (DEC-014 target 3; env override)."""
-    return _positive_int_env(MAX_SESSIONS_ENV_VAR, DEFAULT_MAX_GENESYS_SESSIONS)
-
-
-def genesys_max_session_s_config() -> float:
-    """Resolve the graceful call-cap seconds (default 900; <=0 disables; env override)."""
-    raw = os.environ.get(MAX_SESSION_S_ENV_VAR)
-    if raw is None:
-        return DEFAULT_MAX_SESSION_S
-    try:
-        return float(raw)
-    except ValueError:
-        return DEFAULT_MAX_SESSION_S
-
-
-def genesys_codec_config() -> str:
-    """Resolve the Genesys wire codec (default L16; unknown value falls back to default)."""
-    from . import genesys_codec
-
-    raw = (os.environ.get(CODEC_ENV_VAR) or "").strip().upper()
-    return raw if raw in genesys_codec.SUPPORTED_CODECS else genesys_codec.DEFAULT_CODEC
-
-
-def _positive_int_env(env_var: str, default: int) -> int:
-    raw = os.environ.get(env_var)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return value if value > 0 else default

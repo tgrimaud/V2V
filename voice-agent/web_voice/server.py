@@ -515,17 +515,22 @@ def _build_genesys_handler(args, ingress, egress, backend):
     """Build the aiohttp `/genesys/audiohook` handler for the single-port path, or None.
 
     Rides aiohttp's own `WebSocketResponse` (no extra package), reusing the shared
-    `SessionFactory` (transport label `genesys`) exactly like `/ws`. `--genesys off`
-    disables it; `auto` (default) / `on` enable it. Concurrency, codec and the graceful
-    15-minute cap are env-tunable (TASK-WEB-041 / ADR-0049).
+    `SessionFactory` (transport label `genesys`) exactly like `/ws`. The endpoint is
+    **default-off** (`--genesys off`): until AudioHook signature/HMAC verification lands
+    (TASK-INFRA-012), it must stay closed + network-isolated, and even when explicitly
+    enabled (`auto`/`on`) it enforces an Origin allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`)
+    mirroring `/ws` (review Major #2 / ADR-0049). Concurrency, codec, the graceful 15-minute
+    cap and its hard drain grace are env-tunable (TASK-WEB-041 / ADR-0049).
     """
-    if getattr(args, "genesys", "auto") == "off":
+    if getattr(args, "genesys", "off") == "off":
         return None
-    from .genesys_app import (
+    from .genesys_app import make_genesys_handler
+    from .genesys_config import (
+        genesys_allowed_origins_config,
+        genesys_cap_drain_grace_s_config,
         genesys_codec_config,
         genesys_max_session_s_config,
         genesys_max_sessions_config,
-        make_genesys_handler,
     )
     from .websocket_signaling import ws_language_config
 
@@ -535,6 +540,8 @@ def _build_genesys_handler(args, ingress, egress, backend):
         max_sessions=genesys_max_sessions_config(),
         wire_codec=genesys_codec_config(),
         max_session_s=genesys_max_session_s_config(),
+        cap_drain_grace_s=genesys_cap_drain_grace_s_config(),
+        allowed_origins=genesys_allowed_origins_config(),
     )
 
 
@@ -759,11 +766,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--genesys",
         choices=("auto", "on", "off"),
-        default=os.environ.get("VOICE_GENESYS", "auto"),
-        help="Genesys Audio Connector `wss` endpoint (TASK-WEB-041): 'auto'/'on' mount "
-        "GET /genesys/audiohook on the aiohttp server, 'off' disables it. Codec "
-        "(VOICE_GENESYS_CODEC, default L16), concurrency (VOICE_GENESYS_MAX_SESSIONS, "
-        "default 3) and the 15-min cap (VOICE_GENESYS_MAX_SESSION_S) are env-tunable",
+        default=os.environ.get("VOICE_GENESYS", "off"),
+        help="Genesys Audio Connector `wss` endpoint (TASK-WEB-041): default 'off' (the "
+        "endpoint is NOT exposed until AudioHook signature/HMAC auth lands under "
+        "TASK-INFRA-012 and must stay network-isolated); 'auto'/'on' mount GET "
+        "/genesys/audiohook on the aiohttp server with an Origin allowlist "
+        "(VOICE_GENESYS_ALLOWED_ORIGINS). Codec (VOICE_GENESYS_CODEC, default L16), "
+        "concurrency (VOICE_GENESYS_MAX_SESSIONS, default 3), the 15-min cap "
+        "(VOICE_GENESYS_MAX_SESSION_S) and its drain grace "
+        "(VOICE_GENESYS_CAP_DRAIN_GRACE_MS) are env-tunable",
     )
     parser.add_argument(
         "--stun",
