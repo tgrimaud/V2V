@@ -167,6 +167,25 @@ class BackendTelemetryTest {
     }
 
     @Test
+    @DisplayName("keeps the genesys channel first-class on channel-delivery (TASK-BE-037)")
+    void keepsGenesysChannelFirstClass() {
+        // GIVEN the Genesys Audio Connector channel for the current delivery
+        CorrelationId.setChannel("genesys");
+
+        // WHEN a channel delivery is recorded
+        telemetry.recordChannelDelivery("voice", false);
+
+        // THEN it is reported under its own tag, not collapsed to 'other'
+        Counter counter = registry.find("voice_support.channel_delivery")
+                .tag("channel", "genesys")
+                .tag("reply_mode", "voice")
+                .tag("duplicate", "false")
+                .counter();
+        assertNotNull(counter);
+        assertEquals(1.0, counter.count());
+    }
+
+    @Test
     @DisplayName("normalizes an allow-listed channel case-insensitively")
     void normalizesAllowedChannelCase() {
         // GIVEN an allow-listed channel supplied in mixed case
