@@ -3861,10 +3861,24 @@ are already active and per-channel labelled (`channel=genesys_audio_connector`) 
 - When the live events land: populate the map AND disable the in-house detectors on this path
   (flip to `native`) so the two never both fire (ADR-0049 point 4 / R4).
 
-**Tests (all pass):** 16 focused unit tests in `tests/test_genesys_barge_in_eot.py` (barge-in fires
+### Follow-up note (ADR-0049 R4 co-location, 2026-08-28)
+
+To keep the R4 fix atomic, the two edits that must happen together are now co-located and guarded:
+- A code `TODO(TASK-WEB-042: R4 - populate map AND disable in-house detectors together)` sits
+  directly at `GenesysControlSignalSource._EVENT_TYPE_MAP`, so whoever populates the map sees the
+  requirement to disable the in-house detectors on the Genesys path in the same change (activation
+  can never double-fire).
+- A startup **WARN** is emitted from the control-source factory when `VOICE_GENESYS_CONTROL_MODE=native`
+  resolves to an EMPTY event map: it states the native seam is idle and the in-house detectors remain
+  authoritative (no PII). This makes an accidental `native`-with-empty-map deploy loud instead of
+  silently doing nothing. Covered by `test_native_mode_warns_when_event_map_is_empty` /
+  `test_detector_mode_does_not_warn`.
+
+**Tests (all pass):** 18 focused unit tests in `tests/test_genesys_barge_in_eot.py` (barge-in fires
 on sustained loud onset + rejects residual-echo spikes on the Genesys channel; EOT flush on the
 silence window with Genesys channel labelling; control-mode config; idle vs wired native seam;
-call-end reasons idempotent/first-wins + drain wiring). Full suite: **676 unittest OK**,
+idle-native-seam startup WARN fires only in `native`+empty-map; call-end reasons idempotent/first-wins
++ drain wiring). Full suite: **678 unittest OK**,
 **behave 17 features / 46 scenarios / 209 steps passed**. ADR-0001 held: 0 backend/`.java` files.
 
 ---

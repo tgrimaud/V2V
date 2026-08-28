@@ -62,6 +62,7 @@ from web_voice.streaming_stt_processor import StreamingSttProcessor  # noqa: E40
 SAMPLE_RATE = 16000
 FRAME_MS = 20
 FRAME_BYTES = (SAMPLE_RATE * FRAME_MS // 1000) * 2
+_CONTROL_LOGGER = "web_voice.genesys_barge_in_eot"
 
 
 # --------------------------------------------------------------------------------------
@@ -293,6 +294,21 @@ class GenesysControlSourceFactoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(factory)
         source = factory(_genesys_envelope())
         self.assertIsInstance(source, GenesysControlSignalSource)
+
+    def test_native_mode_warns_when_event_map_is_empty(self):
+        # GIVEN native mode with the still-empty native event map (the prep-increment state)
+        self.assertFalse(GenesysControlSignalSource._EVENT_TYPE_MAP)
+        # WHEN the control-source factory is resolved at startup
+        with self.assertLogs(_CONTROL_LOGGER, level="WARNING") as captured:
+            genesys_control_source_factory(CONTROL_MODE_NATIVE)
+        # THEN a WARN flags the idle native seam so the in-house detectors stay authoritative
+        self.assertTrue(any("native control seam is idle" in line for line in captured.output))
+
+    def test_detector_mode_does_not_warn(self):
+        # GIVEN detector mode (the default) WHEN the factory is resolved
+        # THEN no idle-seam WARN is emitted (the seam is not selected)
+        with self.assertNoLogs(_CONTROL_LOGGER, level="WARNING"):
+            genesys_control_source_factory(CONTROL_MODE_DETECTOR)
 
     async def test_idle_seam_yields_no_signals(self):
         # GIVEN no live AudioHook control stream wired (the preparation default)

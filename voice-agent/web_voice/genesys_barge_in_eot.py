@@ -81,6 +81,9 @@ class GenesysControlSignalSource(ControlSignalSource):
     # TODO(TASK-WEB-042: live-measurement): fill with the CONFIRMED native AudioHook control
     # event names (candidates from ADR-0040/0049: "barge-in", "playback-started"/
     # "playback-completed", "BotTurnResponse"/end-of-turn). Empty today -> the seam is a no-op.
+    # TODO(TASK-WEB-042: R4 - populate map AND disable in-house detectors together): populating
+    # this map without disabling the in-house energy/amplitude detectors on the Genesys path would
+    # let BOTH fire (double barge-in/EOT, ADR-0049 point 4). Do the two edits in one change.
     _EVENT_TYPE_MAP: dict[str, ControlSignalType] = {}
 
     def __init__(
@@ -121,11 +124,28 @@ def genesys_control_source_factory(
     """
     if mode != CONTROL_MODE_NATIVE:
         return None
+    _warn_if_native_seam_idle()
 
     def _factory(envelope: Any) -> ControlSignalSource:
         return GenesysControlSignalSource(envelope)
 
     return _factory
+
+
+def _warn_if_native_seam_idle() -> None:
+    """Startup WARN when `native` mode resolves to an EMPTY event map (ADR-0049 R4).
+
+    The native AudioHook control seam is selected but `_EVENT_TYPE_MAP` is not populated yet, so
+    it emits no signals: the in-house energy/amplitude detectors remain the barge-in/end-of-turn
+    authority on the Genesys path. Static operational warning only - no PII, no per-call state.
+    """
+    if GenesysControlSignalSource._EVENT_TYPE_MAP:
+        return
+    _logger.warning(
+        "genesys control mode=native but the native AudioHook event map is empty: "
+        "native control seam is idle, in-house detectors remain authoritative "
+        "(TASK-WEB-042 / ADR-0049 R4)"
+    )
 
 
 class GenesysCallControl:
