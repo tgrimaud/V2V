@@ -1355,3 +1355,56 @@ Left untouched: `main`, `feat/restart-from-scratch`, `feat/sprint-13-genesys-aud
 `task/TASK-BE-033-llm-provider-benchmark`. No force-push, no history rewrite. Ported via a short
 `chore/port-bug-017-backlog` branch merged `--no-ff` into `feat/restart-from-scratch` (chore branch
 deleted locally after merge, never pushed).
+
+## 2026-08-28 — Session wrap-up: branch hygiene + sprint-12 forward-port + knowledge capture
+
+Consolidated record of the day's cross-branch cleanup (complements the three earlier 2026-08-28
+entries above: the TASK-STT-014 revert, the 4-area adversarial review + doc-gate remediation, and
+the BUG-017→BUG-018 backlog port). This entry captures the branch-hygiene / sprint-12 discovery
+narrative and the resulting net branch state, plus the git-mechanics learnings persisted to
+`CLAUDE.md` / `AGENTS.md`.
+
+**Work done this session:**
+
+- **TASK-STT-014 reverted** (measured harmful; QA finding kept as the durable record). See the
+  dedicated entry above.
+- **Full 4-area adversarial review** run (backend **96 CLEAN** / voice **96 CLEAN** / deploy
+  **87 CLEAN** / docs **82 → remediated CLEAN**); reports under
+  `docs/qa/adversarial-review-2026-08-28-*.md`. Doc gate closed (ID-reservation notes, status
+  reconciliations, TASK-INFRA-011 registration). See the dedicated entry above.
+- **Branch hygiene:** pruned ~35 already-merged branches; merged TASK-OPS-006 + TASK-INFRA-011.
+- **Sprint-12 discovery:** `feat/sprint-12-external-voice-websocket` turned out to be already
+  **closed + released** (closure merge `0a10da4`, tag `v0.6.0`) while mainline
+  `feat/restart-from-scratch` had already advanced to `v0.7.0` — a week of work had been layered on
+  the closed branch, diverging from mainline.
+- **Forward-port of the sprint-12 tail** onto `feat/restart-from-scratch` via **per-ticket
+  cherry-pick** (BE-020, OPS-006, INFRA-011, OPS-009, BE-034/ADR-0048, doc gate), dropping
+  net-zero add+revert pairs and merge commits, union-resolving shared-ledger conflicts — **merge
+  `99a55ad`**. Retired the closed sprint-12 branch (content preserved by `v0.6.0` + closure merge).
+- **BUG-017 record ported to mainline as BUG-018** + renumbered fix tickets WEB-045/046/OPS-010 —
+  **merge `1404bf4`** (detailed in the entry above).
+
+**Net branch state:** mainline `feat/restart-from-scratch` (v0.7.0 + forward-ported tail),
+`feat/sprint-13-genesys-audio-connector`, `task/TASK-BE-033-llm-provider-benchmark`, `main`.
+
+**Git-mechanics learnings persisted (CLAUDE.md "Issues" + AGENTS.md "Common mistakes"):**
+
+- A subagent's "error/failed" status can be false — the work may be committed/pushed already, and a
+  zombie turn can commit **concurrently** while you inspect. Verify real repo state by content.
+- Prefer `git checkout <base> -- <files>` over `git revert -m 1 <merge>` for surgical feature
+  removal when those files' only changes since the base are that feature's.
+- Verify a branch isn't closed+released (tag + closure merge + `merge-base` vs mainline) before
+  treating it as the active sprint.
+- Forward-port per ticket (not wholesale merge / `rebase --onto`); `git cherry`'s `+` is **not**
+  proof a commit is unique after union conflict-resolution changes the patch-id — confirm by content.
+- Grep any ticket/ADR/BUG id across **all** branches before minting/forward-porting; the same ids
+  were independently reused on different branches.
+- `git branch -d` refuses non-merged branches; use `-D` (with user approval) for a superseded
+  branch whose content is preserved elsewhere.
+
+### Files changed
+- `CLAUDE.md` — 5 new rows in "Issues historically hit (and fixes)" (subagent-status, surgical
+  `checkout <base> --`, closed+released branch detection, forward-port `git cherry` caveat,
+  `branch -d` vs `-D`)
+- `AGENTS.md` — 4 new bullets in "Common mistakes to avoid" (same themes)
+- `done-tasks.md` — this entry
