@@ -537,9 +537,13 @@ def _build_genesys_handler(args, ingress, egress, backend):
         genesys_max_session_s_config,
         genesys_max_sessions_config,
     )
+    from .genesys_timing import genesys_log_telemetry
     from .websocket_signaling import ws_language_config
 
-    authenticator = genesys_authenticator_from_env()
+    # Pass the REAL exporter (stderr + OTLP, same path the session handler uses) so the
+    # mandatory per-attempt auth-outcome event/metric is actually flushed in prod — the
+    # default no-op would discard it and only tests would ever see it (review Major A).
+    authenticator = genesys_authenticator_from_env(log=genesys_log_telemetry)
     if not authenticator.configured:
         _logger.warning(
             "genesys endpoint enabled but AudioHook auth is unconfigured; failing CLOSED "

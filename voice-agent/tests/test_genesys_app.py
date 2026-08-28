@@ -25,6 +25,7 @@ from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 from voice_common.trace_context import derive_traceparent  # noqa: E402
 from web_voice.envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL  # noqa: E402
 from web_voice.genesys_app import WS_POLICY_VIOLATION, make_genesys_handler  # noqa: E402
+from web_voice.genesys_auth import AuthResult, OUTCOME_ACCEPTED  # noqa: E402
 from web_voice.genesys_cap import DrainOnce, cancel_cap, schedule_cap  # noqa: E402
 from web_voice.genesys_config import (  # noqa: E402
     ACTIVE_SESSIONS_METRIC,
@@ -48,6 +49,18 @@ from web_voice.genesys_config import (  # noqa: E402
     genesys_max_session_s_config,
     genesys_max_sessions_config,
 )
+
+
+class _AcceptAllAuthenticator:
+    """Test double admitting every connection, so the transport lifecycle can be exercised
+    independently of the auth policy (auth itself is covered in test_genesys_auth.py).
+    `make_genesys_handler` requires an authenticator (fail-closed by default, Minor 1)."""
+
+    def authenticate(self, request):
+        return AuthResult(OUTCOME_ACCEPTED)
+
+
+_ACCEPT_ALL = _AcceptAllAuthenticator()
 
 
 async def _wait_for(predicate, *, timeout: float = 10.0) -> None:
@@ -161,7 +174,8 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         logged: list[TelemetryRecorder] = []
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, max_sessions=2, telemetry_factory=lambda: shared, log=logged.append
+            factory, authenticator=_ACCEPT_ALL, max_sessions=2,
+            telemetry_factory=lambda: shared, log=logged.append,
         )
         client = await self._serve(handler)
         # WHEN a Genesys call opens carrying its conversationId
@@ -186,7 +200,8 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         shared = TelemetryRecorder()
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, telemetry_factory=lambda: shared, log=lambda _r: None
+            factory, authenticator=_ACCEPT_ALL, telemetry_factory=lambda: shared,
+            log=lambda _r: None,
         )
         client = await self._serve(handler)
         # WHEN the call opens with ?conversationId=conv-trace
@@ -204,7 +219,9 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         # GIVEN a handler capped at one concurrent Genesys session
         logged: list[TelemetryRecorder] = []
         factory = _FakeFactory()
-        handler = make_genesys_handler(factory, max_sessions=1, log=logged.append)
+        handler = make_genesys_handler(
+            factory, authenticator=_ACCEPT_ALL, max_sessions=1, log=logged.append
+        )
         client = await self._serve(handler)
         first = await client.ws_connect("/genesys/audiohook?conversationId=a")
         await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
@@ -230,7 +247,9 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         # GIVEN a handler capped at one concurrent Genesys session
         logged: list[TelemetryRecorder] = []
         factory = _FakeFactory()
-        handler = make_genesys_handler(factory, max_sessions=1, log=logged.append)
+        handler = make_genesys_handler(
+            factory, authenticator=_ACCEPT_ALL, max_sessions=1, log=logged.append
+        )
         client = await self._serve(handler)
         first = await client.ws_connect("/genesys/audiohook?conversationId=a")
         await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
@@ -258,7 +277,8 @@ class GenesysOriginAllowlistTest(GenesysHandlerServeMixin):
         # GIVEN a handler with an Origin allowlist set (endpoint enabled but guarded)
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, allowed_origins=["https://allowed.example"], log=lambda _r: None
+            factory, authenticator=_ACCEPT_ALL, allowed_origins=["https://allowed.example"],
+            log=lambda _r: None,
         )
         client = await self._serve(handler)
         # WHEN a call arrives from a disallowed Origin
@@ -276,7 +296,8 @@ class GenesysOriginAllowlistTest(GenesysHandlerServeMixin):
         # GIVEN the same allowlist
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, allowed_origins=["https://allowed.example"], log=lambda _r: None
+            factory, authenticator=_ACCEPT_ALL, allowed_origins=["https://allowed.example"],
+            log=lambda _r: None,
         )
         client = await self._serve(handler)
         # WHEN a call arrives from an allowed Origin
@@ -297,7 +318,7 @@ class GenesysCapTest(GenesysHandlerServeMixin):
         logged: list[TelemetryRecorder] = []
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, max_sessions=2, max_session_s=0.05,
+            factory, authenticator=_ACCEPT_ALL, max_sessions=2, max_session_s=0.05,
             telemetry_factory=lambda: shared, log=logged.append,
         )
         client = await self._serve(handler)
@@ -318,8 +339,8 @@ class GenesysCapTest(GenesysHandlerServeMixin):
         logged: list[TelemetryRecorder] = []
         factory = _WedgedDrainFactory()
         handler = make_genesys_handler(
-            factory, max_sessions=2, max_session_s=0.05, cap_drain_grace_s=0.05,
-            telemetry_factory=lambda: shared, log=logged.append,
+            factory, authenticator=_ACCEPT_ALL, max_sessions=2, max_session_s=0.05,
+            cap_drain_grace_s=0.05, telemetry_factory=lambda: shared, log=logged.append,
         )
         client = await self._serve(handler)
         # WHEN the cap fires but the drain wedges past the grace bound
@@ -343,7 +364,7 @@ class GenesysCapTest(GenesysHandlerServeMixin):
         logged: list[TelemetryRecorder] = []
         factory = _FakeFactory()
         handler = make_genesys_handler(
-            factory, max_sessions=2, max_session_s=100.0,
+            factory, authenticator=_ACCEPT_ALL, max_sessions=2, max_session_s=100.0,
             telemetry_factory=lambda: shared, log=logged.append,
         )
         client = await self._serve(handler)

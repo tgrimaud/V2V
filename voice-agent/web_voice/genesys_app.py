@@ -78,6 +78,7 @@ def _conversation_id(request: web.Request) -> str | None:
 def make_genesys_handler(
     factory: SessionFactory,
     *,
+    authenticator: GenesysConnectionAuthenticator,
     max_sessions: int = DEFAULT_MAX_GENESYS_SESSIONS,
     wire_codec: str | None = None,
     max_session_s: float = DEFAULT_MAX_SESSION_S,
@@ -85,25 +86,24 @@ def make_genesys_handler(
     allowed_origins: list[str] | None = None,
     default_language: str | None = None,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
-    authenticator: GenesysConnectionAuthenticator | None = None,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
     log: Callable[[TelemetryRecorder], None] = genesys_log_telemetry,
 ) -> Callable[[web.Request], Awaitable[web.StreamResponse]]:
     """Build the `GET /genesys/audiohook` handler: one session per connection, N concurrent.
 
-    When `authenticator` is supplied the AudioHook connection auth (API key + HMAC
-    signature) is verified BEFORE the WS upgrade; a failure returns the HTTP status the
-    outcome maps to (401/503) and never builds a session (TASK-INFRA-012).
+    `authenticator` is REQUIRED so a forgotten wiring fails CLOSED (review Minor 1): the
+    AudioHook connection auth (API key + HMAC signature) is verified BEFORE the WS upgrade;
+    a failure returns the HTTP status the outcome maps to (401/503) and never builds a
+    session (TASK-INFRA-012). Pass an unconfigured authenticator to refuse every connection.
     """
     active = _ActiveSessions()
     ceiling = max_sessions if max_sessions > 0 else DEFAULT_MAX_GENESYS_SESSIONS
     codec = wire_codec or genesys_codec_config()
 
     async def handler(request: web.Request) -> web.StreamResponse:
-        if authenticator is not None:
-            result = authenticator.authenticate(request)
-            if not result.ok:
-                return web.Response(status=result.http_status)
+        result = authenticator.authenticate(request)
+        if not result.ok:
+            return web.Response(status=result.http_status)
         websocket = web.WebSocketResponse()
         await websocket.prepare(request)
         if allowed_origins and not is_origin_allowed(
