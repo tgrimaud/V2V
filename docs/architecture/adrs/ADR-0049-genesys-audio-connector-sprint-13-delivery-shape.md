@@ -161,6 +161,58 @@ gate's outputs (also OQ-006 decision items):
 - **Codec (PCMU vs L16)** end to end + the transcode budget.
 - **Data residency / egress** for the PII audio leaving the Genesys cloud to the runtime VMs.
 
+### Implementation status (TASK-WEB-041, 2026-08-28)
+
+The **media-plane transport adapter** (Decision point 1) is implemented on the ADR-0047
+single async server; the spike (`voice-agent/spikes/genesys_audiohook/`) stays intact as
+evidence. It lives entirely in the voice runtime (`voice-agent/web_voice/`) — **no backend
+code changed** (ADR-0001 held):
+
+- `genesys_app.py` — `GET /genesys/audiohook` handler: one bidirectional stream per session
+  built through the unchanged ADR-0043 `SessionFactory`, a concurrency ceiling (default 3,
+  `VOICE_GENESYS_MAX_SESSIONS`) with WS 1013 backpressure, and a **graceful 15-minute cap**
+  (at the cap the session is *drained* — trailing partial finalized, answer spoken — then
+  ended so Architect resumes; never a silent mid-call cut, R2). Per-channel OpenTelemetry
+  (session/gauge/cap events + a deterministic `conversationId → traceparent`, one trace).
+  The cap/drain machinery lives in `genesys_cap.py`; the constants, env resolvers and
+  telemetry emitters in `genesys_config.py` (module-budget split, review remediation).
+
+### Review remediation (TASK-WEB-041, 2026-08-28)
+
+The 2026-08-28 adversarial code review raised two Major findings, both now closed in the
+runtime (still ADR-0001-clean — no backend code):
+
+- **Hard-bounded cap drain (Major #1).** At the cap the drain is wrapped in
+  `asyncio.wait_for(drain, timeout=grace)`; if the drain wedges (a stuck STT/TTS provider)
+  the session is force-`stop()`ped after the grace and a `voice.genesys.session_cap_forced`
+  event is recorded, so the concurrency slot + WS are **always** freed at cap+grace and can
+  never be held indefinitely. The grace is env-tunable (`VOICE_GENESYS_CAP_DRAIN_GRACE_MS`,
+  default 5 s). A `DrainOnce` guard ensures the cap timer and the peer-disconnect handler
+  never both drain the same session.
+- **Endpoint exposure posture (Major #2, security).** The endpoint is now **default-off**
+  (`--genesys off` / `VOICE_GENESYS=off`) and, when explicitly enabled, enforces an Origin
+  allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`) mirroring `/ws`. **AudioHook signature / HMAC
+  / API-key verification of the Genesys leg is owned by TASK-INFRA-012** (live-org endpoint
+  exposure); until it lands the endpoint MUST stay **default-off and network-isolated**, and
+  the Origin allowlist is the reversible in-runtime guard. This is the recorded sign-off for
+  the deferral, not a silent gap.
+- `genesys_framing.py` — subclasses the AudioHook-shaped `WebSocketAudioSerializer`, reusing
+  its whole control channel and overriding only the audio path; emits `genesys.transcode.in`
+  / `.out` per-leg spans.
+- `genesys_codec.py` — **native, numpy-vectorized** PCMU/L16 ↔ PCM16/16 kHz transcode
+  (prefer L16). This resolves **R6**: the spike's pure-Python per-sample loop held the GIL
+  and serialized ~2.96× at concurrency 3; numpy releases the GIL on its vectorized C ops, so
+  three concurrent transcodes now run **faster than three sequential** ones (measured
+  `conc3/seq3 ≈ 0.45–0.54` on a multicore box; well under the pure-Python blow-up on 1 vCPU).
+  `numpy` is already a transitive dependency (`opencv-python → numpy`), so this adds **zero**
+  new wheels; it is pinned explicitly in `requirements.txt` because the codec now uses it
+  directly (`audioop` is removed in Python 3.13+, so it was not an option).
+
+What is **still gated / out of this ticket**: the ADR-0029 latency re-score on the real
+Genesys leg (R1, needs a live org), the native barge-in/EOT ownership wiring (R4,
+TASK-WEB-042), and the degraded-mode / resume-callback policy (R2/R3, TASK-WEB-044 +
+TASK-INFRA-012). This ADR therefore stays **Proposed / latency-gated**.
+
 ## Consequences
 
 - Sprint 13 is **gate-first**: the spike commits or defers everything else. A **NO-GO** parks

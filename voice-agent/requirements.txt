@@ -25,6 +25,14 @@ opencv-python>=4.11,<5   # required by the SmallWebRTCTransport import (cv2/RawV
 opentelemetry-sdk>=1.27,<2
 opentelemetry-exporter-otlp-proto-http>=1.27,<2
 
+# Genesys Audio Connector codec (TASK-WEB-041 / ADR-0049): native, vectorized PCMU/L16
+# <-> PCM16 transcode. numpy is ALREADY a transitive dependency (opencv-python -> numpy),
+# so pinning it here adds ZERO new wheels; it is declared explicitly because the codec
+# now depends on it directly (code-guidelines: unit-test the library surface you use).
+# numpy releases the GIL on its vectorized C ops, resolving the TASK-WEB-025 R6 finding
+# that a pure-Python transcode serializes ~2.96x at concurrency 3 on 1 vCPU.
+numpy>=2,<3
+
 # Dev / test
 behave>=1.2
 # QA gate for TASK-WEB-016: validates web_voice/openapi.yaml against the OpenAPI 3

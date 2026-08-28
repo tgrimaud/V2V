@@ -50,6 +50,9 @@ _JSON = "application/json"
 # Live WebSocket audio upgrade route (mounted only when a ws_handler is supplied, so
 # importing this module stays free of the pipecat transport dependency).
 WS_ROUTE = "/ws"
+# Genesys Audio Connector AudioHook upgrade route (TASK-WEB-041), mounted only when a
+# genesys_handler is supplied so the base HTTP surface stays unchanged otherwise.
+GENESYS_ROUTE = "/genesys/audiohook"
 
 
 def _json_response(status: int, payload: dict, extra_headers: dict[str, str] | None = None) -> web.Response:
@@ -93,7 +96,12 @@ async def _run_blocking(func: Callable, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
 
 
-def make_app(processor: Any, signaling: Any = None, ws_handler: Any = None) -> web.Application:
+def make_app(
+    processor: Any,
+    signaling: Any = None,
+    ws_handler: Any = None,
+    genesys_handler: Any = None,
+) -> web.Application:
     """Build the aiohttp application wiring the voice HTTP surface to `processor`.
 
     `signaling` (optional) is the WebRTC signaling service used by the offer route;
@@ -103,6 +111,10 @@ def make_app(processor: Any, signaling: Any = None, ws_handler: Any = None) -> w
     `websocket_app.make_ws_handler`). When provided it is mounted at `GET /ws` on the
     same port; when None the `/ws` route is not registered (the interim `:8091` listener
     stays authoritative), so the HTTP surface is unchanged.
+
+    `genesys_handler` (optional) is the Genesys Audio Connector handler (TASK-WEB-041,
+    `genesys_app.make_genesys_handler`). When provided it is mounted at
+    `GET /genesys/audiohook` on the same port; when None the route is not registered.
     """
     app = web.Application(client_max_size=MAX_AUDIO_BYTES + 1024)
 
@@ -236,6 +248,8 @@ def make_app(processor: Any, signaling: Any = None, ws_handler: Any = None) -> w
     if ws_handler is not None:
         # Registered before the static catch-all so the upgrade route wins over it.
         routes.append(web.get(WS_ROUTE, ws_handler))
+    if genesys_handler is not None:
+        routes.append(web.get(GENESYS_ROUTE, genesys_handler))
     # Static catch-all LAST so it never shadows the explicit routes above.
     routes.append(web.get("/{tail:.*}", handle_static))
     app.add_routes(routes)

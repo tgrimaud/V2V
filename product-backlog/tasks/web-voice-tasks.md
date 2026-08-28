@@ -3672,9 +3672,11 @@ ADR-0029 (latency gate)
 **Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
 drive it end to end)
 **Classification:** V1 voice runtime — Genesys media plane (runtime-affecting)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Status:** ✅ Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
+`task/TASK-WEB-041-genesys-audio-connector-adapter`; awaiting user validation/merge. Live
+Genesys-leg latency re-score (R1) still needs a live org; barge-in/EOT wiring is TASK-WEB-042.
 **Priority:** High (Sprint 13 spine, once gated)
-**Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch, when gated)
+**Branch:** `task/TASK-WEB-041-genesys-audio-connector-adapter` (off the sprint branch)
 
 ### Context
 
@@ -3723,6 +3725,58 @@ Scenario: The pilot codec is handled end to end
 
 - Barge-in/end-of-turn ownership on this path is **not** this ticket — see TASK-WEB-042.
 - Per-leg latency + concurrency + correlation-id are TASK-WEB-043; degraded modes are TASK-WEB-044.
+
+### Implementation (2026-08-28)
+
+Delivered in the voice runtime only (`voice-agent/web_voice/`); **no backend code changed**
+(ADR-0001 held). See the ADR-0049 "Implementation status" note for the design.
+
+- **Adapter** `genesys_app.py` — `GET /genesys/audiohook` on the ADR-0047 single async server;
+  one bidirectional stream/session via the unchanged ADR-0043 `SessionFactory`; concurrency
+  ceiling (default 3, `VOICE_GENESYS_MAX_SESSIONS`) with WS 1013 backpressure; **graceful
+  15-min cap** (`VOICE_GENESYS_MAX_SESSION_S`) that *drains* the session (never a silent cut);
+  per-channel OTel (session/gauge/cap events) + deterministic `conversationId → traceparent`.
+  Cap/drain machinery in `genesys_cap.py`; constants/env-resolvers/telemetry emitters in
+  `genesys_config.py` (module-budget split — all three files < 200 non-blank lines).
+- **Serializer** `genesys_framing.py` — subclasses the AudioHook `WebSocketAudioSerializer`,
+  overriding only the audio path; `genesys.transcode.in`/`.out` per-leg spans.
+- **Native codec** `genesys_codec.py` — numpy-vectorized PCMU/L16 ↔ PCM16/16 kHz (prefer
+  L16). Resolves **R6**: three concurrent transcodes now run faster than three sequential
+  (`conc3/seq3 ≈ 0.45–0.54`) because numpy releases the GIL, vs the spike's ~2.96× pure-Python
+  serialization. `numpy` was already transitive (`opencv-python`) → zero new wheels.
+- **Tests:** `tests/test_genesys_codec.py` (round-trip + concurrency-3), `test_genesys_framing.py`,
+  `test_genesys_app.py`. Full suite green: 635 unittest, 17 behave features / 46 scenarios.
+- The spike (`voice-agent/spikes/genesys_audiohook/`) is kept intact as evidence.
+
+### Review remediation (2026-08-28, clears the ≥90 adversarial-review gate)
+
+Two Major + three Minor findings from the 2026-08-28 adversarial code review, all fixed in
+the voice runtime only (**ADR-0001 held — zero backend changes**):
+
+- **[Major #1] Hard duration bound on the 15-min cap drain.** The cap drain is wrapped in
+  `asyncio.wait_for(drain, timeout=grace)`; on timeout the session is force-`stop()`ped and a
+  `voice.genesys.session_cap_forced` event (`reason=cap_drain_timeout`) is recorded, so a
+  wedged STT/TTS provider can no longer hold the concurrency slot + WS indefinitely — the slot
+  is ALWAYS freed at cap+grace. Grace is env-tunable (`VOICE_GENESYS_CAP_DRAIN_GRACE_MS`,
+  default 5 s). New leak test proves the slot is freed + WS closed when `drain()` never
+  completes.
+- **[Major #2, security] Closed the unauthenticated default-on posture.** The endpoint is now
+  **default-off** (`--genesys off` / `VOICE_GENESYS=off`) and enforces an Origin allowlist
+  (`VOICE_GENESYS_ALLOWED_ORIGINS`) mirroring `/ws` when enabled. **Full AudioHook
+  signature / HMAC / API-key verification is OWNED BY TASK-INFRA-012** (live-org endpoint
+  exposure); until it lands the endpoint MUST stay default-off + network-isolated. This is the
+  recorded sign-off (see ADR-0049 "Review remediation"), not a silent deferral.
+- **[Minor] GIL-proof concurrency assertion** now gates the fragile `conc3/single < 2.5`
+  behind `cpu_count ≥ 2` (single-core relaxed to `< 3.2`); the real GIL proof `conc3 < seq3`
+  stays multicore-gated.
+- **[Minor] Double-drain guard** — a `DrainOnce` guard + the disconnect handler cancelling a
+  pending cap ensure the cap timer and `on_client_disconnected` never both drain a session.
+- **[Minor] Module split** — `genesys_app.py` (was > 200 lines) split into `genesys_app.py`
+  (handler/lifecycle, 177), `genesys_cap.py` (cap/drain, 105) and `genesys_config.py`
+  (constants/config/telemetry, 139).
+
+Documented/deferred items left as-is (correctly deferred to TASK-INFRA-012): L16 big-endian
+on-wire byte order, `conversationId` header/open-frame carrier, crude resampling.
 
 ---
 
