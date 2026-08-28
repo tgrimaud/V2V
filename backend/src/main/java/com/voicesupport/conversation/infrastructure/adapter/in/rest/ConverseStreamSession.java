@@ -2,8 +2,11 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.TokenStream;
 import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffCommand;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
@@ -38,6 +41,7 @@ class ConverseStreamSession {
     private final SseEmitter emitter;
     private final ConverseStreamUseCase converseStreamUseCase;
     private final IdempotentDeliveryGuard idempotentDeliveryGuard;
+    private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ConverseRequest request;
     private final ChannelEnvelope envelope;
@@ -50,12 +54,14 @@ class ConverseStreamSession {
             SseEmitter emitter,
             ConverseStreamUseCase converseStreamUseCase,
             IdempotentDeliveryGuard idempotentDeliveryGuard,
+            PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             ConverseRequest request,
             String correlationId) {
         this.emitter = emitter;
         this.converseStreamUseCase = converseStreamUseCase;
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
+        this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
         this.request = request;
         this.envelope = request.toEnvelope();
@@ -106,8 +112,20 @@ class ConverseStreamSession {
         TokenStream tokenStream = converseStreamUseCase.converseStream(
                 request.transcript(), envelope.conversationKey(), request.language());
         GeneratedAnswer answer = tokenStream.consume(this::onChunk);
-        send("done", StreamDoneEvent.from(answer));
+        EscalationHandoffReference reference = prepareHandoffIfEscalated(answer);
+        send("done", StreamDoneEvent.from(answer, reference));
         logTurn(answer);
+    }
+
+    // On an escalation turn, stores the audited hand-off and carries only the by-reference token on
+    // the terminal `done` event, so the streamed voice path emits a handoff_id — never inline PII
+    // (TASK-BE-036 / DEC-013). Ordinary turns return null and escalation_context is omitted.
+    private EscalationHandoffReference prepareHandoffIfEscalated(GeneratedAnswer answer) {
+        if (!answer.requiresEscalation()) {
+            return null;
+        }
+        return prepareEscalationHandoffUseCase.prepare(
+                EscalationHandoffCommand.of(envelope, request.transcript(), answer));
     }
 
     private void emitListenPrompt() {

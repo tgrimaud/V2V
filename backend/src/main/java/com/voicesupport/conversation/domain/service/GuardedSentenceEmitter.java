@@ -60,13 +60,13 @@ public class GuardedSentenceEmitter {
         }
         if (blocked) {
             onChunk.accept(fallbackMessage);
-            return GeneratedAnswer.fallback(fallbackMessage);
+            return GeneratedAnswer.fallback(fallbackMessage, blockedVerdict);
         }
         if (voiced.isEmpty()) {
             blockedVerdict = GuardrailDecision.Verdict.LOW_CONFIDENCE;
             String message = GuardrailMessages.lowConfidence(language);
             onChunk.accept(message);
-            return GeneratedAnswer.fallback(message);
+            return GeneratedAnswer.fallback(message, blockedVerdict);
         }
         return GeneratedAnswer.grounded(voiced.toString(), groundedConfidence);
     }

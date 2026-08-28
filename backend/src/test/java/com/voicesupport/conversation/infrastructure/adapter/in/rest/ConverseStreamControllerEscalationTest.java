@@ -1,16 +1,17 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.application.service.EscalationHandoffService;
 import com.voicesupport.conversation.domain.model.TokenStream;
-import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
-import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
+import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
+import com.voicesupport.conversation.domain.service.EscalationHandoffFactory;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
+import com.voicesupport.conversation.infrastructure.adapter.out.handoff.InMemoryEscalationHandoffAdapter;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.observability.BackendTelemetry;
-import com.voicesupport.shared.observability.CorrelationId;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,25 +25,26 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Exercises the ADR-0013 SSE contract as served: chunk events per safe sentence, a terminal done
-// event, and the correlation-id echo. Uses an inline executor so the streamed body is fully
-// written before assertions (no api-key configured -> open pilot host).
+// Proves the DEC-013 by-reference contract on the primary voice path (/converse-stream): an
+// escalation turn's terminal `done` event carries ONLY the handoff_id + non-PII routing metadata
+// (escalation_context), never the customer's question inline. A real service + in-memory store mint
+// the reference so the wired path is exercised end to end.
 @WebMvcTest(ConverseStreamController.class)
 @Import(JacksonConfig.class)
-@DisplayName("ConverseStreamController SSE contract (open)")
-class ConverseStreamControllerTest {
+@DisplayName("ConverseStreamController escalation by-reference (TASK-BE-036)")
+class ConverseStreamControllerEscalationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,7 +53,7 @@ class ConverseStreamControllerTest {
     static class Config {
         @Bean
         ConverseStreamUseCase converseStreamUseCase() {
-            return (transcript, conversationId) -> streamOf("Bonjour.", "Comment puis-je aider ?");
+            return (transcript, conversationId) -> escalationStream();
         }
 
         @Bean
@@ -61,7 +63,9 @@ class ConverseStreamControllerTest {
 
         @Bean
         PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase() {
-            return command -> EscalationHandoffReference.of(HandoffId.of("handoff-test"), command.reason());
+            return new EscalationHandoffService(
+                    new EscalationHandoffFactory(), new InMemoryEscalationHandoffAdapter(1000),
+                    Clock.systemUTC(), new BackendTelemetry(new SimpleMeterRegistry()));
         }
 
         @Bean
@@ -74,47 +78,30 @@ class ConverseStreamControllerTest {
             return new InlineExecutorService();
         }
 
-        private static TokenStream streamOf(String first, String second) {
+        private static TokenStream escalationStream() {
             return onChunk -> {
-                onChunk.accept(first);
-                onChunk.accept(second);
-                return GeneratedAnswer.grounded(first + " " + second, 0.9);
+                String message = "Je vous mets en relation avec un conseiller.";
+                onChunk.accept(message);
+                return GeneratedAnswer.fallback(message, GuardrailDecision.Verdict.LOW_CONFIDENCE);
             };
         }
     }
 
     @Test
-    @DisplayName("streams a chunk event per sentence and a terminal done event")
-    void streamsChunksThenDone() throws Exception {
-        String body = dispatchBody("{\"transcript\":\"Bonjour\",\"conversation_id\":\"c1\",\"channel\":\"web\"}");
+    void the_done_event_carries_the_handoff_reference_not_inline_pii() throws Exception {
+        // GIVEN a Genesys streaming escalation turn carrying the customer's question
+        String body = dispatchBody("{\"transcript\":\"Pourquoi ma facture a augmenté ?\",\"channel\":\"genesys\","
+                + "\"external_session_id\":\"genesys-conv-9\"}");
 
-        assertTrue(body.contains("event:chunk"), body);
-        assertTrue(body.contains("Bonjour."), body);
-        assertTrue(body.contains("event:done"), body);
-        assertTrue(body.contains("\"grounded\":true"), body);
-    }
-
-    @Test
-    @DisplayName("a blank transcript streams a safe listen prompt")
-    void blankTranscriptStreamsListenPrompt() throws Exception {
-        String body = dispatchBody("{\"transcript\":\"   \",\"conversation_id\":\"c1\"}");
-
-        assertTrue(body.contains("Je vous écoute, posez-moi votre question."), body);
-        assertTrue(body.contains("event:done"), body);
-    }
-
-    @Test
-    @DisplayName("echoes the runtime correlation id (from the body) on the response header")
-    void echoesCorrelationIdHeader() throws Exception {
-        MvcResult started = mockMvc.perform(post("/api/conversation/converse-stream")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"transcript\":\"Bonjour\",\"correlation_id\":\"corr-42\",\"channel\":\"web\"}"))
-                .andExpect(request().asyncStarted())
-                .andReturn();
-
-        mockMvc.perform(asyncDispatch(started))
-                .andExpect(status().isOk())
-                .andExpect(header().string(CorrelationId.HEADER, "corr-42"));
+        // THEN the terminal done event carries only the by-reference token + non-PII routing metadata
+        assertThat(body).contains("event:done");
+        assertThat(body).contains("\"escalation_context\"");
+        assertThat(body).contains("\"handoff_id\"");
+        assertThat(body).contains("\"reason_code\":\"low_confidence\"");
+        assertThat(body).contains("\"priority\":\"normal\"");
+        // AND neither the raw customer question (PII) nor the customer session reference ride the SSE body
+        assertThat(body).doesNotContain("Pourquoi ma facture a augmenté ?");
+        assertThat(body).doesNotContain("genesys-conv-9");
     }
 
     private String dispatchBody(String json) throws Exception {

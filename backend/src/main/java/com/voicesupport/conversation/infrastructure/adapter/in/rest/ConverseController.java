@@ -1,8 +1,11 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffCommand;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
@@ -44,16 +47,19 @@ public class ConverseController {
 
     private final ConverseUseCase converseUseCase;
     private final IdempotentDeliveryGuard idempotentDeliveryGuard;
+    private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ApiKeyGuard apiKeyGuard;
 
     public ConverseController(
             ConverseUseCase converseUseCase,
             IdempotentDeliveryGuard idempotentDeliveryGuard,
+            PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseUseCase = converseUseCase;
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
+        this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
         this.apiKeyGuard = new ApiKeyGuard(apiKey);
     }
@@ -120,8 +126,21 @@ public class ConverseController {
         // conversation_id) so a Genesys call stays one conversation; a blank key is stateless.
         GeneratedAnswer generated = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
                 () -> converseUseCase.converse(request.transcript(), envelope.conversationKey(), request.language()));
+        EscalationHandoffReference reference = prepareHandoffIfEscalated(request, envelope, generated);
         logTurn(request, envelope, generated, elapsedMs(start));
-        return ResponseEntity.ok(ConverseResponse.from(generated));
+        return ResponseEntity.ok(ConverseResponse.from(generated, reference));
+    }
+
+    // On an escalation turn (ADR-0019 trigger surfaced by the guardrail), stores the audited hand-off
+    // and returns only the by-reference token, so the channel carries a handoff_id — never inline PII
+    // (DEC-013). Ordinary turns return null and the escalation_context is omitted from the response.
+    private EscalationHandoffReference prepareHandoffIfEscalated(
+            ConverseRequest request, ChannelEnvelope envelope, GeneratedAnswer generated) {
+        if (!generated.requiresEscalation()) {
+            return null;
+        }
+        return prepareEscalationHandoffUseCase.prepare(
+                EscalationHandoffCommand.of(envelope, request.transcript(), generated));
     }
 
     private void logTurn(ConverseRequest request, ChannelEnvelope envelope, GeneratedAnswer answer, long durationMs) {

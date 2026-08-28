@@ -1509,9 +1509,11 @@ ADR-0009 (channel envelope), ADR-0040/0049 (Genesys planes + delivery shape).
 **Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
 TASK-BE-037 (channel envelope fields the handoff rides on)
 **Classification:** V1 core — backend escalation/handoff (runtime-affecting)
-**Status:** 📋 Proposed — conditional on spike GO + OQ-006
+**Status:** 🧪 Implemented on `task/TASK-BE-036-escalation-handoff-by-reference` (off
+`feat/sprint-13-genesys-audio-connector`); `mvn test` green (**458**, ArchUnit incl.). Pending
+adversarial review + QA + user validation. Not merged (user is final validator).
 **Priority:** High (closes adversarial-review **R5**)
-**Branch:** `task/TASK-BE-036-genesys-handoff-transport` (off the sprint branch, when gated)
+**Branch:** `task/TASK-BE-036-escalation-handoff-by-reference` (off the sprint branch)
 
 ### Context
 
@@ -1564,6 +1566,45 @@ Scenario: The handoff decision and payload stay backend-owned
 
 - The escalation **wording** the caller hears is unchanged (ADR-0019/guardrail path); this ticket is
   the machine-to-machine handoff, not the spoken message.
+
+### Implementation note (2026-08-28)
+
+By-reference transport implemented per **DEC-013**; inline transport deliberately not built.
+
+**Domain (pure, channel-agnostic — ADR-0001/ADR-0009 held, no Genesys logic):**
+- `EscalationHandoff` (record + nested `Builder`) — the audited ADR-0019 payload (conversation
+  context + PII), backend-owned.
+- `HandoffId` — opaque sanitized identity; the only PII-free token that crosses the channel boundary.
+- `EscalationHandoffReference` (`handoff_id`, `reason_code`, `priority`) — the by-reference token
+  placed on the envelope's `escalation_context`; **exposes no summary / last message / customer ref**.
+- `EscalationReason` (enum) — maps guardrail verdicts → escalation codes (`LOW_CONFIDENCE` →
+  `low_confidence`/normal, `UNGROUNDED` → `billing_uncertainty`/high); non-escalating verdicts → empty.
+- `EscalationHandoffCommand` + `EscalationHandoffFactory` (domain service) — assemble the payload from
+  a turn; `GeneratedAnswer` enriched with an optional `EscalationReason` + `requiresEscalation()`.
+- Ports: `EscalationHandoffPort` (out: `store`/`findById`), `PrepareEscalationHandoffUseCase` +
+  `FetchEscalationHandoffUseCase` (in).
+
+**Application/infra:**
+- `EscalationHandoffService` implements both use cases (store → return reference; fetch by id).
+- `InMemoryEscalationHandoffAdapter` — bounded LRU store minting opaque UUID `handoff_id` (mirrors
+  BE-037's dedup adapter layout); wired via 3 `@Bean`s in `ConversationConfig`
+  (`voice-support.conversation.handoff.max-handoffs:100000`).
+
+**REST (by reference, snake_case, api-key gated via `WebSecurityMvcConfig`):**
+- `GET /api/conversation/escalation-handoffs/{handoff_id}` → 200 `EscalationHandoffResponse` |
+  404 `ErrorResponse` (`ERR_HANDOFF_NOT_FOUND`, no internal detail) | 401 without key.
+- Escalation path: on `/converse` **and** `/converse-stream`, when `answer.requiresEscalation()`, the
+  handoff is stored and only the `EscalationHandoffReference` is emitted on `escalation_context`
+  (`ConverseResponse` / SSE `done` event) — never inline PII.
+
+**OTel:** `BackendTelemetry.recordEscalationHandoff(outcome, reasonCode, handoffId)` — counter
+`voice_support.escalation_handoff` (tags: outcome=created/fetched/not_found, reason_code, channel) +
+`[HANDOFF]` structured log with correlation id; never logs summary / last message / customer ref.
+
+**Tests (JUnit 5, manual fakes, no Mockito):** reason mapping, answer escalation signal, factory
+payload assembly, adapter round-trip + LRU eviction + unknown-id, service prepare/fetch (PII stays in
+store, reference carries only id/reason/priority), controller 200/404, api-key gating, and batch +
+streaming by-reference wiring (done event carries `handoff_id`, no inline PII). Full suite **458** green.
 
 ---
 

@@ -59,7 +59,8 @@ public class AnswerService implements AnswerQuestionUseCase {
             // plus the blocked verdict so clarify/low-confidence rates are observable (ADR-0034).
             telemetry.recordGuardrailBlock(grounding.decision().verdict().name());
             telemetry.recordAnswerLanguage(null, language.code());
-            return GeneratedAnswer.fallback(grounding.decision().fallbackMessage());
+            return GeneratedAnswer.fallback(
+                    grounding.decision().fallbackMessage(), grounding.decision().verdict());
         }
         List<RetrievedEvidence> evidence = grounding.evidence();
         String text = answerGenerator.generate(question, evidence, safeHistory, language);
@@ -68,7 +69,7 @@ public class AnswerService implements AnswerQuestionUseCase {
             // DEC-002 output block (e.g. an ungrounded amount): count it so QA/Ops can observe how
             // often the bot suppresses a fabricated answer, not just the grounding-stage blocks.
             telemetry.recordGuardrailBlock(outputDecision.verdict().name());
-            return GeneratedAnswer.fallback(outputDecision.fallbackMessage());
+            return GeneratedAnswer.fallback(outputDecision.fallbackMessage(), outputDecision.verdict());
         }
         return GeneratedAnswer.grounded(text, bestScore(evidence));
     }

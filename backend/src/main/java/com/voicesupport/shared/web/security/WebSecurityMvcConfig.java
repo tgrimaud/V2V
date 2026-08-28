@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-// Registers the api-key gate on the knowledge ingestion/sync, answer and retrieve paths that had
-// no authentication before TASK-BE-019. Reads the shared secret directly (no injected @Component)
+// Registers the api-key gate on the knowledge ingestion/sync, answer, retrieve, warm-up and
+// escalation hand-off fetch (TASK-BE-036) paths. Reads the shared secret directly (no injected @Component)
 // so @WebMvcTest slices that auto-load this WebMvcConfigurer resolve cleanly and stay open when no
 // key is set. The converse endpoints keep their own inline gate (same rule via ApiKeyGuard) and are
 // intentionally not listed here to preserve their documented empty-body 401 contract. Health stays
@@ -32,6 +32,7 @@ public class WebSecurityMvcConfig implements WebMvcConfigurer {
                         "/api/knowledge/**",
                         "/api/conversation/answer",
                         "/api/conversation/retrieve",
-                        "/api/conversation/warm-up");
+                        "/api/conversation/warm-up",
+                        "/api/conversation/escalation-handoffs/**");
     }
 }
