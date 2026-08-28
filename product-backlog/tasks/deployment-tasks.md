@@ -804,8 +804,18 @@ of a session's signaling to the bridge that answered the offer.
 **Related decisions:** ADR-0038
 **Depends on:** TASK-OPS-001 (the workflows)
 **Classification:** V1 pilot deployment (CI supply-chain hardening)
-**Status:** Proposed (2026-08-05) — **ticket only, deferred** (low risk for a private-repo
-pilot; recommended before wider exposure).
+**Status:** ✅ Implemented (2026-08-06, branch `task/TASK-OPS-006-pin-actions-sha`) — all 8
+third-party `uses:` in `tests.yml` + `images.yml` repinned to full commit SHAs (with a
+trailing `# vX.Y.Z` readability comment), resolved live via `git ls-remote` (identical to the
+commit each floating major tag pointed to, so no behaviour change): `actions/checkout` v4.4.0,
+`actions/setup-java` v4.9.1, `actions/setup-python` v5.6.0, `docker/metadata-action` v5.10.0,
+`docker/setup-buildx-action` v3.12.0, `docker/login-action` v3.7.0, `docker/build-push-action`
+v6.19.2. Added `.github/dependabot.yml` (weekly `github-actions` ecosystem, grouped
+actions/docker PRs, `ci` commit prefix) so SHAs are bumped by reviewed PRs. The local reusable
+`uses: ./.github/workflows/tests.yml` is intentionally exempt (same-repo ref). QA:
+`.github/qa-validate-workflows.sh` **27/27** (+3 new: SHA-pin, `# vX.Y.Z` comment guard,
+Dependabot presence/YAML) and `actionlint` clean. **Not runtime-affecting** (CI-only; no app
+code, no new latency slice → no OpenTelemetry change). Pending review/merge on user request.
 **Priority:** Low
 **Surfaced by:** Sprint 11 full adversarial code+doc review (2026-08-05) — the CI workflows
 reference third-party actions by **mutable major-version tags**, not immutable commit SHAs.
@@ -1222,54 +1232,176 @@ Scenario: A wss voice connection survives a full call through the edge
   WebSocket route + tunnel timeout.
 - No TURN, no STUN — this is the whole point of the interim path (ADR-0042/0043).
 
-## TASK-INFRA-011 - Fix the voice deploy health gate hanging on the podman loopback quirk
+---
 
-**Parent:** EPIC-012 (pilot deployment)
-**Related decisions:** ADR-0038 (pilot deployment), TASK-OPS-002 (Ansible deploy playbooks)
-**Related:** TASK-WEB-037 / TASK-WEB-039 (the same loopback quirk broke the live-test SSH tunnel)
-**Classification:** V1 pilot deployment (release correctness)
-**Status:** 📋 Planned — recurring blocker; surfaced again 2026-08-26 during the v0.6.0 WS live test.
-**Priority:** High
-**Branch:** `task/TASK-INFRA-011-voice-health-gate-loopback` (to create)
+## TASK-INFRA-011 - Voice deploy health gate: probe the container health verdict, not host loopback
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** ADR-0038 (deploy topology), TASK-OPS-002 (Ansible deploy), TASK-OPS-004 (firewalld source-scoping)
+**Depends on:** —
+**Classification:** V1 pilot deployment — deploy-tooling fix (non-runtime)
+**Status:** ✅ Implemented + validated live on t01/t02 (2026-08-26) on `task/TASK-INFRA-011-voice-health-container-probe` (off `feat/restart-from-scratch`). Surfaced during the **v0.6.0 deploy**: the voice rolling deploy hung ~15 min on the health gate and had to be finished with a per-host `-e health_url` override.
 
 ### Context
 
-The Ansible voice deploy's "Wait for voice HTTP health" step probes `http://127.0.0.1:8090/`
-(`group_vars/voice.yml` `health_url`). On the pilot podman hosts the published port answers on
-`0.0.0.0:8090` and via the **host LAN IP** (`curl http://<host-ip>:8090/` → `200`, container
-`healthy`), but **host→loopback** returns `000` — a podman port-forwarder quirk, not an app
-failure. Same root cause bit the WS live test (TASK-WEB-039): `ws://127.0.0.1:8091` timed out
-through an SSH tunnel until it was re-pointed at the bridge LAN IP.
+The Ansible deploy health task (`roles/compose_tier/tasks/health.yml`) probed each tier
+over HTTP from the **host** with `ansible.builtin.uri` at `health_url`. For the **voice
+bridge** this is `http://127.0.0.1:8090/`, which is a recurring false-negative (documented
+in CLAUDE.md): the published port answers on the **192.168.x service IP** but returns **000
+on host loopback**, and the management-interface FQDN is **firewalld source-scoped**
+(TASK-OPS-004) so a probe there **hangs** (30 retries × ~30 s `uri` timeout ≈ 15 min) before
+aborting the rolling deploy (`serial:1` + `max_fail_percentage:0`). During the v0.6.0 deploy
+this blocked the voice tier; t02 had to be finished manually with
+`-e health_url=http://192.168.0.104:8090/`.
 
-With `retries:30 delay:5` + `serial:1 max_fail_percentage:0`, the false negative burns ~150 s
-then aborts the whole play **after** the node was already recreated at the new tag — so the
-next node is never touched and the deploy is left half-applied.
+### What was implemented
 
-### Scope
+- Added a **container-health probe** to `health.yml`: when `health_container_name` is set,
+  poll `docker inspect --format {{.State.Health.Status}} <name>` until `healthy`
+  (30×5 s). The container's own `HEALTHCHECK` curls `localhost:8090` **inside the container
+  namespace**, so it is immune to host interface/firewall/loopback quirks.
+- `group_vars/voice.yml` sets `health_container_name: voice-support-bridge`; the HTTP `uri`
+  probe is kept as a **fallback** (runs only when `health_container_name` is unset, e.g. the
+  backend tier whose loopback `:8080` probe works) so the QA contract (`ansible.builtin.uri`
+  present) is preserved.
+- `qa-validate-ansible.sh` gains 3 assertions (container-health probe present + gated +
+  voice tier uses it).
 
-- Replace the loopback HTTP probe with one of:
-  - **(preferred)** the container's own health verdict — `podman inspect --format '{{.State.Health.Status}}'`
-    (the image already ships a `HEALTHCHECK`), which is immune to the host→loopback forwarder quirk; or
-  - repoint `health_url` at the host's primary LAN IP
-    (`ansible_default_ipv4.address`) instead of `127.0.0.1`.
-- Keep the gate meaningful (still fail on a genuinely unhealthy container) and keep
-  `serial:1` safe (don't recreate the next node on a real failure).
-- Sweep the same loopback assumption anywhere else in the deploy (backend tier probe if present).
+### Acceptance (met)
+
+- `ansible-playbook deploy.yml --syntax-check` clean; `qa-validate-ansible.sh` **72/72** (+3).
+- **Live**: re-running the voice deploy on t01/t02 with the committed config passes
+  `Wait for voice container to report healthy (voice-support-bridge)` immediately and
+  **skips** the loopback HTTP probe — no override, no hang, `failed=0`.
+
+### Notes
+
+- Non-runtime (deploy tooling only). Backend/redis health paths unchanged.
+- Removes the need for the manual `-e health_url=<service-IP>` workaround on future voice deploys.
+
+---
+
+## TASK-OPS-009 - Deploy must trigger/verify KB sync + FR corpus default
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations) / EPIC-005 (answer engine)
+**Related decisions:** ADR-0048 (bilingual KB corpus + retrieval language scope),
+ADR-0038 (pilot deploy), ADR-0031 (answer language), ADR-0034 (audience filter)
+**Related:** TASK-OPS-002 (Ansible deploy), TASK-BE-013/014 (CSV connector), TASK-BE-034
+(retrieval language filter — target)
+**Depends on:** TASK-OPS-002
+**Classification:** V1 pilot deployment (release correctness + KB content)
+**Status:** 🔧 Implemented on `task/TASK-OPS-009-kb-sync-fr-default` (2026-08-27, off
+`feat/sprint-12-external-voice-websocket`): durable Ansible change (FR corpus default +
+**async** post-deploy sync + `SyncReport.processed` gate) landed; `qa-validate-ansible.sh`
+**76/76** (added 7 checks), YAML + playbook syntax-check clean. The immediate pilot load
+(Part B step 1) was performed operationally out-of-band (see done-tasks 2026-08-27).
+**Adversarial review 96/100 (Pass, 2026-08-27)** — contracts verified against backend source
+(`SyncReport.processed = documents.size()` → an idempotent re-deploy still passes the gate;
+`x-api-key` gate on `/api/knowledge/**` + `/retrieve`; global `SNAKE_CASE` Jackson so the
+`top_k` body + `json.*` reads resolve). Two non-blocking maintainability findings fixed
+(dropped `no_log` on the `async_status` wait so a failed sync is diagnosable; read-only
+retrieval smoke-check marked `changed_when: false`); `qa-validate-ansible.sh` re-run **76/76**.
+Report: [`docs/qa/task-ops-009-kb-sync-fr-default-adversarial-review.md`](../../docs/qa/task-ops-009-kb-sync-fr-default-adversarial-review.md).
+Pending user validation / merge.
+**Priority:** High
+**Branch:** `task/TASK-OPS-009-kb-sync-fr-default`
+
+### Problem
+
+Two gaps made the live pilot RAG **markdown-only** (39 chunks, 3 FR FAQ files) with **zero
+CSV content**, so mobile/support questions such as *"j'ai un problème avec mon téléphone
+mobile"* had no grounded evidence and deflected to an advisor (DEC-002):
+
+1. **The Ansible deploy copies KB assets but never syncs them.**
+   `roles/compose_tier/tasks/kb_assets.yml` drops `knowledge-base/*.md` + the CSV corpus
+   under `KB_HOST_PATH`, but **no task triggers `POST /api/knowledge/sync`** — the initial
+   markdown sync was run manually once, and no CSV was ever synced. A redeploy therefore
+   leaves the RAG empty/markdown-only unless someone remembers the manual step.
+2. **The CSV default was the English `articles.csv`.** Pilot users are French; FR-on-FR
+   retrieval grounds far better than FR-on-EN (ADR-0048).
+
+### Objective
+
+Make a (re)deploy self-sufficient: copy the **French** corpus, tag it `fr`, and **trigger +
+verify** the KB sync post-deploy so the RAG is never left empty/markdown-only.
+
+### Scope (delivered)
+
+- **FR corpus default** (group_vars/backend.yml): `kb_csv_filename: "articles-fr.csv"` +
+  `kb_csv_language: "fr"`; `kb_assets.yml` copies `{{ kb_csv_filename }}`; `backend.env.j2`
+  renders `KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}` + `KB_CSV_LANGUAGE={{ kb_csv_language }}`;
+  `.env.example` mirrors it.
+- **Post-deploy sync** (new `roles/compose_tier/tasks/kb_sync.yml`, backend tier only, after
+  `health.yml`, gated `kb_sync_after_deploy`): reads `CONVERSATION_API_KEY` from the rendered
+  `.env` (`no_log`, never on argv), then fires `POST /api/knowledge/sync` **async** (`poll: 0`)
+  and waits via `async_status` (90 × 30 s = 45 min headroom). **Why async:** the first CSV sync
+  is slow — ~300 articles are embedded on the co-located CPU Ollama sidecar AND each is
+  domain-classified by an embedding call at parse time (ADR-0030), so a full run takes ~15–30 min
+  on the pilot, far past any single-request timeout (a naïve 600 s `uri` call would time out and
+  fail the deploy). **Deploy gate:** assert the aggregate `SyncReport.processed >=
+  kb_sync_min_processed` (default 50; markdown baseline is 3, the FR corpus adds ~300) — this
+  proves the CSV corpus was actually seen/parsed, so the RAG is never silently left markdown-only.
+  We gate on `processed` (not `ingested`) because an idempotent re-deploy skips unchanged sources
+  (`ingested=0`) yet is a success. A `POST /api/conversation/retrieve` call then smoke-checks the
+  pipeline (gated on HTTP 200 + evidence count logged) — deliberately **not** the CSV-loaded gate,
+  since the always-present markdown FAQ can satisfy retrieval and the fail-closed audience filter
+  (ADR-0034) legitimately returns 0 chunks for a query with no customer-facing match.
+- **QA:** `qa-validate-ansible.sh` extended (76/76) — FR default, env wiring, sync wired +
+  verifies, api-key `no_log`, **async + async_status**, **`processed` gate**.
 
 ### Acceptance
 
 ```gherkin
-Scenario: Voice deploy health gate passes when the bridge is actually healthy
-  Given a voice bridge published on 8090 and reporting healthy via podman inspect
-  When the Ansible voice deploy runs its health gate on the pilot podman host
-  Then the gate passes without the host->loopback false negative
-  And a genuinely unhealthy container still fails the gate
+Scenario: A redeploy leaves the RAG populated, not markdown-only
+  Given the backend stack is (re)deployed via Ansible
+  When the post-deploy step runs
+  Then POST /api/knowledge/sync is fired async with the api key read from the rendered .env
+    And the play waits for the sync to finish via async_status (no single-request timeout)
+    And the deploy fails if SyncReport.processed is below the CSV baseline (markdown-only)
+
+Scenario: An idempotent re-deploy is a fast no-op
+  Given the CSV corpus is already synced (unchanged content_hash)
+  When the post-deploy sync runs again
+  Then it skips unchanged sources (ingested=0) and still passes the processed gate
+
+Scenario: The pilot CSV corpus is French
+  Then KB_CSV_PATH points at articles-fr.csv and KB_CSV_LANGUAGE is fr
 ```
 
-- `qa-validate-ansible.sh` stays green; add a check asserting the gate is not a bare `127.0.0.1` probe.
-- Documented in the deploy runbook (the manual "finish a blocked node" workaround can be retired).
+### Residuals / notes
 
-### Notes
+- **Language tag on the interim operational load (ADR-0048):** the immediate pilot load (Part
+  B step 1) dropped `articles-fr.csv` at the already-mounted `articles.csv` path and synced
+  `csv-article` while `KB_CSV_LANGUAGE` was still `en`, so those chunks carry a cosmetic
+  `language=en`. Harmless today (no language filter; answer language per-request). Once
+  **TASK-BE-034** lands, a **forced re-sync** is needed to re-tag `fr` (idempotent sync skips
+  on identical content_hash). A clean redeploy with this ticket's config tags correctly from
+  the start (source_type stays `csv-article`, language `fr`).
+- **Do NOT run a full prod redeploy** solely for this unless clearly safe (known voice
+  health-gate false-negative, TASK-INFRA-011). The operational pilot load (step 1) is the
+  immediate fix; this ticket makes the next planned redeploy durable.
+- **Bilingual target:** when TASK-BE-034 (retrieval language filter) lands, revisit to load
+  both `csv-article` (EN) + `csv-article-fr` (FR).
+- **Corpus is an internal back-office KB (audience boundary, ADR-0034):** the FR corpus is a
+  translation of the Eir operator KB, dominated by agent/back-office procedures. The
+  `KeywordAudienceClassifierAdapter` tags an article `internal` when its title/content matches a
+  marker (`back office`, `vérification d'aptitude`, `r6/ion`, `vaa`, `vrd`), and the customer
+  answer engine is **fail-closed to `audience=customer`**. Observed during the pilot sync: even
+  *"Mobile : Guide de dépannage"* was tagged `internal` (its body references back-office steps),
+  so it is excluded from customer retrieval. Consequence: loading the corpus does **not**
+  guarantee the mobile question grounds — the customer-facing partition may be thin. This is a
+  **KB-quality / audience-tuning** matter (curate the customer-facing FR partition), not a deploy
+  defect — and **not** a branding issue: the Eir brand in the corpus is intentional and correct
+  (the content is Eir's and the product's purpose is to answer Eir customer problems), so no
+  rebrand is needed (the earlier TASK-BE-035 rebrand follow-up is cancelled). The pilot
+  verification (done-tasks 2026-08-27) records the actual customer-retrieval outcome for the
+  mobile query.
+- **Sync is embedding-bound, not a fixed cost:** every article triggers a domain-classification
+  embedding at parse time (ADR-0030) *before* the per-chunk storage embeddings, all on the CPU
+  Ollama sidecar (`ollama_cpus: 1.0`). The vector store therefore stays at the markdown baseline
+  until the whole parse phase completes, then CSV chunks appear per document. This is why the
+  sync is fired async and gated on `SyncReport.processed`, and why `voice-support.embedding.timeout-ms`
+  is raised to 120 s on the backend tier (`java_opts`) for the sync batch.
 
 - Interim manual workaround (already documented): verify health out-of-band
   (`docker inspect --format {{.State.Health.Status}}` + `curl http://<host-ip>:8090/`), then
@@ -1343,3 +1475,86 @@ Scenario: The flow fails safe when the bot endpoint is unavailable
 
 - The Platform API / Architect specifics (variable names, queue ids, auth mechanism) are confirmed by
   the TASK-WEB-025 spike against the real pilot org (OQ-006); this ticket implements the confirmed shape.
+
+---
+
+## TASK-OPS-010 - Bridge active-session `/drain` endpoint + deploy wiring
+
+> **ID note:** Originally filed as **TASK-OPS-010** on the retired `fix/BUG-017-voice-turn-hang`
+> branch. The id was verified **free** on the mainline (no other `TASK-OPS-010` exists across the
+> active branches), so it is kept unchanged; only its BUG/WEB cross-references were renumbered
+> (BUG-017 → BUG-018, TASK-WEB-037/038 → TASK-WEB-045/046) to match the ported tickets.
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** ADR-0038 (pilot deployment), ADR-0025 (native barge-in / audio drain the bridge already uses per-turn)
+**Related:** BUG-018 (stuck-in-thinking incident — P1 fix #3), TASK-OPS-002 (Ansible session-draining hook, grace-only today), TASK-INFRA-007 (LB drain/enable via HAProxy admin socket — stops NEW calls, not live ones), TASK-INFRA-011 (known voice health-gate loopback false-negative), TASK-WEB-008 (per-turn audio `drain()`)
+**Depends on:** TASK-OPS-002 (compose deploy + drain hook), TASK-INFRA-007 (LB drain wiring)
+**Classification:** V1 pilot deployment (release correctness) + voice runtime
+**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Priority:** High
+**Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (to create when work starts)
+**Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a bridge recreate / deploy / HAProxy failover mid-turn can hard-cut a live call and strand the UI, because there is no active-session drain.
+
+### Context
+
+The voice bridge has **no active-session `/drain` endpoint** — this is a documented gap in
+`deploy/ansible/group_vars/voice.yml` ("The bridge has no active-session endpoint yet, so
+draining is best-effort … A hard 'wait until 0 active calls' still needs a bridge /drain
+endpoint (follow-up)"). Today a redeploy relies on three best-effort levers only:
+`serial: 1` (one bridge recreates at a time so the VIP peer keeps serving), the
+TASK-INFRA-007 LB drain hook (stops **new** calls hitting the node via the HAProxy admin
+socket), and a bounded `voice_drain_grace_seconds` grace window. None of these **wait for
+in-flight calls to finish**, so a call still in progress when the grace window elapses is
+hard-cut with no terminal signal — one of the ways BUG-018's "stuck in thinking" can occur
+during a deploy/failover. Note: the existing `drain()` in `web_voice/streaming_runtime.py` /
+`webrtc_signaling.py` (TASK-WEB-008 / ADR-0025) drains a **single turn's** TTS audio buffer;
+it is **not** a session-level graceful-drain for deploys.
+
+### Objective
+
+Add a graceful active-session drain to the bridge and wire it into the Ansible voice deploy
+so a bridge recreate/deploy/failover lets live calls wind down (bounded) instead of
+hard-cutting them, replacing the grace-only ceiling documented in `group_vars/voice.yml`.
+
+### Scope
+
+- **Bridge:** an active-session drain capability (e.g. a control endpoint / signal) that
+  stops accepting new sessions and reports when in-flight sessions have drained, so the
+  deploy can wait for "0 active calls" up to a bounded timeout before recreate; on timeout,
+  end remaining calls gracefully (emit the terminal control signal per TASK-WEB-046) rather
+  than a silent hard-cut. Reuse the existing active-session accounting
+  (`voice_max_webrtc_sessions` gauge / WS active-session gauge) rather than new state.
+- **Deploy wiring:** call the bridge drain before recreate in the Ansible voice deploy
+  (`roles/compose_tier`), superseding the grace-only path; keep it fail-safe (a drain
+  failure degrades to today's grace behaviour, never aborts the whole play — consistent
+  with the `voice_lb_socket_hosts` opt-in safety net).
+- **Health-gate interaction:** account for the known voice HTTP health-gate loopback
+  false-negative (TASK-INFRA-011) so the drain step does not compound a false abort during
+  a rolling deploy; confirm health out-of-band as documented.
+- **Docs:** update `deploy/ansible/group_vars/voice.yml` (remove the "no /drain endpoint
+  yet" caveat), `docs/operations/release-process.md` and the first-deploy runbook.
+- OpenTelemetry: record the drain outcome (sessions drained vs force-ended, elapsed) so a
+  deploy that cut a live call is observable.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A redeploy during an active call drains rather than hard-cuts
+  Given an active voice call on a bridge that is being recreated by the deploy
+  When the voice deploy runs against that bridge
+  Then the bridge stops accepting new sessions
+    And the deploy waits for the in-flight call to finish (up to a bounded timeout)
+    And the call is not hard-cut mid-turn before the container recreates
+
+Scenario: Drain is fail-safe
+  Given the bridge drain cannot complete (endpoint error or timeout exceeded)
+  Then remaining calls are ended gracefully with a terminal signal
+    And the deploy degrades to the grace-window behaviour without aborting the whole play
+```
+
+### Out Of Scope
+
+- The backend/runtime wall-clock turn deadline (TASK-WEB-045) and the browser watchdog
+  (TASK-WEB-046) — sibling BUG-018 P1 fixes.
+- Repointing the health gate off loopback (TASK-INFRA-011) — only accounted for here, not
+  fixed.

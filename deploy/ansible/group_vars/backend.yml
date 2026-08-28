@@ -56,6 +56,37 @@ redis_health_enabled: true
 # Knowledge base assets mounted read-only into the container.
 kb_host_path: "{{ compose_root }}/backend/kb-assets"
 
+# KB CSV corpus (ADR-0048 / TASK-OPS-009). The pilot uses the FRENCH corpus
+# (articles-fr.csv) as the single CSV source: pilot users are French, so FR-on-FR
+# retrieval grounds mobile/support questions that otherwise deflect to an advisor.
+# Answer language is already per-request (ADR-0031), so this only affects retrieval
+# relevance. articles-fr.csv references eir/eircom/AT&T by design — the content comes from
+# the Eir KB and the product answers Eir customer problems, so the brand is expected and
+# correct (no rebrand needed; the earlier TASK-BE-035 rebrand follow-up is cancelled). The
+# bilingual target (load both corpora + a retrieval language filter) is TASK-BE-034.
+# kb_csv_filename is the repo-root file Ansible copies and the container reads via
+# KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}.
+kb_csv_filename: "articles-fr.csv"
+kb_csv_language: "fr"
+
+# Post-deploy KB sync (TASK-OPS-009). After the stack is healthy, trigger
+# POST /api/knowledge/sync so a (re)deploy never leaves the RAG markdown-only or empty
+# (the image ships no KB; the sync loads the mounted assets into pgvector). Idempotent:
+# a second run skips unchanged sources by content_hash. Backend tier only.
+kb_sync_after_deploy: true
+# The first CSV sync is slow: ~300 articles are embedded on the CPU Ollama sidecar AND
+# each is domain-classified by an embedding call at parse time (ADR-0030), so a full run
+# takes ~15-30 min on the pilot. kb_sync.yml fires the sync async (poll:0) and waits via
+# async_status: poll every kb_sync_poll_delay s, up to kb_sync_poll_retries times
+# (90 * 30 s = 45 min headroom). Idempotent re-deploys finish in seconds.
+kb_sync_timeout: 2400          # async worker's own HTTP read timeout (s)
+kb_sync_async_seconds: 2700    # async job max lifetime (s)
+kb_sync_poll_retries: 90       # async_status polls
+kb_sync_poll_delay: 30         # seconds between polls
+# Deploy gate: the aggregate SyncReport.processed must be >= this (markdown baseline is 3,
+# the FR corpus adds ~300) to prove the CSV corpus was seen and the RAG is not markdown-only.
+kb_sync_min_processed: 50
+
 # JVM / resource sizing (4 vCPU / 8 GB VM, shared with the ollama sidecar).
 # The embedding read timeout (voice-support.embedding.timeout-ms, default 5s) is sized for a
 # single per-query embedding at retrieval; the one-shot KB sync embeds a large batch in one

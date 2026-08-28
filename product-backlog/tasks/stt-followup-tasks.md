@@ -744,8 +744,18 @@ finalize-tail win this ticket extends)
 **Depends on / follows:** TASK-WEB-020 (lever 1) + TASK-WEB-021 (lever 2) validated —
 they leave the `stt` slice as one of the two residual gate contributors.
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** To do (future improvement, out of Sprint 10 scope). Created 2026-07-31 from the
-TASK-WEB-020 cold/combined live passes.
+**Status:** ❌ **Rejected — measured harmful; runtime code reverted from sprint-12 (2026-08-27). Ticket branch preserved for reference.**
+Partial-quiet early finalization (default-OFF) + async reconcile telemetry was implemented and merged
+`--no-ff` into `feat/sprint-12-external-voice-websocket`, then live-measured 2026-08-27 (real
+Gradium+Mistral+Ollama, warm) at `VOICE_STT_PARTIAL_QUIET_MS=300`: `stt` slice p50 flat (346→344 ms),
+p95 −740 ms (1200→460 ms) BUT the reconcile gauge shows `extra_words ≈1` on ~100 % of engagements
+(`reconciled_match=0`, 14/14) for only ~99 ms median saved — i.e. it drops the trailing word almost
+every turn. The correctness gate (word-loss ~0) **FAILS at 300 ms** (and the gain also vanishes by
+~350 ms `flushed`; Gradium ~800 ms lookahead), so the runtime code was reverted from sprint-12 and the
+QA finding retained as the durable record (`docs/qa/task-stt-014-finalize-tail-qa.md` §7; evidence
+commit `cfbf1a9`). Adversarial review 92/100; unit + behave were green at implementation (573
+unittests; 17 features / 47 scenarios). **Remaining (moot):** formal WER pass — the reconcile gauge is
+already decisive against 300 ms. Created 2026-07-31; implemented + measured + rejected 2026-08-27.
 **Priority:** Medium
 
 ### Objective

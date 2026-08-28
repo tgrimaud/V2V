@@ -70,6 +70,34 @@ echo "== referenced Dockerfiles exist =="
 [ -f backend/Dockerfile ]      && ok "backend/Dockerfile exists"      || ko "backend/Dockerfile missing"
 [ -f voice-agent/Dockerfile ]  && ok "voice-agent/Dockerfile exists"  || ko "voice-agent/Dockerfile missing"
 
+echo "== action pinning to commit SHA (supply-chain, TASK-OPS-006) =="
+# Every third-party `uses:` must reference a 40-hex commit SHA (immutable), not a
+# floating tag (@v4, @main). The local reusable `uses: ./...` is exempt (same repo).
+refs=$(grep -REh '^[[:space:]]*(- )?uses:[[:space:]]' "$WF"/*.yml \
+  | sed -E 's/.*uses:[[:space:]]*([^[:space:]]+).*/\1/')
+unpinned=$(printf '%s\n' "$refs" | grep -vE '^\./' | grep -vE '@[0-9a-f]{40}$' || true)
+if [ -n "$unpinned" ]; then
+  ko "action ref(s) NOT pinned to a commit SHA: $(printf '%s' "$unpinned" | tr '\n' ' ')"
+else
+  ok "all third-party actions pinned to a 40-hex commit SHA"
+fi
+# Readability guard: a pinned SHA should keep a trailing `# vX.Y.Z` version comment.
+if grep -REn '@[0-9a-f]{40}[[:space:]]*$' "$WF"/*.yml >/dev/null 2>&1; then
+  ko "a SHA-pinned action has no trailing # vX.Y.Z version comment"
+else
+  ok "pinned actions carry a # vX.Y.Z readability comment"
+fi
+
+echo "== dependabot (reviewed SHA bumps, TASK-OPS-006) =="
+[ -f .github/dependabot.yml ] \
+  && ok "dependabot.yml present" || ko "dependabot.yml missing"
+has .github/dependabot.yml "package-ecosystem: github-actions" \
+  && ok "dependabot tracks the github-actions ecosystem" || ko "dependabot github-actions ecosystem missing"
+python3 - <<'PY' && ok "dependabot.yml is valid YAML" || ko "dependabot.yml is not valid YAML"
+import yaml, sys
+yaml.safe_load(open(".github/dependabot.yml"))
+PY
+
 echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,22 @@
+# Dependabot for GitHub Actions supply-chain hardening (TASK-OPS-006, ADR-0038).
+# The workflow `uses:` are pinned to immutable commit SHAs; Dependabot bumps those
+# SHAs (and the trailing `# vX.Y.Z` comment) via reviewed PRs instead of letting a
+# moving major tag drift silently. Scope is intentionally github-actions only — the
+# Maven/pip dependency policy is governed separately (code-guidelines).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      # One PR per provider family keeps the SHA bumps reviewable in a single diff.
+      actions-official:
+        patterns:
+          - "actions/*"
+      docker:
+        patterns:
+          - "docker/*"

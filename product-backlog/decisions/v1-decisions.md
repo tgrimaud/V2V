@@ -3,6 +3,13 @@
 This file keeps the product-readable decision summary. The authoritative
 architecture decisions are the ADRs under `docs/architecture/adrs/`.
 
+> **Two distinct "decision" numberings — do not conflate.** `DEC-001…DEC-011` below is
+> the durable product decision log. The **"global-review decision #1…#9"** referenced in
+> `backlog-index.md`, `done-tasks.md` and the 2026-08-15 review are a **separate,
+> review-local numbering** (the items of that adversarial-review remediation loop, e.g.
+> ADR-0043/0044, TASK-BE-030/031/032, TASK-WEB-032/033/034); they are **not** `DEC-###`
+> entries and do not extend this log. `DEC-012`/`DEC-013` do not exist.
+
 ## DEC-001 - V1 Focuses On Invoice Explanation
 
 **Status:** Accepted via ADR-0017  

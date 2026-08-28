@@ -3868,3 +3868,152 @@ Scenario: The caller is never stranded when our endpoint is unavailable
 
 - At least the endpoint-down mode is implemented + tested end to end (spike characterises it first).
 - No degraded mode leaves the caller in dead air; each is observable/auditable.
+
+---
+
+## TASK-WEB-045 - Overall wall-clock deadline for a streamed voice turn
+
+> **ID note:** Originally filed as **TASK-WEB-037** on the retired `fix/BUG-017-voice-turn-hang`
+> branch; renumbered to **TASK-WEB-045** to avoid collision with the v0.7.0 aiohttp single-port
+> TASK-WEB-037 already on the mainline. Original intent/acceptance preserved verbatim below.
+
+**Parent:** EPIC-006 (Voice2Voice journey foundation)
+**Related decisions:** ADR-0037 (first-sentence backend streaming to TTS — the streamed path this bounds), ADR-0029 (pilot latency criterion / mouth-to-ear budget), ADR-0013 (guarded SSE), ADR-0028 (observability)
+**Related:** BUG-018 (stuck-in-thinking incident — P1 fix #1), TASK-BE-025 (backend streaming inter-signal timeout — the backend-side bound this complements on the runtime side), TASK-STT-014 (STT finalize-tail, contributing mitigation, separate ticket)
+**Depends on:** —
+**Classification:** V1 voice runtime — reliability / robustness
+**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Priority:** High
+**Branch:** `task/TASK-WEB-045-voice-turn-wall-clock-deadline` (to create when work starts)
+**Surfaced by:** BUG-018 read-only investigation (2026-08-27) — the leading hypothesis for the "stuck in thinking until refresh" incident.
+
+### Context
+
+On the streamed answer path (ADR-0037, default `VOICE_BACKEND_STREAM=1`), a voice turn is
+bounded **only by the per-read socket timeout** on the backend HTTP hop: the streaming
+consumer applies the configured timeout **per read** and pulls SSE events one at a time,
+so a backend that keeps trickling bytes (sub-timeout inter-byte gaps) but never emits a
+terminal `done`/`error` holds the turn open indefinitely. There is **no end-to-end
+wall-clock budget** for the whole turn. This is the architectural hang-until-refresh risk
+behind BUG-018 (not observed firing in the retained ~22 h of logs, but the code path
+allows it). The backend already has an inter-signal streaming timeout (TASK-BE-025); this
+ticket adds the symmetric **overall** bound on the runtime side.
+
+### Objective
+
+Guarantee that a streamed voice turn always terminates within a bounded wall-clock time,
+degrading to the existing safe spoken fallback (ADR-0021 / TASK-WEB-003-F) when the
+deadline is exceeded, so a slow-but-not-dead backend can never strand the turn.
+
+### Scope
+
+- Add an overall per-turn wall-clock deadline (env-tunable, e.g. `VOICE_TURN_DEADLINE_MS`,
+  target ~12–15 s to sit inside the ADR-0029 mouth-to-ear budget and its degraded ceiling)
+  **in addition to** the existing per-read socket timeout — the two are complementary
+  (per-read catches a dead socket; the wall-clock catches a live-but-never-terminating
+  stream).
+- When the deadline is hit mid-turn: stop consuming the stream, close the backend
+  connection cleanly, and degrade to the safe spoken fallback (never leave the turn open,
+  never speak fabricated/ungrounded content — DEC-002). If a vetted sentence was already
+  spoken, end the turn gracefully rather than un-saying it.
+- Keep the blocking (non-streamed) path's bound consistent so both paths terminate.
+- OpenTelemetry: emit a deadline-hit outcome (e.g. a `voice.turn.deadline_exceeded`
+  event/metric with correlation id, provider, elapsed and where in the turn it fired) so
+  the case is observable next time.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A backend that streams but never terminates is still bounded
+  Given a backend that emits stream bytes with inter-byte gaps below the socket timeout
+    But never sends a terminal done or error
+  When a voice turn runs on the streamed path
+  Then the turn ends within the configured wall-clock deadline
+    And the caller hears the safe spoken fallback (no fabricated content)
+    And a deadline-hit outcome is recorded in telemetry with the turn's correlation id
+
+Scenario: A normal fast turn is unaffected
+  Given a backend that terminates well within the deadline
+  Then the turn completes normally and no deadline-hit outcome is recorded
+```
+
+### Out Of Scope
+
+- The guaranteed terminal UI control signal + browser watchdog (TASK-WEB-046) and the
+  bridge active-session drain (TASK-OPS-010) — sibling BUG-018 P1 fixes.
+- The Gradium STT finalize-tail stall (TASK-STT-014).
+
+---
+
+## TASK-WEB-046 - Guaranteed terminal UI control signal + browser watchdog
+
+> **ID note:** Originally filed as **TASK-WEB-038** on the retired `fix/BUG-017-voice-turn-hang`
+> branch; renumbered to **TASK-WEB-046** to avoid collision with the v0.7.0 aiohttp single-port
+> TASK-WEB-038 already on the mainline. Original intent/acceptance preserved verbatim below.
+
+**Parent:** EPIC-006 (Voice2Voice journey foundation) / EPIC-010 (observability, latency & pilot validation)
+**Related decisions:** ADR-0043 (WebSocket transport + control-signal vocabulary — `playback_completed`/terminal signals), ADR-0025 (native barge-in / interruption), ADR-0028 (observability), ADR-0021 (degraded-mode fallback)
+**Related:** BUG-018 (stuck-in-thinking incident — P1 fix #2), TASK-WEB-045 (wall-clock deadline — the backend-timeout half), TASK-WEB-030 (WS per-slice telemetry / correlation id)
+**Depends on:** —
+**Classification:** V1 voice runtime + `web_voice` browser client — reliability
+**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Priority:** High
+**Branch:** `task/TASK-WEB-046-terminal-signal-and-watchdog` (to create when work starts)
+**Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a dropped/broken connection or an unsignalled failure can strand the UI in "thinking".
+
+### Context
+
+The UI leaves the "thinking" state on a terminal control signal (`playback_completed` /
+an explicit error signal — the control-signal vocabulary lives in
+`web_voice/control_signals.py` / `web_voice/websocket_framing.py`, ADR-0043). That signal
+is **not guaranteed on every turn outcome**: a backend error/timeout, a mid-turn WebSocket
+teardown, or a deploy/HAProxy failover (browser↔bridge connection under `timeout tunnel
+1h`) can end a turn with **no terminal signal reaching the browser**, so the UI stays in
+"thinking" until the user refreshes. The client also has **no watchdog** to bail out of
+"thinking" when a signal never arrives.
+
+### Objective
+
+Ensure the UI can never be permanently stuck in "thinking": a terminal outcome is always
+delivered on every turn (success, degraded, error, timeout, teardown), and — as a safety
+net for a dropped connection where no signal can arrive — the browser auto-exits "thinking"
+after a bounded wait and offers a retry.
+
+### Scope
+
+- **Runtime:** guarantee a terminal control signal (`playback_completed` on success, an
+  explicit `turn_error`/terminal signal on backend error / timeout / deadline-hit /
+  interruption) is emitted on **every** turn outcome, including error and connection-teardown
+  paths — mirror the WebRTC and WebSocket transports (ADR-0043 vocabulary).
+- **Browser client (`web_voice/static`):** add a bounded watchdog so that if no terminal
+  signal arrives within a configured window (and no audio is playing), the UI leaves
+  "thinking" and shows a clear retry affordance; reset the watchdog on barge-in / new turn so
+  a long-but-progressing turn is not cut prematurely.
+- Do not fabricate an answer on the client — leaving "thinking" surfaces a retry, not a
+  synthesized response (DEC-002).
+- OpenTelemetry: record when a terminal signal was force-emitted on an error/teardown path
+  and when the client watchdog fired (with correlation id) so silent strandings are visible.
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A broken connection mid-turn does not strand the UI
+  Given a voice turn is in progress and the browser is showing "thinking"
+  When the browser to bridge connection is killed or broken mid-turn
+  Then the UI leaves the "thinking" state within the bounded watchdog window
+    And the user is offered a retry (no manual page refresh required)
+
+Scenario: A backend error always ends the turn visibly
+  Given a turn that fails on the backend (error, timeout or deadline-hit)
+  Then a terminal control signal reaches the browser
+    And the UI leaves "thinking" and surfaces the safe fallback or a retry
+
+Scenario: A long but progressing turn is not cut early
+  Given a turn that is still producing audio within the bounded wait
+  Then the watchdog does not fire and the turn plays to completion
+```
+
+### Out Of Scope
+
+- The backend/runtime wall-clock turn deadline (TASK-WEB-045).
+- Graceful deploy-time draining of active calls (TASK-OPS-010).
