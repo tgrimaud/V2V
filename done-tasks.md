@@ -1408,3 +1408,45 @@ narrative and the resulting net branch state, plus the git-mechanics learnings p
   `branch -d` vs `-D`)
 - `AGENTS.md` — 4 new bullets in "Common mistakes to avoid" (same themes)
 - `done-tasks.md` — this entry
+
+## 2026-08-31 — Sprint 13 closed (Genesys Audio Connector) + pilot endpoint enablement
+
+**Summary:**
+
+- **Closed Sprint 13** (Genesys Audio Connector + Genesys integration): merged
+  `feat/sprint-13-genesys-audio-connector` into `feat/restart-from-scratch`. Delivered the
+  Audio Connector transport adapter on the ADR-0047 single async server (TASK-WEB-041),
+  per-path barge-in/EOT (TASK-WEB-042), per-channel observability + concurrency ceiling
+  (TASK-WEB-043), handoff-by-reference (TASK-BE-036) + normalized channel envelope
+  (TASK-BE-037), AudioHook connection-auth + Architect flow contract (TASK-INFRA-012) +
+  admin docs (TASK-INFRA-013/014), and the local AudioHook test client (TASK-WEB-047).
+- **TASK-WEB-047** — headless Genesys AudioHook test client (`voice-agent/scripts/genesys_local_client.py`)
+  that signs the connection-auth handshake byte-for-byte as `GenesysConnectionAuthenticator`
+  rebuilds it and drives `/genesys/audiohook` (local or deployed) without a live Genesys org.
+  Adversarial review 95/100 (credentials via env not argv; client owns the query string).
+  Also ran a **real local V2V turn** through the endpoint (Gradium STT/TTS + Java backend RAG
+  over pgvector + Mistral): ~15 s grounded French billing answer, first audio ~1.79 s.
+- **TASK-INFRA-015** (added at closure) — enabled `/genesys/audiohook` on the pilot bridge
+  via deploy config + secret (no image change; the code already ships in the image). Added
+  the `VOICE_GENESYS` / `GENESYS_AUDIOHOOK_*` / `VOICE_GENESYS_*` passthrough to the compose +
+  `voice.env.j2` render + `group_vars/voice.yml` (`voice_genesys: on`, L16, concurrency 3) +
+  vault contract; generated our own AudioHook shared secret (git-ignored `vault.yml`) for the
+  pre-live self-test (rotated to the admin-agreed secret before the live-org test).
+- **Carried forward:** **TASK-WEB-044** (Genesys-path degraded modes, Must-fix R3) stays
+  `📋 Proposed` — the ADR-0029 gate is decoupled (DEC-015) and no Genesys-path SLO is claimed,
+  so it did not block closure but is required before a production Genesys SLO. **ADR-0049
+  stays Proposed** pending the live-org cloud-leg re-score + OQ-006 sign-off.
+- Deployed a genesys-ready image (v0.8.0) to the pilot `vla-t01/t02` with `VOICE_GENESYS=on`,
+  additive on the ADR-0047 routed `:8090` (browser `/ws` + WebRTC unchanged), then ran the
+  Step 0b self-test against the deployed endpoint over an SSH tunnel to the bridge LAN IP.
+
+### Files changed
+- `product-backlog/sprints/sprint-13-genesys-audio-connector.md` — Status → Done (closed
+  2026-08-31) + closure note; ticket table reconciled (WEB-025/041/042/043 + BE-036/037 +
+  INFRA-012/013/014 Done; WEB-044 carried forward; WEB-047 + INFRA-015 added Done); roadmap row
+- `product-backlog/backlog-index.md` — sprint registry row → Done; TASK-INFRA-015 row added
+- `product-backlog/tasks/deployment-tasks.md` — TASK-INFRA-015 ticket
+- `deploy/compose/voice/docker-compose.yml`, `deploy/compose/voice/.env.example` — genesys env
+- `deploy/ansible/roles/compose_tier/templates/voice.env.j2`, `deploy/ansible/group_vars/voice.yml`,
+  `deploy/ansible/group_vars/all/vault.example.yml` — genesys render + defaults + vault contract
+- `done-tasks.md` — this entry

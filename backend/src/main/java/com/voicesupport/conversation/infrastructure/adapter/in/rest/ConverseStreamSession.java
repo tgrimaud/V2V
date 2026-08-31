@@ -1,8 +1,13 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.model.TokenStream;
+import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffCommand;
+import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
+import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
@@ -35,28 +40,37 @@ class ConverseStreamSession {
 
     private final SseEmitter emitter;
     private final ConverseStreamUseCase converseStreamUseCase;
+    private final IdempotentDeliveryGuard idempotentDeliveryGuard;
+    private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ConverseRequest request;
+    private final ChannelEnvelope envelope;
     private final String correlationId;
     private final long startNanos = System.nanoTime();
     private boolean firstChunkSent;
+    private boolean reserved;
 
     ConverseStreamSession(
             SseEmitter emitter,
             ConverseStreamUseCase converseStreamUseCase,
+            IdempotentDeliveryGuard idempotentDeliveryGuard,
+            PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             ConverseRequest request,
             String correlationId) {
         this.emitter = emitter;
         this.converseStreamUseCase = converseStreamUseCase;
+        this.idempotentDeliveryGuard = idempotentDeliveryGuard;
+        this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
         this.request = request;
+        this.envelope = request.toEnvelope();
         this.correlationId = correlationId;
     }
 
     void run() {
         CorrelationId.set(correlationId);
-        CorrelationId.setChannel(request.channel());
+        CorrelationId.setChannel(envelope.channel());
         String outcome = "success";
         try {
             stream();
@@ -69,6 +83,7 @@ class ConverseStreamSession {
             outcome = "error";
             completeWithError(e);
         } finally {
+            releaseReservationIfUnfinished(outcome);
             telemetry.recordLatency(Slices.BACKEND_REQUEST, PROVIDER, outcome, elapsed());
             MDC.clear();
         }
@@ -76,15 +91,55 @@ class ConverseStreamSession {
 
     private void stream() {
         if (!request.hasTranscript()) {
-            send("chunk", new StreamChunkEvent(LISTEN_PROMPT));
-            send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
+            emitListenPrompt();
             return;
         }
+        // Duplicate protection on the primary voice path (streaming on by default): a re-delivered
+        // turn is short-circuited to a safe listen prompt without reprocessing (TASK-BE-037 review #1).
+        if (idempotentDeliveryGuard.isDuplicate(envelope)) {
+            telemetry.recordChannelDelivery(envelope.replyMode().code(), true);
+            emitListenPrompt();
+            return;
+        }
+        processTurn();
+    }
+
+    private void processTurn() {
+        reserved = true;
+        telemetry.recordChannelDelivery(envelope.replyMode().code(), false);
+        // Memory keys on the envelope's conversation key (external_session_id, falling back to
+        // conversation_id) so a Genesys streaming call stays one coherent conversation.
         TokenStream tokenStream = converseStreamUseCase.converseStream(
-                request.transcript(), request.conversationId(), request.language());
+                request.transcript(), envelope.conversationKey(), request.language());
         GeneratedAnswer answer = tokenStream.consume(this::onChunk);
-        send("done", StreamDoneEvent.from(answer));
+        EscalationHandoffReference reference = prepareHandoffIfEscalated(answer);
+        send("done", StreamDoneEvent.from(answer, reference));
         logTurn(answer);
+    }
+
+    // On an escalation turn, stores the audited hand-off and carries only the by-reference token on
+    // the terminal `done` event, so the streamed voice path emits a handoff_id — never inline PII
+    // (TASK-BE-036 / DEC-013). Ordinary turns return null and escalation_context is omitted.
+    private EscalationHandoffReference prepareHandoffIfEscalated(GeneratedAnswer answer) {
+        if (!answer.requiresEscalation()) {
+            return null;
+        }
+        return prepareEscalationHandoffUseCase.prepare(
+                EscalationHandoffCommand.of(envelope, request.transcript(), answer));
+    }
+
+    private void emitListenPrompt() {
+        send("chunk", new StreamChunkEvent(LISTEN_PROMPT));
+        send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
+    }
+
+    // Confirms the idempotency reservation only when this turn completed successfully; a failed or
+    // cancelled turn releases its own reserved key so a legitimate retry is reprocessed rather than
+    // swallowed. Only releases a reservation this session actually made (TASK-BE-037 review #1/#3).
+    private void releaseReservationIfUnfinished(String outcome) {
+        if (reserved && !"success".equals(outcome)) {
+            idempotentDeliveryGuard.releaseOnFailure(envelope);
+        }
     }
 
     private void onChunk(String text) {
@@ -119,9 +174,9 @@ class ConverseStreamSession {
     }
 
     private void logTurn(GeneratedAnswer answer) {
-        log.info("[CONVERSE-STREAM] channel={} conversation_id={} correlation_id={} grounded={} confidence={} "
+        log.info("[CONVERSE-STREAM] channel={} session_key={} correlation_id={} grounded={} confidence={} "
                         + "chars={} duration_ms={}",
-                nullSafe(request.channel()), nullSafe(request.conversationId()), nullSafe(request.correlationId()),
+                nullSafe(envelope.channel()), nullSafe(envelope.conversationKey()), nullSafe(request.correlationId()),
                 answer.grounded(), formatConfidence(answer.confidence()),
                 answer.text() != null ? answer.text().length() : 0, elapsed().toMillis());
     }

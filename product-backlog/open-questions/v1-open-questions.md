@@ -176,9 +176,39 @@ turning an aspirational target into an unmeasured contractual promise.
 
 ## OQ-006 - Genesys Handoff Integration Shape
 
-**Status:** Open  
+**Status:** **Strategic direction decided (2026-08-27) — Genesys = full pilot entry** (DEC-012),
+**handoff by-reference** (DEC-013); **residual technical/compliance items still open.** The strategic
+items are settled: full Genesys Audio Connector voice routing **is** the pilot target (not spike-only),
+Genesys **is** the phone entry point for pilot calls, the single pilot entry is **Genesys** (US-018
+Twilio/SIP deferred), and the escalation-handoff transport is **`handoff_id` + backend fetch** (inline
+Architect-variable context **rejected** on PII/trust-boundary grounds).
+**Resolution vehicle for the rest = Sprint 13** (`sprints/sprint-13-genesys-audio-connector.md`):
+the **TASK-WEB-025** spike remains the **latency/feasibility gate** (deciding Genesys as the entry does
+**not** waive it — a gate-fail escalates to the user, it does not auto-proceed), and **ADR-0049** records
+the delivery shape.
+
+**✅ Additionally decided by the user (2026-08-28, DEC-014):**
+- **Spike PII posture = synthetic-first** — the TASK-WEB-025 spike runs on **synthetic / non-PII audio
+  only**; the real-PII egress sign-off is a **parallel** item (see the residual list), **not** a spike
+  blocker.
+- **Pilot concurrency target = 3** concurrent Genesys sessions — the spike checks this fits the premium
+  **≤5-integrations / 1-vCPU** envelope.
+- **Genesys pilot environment is available now** (org + Architect access) — the live-measurement steps
+  can be human-run once the throwaway prototype is ready.
+
+**Residual OPEN items** (owners):
+- **Codec — PCMU vs L16 end to end** + transcode budget — *spike (TASK-WEB-025)*.
+- **15-minute cap fit** vs the worst-case billing journey + mitigation (checkpoint/resume or call-back)
+  — *spike (TASK-WEB-025)*.
+- **PII-audio residency / egress** from the Genesys cloud to the runtime VMs (region, encryption,
+  compliance sign-off) — **user (Security / Compliance)**. **Still OPEN — parallel track, not a spike
+  blocker (DEC-014).** Aligned with OQ-009 (production data-protection gate).
+- **Pilot concurrency** vs the premium **≤5-integrations / 1-vCPU** envelope — *spike (TASK-WEB-025) +
+  product*. **Target set = 3 concurrent sessions (DEC-014); the spike verifies the fit.**
+
+This OQ stays Open until those residual items report and the decision owners sign off.  
 **Owner:** Product / Contact Center / Architecture / Security  
-**Impacts:** EPIC-006, EPIC-008, EPIC-009
+**Impacts:** EPIC-006, EPIC-007, EPIC-008, EPIC-009 — Sprint 13
 
 ### Question
 
@@ -193,21 +223,28 @@ constraints apply.
 
 ### Needed Decision
 
-- Genesys handoff mechanism for the pilot.
-- Required and allowed handoff fields.
-- Customer/session identifiers allowed by the pilot trust model.
-- Queue or skill routing rules for billing advisor escalation.
-- Whether full Genesys Audio Connector routing is required for the pilot or only
-  a feasibility spike.
-- Whether Genesys is the phone entry point for pilot calls or only the advisor
-  handoff target.
-- If full Genesys voice routing is used, which media integration is selected
-  (AudioHook, Audio Connector, SIP, or another approved pattern).
-- Which Genesys attributes, task variables, or Open API objects carry transcript
-  summary, detected intent, escalation reason, BSS evidence, and unresolved
-  points to the advisor desktop.
-- Which Genesys Analytics metrics and AI-layer metrics are combined in the pilot
-  KPI dashboard.
+- **✅ Decided (DEC-013):** Genesys handoff mechanism for the pilot = **`handoff_id` +
+  backend fetch** (by reference); inline Architect-variable context rejected (PII/trust
+  boundary).
+- **✅ Decided (DEC-013):** required and allowed handoff fields through Genesys are
+  limited to the opaque `handoff_id` + minimal routing metadata; the full audited
+  `EscalationHandoff` stays backend-owned.
+- **⏳ Open (spike):** the exact customer/session identifiers allowed by the pilot trust
+  model (which minimal routing metadata rides alongside the `handoff_id`).
+- **⏳ Open (spike + infra, TASK-INFRA-012):** queue or skill routing rules for billing
+  advisor escalation.
+- **✅ Decided (DEC-012):** full Genesys Audio Connector routing **is** required for the
+  pilot (pilot target, not spike-only) — the TASK-WEB-025 latency/feasibility gate still
+  applies.
+- **✅ Decided (DEC-012):** Genesys **is** the phone entry point for pilot calls (not only
+  the advisor-handoff target).
+- **✅ Decided (DEC-012):** the selected media integration is the **Audio Connector**
+  (bidirectional AudioHook); SIP/Twilio as a separate entry (US-018) is deferred.
+- **⏳ Open (spike):** which Genesys attributes / task variables carry the minimal routing
+  metadata (transcript summary, detected intent, escalation reason, BSS evidence and
+  unresolved points are fetched from the backend, not pushed inline).
+- **⏳ Open (product):** which Genesys Analytics metrics and AI-layer metrics are combined
+  in the pilot KPI dashboard.
 
 ---
 

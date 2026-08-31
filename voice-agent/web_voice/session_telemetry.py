@@ -9,34 +9,48 @@ is identical across transports (US-036).
 
 import json
 import sys
+from typing import Any, Callable
 
 from voice_common.otel_export import export_recorder
 from voice_common.pipeline_timing import PipelineTimingReport
-from voice_common.telemetry import TelemetryRecorder
+from voice_common.telemetry import Span, TelemetryRecorder
+
+# A per-slice report builder over the call's spans. Defaults to the canonical web/WS legs;
+# a transport with its own legs (the Genesys per-leg report, TASK-WEB-043) injects its own.
+PipelineTimingBuilder = Callable[[list[Span]], Any]
 
 
-def build_payload(telemetry: TelemetryRecorder) -> dict:
+def build_payload(
+    telemetry: TelemetryRecorder,
+    *,
+    pipeline_timing: PipelineTimingBuilder = PipelineTimingReport.from_spans,
+) -> dict:
     """Assemble one call's evidence payload (spans/events/metrics + canonical per-slice timing).
 
     Extracted so the payload shape is unit-testable without capturing stderr (TASK-WEB-030 AC#2):
-    the `pipeline_timing` block always carries every canonical journey slice with a measured
-    true/false flag, so a slice with no span is marked `measured=false`, never silently omitted."""
+    the `pipeline_timing` block always carries every journey slice with a measured true/false
+    flag, so a slice with no span is marked `measured=false`, never silently omitted. The
+    Genesys transport passes its own `pipeline_timing` builder so the block carries the Genesys
+    legs (transcode in/out + cloud legs) instead of the web legs (TASK-WEB-043)."""
     spans = telemetry.spans()
     return {
         "spans": [span.__dict__ for span in spans],
         "events": [event.__dict__ for event in telemetry.events()],
         "metrics": [metric.__dict__ for metric in telemetry.metrics()],
-        # Canonical per-slice journey timing (US-036 / TASK-WEB-030 AC#2): every slice
-        # (channel_ingress -> end_of_turn -> stt -> backend -> tts_first_audio ->
-        # channel_egress) is ALWAYS present with measured true/false, so a slice with no
-        # span shows up as measured=false + a reason, never silently omitted.
-        "pipeline_timing": PipelineTimingReport.from_spans(spans).to_dict(),
+        # Per-slice journey timing (US-036 / TASK-WEB-030 AC#2): every slice is ALWAYS
+        # present with measured true/false, so a slice with no span shows up as
+        # measured=false + a reason, never silently omitted.
+        "pipeline_timing": pipeline_timing(spans).to_dict(),
     }
 
 
-def log_telemetry(telemetry: TelemetryRecorder) -> None:
+def log_telemetry(
+    telemetry: TelemetryRecorder,
+    *,
+    pipeline_timing: PipelineTimingBuilder = PipelineTimingReport.from_spans,
+) -> None:
     """Dump one call's spans/events/metrics as a structured line, then OTLP-export."""
-    payload = build_payload(telemetry)
+    payload = build_payload(telemetry, pipeline_timing=pipeline_timing)
     # flush=True: the per-call telemetry dump is the only latency/QA evidence for a
     # streaming call (no HTTP response per turn). When stderr is redirected to a file
     # it is block-buffered, so without an explicit flush the dump can sit unwritten

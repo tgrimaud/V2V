@@ -93,9 +93,21 @@ class PipelineTimingReport:
         cls,
         spans: Iterable[Span],
         expected: tuple[str, ...] = PIPELINE_SLICES,
+        *,
+        span_names: dict[str, tuple[str, ...]] | None = None,
+        notes: dict[str, str] | None = None,
     ) -> "PipelineTimingReport":
+        """Build a per-slice report.
+
+        `span_names`/`notes` default to the canonical web/WS/batch maps; a transport
+        with its own legs (e.g. the Genesys per-leg report, TASK-WEB-043) supplies its
+        own maps so its slices are reported without this domain-neutral module gaining
+        transport-specific span names.
+        """
+        span_names = _SLICE_SPAN_NAMES if span_names is None else span_names
+        notes = _UNMEASURED_NOTES if notes is None else notes
         by_name = _durations_by_span_name(spans)
-        slices = [_slice_timing(name, by_name) for name in expected]
+        slices = [_slice_timing(name, by_name, span_names, notes) for name in expected]
         return cls(slices=slices)
 
 
@@ -131,14 +143,19 @@ def _durations_by_span_name(spans: Iterable[Span]) -> dict[str, list[float]]:
     return durations
 
 
-def _slice_timing(slice_name: str, durations_by_name: dict[str, list[float]]) -> SliceTiming:
+def _slice_timing(
+    slice_name: str,
+    durations_by_name: dict[str, list[float]],
+    span_names: dict[str, tuple[str, ...]] = _SLICE_SPAN_NAMES,
+    notes: dict[str, str] = _UNMEASURED_NOTES,
+) -> SliceTiming:
     # First present candidate span wins so a fixture-only run (stt.audio.accept)
     # and a web run (web.voice.ingress) never mix into the same distribution.
-    for span_name in _SLICE_SPAN_NAMES.get(slice_name, ()):
+    for span_name in span_names.get(slice_name, ()):
         samples = durations_by_name.get(span_name)
         if samples:
             return SliceTiming(slice=slice_name, measured=True, report=LatencyReport.from_samples(samples))
-    return SliceTiming(slice=slice_name, measured=False, note=_UNMEASURED_NOTES.get(slice_name))
+    return SliceTiming(slice=slice_name, measured=False, note=notes.get(slice_name))
 
 
 # --- time_to_first_audio composite (ADR-0018 pilot acceptance criterion) ---------

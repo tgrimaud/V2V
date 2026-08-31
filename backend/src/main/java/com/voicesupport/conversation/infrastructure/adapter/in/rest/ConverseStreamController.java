@@ -1,6 +1,8 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
+import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.web.security.ApiKeyGuard;
@@ -37,16 +39,22 @@ public class ConverseStreamController {
     private static final long STREAM_TIMEOUT_MS = 60_000L;
 
     private final ConverseStreamUseCase converseStreamUseCase;
+    private final IdempotentDeliveryGuard idempotentDeliveryGuard;
+    private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ExecutorService streamExecutor;
     private final ApiKeyGuard apiKeyGuard;
 
     public ConverseStreamController(
             ConverseStreamUseCase converseStreamUseCase,
+            IdempotentDeliveryGuard idempotentDeliveryGuard,
+            PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             ExecutorService sseStreamExecutor,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseStreamUseCase = converseStreamUseCase;
+        this.idempotentDeliveryGuard = idempotentDeliveryGuard;
+        this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
         this.streamExecutor = sseStreamExecutor;
         this.apiKeyGuard = new ApiKeyGuard(apiKey);
@@ -76,8 +84,9 @@ public class ConverseStreamController {
         String correlationId = resolveCorrelationId(request);
         httpResponse.setHeader(CorrelationId.HEADER, correlationId);
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        ConverseStreamSession session =
-                new ConverseStreamSession(emitter, converseStreamUseCase, telemetry, request, correlationId);
+        ConverseStreamSession session = new ConverseStreamSession(
+                emitter, converseStreamUseCase, idempotentDeliveryGuard, prepareEscalationHandoffUseCase,
+                telemetry, request, correlationId);
         try {
             streamExecutor.execute(session::run);
         } catch (RejectedExecutionException e) {

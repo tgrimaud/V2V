@@ -15,6 +15,7 @@ coexist and produce identical output. The STT/TTS provider is selected with
 import argparse
 import base64
 import json
+import logging
 import os
 import socketserver
 import sys
@@ -53,6 +54,8 @@ from .runtime import (  # noqa: E402
     VoiceTurnProcessor,
     build_turn_processor,
 )
+
+_logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 OPENAPI_PATH = Path(__file__).resolve().parent / "openapi.yaml"
@@ -488,14 +491,18 @@ def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]
     return ws_signaling, owned_loop
 
 
-def _build_ws_session_factory(args, ingress, egress, backend):
-    """Build the transport-agnostic `SessionFactory` shared by both WS transports.
+def _build_ws_session_factory(
+    args, ingress, egress, backend, transport_label="websocket", control_signal_source_factory=None
+):
+    """Build the transport-agnostic `SessionFactory` shared by the WS + Genesys transports.
 
-    The interim `SingleClientWebsocketServerTransport` (`:8091`) and the aiohttp-native
-    `/ws` transport (single port, ADR-0047) differ only in the transport they pass to
-    `build_session`; the session core is identical (ADR-0043, TASK-WEB-027). The
-    channel-egress span is labelled `websocket` so a per-slice report can split it from
-    WebRTC regardless of which WS transport carried the call.
+    The interim `SingleClientWebsocketServerTransport` (`:8091`), the aiohttp-native
+    `/ws` transport (single port, ADR-0047) and the Genesys Audio Connector adapter
+    (TASK-WEB-041) differ only in the transport they pass to `build_session`; the session
+    core is identical (ADR-0043, TASK-WEB-027). `transport_label` is stamped on the
+    channel-egress span so a per-slice report can split `websocket` from `genesys`.
+    `control_signal_source_factory` is the per-path native-event seam (TASK-WEB-029/042):
+    None keeps the in-house detectors authoritative; the Genesys path may inject its own.
     """
     from .session_factory import SessionFactory
 
@@ -507,7 +514,69 @@ def _build_ws_session_factory(args, ingress, egress, backend):
         streaming_tts_provider=_build_streaming_tts_provider(args),
         streaming_providers_by_language=_streaming_stt_by_language(args),
         streaming_tts_providers_by_language=_streaming_tts_by_language(args),
-        transport_label="websocket",
+        transport_label=transport_label,
+        control_signal_source_factory=control_signal_source_factory,
+    )
+
+
+def _build_genesys_handler(args, ingress, egress, backend):
+    """Build the aiohttp `/genesys/audiohook` handler for the single-port path, or None.
+
+    Rides aiohttp's own `WebSocketResponse` (no extra package), reusing the shared
+    `SessionFactory` (transport label `genesys`) exactly like `/ws`. The endpoint is
+    **default-off** (`--genesys off`). When enabled (`auto`/`on`) it always attaches an
+    AudioHook connection authenticator (API key + HMAC signature, TASK-INFRA-012) and an
+    Origin allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`) as defense-in-depth. If enabled but
+    no API key + shared secret is configured the authenticator **fails closed** (refuses
+    every connection) — never opens (review Major #2 / ADR-0049). Concurrency, codec, the
+    graceful 15-minute cap and its hard drain grace are env-tunable (TASK-WEB-041).
+    """
+    if getattr(args, "genesys", "off") == "off":
+        return None
+    from .genesys_app import make_genesys_handler
+    from .genesys_auth import genesys_authenticator_from_env
+    from .genesys_barge_in_eot import (
+        genesys_control_mode_config,
+        genesys_control_source_factory,
+    )
+    from .genesys_config import (
+        genesys_allowed_origins_config,
+        genesys_cap_drain_grace_s_config,
+        genesys_codec_config,
+        genesys_max_session_s_config,
+        genesys_max_sessions_config,
+    )
+    from .genesys_timing import genesys_log_telemetry
+    from .websocket_signaling import ws_language_config
+
+    control_factory = genesys_control_source_factory(genesys_control_mode_config())
+    # Pass the REAL exporter (stderr + OTLP, same path the session handler uses) so the
+    # mandatory per-attempt auth-outcome event/metric is actually flushed in prod — the
+    # default no-op would discard it and only tests would ever see it (review Major A).
+    authenticator = genesys_authenticator_from_env(log=genesys_log_telemetry)
+    if not authenticator.configured:
+        _logger.warning(
+            "genesys endpoint enabled but AudioHook auth is unconfigured; failing CLOSED "
+            "(every connection refused). Set %s + %s to enable.",
+            "GENESYS_AUDIOHOOK_API_KEY",
+            "GENESYS_AUDIOHOOK_SECRET",
+        )
+    return make_genesys_handler(
+        _build_ws_session_factory(
+            args,
+            ingress,
+            egress,
+            backend,
+            transport_label="genesys",
+            control_signal_source_factory=control_factory,
+        ),
+        default_language=ws_language_config(),
+        max_sessions=genesys_max_sessions_config(),
+        wire_codec=genesys_codec_config(),
+        max_session_s=genesys_max_session_s_config(),
+        cap_drain_grace_s=genesys_cap_drain_grace_s_config(),
+        allowed_origins=genesys_allowed_origins_config(),
+        authenticator=authenticator,
     )
 
 
@@ -616,23 +685,26 @@ def main() -> int:
     # ADR-0047: on the aiohttp path the live WS rides the SAME port (`/ws`) via an
     # aiohttp-native transport, so the interim single-client `:8091` listener is NOT
     # started; the stdlib path keeps that listener unchanged.
+    genesys_handler = None
     if args.server == "aiohttp":
         ws_handler = _build_ws_handler(args, ingress, egress, backend)
+        genesys_handler = _build_genesys_handler(args, ingress, egress, backend)
         ws_signaling, ws_loop = None, None
         ws_status = f"on:{args.port}/ws" if ws_handler else "off"
     else:
         ws_handler = None
         ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
         ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
+    genesys_status = f"on:{args.port}/genesys/audiohook" if genesys_handler else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
         f"(server={args.server}, provider={args.provider}, runtime={args.runtime}, "
         f"backend={backend.name}, webrtc={'on' if signaling else 'off'}, websocket={ws_status}, "
-        f"stt_mode={args.stt_mode}, tts_mode={args.tts_mode})",
+        f"genesys={genesys_status}, stt_mode={args.stt_mode}, tts_mode={args.tts_mode})",
         file=sys.stderr,
     )
     try:
-        _serve(args, processor, signaling, ws_handler)
+        _serve(args, processor, signaling, ws_handler, genesys_handler)
     finally:
         if ws_signaling is not None:
             ws_signaling.close()
@@ -649,11 +721,18 @@ def main() -> int:
     return 0
 
 
-def _serve(args, processor: VoiceTurnProcessor, signaling: Any, ws_handler: Any = None) -> None:
+def _serve(
+    args,
+    processor: VoiceTurnProcessor,
+    signaling: Any,
+    ws_handler: Any = None,
+    genesys_handler: Any = None,
+) -> None:
     """Run the selected HTTP server (blocking until shutdown).
 
-    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target: static, REST
-    and — when `ws_handler` is supplied — the live WebSocket audio path all ride one port.
+    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target: static, REST,
+    the live WebSocket audio path and — when `genesys_handler` is supplied — the Genesys
+    Audio Connector `wss` endpoint all ride one port.
     `stdlib` is the historical `ThreadingHTTPServer` (HTTP only; WS stays on `:8091`).
     """
     if args.server == "aiohttp":
@@ -666,7 +745,7 @@ def _serve(args, processor: VoiceTurnProcessor, signaling: Any, ws_handler: Any 
         # query string, which carries conversation_id/correlation_id/session_id/language).
         # Keep those opaque IDs out of the access log — telemetry already records them.
         web.run_app(
-            make_app(processor, signaling, ws_handler=ws_handler),
+            make_app(processor, signaling, ws_handler=ws_handler, genesys_handler=genesys_handler),
             host=args.host,
             port=args.port,
             print=None,
@@ -718,6 +797,19 @@ def _parse_args() -> argparse.Namespace:
         "installed), 'on' (require), 'off'. On the default aiohttp server the WS rides "
         "the SAME port at /ws (ceiling VOICE_MAX_WS_SESSIONS); on the legacy stdlib "
         "server it uses a separate listener on VOICE_WS_PORT (default 8091)",
+    )
+    parser.add_argument(
+        "--genesys",
+        choices=("auto", "on", "off"),
+        default=os.environ.get("VOICE_GENESYS", "off"),
+        help="Genesys Audio Connector `wss` endpoint (TASK-WEB-041): default 'off'. "
+        "'auto'/'on' mount GET /genesys/audiohook on the aiohttp server with AudioHook "
+        "connection auth (API key + HMAC signature, TASK-INFRA-012: GENESYS_AUDIOHOOK_API_KEY "
+        "+ GENESYS_AUDIOHOOK_SECRET — fails CLOSED if unset) plus an Origin allowlist "
+        "(VOICE_GENESYS_ALLOWED_ORIGINS). Codec (VOICE_GENESYS_CODEC, default L16), "
+        "concurrency (VOICE_GENESYS_MAX_SESSIONS, default 3), the 15-min cap "
+        "(VOICE_GENESYS_MAX_SESSION_S) and its drain grace "
+        "(VOICE_GENESYS_CAP_DRAIN_GRACE_MS) are env-tunable",
     )
     parser.add_argument(
         "--stun",

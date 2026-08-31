@@ -1487,3 +1487,244 @@ Scenario: LLM candidates are benchmarked on TTFT + quality + cost + residency
 - OpenAI introduces **US chat egress** — a compliance decision (OQ-009), not only latency; may be
   rejected on residency grounds regardless of TTFT.
 - Evidence to reuse: `docs/qa/task-web-036-topk-ab-report.json`, `docs/qa/task-web-035-finalize-budget-report.json`.
+
+---
+
+# Sprint 13 — Genesys handoff (backend)
+
+Backend slices for the Genesys integration (Sprint 13, `sprints/sprint-13-genesys-audio-connector.md`).
+Both are **Proposed and conditional on the TASK-WEB-025 spike GO + OQ-006**. They keep the escalation
+decision and the handoff payload **backend-owned** (ADR-0001/0019) while Genesys stays the
+contact-center system of record. Decisions of record: ADR-0019 (escalation + handoff contract),
+ADR-0009 (channel envelope), ADR-0040/0049 (Genesys planes + delivery shape).
+
+---
+
+## TASK-BE-036 — EscalationHandoff transport contract for Genesys (handoff_id + backend fetch)
+
+**Parent:** EPIC-007 (Genesys advisor handoff)
+**Related decisions:** **DEC-013 (escalation handoff by reference — decided)**, ADR-0019
+(`EscalationHandoff` payload), ADR-0020 (Genesys handoff), ADR-0040 (context/handoff plane), ADR-0049
+(delivery shape), ADR-0009 (channel envelope)
+**Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
+TASK-BE-037 (channel envelope fields the handoff rides on)
+**Classification:** V1 core — backend escalation/handoff (runtime-affecting)
+**Status:** 🧪 Implemented on `task/TASK-BE-036-escalation-handoff-by-reference` (off
+`feat/sprint-13-genesys-audio-connector`); `mvn test` green (**458**, ArchUnit incl.). Pending
+adversarial review + QA + user validation. Not merged (user is final validator).
+**Priority:** High (closes adversarial-review **R5**)
+**Branch:** `task/TASK-BE-036-escalation-handoff-by-reference` (off the sprint branch)
+
+### Context
+
+ADR-0019 defines a 14-field `EscalationHandoff` payload (reason, summary, compared periods, evidence,
+citations, unresolved points, recommended next action, identifiers…). **DEC-013 decides the transport
+by reference**: Genesys carries only an opaque **`handoff_id` + minimal routing metadata**; the backend
+**owns and serves the full context/PII** on an audited fetch. Carrying the context **inline** in
+Architect variables / conversation attributes is **rejected on PII / trust-boundary grounds**
+(independent of, and on top of, the Architect variable size/type limits the adversarial review flagged
+as R5). ADR-0040 keeps the handoff plane backend-owned. This ticket implements that decided transport.
+
+### Scope
+
+- Implement the decided by-reference shape (**DEC-013**): carry only a **`handoff_id` + the minimal
+  routing metadata** the trust model permits through the Genesys control plane (Architect variables /
+  conversation attributes), and expose a **backend fetch** the advisor desktop (or a widget) calls to
+  retrieve the full, audited `EscalationHandoff` on demand — keeping the payload + PII backend-owned
+  and auditable.
+- The **inline** transport (full context in Genesys variables) is **not** a V1 option — it is rejected
+  on PII/trust-boundary grounds; do not build it as a fallback.
+- The spike (TASK-WEB-025) still measures the **actual Architect variable/attribute size + type limits**
+  — but only to size the minimal routing metadata riding with the `handoff_id` and to confirm which
+  identifiers the pilot trust model allows, not to reconsider inline transport.
+- Keep the escalation **decision** in the backend (ADR-0019 triggers) — Genesys never decides to
+  escalate; it receives the reference and routes.
+- Audit + trust model: only the `handoff_id` + permitted minimal routing metadata travel through
+  Genesys; the fetch is access-controlled and logged.
+
+### Acceptance
+
+```gherkin
+Scenario: The advisor receives full handoff context without hitting Genesys variable limits
+  Given the bot escalates a billing conversation
+  When the handoff is prepared
+  Then only a handoff reference and permitted customer/session identifiers travel through Genesys
+  And the advisor retrieves the full audited escalation context from the backend on demand
+Scenario: The handoff decision and payload stay backend-owned
+  Given an escalation is triggered by a backend rule
+  Then Genesys does not compute or alter the escalation reason or content
+```
+
+- By-reference transport implemented per **DEC-013** (`handoff_id` + backend fetch); the measured
+  Architect size limits are recorded only to size the minimal routing metadata.
+- Inline context transport is **not** implemented (rejected on PII/trust-boundary grounds); only the
+  `handoff_id` + permitted minimal routing metadata cross the Genesys boundary.
+- `EscalationHandoff` (incl. PII) stays backend-owned + auditable; identifiers gated by the trust model.
+- Backend unit tests (manual fakes, no Mockito) cover the reference build + the fetch access path.
+
+### Notes
+
+- The escalation **wording** the caller hears is unchanged (ADR-0019/guardrail path); this ticket is
+  the machine-to-machine handoff, not the spoken message.
+
+### Implementation note (2026-08-28)
+
+By-reference transport implemented per **DEC-013**; inline transport deliberately not built.
+
+**Domain (pure, channel-agnostic — ADR-0001/ADR-0009 held, no Genesys logic):**
+- `EscalationHandoff` (record + nested `Builder`) — the audited ADR-0019 payload (conversation
+  context + PII), backend-owned.
+- `HandoffId` — opaque sanitized identity; the only PII-free token that crosses the channel boundary.
+- `EscalationHandoffReference` (`handoff_id`, `reason_code`, `priority`) — the by-reference token
+  placed on the envelope's `escalation_context`; **exposes no summary / last message / customer ref**.
+- `EscalationReason` (enum) — maps guardrail verdicts → escalation codes (`LOW_CONFIDENCE` →
+  `low_confidence`/normal, `UNGROUNDED` → `billing_uncertainty`/high); non-escalating verdicts → empty.
+- `EscalationHandoffCommand` + `EscalationHandoffFactory` (domain service) — assemble the payload from
+  a turn; `GeneratedAnswer` enriched with an optional `EscalationReason` + `requiresEscalation()`.
+- Ports: `EscalationHandoffPort` (out: `store`/`findById`), `PrepareEscalationHandoffUseCase` +
+  `FetchEscalationHandoffUseCase` (in).
+
+**Application/infra:**
+- `EscalationHandoffService` implements both use cases (store → return reference; fetch by id).
+- `InMemoryEscalationHandoffAdapter` — bounded LRU store minting opaque UUID `handoff_id` (mirrors
+  BE-037's dedup adapter layout); wired via 3 `@Bean`s in `ConversationConfig`
+  (`voice-support.conversation.handoff.max-handoffs:100000`).
+
+**REST (by reference, snake_case, api-key gated via `WebSecurityMvcConfig`):**
+- `GET /api/conversation/escalation-handoffs/{handoff_id}` → 200 `EscalationHandoffResponse` |
+  404 `ErrorResponse` (`ERR_HANDOFF_NOT_FOUND`, no internal detail) | 401 without key.
+- Escalation path: on `/converse` **and** `/converse-stream`, when `answer.requiresEscalation()`, the
+  handoff is stored and only the `EscalationHandoffReference` is emitted on `escalation_context`
+  (`ConverseResponse` / SSE `done` event) — never inline PII.
+
+**OTel:** `BackendTelemetry.recordEscalationHandoff(outcome, reasonCode, handoffId)` — counter
+`voice_support.escalation_handoff` (tags: outcome=created/fetched/not_found, reason_code, channel) +
+`[HANDOFF]` structured log with correlation id; never logs summary / last message / customer ref.
+
+**Tests (JUnit 5, manual fakes, no Mockito):** reason mapping, answer escalation signal, factory
+payload assembly, adapter round-trip + LRU eviction + unknown-id, service prepare/fetch (PII stays in
+store, reference carries only id/reason/priority), controller 200/404, api-key gating, and batch +
+streaming by-reference wiring (done event carries `handoff_id`, no inline PII). Full suite **458** green.
+
+---
+
+## TASK-BE-037 — Normalized channel envelope for the Genesys adapter
+
+**Parent:** EPIC-007 / EPIC-009 (trust, security & auditability)
+**Related decisions:** ADR-0009 (independent channel adapters, shared backend), ADR-0019 (handoff),
+ADR-0040/0049, ADR-0010 (industrialization contracts)
+**Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
+**Classification:** V1 core — backend channel contract (runtime-affecting)
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `ec5672c`, 2026-08-28) — QA-ready on the sprint branch (sprint still in progress). Backend contract implemented + adversarial-review remediation applied on
+`task/TASK-BE-037-normalized-channel-envelope` (off `feat/sprint-13-genesys-audio-connector`); `mvn test`
+green (432, ArchUnit incl.). Pending re-run of adversarial review + QA + user validation. The Python Genesys
+adapter that *populates* the envelope is out of scope (voice runtime, TASK-WEB-041); this ticket delivers the
+backend-side contract the adapter targets.
+**Priority:** High (supports **R5**; foundation for TASK-BE-036)
+**Branch:** `task/TASK-BE-037-normalized-channel-envelope` (off the sprint branch)
+
+### Context
+
+ADR-0009 requires every channel adapter to speak the shared backend contract with channel identity +
+idempotency data, so escalation/routing/memory stay consistent across web, telephony, WhatsApp and
+Genesys without each channel forking rules. The Genesys adapter must populate the normalized channel
+envelope from Genesys identifiers, so the Genesys path is a first-class channel, not a special case.
+
+### Scope
+
+- Populate the shared envelope fields for the Genesys adapter: **`channel`** (genesys),
+  **`external_session_id`** (Genesys conversationId / participant), **`message_id`** (last inbound
+  event id), **`idempotency_key`** (safe retries / duplicate delivery), **`reply_mode`** (voice), and
+  **`escalation_context`** (the handoff reference from TASK-BE-036).
+- Ensure the backend conversation/memory keys off `external_session_id` so a Genesys call keeps one
+  coherent conversation history (no split memory).
+- Keep the envelope **channel-agnostic** — the same contract the web/WS channels already use; no
+  Genesys-specific business logic leaks into the domain (ADR-0009).
+
+### Acceptance
+
+```gherkin
+Scenario: A Genesys call is a first-class channel on the shared contract
+  Given a call arrives over the Genesys Audio Connector adapter
+  When it reaches the backend
+  Then the request carries channel, external_session_id, message_id, idempotency_key, reply_mode
+  And the conversation memory stays coherent for the whole Genesys call
+Scenario: Escalation context rides the envelope
+  Given the call escalates
+  Then the escalation_context (handoff reference) travels on the same normalized envelope
+```
+
+- Envelope fields populated by the Genesys adapter; memory keyed on `external_session_id`.
+- No Genesys-specific rule in the domain; the contract matches the existing channels (ADR-0009).
+- Backend unit tests cover the envelope mapping + idempotent duplicate-delivery handling.
+
+### Implementation note (2026-08-28)
+
+Backend-only, hexagonal, no channel-specific rule in the domain (ADR-0009 / ADR-0001 hold). What landed:
+
+- **Domain value objects** (`conversation/domain/model/valueobject/`):
+  - `ChannelEnvelope` (pure record) — the 6 envelope fields `channel`, `external_session_id`,
+    `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`. Normalizing factory `of(...)`
+    strips control chars, trims, length-bounds (≤200) and lowercases the channel; blank optionals → null;
+    unknown `reply_mode` is rejected. Helpers: `conversationKey()` (the memory key = external session id),
+    `hasIdempotencySignal()`, `effectiveIdempotencyKey()` (explicit key, else derived
+    `channel:external_session_id:message_id`).
+  - `ReplyMode` enum (`voice`/`text`) — null/blank → `VOICE`; unknown → `IllegalArgumentException` (→ 400).
+- **Port + service:** `DeliveryDeduplicationPort` (out) + `IdempotentDeliveryGuard` (domain service) —
+  de-duplicates only when an idempotency signal is present, so the existing web path is untouched.
+- **Adapter + wiring:** `InMemoryDeliveryDeduplicationAdapter` (bounded LRU) wired in `ConversationConfig`
+  (`deliveryDeduplicationPort`, `idempotentDeliveryGuard`; cap via
+  `voice-support.conversation.idempotency.max-keys`). Per-context config, not a global `DomainServiceConfig`
+  (this repo uses the context-first Hive layout).
+- **Contract plug-in:** `ConverseRequest` gains the 5 optional snake_case envelope fields (global Jackson
+  SNAKE_CASE strategy) + `toEnvelope()` (prefers `external_session_id`, falls back to `conversation_id`).
+  `ConverseController` builds the envelope, keys memory on `conversationKey()`, and short-circuits a
+  duplicate delivery to a safe listen prompt (no reprocess / no double memory append). `ConverseStreamSession`
+  keys streaming memory on the same envelope key. Existing `/api/conversation/*` contracts and the null-domain
+  voice contract are unchanged (envelope fields optional).
+- **Runtime-affecting → OTel/logs:** new `voice_support.channel_delivery` counter (channel + reply_mode +
+  duplicate) and `[CHANNEL]` structured log carrying the correlation id; `[CONVERSE]`/`[CONVERSE-STREAM]`
+  logs now report the resolved `session_key`.
+- **Tests (manual fakes, no Mockito):** `ChannelEnvelopeTest`, `ReplyModeTest`, `IdempotentDeliveryGuardTest`,
+  `InMemoryDeliveryDeduplicationAdapterTest`, `ConverseControllerEnvelopeTest` (memory keying + duplicate),
+  and snake_case wire round-trip + duplicate tests in `ConverseControllerTest`. Full suite: 422 pass.
+- **Out of scope (unchanged):** the Python Genesys adapter that fills the envelope (TASK-WEB-041) and the
+  handoff transport that produces `escalation_context` (TASK-BE-036).
+
+### Adversarial-review remediation (2026-08-28)
+
+Applied to clear the ≥90 gate. `mvn test` green (432, ArchUnit incl.); `git diff --check` clean. Nothing
+merged (user is final validator).
+
+- **[Major #1] Idempotent dedup on the streaming path.** `/converse-stream` (the primary voice path —
+  `VOICE_BACKEND_STREAM` on by default) now runs the same guard as batch `/converse`. `ConverseStreamSession`
+  is wired with `IdempotentDeliveryGuard`; a duplicate delivery is short-circuited to the safe listen prompt
+  with **no** LLM call, no memory append and no double answer, preserving the SSE `chunk`/`done`/`error`
+  contract and the null-domain voice contract. New test `ConverseStreamControllerEnvelopeTest` proves the
+  underlying stream is opened **0** times on a duplicate (counting fake `ConverseStreamUseCase`).
+- **[Major #2] `genesys` added to the metrics channel allow-list.** `BackendTelemetry.DEFAULT_ALLOWED_CHANNELS`
+  is now `web,web_voice,phone,whatsapp,genesys,api` (still env-overridable via
+  `voice-support.observability.allowed-channels`), so a Genesys delivery is tagged `channel=genesys` in
+  `voice_support.channel_delivery` / `voice_support.slice` instead of collapsing to `other`. New test
+  `keepsGenesysChannelFirstClass` in `BackendTelemetryTest`.
+- **[Major #3] Retry-after-failure dedup semantics.** The key is now **confirmed on success / released on
+  failure** rather than committed on receipt. `DeliveryDeduplicationPort` gains `release(key)`
+  (`InMemoryDeliveryDeduplicationAdapter` evicts under the same lock); `IdempotentDeliveryGuard` gains
+  `releaseOnFailure(envelope)`. `isDuplicate` still reserves atomically (`registerIfNew`), so two in-flight
+  identical deliveries do not both process; the reservation is dropped when the turn throws so a legitimate
+  retry (e.g. upstream 503) with the same `idempotency_key` is reprocessed. Wired into **both** `/converse`
+  (try/catch → release → rethrow) and `/converse-stream` (release in `run()`'s finally, only for a
+  reservation this session actually made). Tests: `IdempotentDeliveryGuardTest` (released→reprocessed,
+  confirmed→deduped, no-signal release no-op) and `ConverseControllerEnvelopeTest`
+  (`reprocesses_a_retry_with_the_same_idempotency_key_after_the_first_turn_fails`).
+- **[Minor] Namespaced explicit idempotency keys.** `ChannelEnvelope.effectiveIdempotencyKey()` now returns
+  `channel:external_session_id:<key>` for explicit keys too (matching the derived branch), so two
+  channels/sessions reusing the same counter space cannot falsely dedupe. Tests updated/added in
+  `ChannelEnvelopeTest` (namespaced key + distinct-sessions).
+- **[Minor] Added tests.** Unknown `reply_mode` → **400 `ERR_400`** (generic message, rejected value never
+  echoed) on **both** `/converse` (`ConverseControllerReplyModeTest`) and `/converse-stream`
+  (`ConverseStreamControllerReplyModeTest`, resolved synchronously before a stream opens); a regression
+  pinning that a normal control-free `conversation_id` (UUID, ≤200) maps **unchanged** through `sanitize()`
+  into the memory key (`ChannelEnvelopeTest`).
+- **Correctly deferred (unchanged):** `escalation_context` consumption (TASK-BE-036); the `:`-in-field
+  low-risk collision (optional, not escaped).

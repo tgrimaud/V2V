@@ -3,12 +3,14 @@
 This file keeps the product-readable decision summary. The authoritative
 architecture decisions are the ADRs under `docs/architecture/adrs/`.
 
-> **Two distinct "decision" numberings — do not conflate.** `DEC-001…DEC-011` below is
+> **Two distinct "decision" numberings — do not conflate.** `DEC-001…DEC-015` below is
 > the durable product decision log. The **"global-review decision #1…#9"** referenced in
 > `backlog-index.md`, `done-tasks.md` and the 2026-08-15 review are a **separate,
 > review-local numbering** (the items of that adversarial-review remediation loop, e.g.
 > ADR-0043/0044, TASK-BE-030/031/032, TASK-WEB-032/033/034); they are **not** `DEC-###`
-> entries and do not extend this log. `DEC-012`/`DEC-013` do not exist.
+> entries and do not extend this log. The `DEC-041-a`/`DEC-041-b` sub-labels used in US-041
+> / ADR-0035 are **story-local** decision tags (they mirror the story id) and are likewise
+> **not** part of this global sequence.
 
 ## DEC-001 - V1 Focuses On Invoice Explanation
 
@@ -307,3 +309,186 @@ benchmarkable), and lets Mistral vs OpenAI be compared once the engine exists.
   providers **and** a swappable embedding provider, with streaming tokens.
 - OpenAI live/POC validation is deferred until credentials are provided; until
   then, functional and latency runs use Mistral (or Ollama offline).
+
+---
+
+## DEC-012 - Genesys Is The Full Phone Entry Point For The Pilot
+
+**Status:** Accepted (user decision) — extends DEC-009; recorded via ADR-0049 and
+ADR-0040; Sprint 13 (`sprints/sprint-13-genesys-audio-connector.md`)  
+**Date:** 2026-08-27
+
+### Decision
+
+For the pilot, **Genesys is the full phone entry point**. Inbound calls ingress via
+Genesys and are routed to the in-house voice runtime over the **Audio Connector**
+(the bidirectional AudioHook feature), and Genesys is also the advisor-handoff target.
+**Full Audio Connector voice routing is the pilot target — not a spike-only option.**
+Telephony as a separate Twilio/SIP entry (US-018) stays **OUT** of Sprint 13.
+
+This supersedes the "optional unless the pilot requires it" posture of DEC-009 **for
+the pilot**: the pilot requires it. DEC-009's boundary rule is unchanged — Genesys
+stays the contact-center system of record and the Java backend keeps the AI
+conversation workflow, RAG, billing reasoning, guardrails, escalation policy, handoff
+content and conversation memory (ADR-0001).
+
+### Important nuance — the latency/feasibility gate is NOT waived
+
+Committing to Genesys as the entry does **not** waive the **TASK-WEB-025** gate.
+TASK-WEB-025 remains the **latency/feasibility go/no-go** on the measured Genesys leg
+against the ADR-0029 mouth-to-ear budget (p95 ≤ 1500 ms). If the spike measures the
+Genesys leg as **gate-failing**, that is an **escalation to the user for a decision**
+(mitigation, re-scope, or timeline) — **not** an auto-proceed onto the V1 critical path
+and **not** a silent drop of the committed direction.
+
+### Rationale
+
+The pilot needs a realistic contact-center entry, and Genesys is the target system of
+record. Deciding the strategic direction now lets Sprint 13 focus the spike on
+measuring feasibility/latency of a committed path rather than re-litigating whether
+Genesys is the entry at all.
+
+### Implication
+
+- Resolves the strategic-direction items of **OQ-006** (full routing required for the
+  pilot = yes; Genesys is the phone entry = yes; single pilot entry = Genesys, US-018
+  deferred).
+- Sprint 13 scope IN explicitly includes **full Genesys voice-entry routing for the
+  pilot**, gated by the spike GO; the follow-on tickets stay conditional on that
+  feasibility result.
+- Residual **OQ-006** technical/compliance items stay open (codec PCMU vs L16; 15-min
+  cap fit + mitigation; PII-audio residency/egress sign-off; pilot concurrency vs the
+  premium ≤5-integrations / 1-vCPU envelope).
+
+---
+
+## DEC-013 - Escalation Handoff Travels By Reference; The Backend Owns The Context/PII
+
+**Status:** Accepted (user decision) — confirms TASK-BE-036; recorded via ADR-0049;
+refines ADR-0019 and ADR-0040  
+**Date:** 2026-08-27
+
+### Decision
+
+The escalation handoff to a human advisor travels **by reference**. Genesys carries
+only an opaque **`handoff_id`** (plus minimal routing metadata); the **backend owns and
+serves the full escalation context and any PII** on an access-controlled, audited fetch.
+
+Carrying the escalation context **inline inside the Genesys event / Architect variables
+is rejected** on **PII / trust-boundary** grounds (independent of, and in addition to,
+the Architect variable size/type limits raised as adversarial-review R5).
+
+### Consequence
+
+The identifiers allowed to travel **through Genesys** are limited to the **opaque
+`handoff_id` + minimal routing metadata** the pilot trust model permits. The full,
+audited `EscalationHandoff` (ADR-0019) never leaves the backend trust boundary; the
+advisor desktop (or a widget) retrieves it from the backend on demand.
+
+### Rationale
+
+Keeping PII and the audited escalation content inside the backend trust boundary is a
+security/compliance requirement, not merely a size optimisation. By-reference also
+sidesteps Architect variable limits as a secondary benefit.
+
+### Implication
+
+- **TASK-BE-036** builds the `handoff_id` + backend-fetch transport; the inline-variable
+  path is **not** a V1 option.
+- The escalation **decision** stays a backend rule (ADR-0019); Genesys receives the
+  reference and routes — it never computes or alters the escalation reason or content.
+
+---
+
+## DEC-014 - Genesys Spike Runs Synthetic-First; Pilot Concurrency Target = 3; Pilot Env Available
+
+**Status:** Accepted (user decision) — scopes the TASK-WEB-025 spike; refines OQ-006 residual
+items; recorded via ADR-0049 and `sprints/sprint-13-genesys-audio-connector.md`  
+**Date:** 2026-08-28
+
+### Decision
+
+Three inputs to the Sprint 13 Genesys feasibility spike (TASK-WEB-025) are now fixed:
+
+1. **Synthetic-first PII-audio posture.** The spike runs on **synthetic / non-PII audio
+   only**. The **real-PII egress sign-off** (data residency / encryption / compliance for PII
+   audio leaving the Genesys cloud to the runtime VMs) is a **parallel open item owned by
+   Security / Compliance** — it is **NOT a blocker for the spike** and stays OPEN in OQ-006
+   (and remains aligned with OQ-009's production-gate posture).
+2. **Pilot concurrency target = 3 concurrent Genesys sessions.** The spike must check this
+   target fits the Genesys **premium ≤5-integrations / 1-vCPU-class runtime** envelope (R6).
+3. **Genesys pilot environment is available now** — a pilot org with Architect access exists,
+   so the live-measurement steps (Call Audio Connector fork/pause/resume flow + billing
+   advisor-queue routing) can be run by a human once the throwaway prototype is ready.
+
+### Rationale
+
+Deciding the PII posture up front keeps the spike unblocked (synthetic audio needs no
+compliance sign-off) while keeping the real-PII decision visible and owned, so the spike is
+not silently treated as a compliance clearance. A concrete concurrency **target** (3) lets the
+spike produce a pass/fail against the premium envelope instead of an open-ended ceiling. Pilot
+access availability confirms the live-org measurement is a scheduling matter, not a blocker.
+
+### Implication
+
+- **TASK-WEB-025** is scoped to synthetic audio; its report measures what synthetic runs can
+  prove and lists exactly what still needs the **live Genesys org** (human-run Architect steps).
+- The spike's concurrency check targets **3 concurrent sessions** on a 1-vCPU-class runtime and
+  records the premium ≤5-integrations impact.
+- **OQ-006** keeps the **PII-audio residency / egress** item OPEN (owner: Security / Compliance,
+  parallel track); the concurrency and env items are updated with the target and availability.
+- This decision does **not** waive the ADR-0029 latency gate or DEC-012/013 — a spike NO-GO still
+  escalates to the user (DEC-012), and the handoff stays by-reference (DEC-013).
+
+---
+
+## DEC-015 - ADR-0029 Latency Gate Decoupled From The Genesys Connector Build
+
+**Status:** Accepted (user decision) — **resolves the TASK-WEB-025 NO-GO escalation raised under
+DEC-012**; keeps ADR-0049 Proposed (build authorized, not yet Accepted); recorded via
+`sprints/sprint-13-genesys-audio-connector.md` and the spike report
+`docs/qa/task-web-025-genesys-audio-connector-spike-report.md`
+
+**Date:** 2026-08-28
+
+### Decision
+
+**DECOUPLE.** The **ADR-0029 mouth-to-ear latency gate** is decoupled from the **Genesys Audio
+Connector connector build**. The TASK-WEB-025 spike NO-GO — escalated to the user under DEC-012 —
+is resolved as follows:
+
+1. **The Genesys connector build proceeds now** (TASK-WEB-041 and the follow-on Genesys tickets),
+   treating the ADR-0029 gate as a **separate latency workstream** rather than a build blocker.
+2. **The ADR-0029 gate stays a documented FAIL** and is tracked independently against the in-house
+   base-latency levers — primarily **TASK-BE-033** (backend chat-model choice / OpenAI key), plus
+   **TASK-STT-014** (STT finalize tail) and **TASK-BE-020** (backend first token).
+3. **No SLO claim is made on the Genesys path** until the in-house base latency comes under budget
+   and ADR-0029 is re-scored PASS.
+
+### Rationale
+
+The spike proved the Genesys transport/transcode is **cheap and feasible** (L16 **~3.3 ms**, PCMU
+**~17.4 ms** p95 overhead) — the media plane is **de-risked**. The ADR-0029 FAIL is attributable
+**entirely to the pre-existing in-house mouth-to-ear base** (p95 **~2.76 s**, TASK-WEB-039), which
+already exceeds the **1.5 s** budget **before any Genesys leg is added**. Because the failure is
+**base-latency-driven, not Genesys-driven**, holding the de-risked Genesys integration hostage to
+an unrelated latency track would stall independently valuable work. Building now while the
+base-latency levers proceed in parallel is the faster path to a pilot-ready Genesys entry, without
+overclaiming performance.
+
+### Implication
+
+- **Build proceeds:** TASK-WEB-041/042/043/044, TASK-BE-036/037 and TASK-INFRA-012 are **unblocked
+  from the ADR-0029 gate**. They remain conditional on **OQ-006 pilot access** and the **live-org
+  measurement** for their live behaviour (cloud legs, negotiated codec, 15-min cap, native
+  barge-in/EOT), **not** on an ADR-0029 PASS.
+- **The gate is a separate latency workstream** owned by **TASK-BE-033** (model choice / OpenAI key)
+  + **TASK-STT-014** + **TASK-BE-020**. Its status stays **FAIL** and is **re-scored, not waived**.
+- **No Genesys-path SLO** is claimed until the base latency closes; the Genesys path stays a
+  measured integration off any SLO claim until a re-scored ADR-0029 PASS lands.
+- **ADR-0049 stays `Proposed`.** The build is **authorized under this decouple decision**; the flip
+  to **Accepted** still requires the **live-org re-score (GO)** + **OQ-006 sign-off** (codec, 15-min
+  cap, PII-audio residency, concurrency within the premium ≤5 / 1-vCPU envelope).
+- **Does not waive DEC-012/013/014:** Genesys stays the full pilot entry (DEC-012), the handoff
+  stays by reference (DEC-013), and the spike stayed synthetic-first (DEC-014). This decision is the
+  **explicit user resolution** of the DEC-012 escalation, not a bypass of it.

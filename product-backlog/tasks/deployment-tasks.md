@@ -1403,6 +1403,147 @@ Scenario: The pilot CSV corpus is French
   sync is fired async and gated on `SyncReport.processed`, and why `voice-support.embedding.timeout-ms`
   is raised to 120 s on the backend tier (`java_opts`) for the sync batch.
 
+- Interim manual workaround (already documented): verify health out-of-band
+  (`docker inspect --format {{.State.Health.Status}}` + `curl http://<host-ip>:8090/`), then
+  finish a blocked node by bumping `IMAGE_TAG` in `/opt/voice-support/voice/.env` (preserve the
+  vault-rendered secrets — never hand-write `.env`) and `podman compose up -d --remove-orphans`.
+
+---
+
+## TASK-INFRA-012 - Genesys Architect flow + control/routing plane (Call Audio Connector + advisor-queue routing + wss endpoint exposure)
+
+**Parent:** EPIC-007 (Genesys advisor handoff) / EPIC-012 (pilot deployment)
+**Related decisions:** ADR-0040 (control/routing plane owned by Architect + Platform API), ADR-0049
+(Sprint 13 delivery shape), ADR-0020 (Genesys handoff), ADR-0047 (single async server hosts the `wss`
+endpoint), ADR-0038 (pilot deployment / edge)
+**Depends on:** TASK-WEB-025 (spike **GO** + pilot access), OQ-006 (pilot environment + queue routing
+rules), TASK-WEB-041 (the `wss` endpoint the flow forks to)
+**Classification:** V1 pilot deployment — Genesys control plane config (no business logic) + voice-runtime connection auth
+**Status:** 🧪 Prep implemented on branch `task/TASK-INFRA-012-genesys-audiohook-auth` (off `feat/sprint-13-genesys-audio-connector`); AudioHook connection auth (API key + HMAC-SHA256 signature) + Architect flow control/routing contract scaffolded; exact header/secret + `@request-target`/`@authority` behind the edge + Architect wiring pending live Genesys measurement; awaiting adversarial review + user merge (not merged)
+**Priority:** High (Sprint 13; co-developed with TASK-WEB-041) — closes part of **R3/R6**
+**Branch:** `task/TASK-INFRA-012-genesys-audiohook-auth` (off the sprint branch)
+
+### Context
+
+ADR-0040 splits Genesys into three planes; the **control/routing plane** — call steering, transfer,
+queue and advisor routing — is owned by **Genesys Architect + the Platform API**, not by our media
+socket. This ticket stands up the Architect flow that forks the call to our Audio Connector `wss`
+endpoint, pauses, then resumes and routes on session end, plus the endpoint exposure/TLS/auth. No
+conversation logic lives here (that stays in the backend, ADR-0001).
+
+> **Edge note (2026-08-27):** the earlier TASK-INFRA-010 (`voice_ws` HAProxy special-case) was
+> **superseded by ADR-0047** — the runtime serves the WebSocket on the single routed port, so HAProxy
+> `mode http` tunnels the upgrade on the existing `voice_bridges` backend with no LB change. The Audio
+> Connector `wss` endpoint rides that same routed port; this ticket does **not** re-open an edge
+> special-case, only the Genesys-side flow + endpoint exposure/auth.
+
+### Scope
+
+- **Architect flow** with the **Call Audio Connector** action: fork the call audio to our `wss`
+  endpoint, pause the flow while streaming, resume when our runtime ends the session.
+- **Advisor-queue routing on escalation/resume**: route to the billing advisor queue with the
+  queue/skill rules from OQ-006, carrying the `handoff_id` + permitted identifiers (TASK-BE-036/037).
+- **Fail-safe route** (pairs with TASK-WEB-044): if our endpoint is unreachable/times out, the flow
+  routes straight to the advisor queue after a defined guard delay.
+- **Endpoint exposure**: reachable `wss://` on the routed port through the existing TLS edge (ADR-0047,
+  no new edge special-case), with the auth the Audio Connector requires; keep the per-IP edge limits.
+- **Integration budget**: track the premium ≤5-Audio-Connector-integrations/org constraint against the
+  pilot (R6).
+- Config + reference flow export are **versioned under `deploy/`** (not merged into the runtime); no
+  secrets in the repo.
+
+### Acceptance
+
+```gherkin
+Scenario: A pilot call is forked to the bot and routed to an advisor on escalation
+  Given an Architect flow with a Call Audio Connector action pointing at our wss endpoint
+  When a pilot caller reaches the flow and the bot cannot resolve the billing question
+  Then the flow forks audio to the bot, pauses, and resumes when the session ends
+  And the caller is routed to the billing advisor queue with the handoff reference attached
+Scenario: The flow fails safe when the bot endpoint is unavailable
+  Given the Call Audio Connector endpoint is unreachable
+  When a call reaches the flow
+  Then the caller is routed straight to the advisor queue after the guard delay
+```
+
+- Architect flow forks/pauses/resumes correctly against the TASK-WEB-041 endpoint.
+- Escalation resume routes to the advisor queue with the handoff reference (TASK-BE-036).
+- Fail-safe route verified (pairs with TASK-WEB-044); premium integration budget recorded.
+- Reference flow/config versioned under `deploy/`; no conversation logic in Genesys.
+
+### Notes
+
+- The Platform API / Architect specifics (variable names, queue ids, auth mechanism) are confirmed by
+  the TASK-WEB-025 spike against the real pilot org (OQ-006); this ticket implements the confirmed shape.
+
+### Increment (2026-08-28) — Prep: AudioHook connection auth + Architect flow contract
+
+Deterministically-knowable half implemented now (the AudioHook connection-auth scheme is a known
+protocol); anything needing the live Genesys tenant / negotiated shared secret is marked
+`TODO(TASK-INFRA-012: live-measurement)`. **ADR-0001 held — voice-runtime + docs only, zero backend
+files changed.**
+
+- **Voice-runtime auth (new):** `voice-agent/web_voice/genesys_auth.py` (policy + fail-closed config +
+  telemetry) and `voice-agent/web_voice/genesys_signature.py` (IETF HTTP Message Signatures
+  canonicalization, `alg="hmac-sha256"`). Verifies `X-API-KEY` (constant-time) + the `Signature` /
+  `Signature-Input` HMAC over the covered components, keyed by `GENESYS_AUDIOHOOK_SECRET` (base64), with
+  `hmac.compare_digest`. Canonicalization is locked against the **official Genesys golden vector**
+  (unit test reproduces the published signature byte-for-byte).
+- **Wiring:** `genesys_app.py` verifies auth **before** the WS upgrade (401/503 on failure, no session
+  built); `server.py` always attaches an env-built authenticator when `--genesys` is enabled and
+  **fails closed** with a structured warning when key/secret are unconfigured. Origin allowlist kept as
+  defense-in-depth.
+- **Telemetry (mandatory):** bounded-cardinality auth-outcome event + metric on the Genesys channel
+  (`accepted` / `rejected_bad_signature` / `rejected_missing_key` / `rejected_not_configured`),
+  connection-scoped correlation (Genesys session id → deterministic traceparent when no conversationId
+  yet). **No secret / signature / API key / PII in any span, metric or log** (asserted by test).
+- **Contract doc (new):** `docs/integrations/genesys-architect-flow-contract.md` — the Architect
+  control/routing plane: fork/pause/resume vocabulary, by-reference handoff (`escalation_context =
+  {handoff_id, reason_code, priority}`) routed to the advisor queue via
+  `GET /api/conversation/escalation-handoffs/{handoff_id}` (TASK-BE-036), fail-safe branch, and the
+  TO-CONFIRM table (DID, queue, egress ranges, auth header casing, variable limits) with owners.
+- **Tests:** `tests/test_genesys_auth.py` (17 unit) + `features/genesys_connection_auth.feature`
+  (5 scenarios) — valid accepted, tampered/invalid rejected, missing key, fail-closed unconfigured,
+  telemetry-without-leak. Full suite green: 677 unit / 18 features · 51 scenarios · 225 steps.
+- **TODO(live-measurement) seams:** exact API-key header casing, the signed `@request-target` /
+  `@authority` as seen behind the pilot HAProxy edge, the negotiated shared secret, and the org-id
+  allowlist — all env-configurable so live values drop in without a code change.
+
+### Increment (2026-08-28) — Adversarial-review remediation (80/100 → fixed 3 Majors + 2 minors)
+
+The review scored the prep 80/100 (blocked). All findings addressed; still voice-runtime + docs
+only (ADR-0001 held — zero backend files). Full suite green: **685 unit / 18 features · 51
+scenarios · 225 steps**.
+
+- **Major A (telemetry discarded in prod):** `server.py` now builds the authenticator with the
+  REAL exporter — `genesys_authenticator_from_env(log=genesys_log_telemetry)` (stderr + OTLP, the
+  same path the session handler uses) instead of the no-op default, so the mandatory per-attempt
+  auth-outcome event/metric is actually flushed at runtime. New test injects a capturing exporter
+  and asserts it RECEIVES the event + metric on BOTH an accepted and a rejected attempt.
+- **Major B (replay/freshness ENFORCED):** new `voice-agent/web_voice/genesys_replay.py`
+  (`signature_is_fresh` + bounded FIFO `NonceCache`). Policy now: `expires` is **mandatory**
+  (absent/stale/future → rejected via the existing bad-signature outcome, no unbounded label);
+  `created`, when present, is age-bounded to `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S` (default
+  **300s**, small clock skew) — repaired from the old logic that merely EXTENDED the `expires`
+  grace; a reused `nonce` is rejected via a cap of `GENESYS_AUDIOHOOK_NONCE_CACHE_SIZE` (default
+  **10000**). `created`/`nonce` stay OPTIONAL so the golden vector (far `expires`) stays
+  byte-identical (clock anchored near its `created`); canonicalization untouched. Regression tests:
+  missing `expires`, stale/future `created`, replayed `nonce`, fresh unique nonce accepted,
+  created-absent accepted, golden still green.
+- **Major C (unbounded-cardinality metric):** dropped `correlation_id` from `AUTH_OUTCOME_METRIC`
+  (kept it on the event/span); the metric label set is now exactly `{channel, outcome}` (asserted).
+- **Minor 1 (insecure default):** `make_genesys_handler` now REQUIRES `authenticator` (always
+  authenticates) so a forgotten wiring fails CLOSED; production behaviour unchanged (server always
+  passes one). Transport-only tests pass an explicit accept-all double.
+- **Minor 2 (non-ASCII API key → 500):** API-key compare is now byte-based
+  (`.encode("utf-8")`), so a non-ASCII `X-API-KEY` degrades to a clean 401 (`rejected_missing_key`),
+  never a 500.
+- **Module budget:** freshness/nonce extracted to `genesys_replay.py`; `genesys_auth.py` stays
+  under the 200-non-blank-line budget (193). Env var renamed to the reviewed
+  `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S`.
+- **Docs:** freshness/replay policy + remaining `TODO(TASK-INFRA-012: live-measurement)` added to
+  `genesys_auth.py` docstring and `docs/integrations/genesys-architect-flow-contract.md`.
+
 ---
 
 ## TASK-OPS-010 - Bridge active-session `/drain` endpoint + deploy wiring
@@ -1485,3 +1626,57 @@ Scenario: Drain is fail-safe
   (TASK-WEB-046) — sibling BUG-018 P1 fixes.
 - Repointing the health gate off loopback (TASK-INFRA-011) — only accounted for here, not
   fixed.
+
+## TASK-INFRA-015 - Enable the Genesys AudioHook endpoint on the pilot voice bridge (config + secrets + rollout)
+
+**Parent:** EPIC-007 (Voice runtime) / EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** ADR-0047 (single async HTTP+WS server), ADR-0049 (Genesys Audio Connector delivery shape), DEC-012 (Genesys = pilot entry), DEC-014 (concurrency target 3)
+**Depends on:** TASK-WEB-041 (Audio Connector transport adapter), TASK-INFRA-012 (Genesys AudioHook auth), TASK-WEB-047 (local test client / Step 0b self-test)
+**Classification:** V1 pilot deployment — deploy config + secrets (activates runtime behaviour that already shipped in the image; no image change)
+**Status:** 🧪 Implemented on `task/TASK-INFRA-015-genesys-endpoint-enablement` (off sprint-13). Enablement config committed; the AudioHook shared secret is generated by us and stored in the local git-ignored `vault.yml` for the pre-live self-test.
+
+### Context
+
+The Genesys Audio Connector code (TASK-WEB-041/042/043 + the connection-auth of
+TASK-INFRA-012) ships **inside** the voice image, but the deployed bridge ran with the
+endpoint **off**: `web_voice/server.py` reads `--genesys` from `VOICE_GENESYS` (default
+`off`) and the deploy config passed **no** genesys env, so `/genesys/audiohook` returned
+404 on the pilot (`vla-t01/t02`). Testing the deployed connector — even the pre-live
+self-test (runbook Step 0b, TASK-WEB-047) — first requires **activating** the endpoint and
+provisioning its HMAC connection-auth secret. Enabling it needs **no image rebuild**: it is
+purely env + secret + a rollout of the (now genesys-capable) mainline image.
+
+### What was implemented
+
+- **Compose passthrough** (`deploy/compose/voice/docker-compose.yml` + `.env.example`):
+  `VOICE_GENESYS` (default off), `GENESYS_AUDIOHOOK_API_KEY`, `GENESYS_AUDIOHOOK_SECRET`,
+  `GENESYS_AUDIOHOOK_AUTHORITY` (optional edge override), `VOICE_GENESYS_ALLOWED_ORIGINS`,
+  `VOICE_GENESYS_CODEC` (default L16), `VOICE_GENESYS_MAX_SESSIONS` (default 3).
+- **Ansible render** (`roles/compose_tier/templates/voice.env.j2`): renders the above from
+  `group_vars/voice.yml` (`voice_genesys: "on"`, `voice_genesys_codec: L16`,
+  `voice_genesys_max_sessions: 3`, allowlist + authority defaults) and the vault secret.
+- **Vault contract** (`group_vars/all/vault.example.yml`): documents
+  `vault_genesys_audiohook_api_key` / `vault_genesys_audiohook_secret` (base64). The real
+  pair is generated locally (`openssl rand -base64 32`) and lives in the git-ignored
+  `vault.yml` — **our own secret for the self-test**, rotated to the Genesys-admin-agreed
+  shared secret before the live-org test.
+- **Additive, non-regressive**: `/genesys/audiohook` mounts on the SAME routed `:8090` as
+  `/ws` (ADR-0047, `web_voice/app.py`); the browser WS + WebRTC routes are unchanged (only
+  the standard container recreate applies at rollout, drained per `release-process.md`).
+
+### Acceptance (met)
+
+- `voice.env.j2` renders all `VOICE_GENESYS*` / `GENESYS_AUDIOHOOK_*` lines with no
+  undefined-variable error (`ansible … -m template` render check).
+- The AudioHook secret never appears on argv or in a committed file (vault-encrypted;
+  `.env` is Ansible-rendered on the host, never committed).
+- Post-rollout: `/genesys/audiohook` accepts a correctly-signed handshake from
+  `genesys_local_client.py` over an SSH tunnel to the bridge LAN IP (Step 0b), while `/ws`
+  keeps serving.
+
+### Out Of Scope
+
+- The Genesys-side Architect flow + org config + the admin-agreed shared secret
+  (TASK-INFRA-012 Genesys side / runbook Steps 1-6).
+- Genesys-path degraded modes (TASK-WEB-044, carried forward) and any ADR-0029 SLO claim
+  (decoupled — DEC-015).
