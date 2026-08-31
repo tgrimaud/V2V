@@ -1715,6 +1715,16 @@ credential-handover mechanism.
   `GENESYS_AUDIOHOOK_AUTHORITY` stays empty. Residual is host-level only: the
   `10.195.59.39` → VIP `192.168.0.10:443` ingress NAT + the TLS cert coverage of
   `voice-vip.pem` for `vip-ai4cc-voice-t01.prod.lan`.
+- **Live edge verification (2026-08-31, read-only from a voice node):** DNS
+  `vip-ai4cc-voice-t01.prod.lan` → `10.195.59.39`; both `10.195.59.39:443` and VIP
+  `192.168.0.10:443` OPEN serving the **same** cert (NAT wired); cert `CN`/`SAN` =
+  `vip-ai4cc-voice-t01.prod.lan` (matches SNI), valid `2026-08-14 → 2026-11-12`.
+  **⚠️ Blocker surfaced:** the cert issuer is a **private CA** (`CN=CA_2_NJJ_MTMC_Default,
+  O=mtMC`), the name is internal `.prod.lan`, and `10.195.59.39` is RFC1918 private — a
+  public SaaS (Genesys Cloud) can neither reach nor trust it as-is. Live-org test needs a
+  resolved network path (interconnect/VPN) + trust model (internal-CA trust or a public
+  FQDN + public cert). Recorded in the admin doc §4 / §8 / §8b. Does NOT affect the passed
+  internal Step 0b self-test.
 
 ### Acceptance (met)
 

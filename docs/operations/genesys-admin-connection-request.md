@@ -10,7 +10,8 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 - **Deployed:** the connector ships in pilot image **`v0.8.0`** and the AudioHook endpoint is **enabled** (`VOICE_GENESYS=on`) on both bridge nodes **`vla-ai4cc-t01` / `t02`** at `:8090`, path `/genesys/audiohook` (ADR-0047 single async server). Both containers report healthy.
 - **Self-tested (Step 0b, PASSED):** a full Voice2Voice turn ran against the **deployed** endpoint — HMAC connection-auth accepted, **L16** codec round-trip, session lifecycle (`open`→`opened`→audio→`close`→`closed`), and a grounded RAG answer (~15.5 s of TTS audio, first response ~2.2 s) with the complete telemetry chain (`connection_auth` → `stt.transcript.final` → `voice.backend.streamed` → `tts.audio.final`).
 - **This proves:** the application-layer contract (auth handshake, codec, session, RAG V2V) works on the running pilot behind the edge (validated at the bridge `:8090`, via an internal tunnel).
-- **This does NOT yet prove (needs the Genesys admin + our netops):** the **HAProxy TLS edge on `:443`** at the VIP, **external reachability** from Genesys' cloud, the **Genesys egress firewall allowlist**, the **org-negotiated codec/native events**, and the Architect degraded branch. Those are the live-org steps (runbook Steps 1–6).
+- **Edge verified internally (2026-08-31):** the HAProxy TLS edge on `:443`, the ingress NAT `10.195.59.39 → VIP .10`, and the served cert (CN+SAN match) are confirmed working from inside the network (§4).
+- **This does NOT yet prove / resolve (needs the Genesys admin + our netops):** **⚠️ public-SaaS reachability + TLS trust** — the endpoint is a **private `10.x` / `.prod.lan`** name behind a **private CA** (`mtMC`), so Genesys Cloud can neither reach nor trust it as-is (top blocker, §4); plus the **Genesys egress firewall allowlist**, the **org-negotiated codec/native events**, and the Architect degraded branch. Those are the live-org steps (runbook Steps 1–6).
 - **Credentials:** a pilot API key + base64 shared secret are generated and stored in our git-ignored vault (never committed). They are handed to the admin **out-of-band** for the first live test (see §7a), then rotated to any admin-mandated pair before real-PII calls.
 
 ## 2. Target endpoint (what Genesys connects TO — we provide)
@@ -38,8 +39,12 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 - No UDP / no TURN / no SIP media needed (AudioHook is TCP/wss only).
 
 ## 4. TLS
-- Our HAProxy edge certificate must be valid (trusted CA) for **`vip-ai4cc-voice-t01.prod.lan`** — Genesys will refuse an untrusted/self-signed cert.
-- Confirm Genesys trusts our issuing CA chain. *(We provide the cert/domain; Genesys confirms trust.)*
+Live-verified 2026-08-31 (TASK-INFRA-016, read-only from a voice node):
+- **DNS**: `vip-ai4cc-voice-t01.prod.lan` resolves to **`10.195.59.39`** (the ingress Genesys will resolve).
+- **Reachability + NAT**: `10.195.59.39:443` and VIP `192.168.0.10:443` are both OPEN and serve the **same** edge cert → the ingress NAT `10.195.59.39 → VIP .10 → HAProxy` is wired.
+- **Certificate served**: `subject CN=vip-ai4cc-voice-t01.prod.lan`, `SAN DNS:vip-ai4cc-voice-t01.prod.lan` (matches the SNI), valid **2026-08-14 → 2026-11-12** (renew before expiry for a longer pilot).
+- ⚠️ **Trust blocker — issuer is a PRIVATE CA** (`CN=CA_2_NJJ_MTMC_Default, O=mtMC`), the hostname is on the **internal `.prod.lan`** zone, and `10.195.59.39` is **RFC1918 private** space. A public SaaS (Genesys Cloud) will neither trust a private CA out-of-the-box nor reach a private IP / resolve `.prod.lan` over the public internet.
+- **MUST resolve before the live-org test (netops + Genesys admin):** confirm the actual Genesys→endpoint path (dedicated interconnect / VPN / private peering / on-prem Genesys edge) **and** the cert trust model — either (a) Genesys is configured/able to trust the internal `mtMC` CA chain, or (b) expose the AudioHook endpoint on a **public FQDN with a publicly-trusted cert**. *(This does not affect the internal Step 0b self-test, which already passed.)*
 
 ## 5. Audio Connector / AudioHook integration (Genesys admin configures)
 | Item | Value | Status |
@@ -71,9 +76,9 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 
 ## 8b. Request to the Genesys admin — start now (copy-paste checklist)
 Send this alongside the tables above. What we need the admin to do/return to schedule the first live test:
-1. **Confirm reachability** of `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` (ingress `10.195.59.39:443`) from the Genesys org — flag if a rewritten edge path or extra prefix is required.
+1. **Confirm the network path (blocker):** the endpoint is a **private** `10.x` IP on the internal `.prod.lan` zone — Genesys Cloud cannot reach it over the public internet. Confirm how the org connects (dedicated interconnect / VPN / private peering / on-prem Genesys edge). The edge path itself is verified working internally (§4).
 2. **Provide the Genesys egress IP ranges** so our netops can open inbound `:443` (the allowlist does not exist yet — §3).
-3. **Confirm TLS trust** of our edge certificate/CA chain for `vip-ai4cc-voice-t01.prod.lan` (§4).
+3. **Confirm TLS trust (blocker):** our edge cert is issued by a **private CA** (`mtMC`) for `vip-ai4cc-voice-t01.prod.lan` — a public CA cannot issue for a `.lan` name. Confirm either Genesys can be made to trust the internal CA chain, or we must expose a **public FQDN with a publicly-trusted cert** (§4).
 4. **Confirm a premium integration slot** is available (1 of ≤5) and the **15-min session cap** is acceptable for the pilot (§5).
 5. **Create the Audio Connector integration**, receive our **API key + shared secret** via the secure channel (§7a), select codec **L16** (fallback PCMU), target the endpoint URL.
 6. **Build the Architect inbound flow** on a **pilot DID** (to provide): Call Audio Connector action + a **failure/timeout branch → billing advisor queue** (to provide) + a **`handoff_id`** participant attribute (report the size/type limit) — §6.
@@ -86,7 +91,9 @@ Send this alongside the tables above. What we need the admin to do/return to sch
 | ~~AudioHook URL path~~ — **resolved**: application route `/genesys/audiohook` | ✅ known (runtime) |
 | ~~HAProxy edge rule → whether the public path == `/genesys/audiohook` or a rewritten prefix~~ — **resolved (TASK-INFRA-016)**: passed through unchanged (no rewrite/ACL/prefix) | ✅ known (`deploy/haproxy/haproxy.cfg`) |
 | ~~Signed `@request-target` / `@authority` behind the edge (`GENESYS_AUDIOHOOK_AUTHORITY`)~~ — **resolved (TASK-INFRA-016)**: `Host` not rewritten → authority preserved, no override needed (leave empty) | ✅ known (`deploy/haproxy/haproxy.cfg`) |
-| Ingress NAT/routing `10.195.59.39` → VIP `192.168.0.10:443`, and TLS cert `voice-vip.pem` covers `vip-ai4cc-voice-t01.prod.lan` (host-level) | Our netops |
+| ~~Ingress NAT/routing `10.195.59.39` → VIP `192.168.0.10:443`, and TLS cert covers `vip-ai4cc-voice-t01.prod.lan`~~ — **verified 2026-08-31** (NAT wired, same cert, CN+SAN match; §4) | ✅ known (live check) |
+| **TLS trust + public reachability blocker**: private CA (`mtMC`) + `.prod.lan` name + `10.x` private IP → how does Genesys Cloud reach + trust the edge? (interconnect/VPN + CA trust, or public FQDN + public cert) | Our netops + Genesys admin (§4) |
+| Edge cert renewal before expiry (`2026-11-12`) for a longer pilot | Our netops |
 | Shared secret + exact API-key header casing (`GENESYS_AUDIOHOOK_API_KEY_HEADER`, default `X-API-KEY`) | Genesys admin + us (TASK-INFRA-012) |
 | Genesys egress IP ranges (firewall allowlist) | Genesys admin |
 | Pilot DID / test number | Genesys admin |
