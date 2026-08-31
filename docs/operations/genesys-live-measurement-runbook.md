@@ -51,6 +51,66 @@ integration), plus one runtime/ops engineer (endpoint exposure + harness re-scor
 
 ---
 
+## Step 0 — Pre-flight self-test WITHOUT Genesys (TASK-WEB-047, recommended first)
+
+Before involving the Genesys org, validate the endpoint from a **local environment** with the
+headless AudioHook client `voice-agent/scripts/genesys_local_client.py`. Everything the
+endpoint owns at the transport boundary is Genesys-independent — the **connection-auth
+handshake** (X-API-KEY + IETF HTTP Message Signatures HMAC-SHA256, TASK-INFRA-012), the
+**`open`/`opened`/`close` control channel** (ADR-0043), the **PCMU/L16 ↔ PCM16/16 kHz codec**,
+the **session lifecycle**, the **concurrency ceiling / WS 1013 backpressure** and the **15-min
+cap** — so it can be driven without a live org. This de-risks Steps 1–2 (auth, TLS, path,
+reachability) before scheduling the Genesys team.
+
+The client signs the handshake **byte-for-byte** as the server's `GenesysConnectionAuthenticator`
+rebuilds it, so a successful turn proves the deployed auth + framing are correct.
+
+### 0a. Local bridge (both sides under your control)
+
+```bash
+cd voice-agent
+export GENESYS_AUDIOHOOK_API_KEY=local-dev-key
+export GENESYS_AUDIOHOOK_SECRET=$(python3 -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())")
+set -a; . ../.env; set +a   # GRADIUM_* / MISTRAL_* for a real spoken answer
+./.venv/bin/python -m web_voice.server --genesys on --backend http \
+    --stt-mode streaming --tts-mode streaming &
+
+# drive one turn with a real PCM16/16 kHz mono WAV (say -o q.wav --data-format=LEI16@16000 …)
+./.venv/bin/python scripts/genesys_local_client.py \
+    --url ws://127.0.0.1:8090/genesys/audiohook \
+    --api-key "$GENESYS_AUDIOHOOK_API_KEY" --secret "$GENESYS_AUDIOHOOK_SECRET" \
+    --audio fixtures/long/billing-question.wav --codec L16 --out /tmp/genesys-answer.wav
+```
+
+The client prints the control frames (`opened` … `closed`), the bot-audio byte count, the
+time-to-first-bot-audio, and saves the answer WAV. Without `--audio` it streams synthetic
+non-PII noise (DEC-014) — enough to validate auth + handshake + lifecycle, but it will not
+trigger a spoken answer (below the STT onset threshold).
+
+### 0b. Deployed endpoint (self-signed TLS edge)
+
+```bash
+./.venv/bin/python scripts/genesys_local_client.py \
+    --url wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook --insecure \
+    --api-key "$KEY" --secret "$SECRET_B64" \
+    --authority vip-ai4cc-voice-t01.prod.lan \
+    --audio speech.wav --codec L16 --out /tmp/genesys-answer.wav
+```
+
+**Caveats for the deployed target (TASK-INFRA-012, TO CONFIRM):** the real shared secret is
+vault-rendered (you need that exact base64 `GENESYS_AUDIOHOOK_SECRET` to sign), and behind the
+HAProxy edge the signed `@request-target`/`@authority` may be rewritten — use `--authority`
+(matching the server's `GENESYS_AUDIOHOOK_AUTHORITY`) and, if the path is rewritten,
+`--request-target`.
+
+### 0c. What Step 0 CANNOT cover
+
+The cloud legs (ingress / Architect fork / egress), the org-negotiated codec, the native
+barge-in/EOT events and the Architect degraded branch still need the live org — they remain
+`measured=false` and are exactly what Steps 1–6 below produce.
+
+---
+
 ## Step 1 — Expose an AudioHook-speaking `wss` endpoint (reachable + secure)
 
 Genesys **initiates** the connection **from the Genesys cloud to our endpoint**, so the
@@ -333,6 +393,7 @@ Fill one row per test call (and summarise p50/p95 across calls for the cloud leg
 - Spike go/no-go report + the 7 manual steps: [`../qa/task-web-025-genesys-audio-connector-spike-report.md`](../qa/task-web-025-genesys-audio-connector-spike-report.md)
 - Synthetic latency artifact: [`../qa/task-web-025-genesys-synthetic-latency.json`](../qa/task-web-025-genesys-synthetic-latency.json)
 - Harness + prototype: `voice-agent/spikes/genesys_audiohook/` (`harness.py`, `README.md`)
+- Local AudioHook self-test client (Step 0, no live Genesys): `voice-agent/scripts/genesys_local_client.py` (TASK-WEB-047)
 - Delivery-shape ADR (stays Proposed): [`../architecture/adrs/ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md`](../architecture/adrs/ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md)
 - Latency gate: [`../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md`](../architecture/adrs/ADR-0029-pilot-latency-criterion-real-backend-and-market-baseline.md)
 - Media plane + 3-plane split: [`../architecture/adrs/ADR-0040-genesys-audio-connector-v2v-media-plane.md`](../architecture/adrs/ADR-0040-genesys-audio-connector-v2v-media-plane.md)
