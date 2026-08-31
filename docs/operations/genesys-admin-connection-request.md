@@ -26,10 +26,11 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 
 > Discrepancy resolved: `pilot-voice-access.md` shows `.10/.103/.104` short names — these are internal tenant-mesh (`192.168.0.0/24`) addresses, NOT the external ingress. The correct inbound target is **`10.195.59.39`** per the authoritative `flow-requests-eir-ai4cc-tst.md`, corroborated by the live-measurement runbook.
 
-> **AudioHook path — resolved + one thing to confirm.** The runtime route is fixed in code: the ADR-0047 async server mounts the AudioHook handler at **`GET /genesys/audiohook`** on the bridge `:8090` (`GENESYS_ROUTE = "/genesys/audiohook"`). What remains to confirm is purely the **HAProxy edge rule** on the VIP:
-> - If HAProxy passes the path through unchanged, the public URL to give Genesys is exactly **`wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook`**.
-> - If HAProxy adds/rewrites a prefix (e.g. `/voice/…`), Genesys dials the **edge** path and HAProxy must remap it to the bridge's `/genesys/audiohook`. In that case give Genesys the edge URL.
-> - HMAC caveat: the AudioHook signature covers `@request-target` and `@authority`; if the edge rewrites host/path, pin the authority runtime-side via `GENESYS_AUDIOHOOK_AUTHORITY` (owner: our netops/runtime; `TODO(TASK-INFRA-012: live-measurement)`).
+> **AudioHook path + `@authority` — RESOLVED (TASK-INFRA-016, from the deployed HAProxy config).** The runtime route is fixed in code: the ADR-0047 async server mounts the AudioHook handler at **`GET /genesys/audiohook`** on the bridge `:8090` (`GENESYS_ROUTE = "/genesys/audiohook"`). The deployed edge (`deploy/haproxy/haproxy.cfg`, `frontend voice_https` on `192.168.0.10:443` → `default_backend voice_bridges` = `192.168.0.103:8090` / `.104:8090`) does **`mode http` with no path rewrite, no ACL, no prefix** and **does not rewrite the `Host` header** (it only adds `X-Forwarded-Proto`). Consequences:
+> - **Public URL is exactly `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook`** — the path is passed through unchanged.
+> - **`@authority` is preserved end-to-end** → the bridge re-derives the same authority Genesys signed, so **no `GENESYS_AUDIOHOOK_AUTHORITY` override is needed** (leave it empty).
+> - The `Connection: upgrade` WS handshake is tunnelled on the same `voice_bridges` backend via the global `timeout tunnel 1h` — the config comment explicitly anticipates the Genesys Audio Connector.
+> - Residual (host-level, not config): confirm the **`10.195.59.39` → VIP `192.168.0.10:443` ingress NAT/routing** and the **TLS cert** actually loaded (`voice-vip.pem`) covers `vip-ai4cc-voice-t01.prod.lan` — see §4.
 
 ## 3. Network / firewall (Genesys admin + our netops)
 - Open **inbound TCP `:443` (wss)** from **Genesys org egress IP ranges → `10.195.59.39`**.
@@ -83,8 +84,9 @@ Send this alongside the tables above. What we need the admin to do/return to sch
 | Item | Owner |
 |---|---|
 | ~~AudioHook URL path~~ — **resolved**: application route `/genesys/audiohook` | ✅ known (runtime) |
-| HAProxy edge rule → whether the public path == `/genesys/audiohook` or a rewritten prefix | Our netops |
-| Signed `@request-target` / `@authority` behind the edge (`GENESYS_AUDIOHOOK_AUTHORITY`) | Our netops/runtime |
+| ~~HAProxy edge rule → whether the public path == `/genesys/audiohook` or a rewritten prefix~~ — **resolved (TASK-INFRA-016)**: passed through unchanged (no rewrite/ACL/prefix) | ✅ known (`deploy/haproxy/haproxy.cfg`) |
+| ~~Signed `@request-target` / `@authority` behind the edge (`GENESYS_AUDIOHOOK_AUTHORITY`)~~ — **resolved (TASK-INFRA-016)**: `Host` not rewritten → authority preserved, no override needed (leave empty) | ✅ known (`deploy/haproxy/haproxy.cfg`) |
+| Ingress NAT/routing `10.195.59.39` → VIP `192.168.0.10:443`, and TLS cert `voice-vip.pem` covers `vip-ai4cc-voice-t01.prod.lan` (host-level) | Our netops |
 | Shared secret + exact API-key header casing (`GENESYS_AUDIOHOOK_API_KEY_HEADER`, default `X-API-KEY`) | Genesys admin + us (TASK-INFRA-012) |
 | Genesys egress IP ranges (firewall allowlist) | Genesys admin |
 | Pilot DID / test number | Genesys admin |

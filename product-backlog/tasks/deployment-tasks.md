@@ -1707,6 +1707,14 @@ credential-handover mechanism.
   endpoint"; added **§7a Credential handover** (out-of-band delivery, who signs, rotation
   before real-PII); added **§8b Request to the Genesys admin — start now** (8-point
   copy-paste checklist); marked the internal pre-flight note **done**.
+- **Resolved two netops unknowns from the deployed `deploy/haproxy/haproxy.cfg`** (not the
+  live host, but the source-controlled edge config): `frontend voice_https`
+  (`192.168.0.10:443`) → `default_backend voice_bridges` does `mode http` with **no path
+  rewrite / no ACL / no prefix** and **does not rewrite `Host`**, so (1) the public path is
+  `/genesys/audiohook` unchanged and (2) `@authority` is preserved end-to-end →
+  `GENESYS_AUDIOHOOK_AUTHORITY` stays empty. Residual is host-level only: the
+  `10.195.59.39` → VIP `192.168.0.10:443` ingress NAT + the TLS cert coverage of
+  `voice-vip.pem` for `vip-ai4cc-voice-t01.prod.lan`.
 
 ### Acceptance (met)
 
