@@ -15,6 +15,14 @@ vault_conversation_api_key: "CHANGE_ME"
 vault_gradium_api_key: "CHANGE_ME"
 vault_redis_password: "CHANGE_ME"
 
+# Genesys Audio Connector connection-auth (TASK-INFRA-015). The AudioHook HMAC uses
+# an api key (sent as X-API-KEY) and a base64-encoded shared secret that the runtime
+# base64-decodes and keys HMAC-SHA256 with. Generate our own pair for the pre-live
+# self-test (openssl rand -base64 32 for the secret); rotate to the Genesys-admin-
+# agreed shared secret before the live-org test. Only used when voice_genesys is on.
+vault_genesys_audiohook_api_key: "CHANGE_ME"
+vault_genesys_audiohook_secret: "CHANGE_ME"   # base64
+
 # WebRTC TURN relay credential (open input #12). Only needed once a TURN relay is
 # provisioned and voice_turn / voice_turn_username are set in group_vars/voice.yml.
 # Leave empty for the web pilot's STUN / host-candidate-only default (VOICE_TURN unset);
