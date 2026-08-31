@@ -76,9 +76,9 @@ set -a; . ../.env; set +a   # GRADIUM_* / MISTRAL_* for a real spoken answer
     --stt-mode streaming --tts-mode streaming &
 
 # drive one turn with a real PCM16/16 kHz mono WAV (say -o q.wav --data-format=LEI16@16000 …)
+# credentials are read from the env (same vars as the server) — never pass the secret on argv (`ps`).
 ./.venv/bin/python scripts/genesys_local_client.py \
     --url ws://127.0.0.1:8090/genesys/audiohook \
-    --api-key "$GENESYS_AUDIOHOOK_API_KEY" --secret "$GENESYS_AUDIOHOOK_SECRET" \
     --audio fixtures/long/billing-question.wav --codec L16 --out /tmp/genesys-answer.wav
 ```
 
@@ -90,9 +90,10 @@ trigger a spoken answer (below the STT onset threshold).
 ### 0b. Deployed endpoint (self-signed TLS edge)
 
 ```bash
+# export the vault-rendered secret into the env first (do NOT put it on argv):
+export GENESYS_AUDIOHOOK_API_KEY=...  GENESYS_AUDIOHOOK_SECRET=...   # base64 secret
 ./.venv/bin/python scripts/genesys_local_client.py \
     --url wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook --insecure \
-    --api-key "$KEY" --secret "$SECRET_B64" \
     --authority vip-ai4cc-voice-t01.prod.lan \
     --audio speech.wav --codec L16 --out /tmp/genesys-answer.wav
 ```

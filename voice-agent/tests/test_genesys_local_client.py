@@ -13,6 +13,7 @@ The codec + signature scheme are the production ones (`web_voice/genesys_codec.p
 `web_voice/genesys_signature.py`), so this is a faithful stand-in for Genesys.
 """
 
+import os
 import sys
 import time
 import unittest
@@ -26,7 +27,11 @@ sys.path.insert(0, str(VOICE_AGENT_ROOT / "scripts"))
 import aiohttp  # noqa: E402
 from aiohttp.test_utils import make_mocked_request  # noqa: E402
 
+from types import SimpleNamespace  # noqa: E402
+
 from genesys_local_client import (  # noqa: E402
+    _connect_targets,
+    _resolve_credentials,
     build_signed_headers,
     decode_secret,
     frame_rms,
@@ -130,6 +135,46 @@ class CodecAndAudioHelpersTest(unittest.TestCase):
             # THEN it returns to the internal 16 kHz length (8k wire is half-rate)
             self.assertEqual(len(wire), 160 if codec == "PCMU" else 320)
             self.assertEqual(len(restored), len(frame))
+
+
+class CredentialAndTargetResolutionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._saved = {k: os.environ.pop(k, None) for k in ("GENESYS_AUDIOHOOK_API_KEY", "GENESYS_AUDIOHOOK_SECRET")}
+
+    def tearDown(self) -> None:
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_credentials_prefer_env_so_the_secret_stays_off_argv(self) -> None:
+        # GIVEN the server's own env vars set (no --api-key/--secret on the command line)
+        os.environ["GENESYS_AUDIOHOOK_API_KEY"] = _KEY
+        os.environ["GENESYS_AUDIOHOOK_SECRET"] = _SECRET_B64
+        api_key, secret = _resolve_credentials(SimpleNamespace(api_key=None, secret=None))
+        # THEN they are resolved from the env (argv would leak via `ps`)
+        self.assertEqual(api_key, _KEY)
+        self.assertEqual(secret, _SECRET)
+
+    def test_missing_credentials_exit_cleanly(self) -> None:
+        # GIVEN neither env nor flags THEN a clear SystemExit, not a traceback
+        with self.assertRaises(SystemExit):
+            _resolve_credentials(SimpleNamespace(api_key=None, secret=None))
+
+    def test_connect_targets_owns_the_query_so_request_target_matches_raw_path(self) -> None:
+        # GIVEN a --url carrying a stray query and a conversation id
+        args = SimpleNamespace(
+            url="ws://host:8090/genesys/audiohook?ignored=1",
+            conversation_id="conv-x",
+            request_target=None,
+            authority=None,
+        )
+        full_url, request_target, authority = _connect_targets(args)
+        # THEN the client owns the query (conversationId) and the signed target == the path it dials
+        self.assertEqual(full_url, "ws://host:8090/genesys/audiohook?conversationId=conv-x")
+        self.assertEqual(request_target, "/genesys/audiohook?conversationId=conv-x")
+        self.assertEqual(authority, "host:8090")
 
 
 class GenesysLocalClientE2ETest(GenesysHandlerServeMixin):

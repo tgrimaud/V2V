@@ -28,15 +28,15 @@ Usage — start the endpoint (local), then drive one turn:
     .venv/bin/python -m web_voice.server --genesys on --backend http \\
         --stt-mode streaming --tts-mode streaming &
 
+    # credentials come from the env (same vars as the server) — never on argv (visible in `ps`)
     .venv/bin/python scripts/genesys_local_client.py \\
         --url ws://127.0.0.1:8090/genesys/audiohook \\
-        --api-key "$GENESYS_AUDIOHOOK_API_KEY" --secret "$GENESYS_AUDIOHOOK_SECRET" \\
         --audio fixtures/long/billing-question.wav --codec L16 --out /tmp/genesys-answer.wav
 
-    # deployed endpoint (needs the vault-rendered secret + the edge @authority/@request-target):
+    # deployed endpoint (export the vault-rendered GENESYS_AUDIOHOOK_SECRET first; edge overrides):
+    export GENESYS_AUDIOHOOK_API_KEY=... GENESYS_AUDIOHOOK_SECRET=...   # base64 secret
     .venv/bin/python scripts/genesys_local_client.py \\
         --url wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook --insecure \\
-        --api-key "$KEY" --secret "$SECRET_B64" \\
         --authority vip-ai4cc-voice-t01.prod.lan --audio speech.wav
 """
 
@@ -49,6 +49,7 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import random
 import struct
 import sys
@@ -230,25 +231,45 @@ def _load_input_audio(args) -> bytes:
 
 
 def _connect_targets(args) -> tuple[str, str, str]:
-    """Resolve (full_url, signed @request-target, signed @authority) from the args + URL."""
+    """Resolve (full_url, signed @request-target, signed @authority) from the args + URL.
+
+    The query is OWNED here (built from --conversation-id) so the signed @request-target
+    always matches the server's raw_path; any query in --url is ignored.
+    """
     parts = urlsplit(args.url)
     query = f"conversationId={args.conversation_id}"
-    full_url = args.url if parts.query else f"{args.url}?{query}"
+    full_url = f"{parts.scheme}://{parts.netloc}{parts.path}?{query}"
     request_target = args.request_target or f"{parts.path}?{query}"
     authority = args.authority or parts.netloc
     return full_url, request_target, authority
 
 
+def _resolve_credentials(args) -> tuple[str, bytes]:
+    """Resolve the API key + shared secret, preferring env over argv (argv leaks via `ps`).
+
+    Defaults to the server's own env vars (`GENESYS_AUDIOHOOK_API_KEY` /
+    `GENESYS_AUDIOHOOK_SECRET`); the flags stay as optional dev-only overrides.
+    """
+    api_key = args.api_key or os.environ.get("GENESYS_AUDIOHOOK_API_KEY") or ""
+    raw_secret = args.secret or os.environ.get("GENESYS_AUDIOHOOK_SECRET") or ""
+    if not api_key or not raw_secret:
+        raise SystemExit(
+            "missing credentials: set GENESYS_AUDIOHOOK_API_KEY + GENESYS_AUDIOHOOK_SECRET "
+            "(base64) in the environment, or pass --api-key/--secret (argv is visible in `ps`)."
+        )
+    return api_key, decode_secret(raw_secret)
+
+
 async def run(args) -> int:
     import aiohttp
 
-    secret = decode_secret(args.secret)
+    api_key, secret = _resolve_credentials(args)
     full_url, request_target, authority = _connect_targets(args)
     now = int(time.time())
     headers = build_signed_headers(
         request_target=request_target,
         authority=authority,
-        api_key=args.api_key,
+        api_key=api_key,
         secret=secret,
         org_id=args.org_id,
         session_id=args.session_id,
@@ -260,6 +281,8 @@ async def run(args) -> int:
         api_key_header=args.api_key_header,
     )
     ssl_arg = False if (full_url.startswith("wss://") and args.insecure) else None
+    if ssl_arg is False:
+        print("WARNING: --insecure disables TLS verification (self-signed edge only).", file=sys.stderr)
     chunk = INTERNAL_SAMPLE_RATE * args.frame_ms // 1000 * 2
     clip = list(iter_internal_frames(_load_input_audio(args), chunk))
     trailing = [b"\x00" * chunk] * max(1, TRAILING_SILENCE_MS // args.frame_ms)
@@ -308,8 +331,14 @@ def _report(args, state: _TurnState, stop_speaking_at: float) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Headless Genesys AudioHook client (no live Genesys)")
     parser.add_argument("--url", default="ws://127.0.0.1:8090/genesys/audiohook")
-    parser.add_argument("--api-key", required=True, help="GENESYS_AUDIOHOOK_API_KEY value")
-    parser.add_argument("--secret", required=True, help="GENESYS_AUDIOHOOK_SECRET (base64)")
+    parser.add_argument(
+        "--api-key",
+        help="API key (dev override; prefer env GENESYS_AUDIOHOOK_API_KEY — argv is visible in `ps`)",
+    )
+    parser.add_argument(
+        "--secret",
+        help="base64 shared secret (dev override; prefer env GENESYS_AUDIOHOOK_SECRET — argv leaks via `ps`)",
+    )
     parser.add_argument("--codec", default=genesys_codec.DEFAULT_CODEC, choices=genesys_codec.SUPPORTED_CODECS)
     parser.add_argument("--audio", help="PCM16 mono 16 kHz .wav/.pcm to stream (real speech)")
     parser.add_argument("--synthetic-ms", type=int, default=1200, help="synthetic non-PII noise if no --audio")
