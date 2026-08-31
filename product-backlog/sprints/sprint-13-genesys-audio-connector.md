@@ -52,10 +52,26 @@ gate) + ADR-0025 (barge-in).
 
 ## Status
 
-**Status:** 🚧 **In progress** (kicked off 2026-08-28) — **strategic direction decided**
-(DEC-012 Genesys = full pilot entry; DEC-013 handoff by reference; **DEC-014** spike
-synthetic-first + concurrency target 3 + pilot env available). Implementation gated by
-**OQ-006** (residual technical/compliance items).
+**Status:** ✅ **Done (closed 2026-08-31)** — kicked off 2026-08-28; **strategic direction
+decided** (DEC-012 Genesys = full pilot entry; DEC-013 handoff by reference; **DEC-014**
+spike synthetic-first + concurrency target 3 + pilot env available). The connector build +
+auth + observability + handoff contract shipped; **TASK-WEB-044** (Genesys-path degraded
+modes, Must-fix **R3**) is **carried forward** (see closure note); **OQ-006** live-org items
+remain open on a parallel track.
+
+**Sprint closure (2026-08-31).** Delivered: the Audio Connector transport adapter on the
+ADR-0047 server (TASK-WEB-041), per-path barge-in/EOT (TASK-WEB-042), per-channel
+observability + concurrency (TASK-WEB-043), handoff-by-reference (TASK-BE-036) + normalized
+channel envelope (TASK-BE-037), AudioHook connection-auth + Architect contract
+(TASK-INFRA-012) + admin docs (TASK-INFRA-013/014), the local AudioHook test client
+(TASK-WEB-047), and — added at closure to make the endpoint testable on the pilot —
+**TASK-INFRA-015** (deploy-config + secret enablement of `/genesys/audiohook`). **Carried
+forward:** **TASK-WEB-044** (degraded modes, R3) stays `📋 Proposed` in the backlog — the
+gate is decoupled (DEC-015) and no Genesys-path SLO is claimed, so it does not block
+closure but must land before a production Genesys SLO. **ADR-0049 stays Proposed** (the flip
+to Accepted still needs the live-org cloud-leg re-score + OQ-006 sign-off). Sprint branch
+merged into `feat/restart-from-scratch`; a genesys-ready image is deployed to the pilot
+(`vla-t01/t02`) with `VOICE_GENESYS=on` for the pre-live self-test (runbook Step 0b).
 
 **Spike outcome + gate posture (2026-08-28, DEC-015 — DECOUPLE).** The **TASK-WEB-025**
 feasibility spike is **delivered** (go/no-go report + synthetic latency artifact). It
@@ -95,7 +111,7 @@ the user's explicit request at sprint closure.
 |---|---|---|
 | Sprint 11 | Remote deployment & release readiness (eir-ai4cc-tst) | ✅ Done (2026-08-24) |
 | Sprint 12 | External voice via interim WebSocket audio (Genesys-ready) | ✅ Done (2026-08-25, v0.6.0) |
-| **Sprint 13** | **Genesys Audio Connector + Genesys integration** | 🚧 In progress — TASK-WEB-025 spike (synthetic-first) |
+| **Sprint 13** | **Genesys Audio Connector + Genesys integration** | ✅ Done (closed 2026-08-31) — connector shipped + deployed; WEB-044 carried forward |
 | Sprint 14 (tentative) | Customer identity + BSS/PDF evidence + deterministic comparison (EPIC-002/003/004) | Planned — gated by OQ-001/003/004 |
 
 ## Why now (state that justifies the sprint)
@@ -180,18 +196,21 @@ the user's explicit request at sprint closure.
 
 | # | Ticket | Title | Role | Gate | Status |
 |---|---|---|---|---|---|
-| 1 | TASK-WEB-025 | Genesys Audio Connector **feasibility spike** (investigation only) — go/no-go | Investigate (the gate) | OQ-006 | 🚧 In progress (synthetic-first, DEC-014) |
-| 2 | TASK-WEB-041 | Genesys **Audio Connector transport adapter** on the ADR-0047 server — codec (PCMU/L16 ↔ PCM16) + one stream/session + 15-min cap | Build (runtime) | spike GO | 📋 Proposed |
-| 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | 📋 Proposed |
-| 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | 📋 Proposed |
-| 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | 📋 Proposed |
-| 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | 🧪 Implemented (`mvn test` 458 green, ArchUnit incl.); pending adversarial review + QA + user validation, not merged |
-| 7 | TASK-BE-037 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | 🔧 In Progress (backend contract done, mvn test green; review/QA pending) |
-| 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure | Wire (infra/config) | spike GO + OQ-006 | 📋 Proposed |
-| 9 | TASK-WEB-047 | **Local AudioHook test client** — drive the `/genesys/audiohook` endpoint (local or deployed) without a live Genesys org: signed auth handshake + codec round-trip + session lifecycle; pre-flight self-test for the live campaign | Build (dev/QA tooling) | — | 🧪 Implemented — review/validation pending, not merged |
+| 1 | TASK-WEB-025 | Genesys Audio Connector **feasibility spike** (investigation only) — go/no-go | Investigate (the gate) | OQ-006 | ✅ Done — spike delivered (2026-08-28), NO-GO vs ADR-0029 resolved as **DECOUPLE (DEC-015)**; merged into sprint-13 |
+| 2 | TASK-WEB-041 | Genesys **Audio Connector transport adapter** on the ADR-0047 server — codec (PCMU/L16 ↔ PCM16) + one stream/session + 15-min cap | Build (runtime) | spike GO | ✅ Done — merged into sprint-13 |
+| 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | ✅ Done — merged into sprint-13 |
+| 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | ✅ Done — merged into sprint-13 |
+| 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | ⏭️ **Carried forward** — stays `📋 Proposed` in the backlog (R3); decoupled (DEC-015), no SLO claimed, does not block closure; required before a production Genesys SLO |
+| 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | ✅ Done — merged into sprint-13 |
+| 7 | TASK-BE-037 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | ✅ Done — merged into sprint-13 |
+| 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure + AudioHook connection auth | Wire (infra/config) | spike GO + OQ-006 | ✅ Done — connection-auth + Architect contract merged into sprint-13; exact edge `@authority` + Architect wiring pending live-org measurement (OQ-006) |
+| 9 | TASK-WEB-047 | **Local AudioHook test client** — drive the `/genesys/audiohook` endpoint (local or deployed) without a live Genesys org: signed auth handshake + codec round-trip + session lifecycle; pre-flight self-test for the live campaign | Build (dev/QA tooling) | — | ✅ Done — merged into sprint-13 |
+| 10 | TASK-INFRA-013 | Genesys admin **connection-request doc** (endpoint/auth/codec onboarding sheet) | Doc | — | ✅ Done — merged into sprint-13 |
+| 11 | TASK-INFRA-014 | Genesys admin doc — resolve AudioHook **path + auth** alignment (`wss://…/genesys/audiohook`, edge `@authority` caveat) | Doc | — | ✅ Done — merged into sprint-13 |
+| 12 | TASK-INFRA-015 | **Enable the Genesys AudioHook endpoint on the pilot bridge** — `VOICE_GENESYS=on` + AudioHook secret (compose + `voice.env.j2` + vault); L16, concurrency 3; additive on the ADR-0047 `:8090`; no image change | Wire (deploy config + secrets) | — | ✅ Done — merged into sprint-13; genesys-ready image deployed to `vla-t01/t02` for the Step 0b self-test |
 
 Full ticket details: TASK-WEB-025/041/042/043/044 in `tasks/web-voice-tasks.md`;
-TASK-BE-036/037 in `tasks/backend-hardening-tasks.md`; TASK-INFRA-012 in
+TASK-BE-036/037 in `tasks/backend-hardening-tasks.md`; TASK-INFRA-012/013/014/015 in
 `tasks/deployment-tasks.md`.
 
 ## Dependencies & Sequencing
