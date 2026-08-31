@@ -4128,3 +4128,87 @@ Scenario: A long but progressing turn is not cut early
 
 - The backend/runtime wall-clock turn deadline (TASK-WEB-045).
 - Graceful deploy-time draining of active calls (TASK-OPS-010).
+
+---
+
+## TASK-WEB-047 - Local AudioHook test client (drive the Genesys endpoint without a live Genesys org)
+
+**Parent:** EPIC-007 / EPIC-010 (Genesys integration + pilot validation)
+**Related decisions:** ADR-0049 (Genesys Audio Connector delivery shape), ADR-0047 (single async
+server), ADR-0043 (session factory), TASK-WEB-041 (transport adapter), TASK-WEB-042 (barge-in/EOT),
+TASK-INFRA-012 (connection auth: X-API-KEY + HMAC-SHA256 signature + freshness/replay), TASK-WEB-025
+(synthetic-first spike), DEC-014 (synthetic / non-PII audio)
+**Depends on:** TASK-WEB-041 + TASK-INFRA-012 (the endpoint + its auth policy exist on the sprint branch)
+**Classification:** V1 voice runtime — dev/QA tooling (NOT runtime-affecting: the client never ships
+in the runtime image and imports the runtime only to reuse its codec + signature scheme)
+**Status:** 🧪 Implemented — pending adversarial review + user validation, not merged
+**Priority:** High (unblocks self-testing the deployed Genesys endpoint before the live-org campaign)
+**Branch:** `task/TASK-WEB-047-genesys-local-test-client` (off the sprint branch)
+
+### Context
+
+Before the live-org measurement campaign (runbook
+`docs/operations/genesys-live-measurement-runbook.md`), the team needs to validate the deployed
+Genesys entry point (`wss://…/genesys/audiohook`) **from a local environment, without a live Genesys
+org**. Everything the endpoint owns at the transport boundary is Genesys-independent: the
+connection-auth handshake (X-API-KEY + IETF HTTP Message Signatures HMAC-SHA256, `genesys_auth.py` /
+`genesys_signature.py`), the AudioHook-shaped control channel (`open`/`opened`, `close`/`closed`,
+`barge_in`, `ping`/`pong` — the ADR-0043 vocabulary), the PCMU/L16 ↔ PCM16/16 kHz codec
+(`genesys_codec.py`), the session lifecycle, the concurrency ceiling / WS 1013 backpressure and the
+15-min cap. Only the **cloud legs** (ingress/Architect fork/egress), the negotiated codec, native
+barge-in/EOT events and the Architect degraded branch need the real org — those stay `measured=false`
+for the runbook.
+
+### Scope
+
+- A durable dev/QA tool `voice-agent/scripts/genesys_local_client.py` acting as a synthetic Genesys
+  AudioHook client:
+  - **signs** the connection-auth handshake byte-for-byte as the server rebuilds it (covered
+    components `@request-target` `@authority` `audiohook-organization-id` `audiohook-session-id`
+    `audiohook-correlation-id` `x-api-key`, `alg=hmac-sha256`, fresh `created`/`expires`, unique
+    `nonce`), keyed by the base64 shared secret — so `GenesysConnectionAuthenticator` accepts it;
+  - connects `ws(s)://host/genesys/audiohook?conversationId=…` (target = a **local bridge** or the
+    **deployed endpoint**; `--insecure` for the pilot self-signed TLS edge; `--authority` +
+    `--request-target` overrides for the HAProxy edge rewrite);
+  - runs the `open`→`opened` handshake, streams audio at ~20 ms cadence — a real **PCM16/16 kHz mono
+    WAV** transcoded to the wire codec (L16/PCMU) **or** deterministic synthetic non-PII noise
+    (DEC-014) — then a trailing silence tail to trigger end-of-turn;
+  - receives bot audio (wire → PCM16/16 kHz) + control frames, **saves the answer WAV**, and prints a
+    per-turn summary (control frames seen, bytes in/out, time-to-first-bot-audio, negotiated codec);
+  - `close`→`closed` teardown.
+- The signing helper is importable so a test proves the client is accepted by the **real**
+  authenticator (byte-for-byte round trip), and an end-to-end test drives the **real** handler
+  (`make_genesys_handler`) over an in-process `aiohttp` server with a configured authenticator.
+
+### Acceptance
+
+```gherkin
+Scenario: The local client is authenticated by the real connection-auth policy
+  Given a GenesysConnectionAuthenticator configured with an API key + shared secret
+  When the local client builds its signed AudioHook handshake headers for a request
+  Then the authenticator returns accepted (byte-for-byte signature match, fresh, non-replayed)
+
+Scenario: A full turn round-trips over the real handler without Genesys
+  Given the real GET /genesys/audiohook handler on an in-process aiohttp server
+  When the local client opens, streams audio, and closes
+  Then it receives the opened/closed control frames and any bot audio
+  And it never needs a live Genesys org for auth, handshake, codec or lifecycle
+
+Scenario: Cloud-only items are out of reach locally
+  Given no live Genesys org
+  Then the cloud legs, negotiated codec, native barge-in/EOT events and the Architect
+    degraded branch remain measured=false for the live-measurement runbook
+```
+
+- Client accepted by the real authenticator; e2e turn round-trips over the real handler in tests.
+- Documented in the runbook ("Pre-flight self-test without Genesys") + the admin connection request.
+
+### Notes
+
+- **Not runtime-affecting:** the client lives under `scripts/`, is never imported by the runtime, and
+  reuses `genesys_codec` + the signature scheme only so it stays faithful to the server (a drift in
+  either breaks the round-trip test). No new dependency — `aiohttp` (ADR-0047) + stdlib `wave`.
+- **Deployed-endpoint caveats (TO CONFIRM on the live org, TASK-INFRA-012):** the real shared secret
+  is vault-rendered, so signing against the deployed endpoint needs that secret; behind the HAProxy
+  edge the signed `@request-target`/`@authority` may be rewritten (`--request-target`/`--authority`
+  overrides + the server's `GENESYS_AUDIOHOOK_AUTHORITY`).

@@ -71,8 +71,10 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 
 > Pilot note: the first live measurement runs with **synthetic / non-PII audio** (the PII residency sign-off is a separate OQ-006 item, required only before routing real customer calls).
 
+> Internal pre-flight (no Genesys needed): our runtime team can self-test this endpoint's auth handshake, codec and session lifecycle from a local environment with `voice-agent/scripts/genesys_local_client.py` before the Genesys admin is involved — see the runbook **Step 0** (TASK-WEB-047). This validates everything except the cloud legs, the org-negotiated codec and native events.
+
 ## References
-- `docs/operations/genesys-live-measurement-runbook.md` (live cloud-leg measurement procedure)
+- `docs/operations/genesys-live-measurement-runbook.md` (live cloud-leg measurement procedure, incl. **Step 0** local self-test)
 - `docs/integrations/genesys-architect-flow-contract.md` (Architect control/routing contract + by-reference handoff)
 - `docs/architecture/adrs/ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md`
 - `docs/architecture/adrs/ADR-0047-single-async-http-websocket-server-one-port.md`

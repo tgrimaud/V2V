@@ -188,6 +188,7 @@ the user's explicit request at sprint closure.
 | 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | 🧪 Implemented (`mvn test` 458 green, ArchUnit incl.); pending adversarial review + QA + user validation, not merged |
 | 7 | TASK-BE-037 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | 🔧 In Progress (backend contract done, mvn test green; review/QA pending) |
 | 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure | Wire (infra/config) | spike GO + OQ-006 | 📋 Proposed |
+| 9 | TASK-WEB-047 | **Local AudioHook test client** — drive the `/genesys/audiohook` endpoint (local or deployed) without a live Genesys org: signed auth handshake + codec round-trip + session lifecycle; pre-flight self-test for the live campaign | Build (dev/QA tooling) | — | 🧪 Implemented — review/validation pending, not merged |
 
 Full ticket details: TASK-WEB-025/041/042/043/044 in `tasks/web-voice-tasks.md`;
 TASK-BE-036/037 in `tasks/backend-hardening-tasks.md`; TASK-INFRA-012 in
