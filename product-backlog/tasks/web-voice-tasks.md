@@ -3943,9 +3943,9 @@ ADR-0044 (degrade-don't-outage posture), ADR-0049
 **Depends on:** TASK-WEB-041 (transport), TASK-INFRA-012 (Architect fallback route), TASK-WEB-025
 (spike characterises ≥1 degraded mode)
 **Classification:** V1 voice runtime + infra (runtime-affecting: failure behaviour)
-**Status:** 📋 Proposed — conditional on spike GO
+**Status:** 🟢 Open (2026-08-31) — **carried forward** from Sprint 13 (closed) as a standalone follow-up. The spike-GO condition is satisfied (DEC-015 decouples the ADR-0029 gate; the connector is built + deployed), so implementation is **unblocked and can start now** against the deployed `/genesys/audiohook` endpoint + the local test client (TASK-WEB-047). Full **live-org** validation of the Architect fail-safe branch still waits on **OQ-006** pilot access (runbook Steps 1–6). Required before any production Genesys SLO.
 **Priority:** High (closes adversarial-review **R3**)
-**Branch:** `task/TASK-WEB-044-genesys-degraded-modes` (off the sprint branch, when gated)
+**Branch:** `task/TASK-WEB-044-genesys-degraded-modes` (created 2026-08-31 off `feat/restart-from-scratch` — sprint-13 is closed, so it no longer forks off the sprint branch; merges back into `feat/restart-from-scratch` when merge-ready)
 
 ### Context
 
