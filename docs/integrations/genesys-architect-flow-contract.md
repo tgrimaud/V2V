@@ -60,7 +60,7 @@ connection auth that the runtime now verifies **before building the session** (T
 
 | Item | Value | Status |
 |---|---|---|
-| Endpoint URL | `wss://vip-ai4cc-voice-t01.prod.lan/<audiohook-path>` | path **TO CONFIRM** (runtime eng.) |
+| Endpoint URL | `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` | application route **known** (`GENESYS_ROUTE = "/genesys/audiohook"` on the ADR-0047 server); public path pending the **HAProxy edge rule** (netops) |
 | Auth: API key header | `X-API-KEY: <api-key>` | header name configurable (`GENESYS_AUDIOHOOK_API_KEY_HEADER`, default `X-API-KEY`) — **TO CONFIRM** exact casing on the live tenant |
 | Auth: signature | `Signature` + `Signature-Input` (IETF HTTP Message Signatures, `alg="hmac-sha256"`) over the covered components (`@request-target`, `@authority`, `audiohook-organization-id`, `audiohook-session-id`, `audiohook-correlation-id`, `x-api-key`) | scheme implemented; **shared secret TO CONFIRM** (negotiated with the Genesys admin) |
 | Shared secret | configured Genesys-side (integration credentials) + runtime-side (`GENESYS_AUDIOHOOK_SECRET`, base64) | **TO CONFIRM** |
@@ -138,7 +138,7 @@ TASK-WEB-044). This branch is exercised deliberately in the live-measurement run
 
 | Item | Owner | Status |
 |---|---|---|
-| AudioHook URL path (`<audiohook-path>`) on the ADR-0047 server | Our runtime engineer | TO CONFIRM |
+| AudioHook URL path on the ADR-0047 server — **resolved**: `/genesys/audiohook`; only the HAProxy edge mapping (pass-through vs rewritten prefix) remains | Our netops/runtime engineer | edge rule TO CONFIRM |
 | Exact API-key header name/casing on the live tenant | Genesys admin + us | TO CONFIRM (`GENESYS_AUDIOHOOK_API_KEY_HEADER`) |
 | Shared secret (API-key/HMAC) | Genesys admin + us | TO CONFIRM |
 | Signed `@request-target` / `@authority` behind the HAProxy edge | Our runtime/netops | `TODO(TASK-INFRA-012: live-measurement)` |
