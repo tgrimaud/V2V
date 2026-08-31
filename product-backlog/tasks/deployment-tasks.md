@@ -1680,3 +1680,42 @@ purely env + secret + a rollout of the (now genesys-capable) mainline image.
   (TASK-INFRA-012 Genesys side / runbook Steps 1-6).
 - Genesys-path degraded modes (TASK-WEB-044, carried forward) and any ADR-0029 SLO claim
   (decoupled — DEC-015).
+
+## TASK-INFRA-016 - Genesys admin coordination package (post-deploy handoff to request the org configuration)
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** DEC-012 (Genesys = pilot entry), DEC-013 (handoff by-reference), DEC-014 (concurrency 3), DEC-015 (ADR-0029 gate decoupled)
+**Depends on:** TASK-INFRA-013/014 (admin connection request + architect flow contract), TASK-INFRA-015 (endpoint enabled on pilot), TASK-WEB-047 (Step 0b self-test)
+**Classification:** V1 pilot deployment — operational coordination doc (documentation-only; not runtime-affecting)
+**Status:** ✅ Done (2026-08-31) on `task/TASK-INFRA-016-genesys-admin-coordination` (off `feat/restart-from-scratch`).
+
+### Context
+
+Sprint 13 is closed and the AudioHook endpoint is deployed + Step 0b self-tested on the
+pilot (TASK-INFRA-015). The user needs a coordination package to hand to the Genesys admin
+so the org-side configuration (Audio Connector integration, Architect flow, firewall/TLS,
+credentials) can start. This refreshes the existing admin connection request with the
+now-concrete deployed state and adds an actionable "request now" checklist + a
+credential-handover mechanism.
+
+### What was implemented
+
+- **`docs/operations/genesys-admin-connection-request.md`**: added a **Current state
+  (2026-08-31)** section (deployed `v0.8.0`, endpoint on, Step 0b PASSED — with an explicit
+  boundary: app layer at `:8090` proven, HAProxy `:443` edge + external reachability + org
+  legs NOT yet); refreshed the auth-row status to "validated end-to-end on the deployed
+  endpoint"; added **§7a Credential handover** (out-of-band delivery, who signs, rotation
+  before real-PII); added **§8b Request to the Genesys admin — start now** (8-point
+  copy-paste checklist); marked the internal pre-flight note **done**.
+
+### Acceptance (met)
+
+- Doc is in English, `git diff --check` clean, no invented facts (unknowns stay in §8 /
+  §8b as owner-tagged confirmations).
+- The self-test claim is scoped honestly (bridge `:8090` behind the edge, not the TLS edge).
+- No secret value appears in the doc; handover is out-of-band (§7a).
+
+### Out Of Scope
+
+- The Genesys org configuration itself and the live-measurement campaign (runbook Steps
+  1-6); the admin-agreed shared secret rotation (executed at TASK-INFRA-015 closure step).
