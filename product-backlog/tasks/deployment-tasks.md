@@ -1680,3 +1680,60 @@ purely env + secret + a rollout of the (now genesys-capable) mainline image.
   (TASK-INFRA-012 Genesys side / runbook Steps 1-6).
 - Genesys-path degraded modes (TASK-WEB-044, carried forward) and any ADR-0029 SLO claim
   (decoupled — DEC-015).
+
+## TASK-INFRA-016 - Genesys admin coordination package (post-deploy handoff to request the org configuration)
+
+**Parent:** EPIC-012 (Pilot deployment, release & operations)
+**Related decisions:** DEC-012 (Genesys = pilot entry), DEC-013 (handoff by-reference), DEC-014 (concurrency 3), DEC-015 (ADR-0029 gate decoupled)
+**Depends on:** TASK-INFRA-013/014 (admin connection request + architect flow contract), TASK-INFRA-015 (endpoint enabled on pilot), TASK-WEB-047 (Step 0b self-test)
+**Classification:** V1 pilot deployment — operational coordination doc (documentation-only; not runtime-affecting)
+**Status:** ✅ Done (2026-08-31) on `task/TASK-INFRA-016-genesys-admin-coordination` (off `feat/restart-from-scratch`).
+
+### Context
+
+Sprint 13 is closed and the AudioHook endpoint is deployed + Step 0b self-tested on the
+pilot (TASK-INFRA-015). The user needs a coordination package to hand to the Genesys admin
+so the org-side configuration (Audio Connector integration, Architect flow, firewall/TLS,
+credentials) can start. This refreshes the existing admin connection request with the
+now-concrete deployed state and adds an actionable "request now" checklist + a
+credential-handover mechanism.
+
+### What was implemented
+
+- **`docs/operations/genesys-admin-connection-request.md`**: added a **Current state
+  (2026-08-31)** section (deployed `v0.8.0`, endpoint on, Step 0b PASSED — with an explicit
+  boundary: app layer at `:8090` proven, HAProxy `:443` edge + external reachability + org
+  legs NOT yet); refreshed the auth-row status to "validated end-to-end on the deployed
+  endpoint"; added **§7a Credential handover** (out-of-band delivery, who signs, rotation
+  before real-PII); added **§8b Request to the Genesys admin — start now** (8-point
+  copy-paste checklist); marked the internal pre-flight note **done**.
+- **Resolved two netops unknowns from the deployed `deploy/haproxy/haproxy.cfg`** (not the
+  live host, but the source-controlled edge config): `frontend voice_https`
+  (`192.168.0.10:443`) → `default_backend voice_bridges` does `mode http` with **no path
+  rewrite / no ACL / no prefix** and **does not rewrite `Host`**, so (1) the public path is
+  `/genesys/audiohook` unchanged and (2) `@authority` is preserved end-to-end →
+  `GENESYS_AUDIOHOOK_AUTHORITY` stays empty. Residual is host-level only: the
+  `10.195.59.39` → VIP `192.168.0.10:443` ingress NAT + the TLS cert coverage of
+  `voice-vip.pem` for `vip-ai4cc-voice-t01.prod.lan`.
+- **Live edge verification (2026-08-31, read-only from a voice node):** DNS
+  `vip-ai4cc-voice-t01.prod.lan` → `10.195.59.39`; both `10.195.59.39:443` and VIP
+  `192.168.0.10:443` OPEN serving the **same** cert (NAT wired); cert `CN`/`SAN` =
+  `vip-ai4cc-voice-t01.prod.lan` (matches SNI), valid `2026-08-14 → 2026-11-12`.
+  **⚠️ Blocker surfaced:** the cert issuer is a **private CA** (`CN=CA_2_NJJ_MTMC_Default,
+  O=mtMC`), the name is internal `.prod.lan`, and `10.195.59.39` is RFC1918 private — a
+  public SaaS (Genesys Cloud) can neither reach nor trust it as-is. Live-org test needs a
+  resolved network path (interconnect/VPN) + trust model (internal-CA trust or a public
+  FQDN + public cert). Recorded in the admin doc §4 / §8 / §8b. Does NOT affect the passed
+  internal Step 0b self-test.
+
+### Acceptance (met)
+
+- Doc is in English, `git diff --check` clean, no invented facts (unknowns stay in §8 /
+  §8b as owner-tagged confirmations).
+- The self-test claim is scoped honestly (bridge `:8090` behind the edge, not the TLS edge).
+- No secret value appears in the doc; handover is out-of-band (§7a).
+
+### Out Of Scope
+
+- The Genesys org configuration itself and the live-measurement campaign (runbook Steps
+  1-6); the admin-agreed shared secret rotation (executed at TASK-INFRA-015 closure step).
