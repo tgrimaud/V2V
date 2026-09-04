@@ -1432,10 +1432,11 @@ narrative and the resulting net branch state, plus the git-mechanics learnings p
   `voice.env.j2` render + `group_vars/voice.yml` (`voice_genesys: on`, L16, concurrency 3) +
   vault contract; generated our own AudioHook shared secret (git-ignored `vault.yml`) for the
   pre-live self-test (rotated to the admin-agreed secret before the live-org test).
-- **Carried forward:** **TASK-WEB-044** (Genesys-path degraded modes, Must-fix R3) stays
-  `📋 Proposed` — the ADR-0029 gate is decoupled (DEC-015) and no Genesys-path SLO is claimed,
-  so it did not block closure but is required before a production Genesys SLO. **ADR-0049
-  stays Proposed** pending the live-org cloud-leg re-score + OQ-006 sign-off.
+- **Carried forward:** **TASK-WEB-044** (Genesys-path degraded modes, Must-fix R3) — opened
+  same-day as a standalone follow-up (now `🟢 Open` on `task/TASK-WEB-044-genesys-degraded-modes`
+  off `feat/restart-from-scratch`); the ADR-0029 gate is decoupled (DEC-015) and no Genesys-path
+  SLO is claimed, so it did not block closure but is required before a production Genesys SLO.
+  **ADR-0049 stays Proposed** pending the live-org cloud-leg re-score + OQ-006 sign-off.
 - Deployed a genesys-ready image (v0.8.0) to the pilot `vla-t01/t02` with `VOICE_GENESYS=on`,
   additive on the ADR-0047 routed `:8090` (browser `/ws` + WebRTC unchanged), then ran the
   Step 0b self-test against the deployed endpoint over an SSH tunnel to the bridge LAN IP.
@@ -1450,3 +1451,38 @@ narrative and the resulting net branch state, plus the git-mechanics learnings p
 - `deploy/ansible/roles/compose_tier/templates/voice.env.j2`, `deploy/ansible/group_vars/voice.yml`,
   `deploy/ansible/group_vars/all/vault.example.yml` — genesys render + defaults + vault contract
 - `done-tasks.md` — this entry
+
+---
+
+## 2026-09-04 — TASK-OPS-012 — Post–Sprint-13 alignment sweep (code + documentation)
+
+Full code + documentation review (three parallel `explore` agents) before resuming Genesys
+work, then reconciled the drift it surfaced. **No runtime/behaviour change** — documentation,
+ledgers, and one Ansible deploy guard only. Tests green: voice-agent **713 unit + 18/51/225
+behave**, backend **`mvn test`** OK; `deploy.yml` `--syntax-check` OK.
+
+**Reconciled (post-closure drift):**
+- Ledgers to the merged/deployed reality — `backlog-index.md` (11 Sprint-13 ticket rows → ✅ Done;
+  sprint-registry WEB-044 → Open; stale "do not mint ADR-0049" note), full ticket sections
+  (WEB-025/041/042/043/047, BE-036/037, INFRA-012/015), the sprint-13 file (closure note + table
+  + branch + exit criterion), and the `done-tasks.md` closure entry (WEB-044 → Open).
+- ADRs: ADR-0040 (→ partially implemented/deployed), ADR-0047 (→ shipped v0.7.0), ADR-0049
+  (implementation note + §4 default `detector` + §6 auth implemented), ADR `README.md` built-vs-target.
+- Ops docs: `flow-requests-eir-ai4cc-tst.md` §3 (→ active request + private-CA blocker),
+  `genesys-live-measurement-runbook.md` Step 1, `deployment-eir-ai4cc-tst.md` (Genesys env
+  subsection), admin doc rows, architect-flow-contract To-Confirm rows, `CLAUDE.md`.
+- Accuracy: wire codec = **8 kHz L16/PCMU (internal 16 kHz)** in admin doc / `.env.example` /
+  runbook; stale HMAC-deferral comment in `genesys_config.py`.
+- Deploy guard: `deploy.yml` asserts Genesys vault secrets when `voice_genesys` is on/auto;
+  `qa-validate-ansible.sh` checks the two Genesys secret keys are vault-sourced.
+
+### Files changed
+- `product-backlog/backlog-index.md`, `product-backlog/sprints/sprint-13-genesys-audio-connector.md`,
+  `product-backlog/tasks/{web-voice,backend-hardening,deployment}-tasks.md`,
+  `product-backlog/open-questions/v1-open-questions.md`, `done-tasks.md`
+- `docs/architecture/adrs/{ADR-0040,ADR-0047,ADR-0049,README}.md`
+- `docs/operations/{flow-requests-eir-ai4cc-tst,genesys-live-measurement-runbook,deployment-eir-ai4cc-tst,genesys-admin-connection-request}.md`,
+  `docs/integrations/genesys-architect-flow-contract.md`, `CLAUDE.md`
+- `deploy/ansible/deploy.yml`, `deploy/ansible/qa-validate-ansible.sh`, `deploy/ansible/README.md`,
+  `deploy/compose/voice/.env.example`, `deploy/compose/README.md`
+- `voice-agent/web_voice/genesys_config.py` (comment only)

@@ -120,26 +120,23 @@ the Genesys org's egress IP ranges. This mirrors the pilot's documented Genesys 
 (`docs/operations/flow-requests-eir-ai4cc-tst.md` §3: inbound TCP `:443` wss from Genesys to
 the voice VIP).
 
-### 1a. Stand up the endpoint
+### 1a. The endpoint is already deployed
 
-The endpoint must terminate the AudioHook `wss` handshake and speak the **ADR-0043 control
-vocabulary + binary PCM16/16 kHz** framing that the spike prototype already reuses
-(`web_voice.websocket_framing.ControlType`). Pick one:
+The AudioHook transport adapter (TASK-WEB-041) is **shipped and deployed** on the pilot
+bridges: `GET /genesys/audiohook` on the ADR-0047 single async server (`:8090`), enabled with
+`VOICE_GENESYS=on` (`v0.8.0`; Step 0b self-test PASSED 2026-08-31). It terminates the AudioHook
+`wss` handshake, verifies connection auth (see below), and speaks the AudioHook control
+vocabulary + audio (**wire = 8 kHz L16 preferred, or PCMU**; the adapter resamples to the
+internal PCM16/16 kHz boundary). There is **no listener to stand up** — the per-leg spans and
+deterministic `traceparent` are emitted by the shipped adapter. Use
+`voice-agent/scripts/genesys_local_client.py` (TASK-WEB-047) to drive it locally or against the
+deployed endpoint without a live org.
 
-- **Option A (preferred) — the ADR-0047 async server.** Serve the AudioHook endpoint from the
-  single async HTTP+WS server on the bridges (`:8090`, ADR-0047), exactly where the real
-  TASK-WEB-041 transport adapter will live. If the TASK-WEB-041 adapter is available, use it;
-  otherwise stand up a **minimal measurement listener** on the same server that wraps the
-  spike session logic (`voice-agent/spikes/genesys_audiohook/audiohook_prototype.py`) so the
-  per-leg spans and deterministic `traceparent` are emitted for free.
-- **Option B (measurement-only) — a dev reverse tunnel.** Run the measurement listener locally
-  and expose it with a TLS tunnel (e.g. an SSH reverse tunnel to a pilot edge host, or an
-  approved tunneling service). Use this only if the pilot edge cannot be reconfigured in time;
-  it is throwaway.
-
-> **To confirm (do not assume):** the exact AudioHook **auth handshake** Genesys sends
-> (API-key header + connection signature) against the current Genesys AudioHook protocol docs,
-> and that the listener validates it. Record the confirmed scheme in the capture template.
+> **Auth (implemented + self-tested).** Connection auth is the `X-API-KEY` header + IETF HTTP
+> Message Signature (HMAC-SHA256) over the AudioHook covered components, verified **before** the
+> WS upgrade and fail-closed (TASK-INFRA-012; Step 0b self-test PASSED). Only the **live tenant's**
+> exact signing values (header casing, `expires`/`created`/`nonce`) remain TO CONFIRM against the
+> org — record the confirmed scheme in the capture template.
 
 ### 1b. Expose it through the pilot edge (Option A)
 
@@ -147,13 +144,17 @@ The pilot terminates TLS at HAProxy on the voice VIP and routes to the bridge `:
 (ADR-0047). Reuse that path — **no new port**, the AudioHook endpoint is a route on the same
 routed `:8090`:
 
-- **Endpoint URL to give Genesys:** `wss://vip-ai4cc-voice-t01.prod.lan/<audiohook-path>`
-  (confirm the exact path with the runtime engineer; it is served by the ADR-0047 server).
+- **Endpoint URL to give Genesys:** `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook`
+  (served by the ADR-0047 server; the HAProxy edge passes the path through unchanged — TASK-INFRA-016).
 - **Firewall:** allow **inbound TCP `:443`** from the Genesys org egress ranges to the voice
   VIP (`10.195.59.39` / `vip-ai4cc-voice-t01`) — same request shape as
   `flow-requests-eir-ai4cc-tst.md` §3.
-- **TLS:** the HAProxy edge certificate must be valid for `vip-ai4cc-voice-t01.prod.lan`
-  (Genesys will not connect to an untrusted/self-signed cert).
+- **TLS (open blocker):** the HAProxy edge currently serves a **private-CA** cert for the
+  internal `.prod.lan` name on a **private** IP (`10.195.59.39`). Genesys Cloud (public SaaS)
+  can neither reach the private IP over the internet nor trust a private CA by default. Resolve
+  the network path (interconnect/VPN + internal-CA trust) **or** expose a public FQDN +
+  publicly-trusted cert before the live-org test (see `genesys-admin-connection-request.md`
+  §4/§8b, items 1 & 3).
 
 ### 1c. Verify reachability before touching Architect
 

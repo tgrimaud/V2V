@@ -2467,7 +2467,7 @@ runtime foundation the Audio Connector `wss` endpoint builds on), ADR-0043 (tran
 session factory)
 **Depends on:** OQ-006 (Genesys pilot environment access + handoff shape) — **gated**
 **Classification:** V1 voice runtime feasibility spike — **investigation only**, deferred (Sprint 13)
-**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `bb25bdd`, 2026-08-28) — spike delivered, **GO-for-build (DEC-015)**; QA-ready on the sprint branch (sprint still in progress, not closed). **Sprint 13 GATE** (2026-08-27):
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `bb25bdd`, 2026-08-28) — spike delivered, **GO-for-build (DEC-015)**; shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31). **Sprint 13 GATE** (2026-08-27):
 this spike is the first, go/no-go ticket of `sprints/sprint-13-genesys-audio-connector.md`; its GO
 verdict unblocks the conditional follow-ons (TASK-WEB-041..044, TASK-BE-036/037, TASK-INFRA-012).
 **Priority:** High for Sprint 13 (foundational go/no-go; was Low while deferred)
@@ -3649,8 +3649,9 @@ comparable to the WebRTC path.
 
 # Sprint 13 — Genesys Audio Connector + Genesys Integration
 
-Follow-on delivery slices unblocked by the **TASK-WEB-025** go/no-go spike. All four are
-**Proposed and conditional on spike GO + OQ-006**; nothing below commits before the gate.
+Follow-on delivery slices unblocked by the **TASK-WEB-025** go/no-go spike. **Sprint 13 closed
+2026-08-31**: WEB-041/042/043 shipped to `feat/restart-from-scratch`; WEB-044 carried forward
+(now Open). The historical gate note below (spike GO + OQ-006) was resolved as DECOUPLE (DEC-015).
 Decisions of record: ADR-0040 (updated) + **ADR-0049** (Sprint 13 delivery shape). They build
 on ADR-0046 (WebSocket primary) + ADR-0047 (single async server) + ADR-0043 (session factory).
 Sprint file: `sprints/sprint-13-genesys-audio-connector.md`.
@@ -3672,7 +3673,7 @@ ADR-0029 (latency gate)
 **Depends on:** TASK-WEB-025 (spike **GO**), TASK-INFRA-012 (Architect Call-Audio-Connector flow to
 drive it end to end)
 **Classification:** V1 voice runtime — Genesys media plane (runtime-affecting)
-**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `4f2a1c6`, 2026-08-28) — QA-ready on the sprint branch (sprint still in progress). Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `4f2a1c6`, 2026-08-28); shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31). Implemented (2026-08-28) — adapter, native codec, 15-min cap + OTel on
 `task/TASK-WEB-041-genesys-audio-connector-adapter`. Live
 Genesys-leg latency re-score (R1) still needs a live org; barge-in/EOT wiring is TASK-WEB-042.
 **Priority:** High (Sprint 13 spine, once gated)
@@ -3787,9 +3788,10 @@ on-wire byte order, `conversationId` header/open-frame carrier, crude resampling
 ADR-0025 (barge-in), ADR-0049, ADR-0046/0043
 **Depends on:** TASK-WEB-041 (the Genesys transport exists), TASK-WEB-025 (spike confirms the events)
 **Classification:** V1 voice runtime (runtime-affecting: control-signal source per path)
-**Status:** 🚧 Prep implemented on branch `task/TASK-WEB-042-genesys-barge-in-eot`; live-org
-barge-in/EOT validation pending the Genesys measurement run; awaiting adversarial review + user
-merge.
+**Status:** ✅ Done — shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31).
+Default control mode is `detector` (in-house energy/amplitude detectors authoritative); the native
+AudioHook event map is a seam left for the live-org run. Live-org barge-in/EOT validation pending
+the Genesys measurement (OQ-006, runbook Steps 1–6).
 **Priority:** High (closes adversarial-review **R4**)
 **Branch:** `task/TASK-WEB-042-genesys-barge-in-eot` (off `feat/sprint-13-genesys-audio-connector`)
 
@@ -3890,7 +3892,7 @@ idle-native-seam startup WARN fires only in `native`+empty-map; call-end reasons
 constraints), ADR-0049, TASK-WEB-030 (WS per-slice), TASK-WEB-024 (WebRTC ceiling counterpart)
 **Depends on:** TASK-WEB-041 (transport exists), TASK-WEB-025 (spike ceiling + per-leg method)
 **Classification:** V1 pilot gate (latency + observability) — runtime-affecting
-**Status:** 📋 Proposed — conditional on spike GO
+**Status:** ✅ Done — shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31). Per-channel concurrency ceiling + backpressure + per-leg latency slices + correlation-id propagation implemented; the live-org ADR-0029 re-score with the real Genesys leg is still pending OQ-006 (runbook Steps 1–6)
 **Priority:** High (closes adversarial-review **R6** + the R1 measurement instrumentation)
 **Branch:** `task/TASK-WEB-043-genesys-concurrency-observability` (off the sprint branch, when gated)
 
@@ -4141,7 +4143,7 @@ TASK-INFRA-012 (connection auth: X-API-KEY + HMAC-SHA256 signature + freshness/r
 **Depends on:** TASK-WEB-041 + TASK-INFRA-012 (the endpoint + its auth policy exist on the sprint branch)
 **Classification:** V1 voice runtime — dev/QA tooling (NOT runtime-affecting: the client never ships
 in the runtime image and imports the runtime only to reuse its codec + signature scheme)
-**Status:** 🧪 Implemented — pending adversarial review + user validation, not merged
+**Status:** ✅ Done — shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31); adversarial review 95/100. Not runtime-affecting (dev/QA tooling)
 **Priority:** High (unblocks self-testing the deployed Genesys endpoint before the live-org campaign)
 **Branch:** `task/TASK-WEB-047-genesys-local-test-client` (off the sprint branch)
 

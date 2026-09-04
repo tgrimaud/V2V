@@ -2,8 +2,10 @@
 
 ## Status
 
-Accepted (target — 2026-08-26, user-directed; implementation pending **TASK-WEB-038**,
-opened by a framework/regression spike). **Refines** — reversing one of its constraints in
+Accepted (2026-08-26, user-directed). **Implemented and shipped** in `v0.7.0` via **TASK-WEB-038**
+(aiohttp single async HTTP+WebSocket server, now the default runtime) and deployed to the pilot;
+the Genesys AudioHook endpoint (`/genesys/audiohook`) rides the same routed `:8090` (Sprint 13).
+**Refines** — reversing one of its constraints in
 the new context — [ADR-0022](ADR-0022-webrtc-transport-for-streaming-voice-loop.md) (stdlib
 `http.server` + "no FastAPI"; one asyncio loop *alongside* the threaded HTTP server).
 **Builds on** [ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md) (WebSocket is the

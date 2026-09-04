@@ -89,8 +89,15 @@ assumed.
 
 ## Decision
 
-Deliver the Genesys integration in Sprint 13 as the following shape, **gated by the
-TASK-WEB-025 go/no-go**:
+> **Implementation note (2026-08-31).** The TASK-WEB-025 spike returned NO-GO vs ADR-0029, but
+> the user resolved the escalation as **DECOUPLE (DEC-015)**: the connector build proceeded
+> (spike = GO-for-build) and shipped in Sprint 13 (deployed `v0.8.0`, `VOICE_GENESYS=on`). The
+> ADR-0029 latency gate is a separate workstream; this ADR stays **Proposed** until the live-org
+> cloud-leg re-score + OQ-006 sign-off. Points 4 and 6 below describe the **target** shape; see
+> the per-point implementation notes for the current default.
+
+Deliver the Genesys integration in Sprint 13 as the following shape (originally **gated by the
+TASK-WEB-025 go/no-go**, resolved as DECOUPLE — see the note above):
 
 1. **Media plane = a transport adapter, not a stack.** The Audio Connector AudioHook
    `wss://` endpoint is exposed on the **ADR-0047 single async HTTP+WebSocket server**,
@@ -115,9 +122,13 @@ TASK-WEB-025 go/no-go**:
 
 4. **Barge-in / end-of-turn ownership is per path.** On the **Genesys path** the native
    Genesys events (`barge-in`, `playback-started`/`playback-completed`, `BotTurnResponse`)
-   are authoritative and the in-house energy/amplitude detectors (ADR-0025) are **disabled**;
-   the in-house detectors remain the mechanism for the **WS/WebRTC dev path** only (R4,
-   TASK-WEB-042).
+   are the **target** authoritative source, with the in-house energy/amplitude detectors
+   (ADR-0025) disabled; the in-house detectors remain the mechanism for the **WS/WebRTC dev
+   path** (R4, TASK-WEB-042).
+   > **Implementation note (2026-08-31).** As shipped, the default control mode is
+   > `VOICE_GENESYS_CONTROL_MODE=detector`: the in-house detectors stay authoritative on the
+   > Genesys path too, and the native-event map is an inert seam. The flip to native-authoritative
+   > requires the live-org run that confirms the actual AudioHook event names/shapes (OQ-006).
 
 5. **Degraded modes fail safe to the advisor queue.** Endpoint down/slow/timeout, session
    drop, 15-minute-cap timeout, and transcode failure each end the streaming session cleanly
@@ -192,10 +203,11 @@ runtime (still ADR-0001-clean — no backend code):
 - **Endpoint exposure posture (Major #2, security).** The endpoint is now **default-off**
   (`--genesys off` / `VOICE_GENESYS=off`) and, when explicitly enabled, enforces an Origin
   allowlist (`VOICE_GENESYS_ALLOWED_ORIGINS`) mirroring `/ws`. **AudioHook signature / HMAC
-  / API-key verification of the Genesys leg is owned by TASK-INFRA-012** (live-org endpoint
-  exposure); until it lands the endpoint MUST stay **default-off and network-isolated**, and
-  the Origin allowlist is the reversible in-runtime guard. This is the recorded sign-off for
-  the deferral, not a silent gap.
+  / API-key verification of the Genesys leg (TASK-INFRA-012) is now IMPLEMENTED** (IETF HTTP
+  Message Signatures, HMAC-SHA256, X-API-KEY, fail-closed, golden-vector locked; Step 0b
+  self-test PASSED 2026-08-31). The endpoint stays **default-off** and adds the Origin
+  allowlist as a second reversible guard. Only the exact live-tenant header casing/secret
+  remain TO CONFIRM against the real org (OQ-006).
 - `genesys_framing.py` — subclasses the AudioHook-shaped `WebSocketAudioSerializer`, reusing
   its whole control channel and overriding only the audio path; emits `genesys.transcode.in`
   / `.out` per-leg spans.

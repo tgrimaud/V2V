@@ -66,9 +66,10 @@ channel envelope (TASK-BE-037), AudioHook connection-auth + Architect contract
 (TASK-INFRA-012) + admin docs (TASK-INFRA-013/014), the local AudioHook test client
 (TASK-WEB-047), and — added at closure to make the endpoint testable on the pilot —
 **TASK-INFRA-015** (deploy-config + secret enablement of `/genesys/audiohook`). **Carried
-forward:** **TASK-WEB-044** (degraded modes, R3) stays `📋 Proposed` in the backlog — the
-gate is decoupled (DEC-015) and no Genesys-path SLO is claimed, so it does not block
-closure but must land before a production Genesys SLO. **ADR-0049 stays Proposed** (the flip
+forward:** **TASK-WEB-044** (degraded modes, R3) was **opened** post-closure as a standalone
+follow-up — now `🟢 Open` on `task/TASK-WEB-044-genesys-degraded-modes` (off
+`feat/restart-from-scratch`); the gate is decoupled (DEC-015) and no Genesys-path SLO is
+claimed, so it does not block closure but must land before a production Genesys SLO. **ADR-0049 stays Proposed** (the flip
 to Accepted still needs the live-org cloud-leg re-score + OQ-006 sign-off). Sprint branch
 merged into `feat/restart-from-scratch`; a genesys-ready image is deployed to the pilot
 (`vla-t01/t02`) with `VOICE_GENESYS=on` for the pre-live self-test (runbook Step 0b).
@@ -94,7 +95,9 @@ spike could not (Genesys cloud legs, negotiated codec, 15-min cap, native barge-
 `--no-ff` merge `8b9bc5a`** so the rebuilt `backend/` + `voice-agent/` are present).
 Two-level branch model: ticket branches fork from and merge back into this sprint branch
 (`git merge --no-ff`); the sprint branch merges into `feat/restart-from-scratch` only on
-the user's explicit request at sprint closure.
+the user's explicit request at sprint closure. **Closed + merged into
+`feat/restart-from-scratch` on 2026-08-31**; further work (WEB-044, INFRA-016, OPS-012)
+runs on standalone ticket branches off `feat/restart-from-scratch`, not this sprint branch.
 
 ## Roadmap Context
 
@@ -200,7 +203,7 @@ the user's explicit request at sprint closure.
 | 2 | TASK-WEB-041 | Genesys **Audio Connector transport adapter** on the ADR-0047 server — codec (PCMU/L16 ↔ PCM16) + one stream/session + 15-min cap | Build (runtime) | spike GO | ✅ Done — merged into sprint-13 |
 | 3 | TASK-WEB-042 | **Barge-in / end-of-turn ownership per path** — Genesys native events on the Genesys path; in-house detectors on WS/WebRTC dev only | Build (runtime) | spike GO | ✅ Done — merged into sprint-13 |
 | 4 | TASK-WEB-043 | Genesys-path **concurrency ceiling + per-channel observability** — per-leg latency slices + correlation-id propagation | Build (runtime + observability) | spike GO | ✅ Done — merged into sprint-13 |
-| 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | ⏭️ **Carried forward** — stays `📋 Proposed` in the backlog (R3); decoupled (DEC-015), no SLO claimed, does not block closure; required before a production Genesys SLO |
+| 5 | TASK-WEB-044 | Genesys-path **degraded modes** — fail-safe route to the advisor queue on endpoint down/timeout/drop/cap | Build (runtime + infra) | spike GO | ⏭️ **Carried forward → 🟢 Open** (2026-08-31) on `task/TASK-WEB-044-genesys-degraded-modes` off `feat/restart-from-scratch` (R3); decoupled (DEC-015), no SLO claimed, did not block closure; required before a production Genesys SLO |
 | 6 | TASK-BE-036 | **EscalationHandoff transport contract** — `handoff_id` + backend fetch (ADR-0019 payload backend-owned), vs Architect-variable size limits | Build (backend) | spike GO | ✅ Done — merged into sprint-13 |
 | 7 | TASK-BE-037 | **Normalized channel envelope** for the Genesys adapter (`channel`, `external_session_id`, `message_id`, `idempotency_key`, `reply_mode`, `escalation_context`) | Build (backend) | spike GO | ✅ Done — merged into sprint-13 |
 | 8 | TASK-INFRA-012 | **Genesys Architect flow + control/routing plane** config — Call Audio Connector fork/resume + advisor-queue routing + `wss` endpoint exposure + AudioHook connection auth | Wire (infra/config) | spike GO + OQ-006 | ✅ Done — connection-auth + Architect contract merged into sprint-13; exact edge `@authority` + Architect wiring pending live-org measurement (OQ-006) |
@@ -312,7 +315,8 @@ Source: `docs/architecture/reviews/genesys-audio-connector-adversarial-review-20
 - The Genesys path **emits per-leg latency slices under one correlation id** and honours
   a measured concurrency ceiling with backpressure (TASK-WEB-043).
 - At least one **degraded mode is implemented and tested** (endpoint down → advisor
-  queue) with a fail-safe that never leaves the caller stranded (TASK-WEB-044).
+  queue) with a fail-safe that never leaves the caller stranded (TASK-WEB-044). **⏭️ Not met
+  at closure — WEB-044 carried forward (now Open); deferred per DEC-015, no SLO claimed.**
 - **Escalation hands off with usable context** through the decided transport
   (`handoff_id` + backend fetch), the `EscalationHandoff` payload stays backend-owned,
   and the normalized channel envelope is populated by the Genesys adapter
