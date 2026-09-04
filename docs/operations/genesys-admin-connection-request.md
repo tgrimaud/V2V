@@ -17,13 +17,13 @@ Configure a Genesys Cloud **Audio Connector (AudioHook)** integration so Genesys
 ## 2. Target endpoint (what Genesys connects TO — we provide)
 | Item | Value | Status |
 |---|---|---|
-| Endpoint URL | `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` | **application path known** — the bridge mounts the AudioHook handler at `GET /genesys/audiohook` (ADR-0047 server, `:8090`). The public path depends on the HAProxy edge rule — see the note below. |
+| Endpoint URL | `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` | **resolved** — the bridge mounts the AudioHook handler at `GET /genesys/audiohook` (ADR-0047 server, `:8090`); the deployed HAProxy edge passes the path through unchanged (no rewrite, no prefix — TASK-INFRA-016), so the public path equals the application path. |
 | Domain (TLS SNI) | `vip-ai4cc-voice-t01.prod.lan` | confirmed (flow-request §1) |
 | Ingress IP (VIP) | **`10.195.59.39`** | confirmed (flow-request §1/§3) |
 | Protocol / port | **`wss` over TLS, TCP `:443`** | confirmed |
 | Direction | **Genesys cloud → our VIP (inbound)** | confirmed |
 | Internal routing | TLS terminated at HAProxy → bridge `:8090` (ADR-0047 single async server) | confirmed (internal, FYI only) |
-| Transport | WebSocket (AudioHook control + binary **PCM16 / 16 kHz**) | confirmed |
+| Transport | WebSocket (AudioHook control + binary audio; **wire = 8 kHz L16 preferred, or PCMU** — the adapter resamples to the internal PCM16/16 kHz boundary) | confirmed |
 
 > Discrepancy resolved: `pilot-voice-access.md` shows `.10/.103/.104` short names — these are internal tenant-mesh (`192.168.0.0/24`) addresses, NOT the external ingress. The correct inbound target is **`10.195.59.39`** per the authoritative `flow-requests-eir-ai4cc-tst.md`, corroborated by the live-measurement runbook.
 
@@ -49,7 +49,7 @@ Live-verified 2026-08-31 (TASK-INFRA-016, read-only from a voice node):
 ## 5. Audio Connector / AudioHook integration (Genesys admin configures)
 | Item | Value | Status |
 |---|---|---|
-| Target URI | `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` (§2) | application path known; confirm the public path with our netops (HAProxy edge rule) |
+| Target URI | `wss://vip-ai4cc-voice-t01.prod.lan/genesys/audiohook` (§2) | resolved — HAProxy edge passes the path through unchanged (TASK-INFRA-016); public path = application path |
 | Authentication | **API key header** (`X-API-KEY`, default) + **IETF HTTP Message Signature** (`Signature` + `Signature-Input`, `alg="hmac-sha256"`) over the AudioHook covered components (`@request-target`, `@authority`, `audiohook-organization-id`, `audiohook-session-id`, `audiohook-correlation-id`, `x-api-key`) | scheme **implemented + validated end-to-end on the deployed endpoint** (Step 0b self-test, 2026-08-31); verified BEFORE the WS upgrade (TASK-INFRA-012). Our pilot **shared secret + API key are ready** (handed over per §7a); the **live tenant's exact signing values (header casing, `expires`/`created`/`nonce`) TO CONFIRM** against the org. Endpoint **fails closed** if enabled but unconfigured. |
 | Signature freshness / replay | `expires` mandatory; `created` age-bounded (default 300 s); reused `nonce` refused (bounded cache) | implemented (TASK-INFRA-012); exact `expires`/`created`/`nonce` the live tenant emits **TO CONFIRM** (all env-tunable) |
 | Codec | request **L16** (preferred); **PCMU** acceptable | confirm negotiated codec |

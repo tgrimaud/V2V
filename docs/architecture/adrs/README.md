@@ -6,8 +6,8 @@ ADRs capture structural decisions that should remain visible beyond code, chats,
 diagrams, and planning notes. When a decision changes, create a new ADR and mark
 the previous one as superseded instead of rewriting history.
 
-> **Note (built vs target, refreshed 2026-08-28 for the Sprint 12 branch
-> `feat/sprint-12-external-voice-websocket`):** an ADR status of `Accepted`
+> **Note (built vs target, refreshed 2026-08-31 after the Sprint 13 closure on
+> `feat/restart-from-scratch`):** an ADR status of `Accepted`
 > records an accepted **target decision**, not necessarily that it is implemented.
 >
 > - **Built:** the two-service voice loop (ADR-0021/0022/0023/0024/0025/0033/0035),
@@ -22,21 +22,30 @@ the previous one as superseded instead of rewriting history.
 >   (ADR-0044, TASK-BE-030), and — new on Sprint 12 — the **interim WebSocket audio
 >   transport** for external-browser voice (ADR-0043, TASK-WEB-026…031, merged into
 >   the sprint branch). The **bilingual KB corpus** decision (ADR-0048) is Accepted
->   and applied for the pilot (single FR corpus load).
+>   and applied for the pilot (single FR corpus load). New on **Sprint 13**: the
+>   **single async HTTP+WebSocket server on one port** (ADR-0047, TASK-WEB-038,
+>   shipped in `v0.7.0`) and, riding it, the **Genesys Audio Connector** transport
+>   adapter + codec + AudioHook HMAC connection-auth + per-channel observability +
+>   handoff-by-reference (ADR-0040/0049, deployed `v0.8.0` with `VOICE_GENESYS=on`;
+>   live-org cloud legs + degraded modes still pending).
 > - **Pilot decision (accepted, applied as config/topology, no feature code):** the
 >   **no-TURN external-media** stance (ADR-0042 — the WebSocket path replaces a TURN
 >   relay).
 > - **Target-only — NOT implemented in code yet:** billing/BSS
 >   (ADR-0003/0004/0005/0017), **multi-agent routing** (ADR-0015 — no
->   `IntentClassifier`/`AgentProfile` on this branch), Genesys/escalation handoff
->   (ADR-0019/0020) including the **Genesys Audio Connector media plane** (ADR-0040 —
->   Sprint 13, gated by OQ-006), and omnichannel contracts (ADR-0009/0010/0011).
-> - **Accepted, scheduled — not built yet:** ADR-0043 (interim WebSocket audio
->   transport for external browser voice, Genesys-ready — Sprint 12).
+>   `IntentClassifier`/`AgentProfile` on this branch), the backend escalation handoff
+>   payload (ADR-0019/0020), and omnichannel contracts (ADR-0009/0010/0011).
+> - **Partially built (Sprint 13):** the **Genesys Audio Connector media plane**
+>   (ADR-0040/0049) — adapter, codec, AudioHook auth, per-channel observability and
+>   handoff-by-reference shipped and deployed; the **live-org** cloud-leg validation
+>   (negotiated codec, native barge-in/EOT, Architect fail-safe — OQ-006) and
+>   **degraded modes** (TASK-WEB-044) are the remaining work; no Genesys-path SLO
+>   (ADR-0029 gate decoupled, DEC-015).
 > - **Proposed (not decided/built):** ADR-0032 (retrieval-quality / vector-store
 >   strategy), ADR-0045 (LLM provider/model benchmark for backend first-token —
 >   decision deferred to the TASK-BE-033 spike), and **ADR-0049** (Genesys Audio
->   Connector Sprint 13 delivery shape — spike-gated by OQ-006 + TASK-WEB-025).
+>   Connector Sprint 13 delivery shape — the delivery **shipped** under the DEC-015
+>   decouple; the ADR stays Proposed until the live-org cloud-leg re-score + OQ-006).
 >
 > Implementation status is tracked in `product-backlog/backlog-index.md` and the
 > 2026-08-28 pre-sprint adversarial reviews under `docs/qa/`.

@@ -1493,7 +1493,8 @@ Scenario: LLM candidates are benchmarked on TTFT + quality + cost + residency
 # Sprint 13 — Genesys handoff (backend)
 
 Backend slices for the Genesys integration (Sprint 13, `sprints/sprint-13-genesys-audio-connector.md`).
-Both are **Proposed and conditional on the TASK-WEB-025 spike GO + OQ-006**. They keep the escalation
+**Sprint 13 closed 2026-08-31** — both BE-036/037 shipped to `feat/restart-from-scratch`; the
+historical gate note (spike GO + OQ-006) was resolved as DECOUPLE (DEC-015). They keep the escalation
 decision and the handoff payload **backend-owned** (ADR-0001/0019) while Genesys stays the
 contact-center system of record. Decisions of record: ADR-0019 (escalation + handoff contract),
 ADR-0009 (channel envelope), ADR-0040/0049 (Genesys planes + delivery shape).
@@ -1509,9 +1510,8 @@ ADR-0009 (channel envelope), ADR-0040/0049 (Genesys planes + delivery shape).
 **Depends on:** TASK-WEB-025 (spike measures Architect variable/attribute size+type limits),
 TASK-BE-037 (channel envelope fields the handoff rides on)
 **Classification:** V1 core — backend escalation/handoff (runtime-affecting)
-**Status:** 🧪 Implemented on `task/TASK-BE-036-escalation-handoff-by-reference` (off
-`feat/sprint-13-genesys-audio-connector`); `mvn test` green (**458**, ArchUnit incl.). Pending
-adversarial review + QA + user validation. Not merged (user is final validator).
+**Status:** ✅ Done — shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31);
+`mvn test` green (**458**, ArchUnit incl.).
 **Priority:** High (closes adversarial-review **R5**)
 **Branch:** `task/TASK-BE-036-escalation-handoff-by-reference` (off the sprint branch)
 
@@ -1615,7 +1615,7 @@ streaming by-reference wiring (done event carries `handoff_id`, no inline PII). 
 ADR-0040/0049, ADR-0010 (industrialization contracts)
 **Depends on:** TASK-WEB-025 (spike confirms the Genesys ids available: conversationId / participant)
 **Classification:** V1 core — backend channel contract (runtime-affecting)
-**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `ec5672c`, 2026-08-28) — QA-ready on the sprint branch (sprint still in progress). Backend contract implemented + adversarial-review remediation applied on
+**Status:** ✅ Merged into `feat/sprint-13-genesys-audio-connector` (integration `--no-ff` `ec5672c`, 2026-08-28); shipped to `feat/restart-from-scratch` via Sprint 13 closure (2026-08-31). Backend contract implemented + adversarial-review remediation applied on
 `task/TASK-BE-037-normalized-channel-envelope` (off `feat/sprint-13-genesys-audio-connector`); `mvn test`
 green (432, ArchUnit incl.). Pending re-run of adversarial review + QA + user validation. The Python Genesys
 adapter that *populates* the envelope is out of scope (voice runtime, TASK-WEB-041); this ticket delivers the

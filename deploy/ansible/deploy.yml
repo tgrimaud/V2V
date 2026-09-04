@@ -55,5 +55,17 @@
   become: true
   serial: 1
   max_fail_percentage: 0
+  pre_tasks:
+    - name: "Assert Genesys AudioHook secrets are set when the endpoint is enabled"
+      ansible.builtin.assert:
+        that:
+          - vault_genesys_audiohook_api_key | default('CHANGE_ME') != 'CHANGE_ME'
+          - vault_genesys_audiohook_secret | default('CHANGE_ME') != 'CHANGE_ME'
+        fail_msg: >-
+          voice_genesys is '{{ voice_genesys }}' but the Genesys AudioHook secrets are still
+          the vault.example.yml placeholders. Set vault_genesys_audiohook_api_key and
+          vault_genesys_audiohook_secret in group_vars/all/vault.yml — otherwise the endpoint
+          deploys enabled but fail-closed (503 on every AudioHook handshake).
+      when: voice_genesys | default('off') in ['on', 'auto']
   roles:
     - compose_tier

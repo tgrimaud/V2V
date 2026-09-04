@@ -5,11 +5,15 @@
 Accepted (target). **Delivery shape refined by [ADR-0049](ADR-0049-genesys-audio-connector-sprint-13-delivery-shape.md)**
 (Genesys Audio Connector Sprint 13 delivery shape, Proposed — spike-gated).
 
-> **Implementation status (2026-08-07): NOT IMPLEMENTED — target decision.** No
-> Genesys Audio Connector server, Architect flow, or adapter exists in the runtime
-> yet. Full Genesys voice routing stays deferred (Sprint 13, gated by OQ-006). This
-> ADR fixes the target integration shape and terminology so the future spike and
-> backlog stay precise. It refines ADR-0020 and does not change any runtime code.
+> **Implementation status (updated 2026-08-31): PARTIALLY IMPLEMENTED (Sprint 13).** The
+> Audio Connector transport adapter (`GET /genesys/audiohook` on the ADR-0047 async server),
+> codec (L16/PCMU ↔ PCM16), AudioHook HMAC connection-auth, per-channel observability, the
+> handoff-by-reference contract and the Architect control/routing contract shipped in Sprint 13
+> and are **deployed to the pilot** (`v0.8.0`, `VOICE_GENESYS=on`; Step 0b self-test PASSED).
+> Still open: the **live-org** cloud-leg validation (negotiated codec, native barge-in/EOT
+> events, Architect fail-safe branch — OQ-006, runbook Steps 1–6) and **degraded modes**
+> (TASK-WEB-044, carried forward). No Genesys-path latency SLO is claimed (ADR-0029 gate
+> decoupled — DEC-015). Delivery shape tracked in ADR-0049 (Proposed until the live-org re-score).
 
 > **Foundation update (2026-08-27): the media plane now rides the unified async
 > server.** Since this ADR was written, [ADR-0046](ADR-0046-websocket-primary-live-voice-transport.md)

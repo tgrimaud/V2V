@@ -138,10 +138,10 @@ TASK-WEB-044). This branch is exercised deliberately in the live-measurement run
 
 | Item | Owner | Status |
 |---|---|---|
-| AudioHook URL path on the ADR-0047 server — **resolved**: `/genesys/audiohook`; only the HAProxy edge mapping (pass-through vs rewritten prefix) remains | Our netops/runtime engineer | edge rule TO CONFIRM |
+| AudioHook URL path on the ADR-0047 server — **resolved**: `/genesys/audiohook`; the deployed HAProxy edge passes the path through unchanged (TASK-INFRA-016) | Our netops/runtime engineer | ✅ resolved |
 | Exact API-key header name/casing on the live tenant | Genesys admin + us | TO CONFIRM (`GENESYS_AUDIOHOOK_API_KEY_HEADER`) |
 | Shared secret (API-key/HMAC) | Genesys admin + us | TO CONFIRM |
-| Signed `@request-target` / `@authority` behind the HAProxy edge | Our runtime/netops | `TODO(TASK-INFRA-012: live-measurement)` |
+| Signed `@request-target` / `@authority` behind the HAProxy edge — **resolved**: edge preserves both (no rewrite), so no `GENESYS_AUDIOHOOK_AUTHORITY` override (TASK-INFRA-016); only live-tenant confirmation remains | Our runtime/netops | ✅ resolved (live-tenant confirm only) |
 | Pilot DID / test number | Genesys admin | TO CONFIRM |
 | Billing advisor queue (id/name) | Genesys admin | TO CONFIRM |
 | Genesys egress IP ranges (firewall allowlist) | Genesys admin | TO CONFIRM |

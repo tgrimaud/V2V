@@ -77,6 +77,8 @@ grep -q 'CONVERSATION_API_KEY={{ vault_conversation_api_key }}' roles/compose_ti
 grep -q 'VOICE_BACKEND_API_KEY={{ vault_conversation_api_key }}' roles/compose_tier/templates/voice.env.j2 || sec_ok=0
 grep -q 'GRADIUM_API_KEY={{ vault_gradium_api_key }}'    roles/compose_tier/templates/voice.env.j2   || sec_ok=0
 grep -q 'REDIS_PASSWORD={{ vault_redis_password }}'      roles/compose_tier/templates/redis.env.j2   || sec_ok=0
+grep -q 'GENESYS_AUDIOHOOK_API_KEY={{ vault_genesys_audiohook_api_key }}' roles/compose_tier/templates/voice.env.j2 || sec_ok=0
+grep -q 'GENESYS_AUDIOHOOK_SECRET={{ vault_genesys_audiohook_secret }}'   roles/compose_tier/templates/voice.env.j2 || sec_ok=0
 [ "$sec_ok" -eq 1 ] && ok "all secret keys are sourced from vault_* vars" || bad "a secret key is not sourced from a vault_* var"
 # The shared API key parity (backend == voice) must hold in the templates.
 [ "$(grep -h 'vault_conversation_api_key' roles/compose_tier/templates/backend.env.j2 roles/compose_tier/templates/voice.env.j2 | wc -l | tr -d ' ')" -eq 2 ] \

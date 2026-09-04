@@ -42,6 +42,9 @@ deploy/ansible/
   fresh host, below).
 - Secrets: `cp group_vars/all/vault.example.yml group_vars/all/vault.yml`, fill it,
   then `ansible-vault encrypt group_vars/all/vault.yml` (the real file is git-ignored).
+  For **Genesys** (TASK-INFRA-015), set `vault_genesys_audiohook_api_key`/`_secret` and
+  `voice_genesys: "on"` in `group_vars/voice.yml`; `deploy.yml` asserts the secrets are set
+  when the endpoint is enabled (otherwise the endpoint deploys enabled but fail-closed).
 - A published, immutable **image** tag — never `latest`. Note the image tag has
   **no `v`** (git tag `vX.Y.Z` → image tag `X.Y.Z`, e.g. `0.4.0`), plus
   `sha-xxxxxxx`. See `docs/operations/release-process.md`.

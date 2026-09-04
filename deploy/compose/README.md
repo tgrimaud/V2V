@@ -64,5 +64,6 @@ These stacks are ready but need a few environment inputs to run end-to-end
 - **Embeddings** host placement (open input #3, TASK-INFRA-003) → `OLLAMA_BASE_URL`.
 - **Egress** to Mistral/Gradium/registry (open input #2).
 - **STUN/TURN** URLs and TLS edge for the voice VIP (open input #1/#4) → `VOICE_STUN`.
+- **Genesys Audio Connector** (TASK-INFRA-015): `VOICE_GENESYS` + `GENESYS_AUDIOHOOK_API_KEY`/`GENESYS_AUDIOHOOK_SECRET` (+ `VOICE_GENESYS_CODEC`/`_MAX_SESSIONS`) in `voice/.env`; pilot enables it via Ansible `group_vars/voice.yml`. Endpoint `GET /genesys/audiohook` on the routed `:8090`.
 - **Postgres** db/user/password and `CREATE EXTENSION vector` (open input #7).
 - **Redis** run mode / auth / TLS (open input #8).

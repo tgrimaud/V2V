@@ -100,9 +100,10 @@ def genesys_codec_config() -> str:
 def genesys_allowed_origins_config() -> list[str] | None:
     """Resolve the Origin allowlist (anti-CSWSH). Empty/unset -> None (allow all: dev/loopback).
 
-    Until the AudioHook signature/HMAC verification lands (owned by TASK-INFRA-012), the
-    endpoint must run default-off + network-isolated; this allowlist is the reversible
-    in-runtime guard that refuses disallowed Origins even when the endpoint is enabled.
+    The AudioHook signature/HMAC verification (TASK-INFRA-012) is the primary connection
+    auth and is enforced before the WS upgrade; this Origin allowlist is a second,
+    reversible defense-in-depth guard that refuses disallowed Origins. The endpoint also
+    stays default-off (VOICE_GENESYS).
     """
     raw = os.environ.get(ALLOWED_ORIGINS_ENV_VAR) or ""
     origins = [item.strip() for item in raw.split(",") if item.strip()]

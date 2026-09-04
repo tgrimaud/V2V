@@ -13,8 +13,13 @@
 > conversation backend (`backend/` — RAG over pgvector, guardrails, confidence,
 > memory), plus a minimal `docker-compose.yml` (Postgres + Ollama). Only the
 > standalone React `frontend/` and the legacy `agent/bot.py` / `bridge_server.py`
-> remain un-rebuilt (the web client is the `web_voice/` static page). Still
-> target-only: billing/BSS, invoice comparison, escalation/Genesys, telephony.
+> remain un-rebuilt (the web client is the `web_voice/` static page). Through **Sprint 13**
+> the **Genesys Audio Connector** is built + deployed to the pilot (`v0.8.0`,
+> `VOICE_GENESYS=on`, endpoint `GET /genesys/audiohook` on the ADR-0047 `:8090`; app-layer
+> Step 0b self-test PASSED) with by-reference escalation handoff — but the **live-org** legs
+> (real Genesys tenant reachability/TLS trust, native barge-in/EOT, Architect fail-safe) and
+> **degraded modes** (TASK-WEB-044) are still pending. Still target-only: billing/BSS,
+> invoice comparison, and telephony (live-org Genesys still to prove).
 
 > Delivery rule: no development starts without a ticket. Branching uses a **two-level
 > model** (decision 2026-07-29): one sprint branch `feat/sprint-NN-short-theme` per sprint,

@@ -79,25 +79,30 @@ would need a runtime change). Only viable if the client NAT allows it.
 | `10.195.80.81` / `10.195.29.11` | `10.195.59.127` | `vla-ai4cc-t01.prod.lan` | `<UDP_RANGE>` | UDP | WebRTC media to bridge (host candidate) |
 | `10.195.80.81` / `10.195.29.11` | `10.195.56.240` | `vla-ai4cc-t02.prod.lan` | `<UDP_RANGE>` | UDP | WebRTC media to bridge (host candidate) |
 
-## 3. Genesys Audio Connector — NOT part of this pilot (future, Sprint 13)
+## 3. Genesys Audio Connector — ACTIVE (Sprint 13 shipped + deployed 2026-08-31)
 
-The web WebRTC path (§1–§2) is the Sprint 11 pilot. The Genesys **Audio Connector**
-integration (ADR-0040, TASK-WEB-025) is a separate, later track gated by OQ-006 — do
-**not** bundle it into the pilot flow requests. When that spike starts it needs a
-**different** flow profile, not the WebRTC UDP/TURN flows:
+**Status change (2026-08-31):** Sprint 13 is closed and the Genesys **Audio Connector**
+endpoint is **deployed** on the pilot voice bridges (`v0.8.0`, `VOICE_GENESYS=on`, endpoint
+`GET /genesys/audiohook` on the ADR-0047 routed `:8090`). This is now a **real flow request**,
+not a future note. It uses a **different** profile from the WebRTC UDP/TURN flows in §1–§2.
 
 - **Transport is `wss://` (WebSocket over TLS, TCP `:443`)**: AudioHook carries the JSON
-  control frames **and** the PCMU/L16 audio **in-band inside the WebSocket**. There is
+  control frames **and** the 8 kHz L16/PCMU audio **in-band inside the WebSocket**. There is
   **no separate UDP media** and **no STUN/TURN** on the Genesys path.
 - **Direction is inbound to us**: Genesys Cloud (SaaS) is the client — the Architect
   *Call Audio Connector* action opens the `wss` connection **from Genesys to our Audio
-  Connector endpoint**. So the flow to request is **inbound TCP `:443` (wss) from
-  Genesys Cloud's published egress IP ranges** to whichever host serves the Audio
-  Connector endpoint (host + public FQDN + TLS cert to be decided in the spike).
-- Prerequisites before any Genesys flow request: the Audio Connector endpoint host and
-  public FQDN, a valid TLS cert, and Genesys Cloud's egress IP allowlist for the target
-  region/org. None of these exist yet (Sprint 13 scope).
+  Connector endpoint**. The flow to request is **inbound TCP `:443` (wss) from Genesys
+  Cloud's published egress IP ranges** to the voice VIP.
 
-**Answer to "do we also need a special opening for Genesys SaaS now?"** — No. It is not
-needed for the Sprint 11 pilot, and it is a different request (inbound `wss/443` from
-Genesys egress, media in-band, no UDP/TURN). Request it when TASK-WEB-025 starts.
+| Source | Destination | Host | Port | Proto | Description |
+|--------|-------------|------|------|-------|-------------|
+| `<GENESYS_EGRESS_RANGES>` | `10.195.59.39` | `vip-ai4cc-voice-t01.prod.lan` (443 → HAProxy VIP `192.168.0.10:443` → `voice_bridges` `.103`/`.104:8090`) | `443` | TCP (wss) | Genesys Cloud AudioHook → `/genesys/audiohook` (control + in-band audio) |
+
+- **Open blocker (netops + Genesys admin):** the endpoint is currently on a **private**
+  RFC1918 IP (`10.195.59.39`), an internal `.prod.lan` name, and a **private-CA** TLS cert.
+  Genesys Cloud (public SaaS) can neither reach the private IP over the internet nor trust a
+  private CA by default. A network path (interconnect/VPN + internal-CA trust) **or** a public
+  FQDN + publicly-trusted cert must be decided before the live-org test. See
+  `genesys-admin-connection-request.md` §4/§8b (items 1 & 3).
+- Still to obtain from the Genesys admin: **Genesys Cloud's egress IP allowlist**
+  (`<GENESYS_EGRESS_RANGES>`) for the target region/org.

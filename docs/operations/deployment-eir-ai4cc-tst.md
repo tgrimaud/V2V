@@ -212,6 +212,22 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `VOICE_STT_PREWARM` | evaluate | opt-in; validate idle-socket behaviour live |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset ⇒ OFF; set `otel_collector_endpoint` to enable | per-turn spans → centralized collector; `voice.turn` trace stitches to backend via derived `traceparent` (TASK-OPS-007) |
 
+#### Genesys Audio Connector (`vla-t01`/`t02`, TASK-INFRA-015)
+
+Enabled on the pilot via Ansible `group_vars/voice.yml` (`voice_genesys: "on"`), rendered into
+`voice.env.j2`. The endpoint is `GET /genesys/audiohook` on the same routed `:8090` (ADR-0047).
+
+| Variable | tst value | Default / notes |
+|----------|-----------|-----------------|
+| `VOICE_GENESYS` | `on` (pilot) | default `off`; gates mounting the AudioHook endpoint (aiohttp server only) |
+| `GENESYS_AUDIOHOOK_API_KEY` | from secrets (`vault_genesys_audiohook_api_key`) | X-API-KEY expected on the handshake; fail-closed if enabled but unset |
+| `GENESYS_AUDIOHOOK_SECRET` | from secrets (`vault_genesys_audiohook_secret`) | base64 HMAC-SHA256 shared secret for the IETF signature |
+| `GENESYS_AUDIOHOOK_AUTHORITY` | **empty** | override only if the edge rewrites Host; HAProxy preserves `@authority`, so leave empty (TASK-INFRA-016) |
+| `VOICE_GENESYS_ALLOWED_ORIGINS` | empty | optional Origin allowlist (mirrors `/ws`) |
+| `VOICE_GENESYS_CODEC` | `L16` | wire codec preference (`L16` preferred, `PCMU` supported); wire is 8 kHz, resampled to internal 16 kHz |
+| `VOICE_GENESYS_MAX_SESSIONS` | `3` | concurrency ceiling (DEC-014) |
+| _code-default-only tunables_ | — | `VOICE_GENESYS_MAX_SESSION_S` (900 s cap), `VOICE_GENESYS_CAP_DRAIN_GRACE_MS` (5 s), `GENESYS_AUDIOHOOK_MAX_SIGNATURE_AGE_S` (300 s), `GENESYS_AUDIOHOOK_NONCE_CACHE_SIZE` (10k), `VOICE_GENESYS_CONTROL_MODE` (`detector`) — not templated; add a passthrough only if pilot tuning is needed |
+
 ## Release and deploy (summary)
 
 First-time bring-up (host provisioning, Postgres bootstrap, initial RAG sync):

@@ -182,10 +182,12 @@ items are settled: full Genesys Audio Connector voice routing **is** the pilot t
 Genesys **is** the phone entry point for pilot calls, the single pilot entry is **Genesys** (US-018
 Twilio/SIP deferred), and the escalation-handoff transport is **`handoff_id` + backend fetch** (inline
 Architect-variable context **rejected** on PII/trust-boundary grounds).
-**Resolution vehicle for the rest = Sprint 13** (`sprints/sprint-13-genesys-audio-connector.md`):
-the **TASK-WEB-025** spike remains the **latency/feasibility gate** (deciding Genesys as the entry does
-**not** waive it — a gate-fail escalates to the user, it does not auto-proceed), and **ADR-0049** records
-the delivery shape.
+**Resolution vehicle (updated 2026-08-31):** Sprint 13 (`sprints/sprint-13-genesys-audio-connector.md`)
+is **closed** — the connector shipped + deployed (`v0.8.0`, `VOICE_GENESYS=on`) and **ADR-0049** records
+the delivery shape. The **TASK-WEB-025** spike returned NO-GO vs ADR-0029, but the user resolved the
+escalation as **DECOUPLE (DEC-015)**: the build proceeded and the ADR-0029 gate is a separate latency
+workstream. The remaining OQ-006 work is the **live-org measurement campaign**
+(`docs/operations/genesys-live-measurement-runbook.md`, Steps 1–6) on a parallel track.
 
 **✅ Additionally decided by the user (2026-08-28, DEC-014):**
 - **Spike PII posture = synthetic-first** — the TASK-WEB-025 spike runs on **synthetic / non-PII audio
@@ -197,14 +199,21 @@ the delivery shape.
   can be human-run once the throwaway prototype is ready.
 
 **Residual OPEN items** (owners):
-- **Codec — PCMU vs L16 end to end** + transcode budget — *spike (TASK-WEB-025)*.
+- **Codec — PCMU vs L16 end to end** + transcode budget — the spike measured both (L16 preferred);
+  the **negotiated on-wire codec + byte order** need confirmation against the real org — *live-org
+  measurement (runbook)*.
 - **15-minute cap fit** vs the worst-case billing journey + mitigation (checkpoint/resume or call-back)
-  — *spike (TASK-WEB-025)*.
+  — *live-org measurement (runbook) + product*.
+- **Network path + TLS trust to a public SaaS** — the deployed endpoint is on a private IP
+  (`10.195.59.39`), an internal `.prod.lan` name, and a private-CA cert; Genesys Cloud can neither reach
+  nor trust it as-is. Resolve interconnect/VPN + internal-CA trust **or** a public FQDN + public cert —
+  **netops + Genesys admin** (see `genesys-admin-connection-request.md` §4/§8b).
 - **PII-audio residency / egress** from the Genesys cloud to the runtime VMs (region, encryption,
   compliance sign-off) — **user (Security / Compliance)**. **Still OPEN — parallel track, not a spike
   blocker (DEC-014).** Aligned with OQ-009 (production data-protection gate).
-- **Pilot concurrency** vs the premium **≤5-integrations / 1-vCPU** envelope — *spike (TASK-WEB-025) +
-  product*. **Target set = 3 concurrent sessions (DEC-014); the spike verifies the fit.**
+- **Pilot concurrency** vs the premium **≤5-integrations / 1-vCPU** envelope — the shipped ceiling is
+  **3 concurrent sessions (DEC-014)**; the live-org run verifies the fit under real load — *live-org
+  measurement + product*.
 
 This OQ stays Open until those residual items report and the decision owners sign off.  
 **Owner:** Product / Contact Center / Architecture / Security  
