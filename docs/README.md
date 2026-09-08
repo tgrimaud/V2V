@@ -45,6 +45,7 @@
 - First-deploy runbook (zero-to-running pilot): [`operations/first-deploy-runbook.md`](operations/first-deploy-runbook.md)
 - Pilot voice access + WebRTC entry point/status: [`operations/pilot-voice-access.md`](operations/pilot-voice-access.md)
 - Galaxion BSS integration: [`integrations/galaxion/bss-integration-plan.md`](integrations/galaxion/bss-integration-plan.md)
+- BSS billing data model (reference): [`integrations/galaxion/bss-billing-data-model.md`](integrations/galaxion/bss-billing-data-model.md)
 - Missing Galaxion inputs: [`integrations/galaxion/missing-inputs.md`](integrations/galaxion/missing-inputs.md)
 - Invoice PDF extraction JSON: [`integrations/galaxion/invoice-extraction-json.md`](integrations/galaxion/invoice-extraction-json.md)
 - Knowledge base guide: [`knowledge-base/knowledge-base-guide.md`](knowledge-base/knowledge-base-guide.md)

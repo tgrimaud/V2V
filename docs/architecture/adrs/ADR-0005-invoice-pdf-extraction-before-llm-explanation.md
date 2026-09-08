@@ -6,8 +6,18 @@ Accepted
 
 > **Implementation status (2026-08-05): NOT IMPLEMENTED — target decision.** No
 > `InvoicePdfExtractor` or extraction-status handling exists in `backend/src/main`
-> yet (grep-verified). Deferred with billing V1 (Sprint 12+, gated by OQ-004 for
+> yet (grep-verified). Deferred with billing V1 (Sprint 14, gated by OQ-004 for
 > PDF fixtures).
+>
+> **Structured-source candidate (2026-09-08, OQ-003).** The BSS owner shared the
+> real billing-module data model (`docs/integrations/galaxion/bss-billing-data-model.md`):
+> invoices are stored as a structured `invoice → invoice_section → invoice_group →
+> invoice_item` tree with amounts at every level. If reachable read-only (via
+> `billing-api`), the comparison engine could consume **structured lines directly**,
+> making PDF extraction the **fallback** rather than the primary evidence path. This
+> does not overturn the decision (the port already anticipates it — see Consequences),
+> but it may reduce the extractor to a secondary path. Deferred pending the access
+> route and field semantics (OQ-003).
 
 ## Context
 

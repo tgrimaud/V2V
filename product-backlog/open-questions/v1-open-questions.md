@@ -83,6 +83,27 @@ events and offer changes.
 - Access and confidentiality limits.
 - Whether any structured invoice-line endpoint can replace PDF extraction later.
 
+### Partial Input (2026-09-08) — BSS billing data model shared
+
+The BSS owner shared the real billing-module data model (see
+`docs/integrations/galaxion/bss-billing-data-model.md`): invoices are stored as a
+structured `invoice → invoice_section → invoice_group → invoice_item` tree with
+monetary amounts (`crud_amount`, `vat`, `vat_excl_amount`, `vat_incl_amount`) at
+every level. This **partially answers** the last sub-decision: a structured
+invoice-line source **exists** and, if exposed read-only via `billing-api`, could
+make PDF extraction (ADR-0005) a fallback rather than the primary path.
+
+Still pending on this OQ:
+
+- The **access route** — are these tables exposed read-only (which `billing-api`
+  route), or internal billing storage only?
+- **Amount semantics** — cents vs euros, tax-included vs tax-excluded, and what
+  `crud_amount` represents (owner is checking).
+- The **`type`/`code`/`vatType` catalogue** and its mapping to V1 business causes.
+- **Period/invoice enumeration** to select two comparable invoices (no explicit
+  billing-period entity in the model).
+- History depth, freshness, and confidentiality/masking limits (unchanged).
+
 ---
 
 ## OQ-004 - Invoice PDF Extraction Reliability And Fixture Coverage

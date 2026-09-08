@@ -55,6 +55,15 @@ not as an available local service.
 | Retrieve out-of-bundle usage | `cdr-usage-consumption-service` or `usages-service` | Medium | Needed to explain usage causes |
 | Retrieve billing events | `customer-history-service`, `events-store-service`, `change-offers-service`, `adjustments-service` | High | Option activation, offer change, adjustment, proration |
 
+> **Structured invoice-line model shared (2026-09-08, OQ-003).** The BSS owner
+> provided the real billing-module data model — a structured
+> `invoice → invoice_section → invoice_group → invoice_item` tree with amounts at
+> every level (see [`bss-billing-data-model.md`](bss-billing-data-model.md)). If this
+> model is exposed **read-only via `billing-api`**, the "Retrieve a detailed
+> structured invoice / invoice lines" rows above could be served **without PDF
+> extraction**, making `InvoicePdfExtractor` (ADR-0005) a fallback. To confirm: the
+> access route, amount semantics, and the `type`/`code`/`vatType` catalogue.
+
 ## Provided Galaxion Catalog
 
 The target BSS is called Galaxion. The Swagger entries below are the starting

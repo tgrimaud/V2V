@@ -130,11 +130,11 @@ Stakeholder-stated premises that shaped the scope below:
 
 | # | Ticket (proposed) | Title | Role | Gate | US / Rule |
 |---|---|---|---|---|---|
-| 1 | TASK-BE-038 | **Billing domain model** — `Invoice`, `InvoiceLine`, `InvoiceComparison`, `BillingCause`, `Evidence` (pure domain, no Spring) | Build (backend domain) | — (fixtures) | EPIC-004 / ADR-0003 |
+| 1 | TASK-BE-038 | **Billing domain model** — `Invoice`, `InvoiceLine`, `InvoiceComparison`, `BillingCause`, `Evidence` (pure domain, no Spring); **mirror the real BSS `invoice → section → group → item` hierarchy** with amounts at each level (`bss-billing-data-model.md`) | Build (backend domain) | — (fixtures) | EPIC-004 / ADR-0003 |
 | 2 | TASK-BE-039 | **`BssBillingPort` + use cases** — typed read-only business port for invoices/periods (no live adapter) | Build (backend port) | — (fixtures) | US-005 / ADR-0004 |
 | 3 | TASK-BE-040 | **BSS mock adapter + static fixtures** `customer-eir-001…006` (nominal, discount expiry, overage, proration, insufficient, unusable) | Build (backend adapter + fixtures) | — (fixtures) | US-005/007 / BR-003-3 |
 | 4 | TASK-BE-041 | **Invoice PDF extractor → structured JSON** on synthetic PDFs; extraction status `parseable`/`partial`/`unusable` | Build (backend) | — (synthetic) | US-008 / ADR-0005 / BR-003-1/2 |
-| 5 | TASK-BE-042 | **Deterministic comparison engine** — period selection + line diff + business-cause attribution + reconciliation + unreconciled exposure, ordered by impact | Build (backend domain) | — (fixtures) | US-010/011/012/013 / BR-004-1/2/3 |
+| 5 | TASK-BE-042 | **Deterministic comparison engine** — period selection + line diff (appeared/disappeared/changed at `invoice_item` level) + business-cause attribution (from `type`/`code`/`vatType`, needs the BSS code catalogue) + roll-up reconciliation (item→group→section→invoice) + unreconciled exposure, ordered by impact | Build (backend domain) | — (fixtures) | US-010/011/012/013 / BR-004-1/2/3 |
 | 6 | TASK-BE-043 | **Evidence-sufficiency / confidence gate** before explanation (insufficient → clarify/escalate) | Build (backend) | OQ-002 (provisional) | US-006 / BR-002-3 |
 | 7 | TASK-BE-044 | **Customer identity resolution (pilot mode)** — identity + confidence + fail-safe; pilot uses known/manual context while the real source is gated | Build (backend) + ADR | **OQ-001** | US-004 / BR-002-1 |
 | 8 | TASK-BE-045 | **Wire the billing chain behind the answer engine** — grounded explanation from the deterministic result (LLM phrases only) | Build (backend integration) | 1–6 | US-012 / DEC-002 / BR-004-1 |
@@ -241,7 +241,9 @@ OQ-001 (identity, later) ─┐                  OQ-003 (BSS granularity) ─┐
   (proposed ADR-0050, pending OQ-001).
 - **Decisions:** DEC-002 (grounding — LLM phrases only).
 - **Open questions:** OQ-001, OQ-002, OQ-003, OQ-004.
-- **Integration docs:** `docs/integrations/galaxion/{bss-integration-plan,galaxion-billing-contracts,invoice-extraction-json,missing-inputs}.md`.
+- **Integration docs:** `docs/integrations/galaxion/{bss-billing-data-model,bss-integration-plan,galaxion-billing-contracts,invoice-extraction-json,missing-inputs}.md`
+  — the **real BSS billing data model** (2026-09-08) grounds the domain model (BE-038)
+  and comparison engine (BE-042), and raises a structured-source-vs-PDF option (OQ-003).
 
 ## Sprint Branch
 

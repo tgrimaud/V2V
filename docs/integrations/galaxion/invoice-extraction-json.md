@@ -16,6 +16,18 @@ already act as the contract between:
 The LLM must never read the PDF to calculate amounts. It only receives this
 normalized JSON, the comparison-engine results, and cited evidence.
 
+> **Structured-source note (2026-09-08, OQ-003).** The BSS owner shared the real
+> billing-module data model (`bss-billing-data-model.md`): invoices are stored as a
+> structured `invoice → invoice_section → invoice_group → invoice_item` tree with
+> monetary amounts at every level. If that model is reachable read-only (via
+> `billing-api`), the comparison engine could consume **structured lines directly**
+> and this PDF-extraction contract would become the **fallback** evidence path (see
+> ADR-0005). This JSON stays the target contract for the PDF path and for the
+> normalized shape the engine consumes regardless of source; the extractor would map
+> structured lines onto the same schema. Pending confirmation of the access route
+> and field semantics (`crud_amount`, cents vs euros, `type`/`code`/`vatType`
+> catalogue).
+
 ## Principles
 
 - Amounts are stored as **integer cents** (`*_cents`) to avoid rounding errors.
