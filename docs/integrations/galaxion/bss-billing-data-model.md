@@ -34,7 +34,7 @@ The polymorphic root of the invoice line hierarchy.
 |-------|-------|
 | `id` | PK; shared 1:1 with either `billingaccount_invoice.id` or `subscription_invoice.id` |
 | `invoice_level` | discriminates the header level (billing-account vs subscription) |
-| `crud_amount` | amount (semantics to confirm — see open points) |
+| `crud_amount` | **technical field** used to build the VAT table (confirmed 2026-09-09) — *not* a customer-facing amount; the comparison uses `vat_incl_amount` |
 | `vat` | tax value/rate (to confirm) |
 | `vat_excl_amount` | tax-excluded amount |
 | `vat_incl_amount` | tax-included amount |
@@ -70,7 +70,7 @@ Notable fields: `msisdn`, `subscription_id`, `subscription_type`,
 | Field | Notes |
 |-------|-------|
 | `id` | PK; `invoice_id` FK → `invoice.id` |
-| `crud_amount`, `vat`, `vat_excl_amount`, `vat_incl_amount` | section-level amounts |
+| `vat_incl_amount`, `vat_excl_amount`, `vat` | section-level amounts (TTC / HT / tax); `crud_amount` is a technical VAT-table field |
 | `display_order` | presentation order |
 | `is_in_details` | whether the section belongs to the detailed breakdown |
 | `name` | section label |
@@ -80,7 +80,7 @@ Notable fields: `msisdn`, `subscription_id`, `subscription_type`,
 | Field | Notes |
 |-------|-------|
 | `id` | PK; `invoice_section_id` FK → `invoice_section.id` |
-| `crud_amount`, `vat`, `vat_excl_amount`, `vat_incl_amount` | group-level amounts |
+| `vat_incl_amount`, `vat_excl_amount`, `vat` | group-level amounts (TTC / HT / tax); `crud_amount` is a technical VAT-table field |
 | `description`, `name`, `displayOrder` | labels / presentation order |
 
 ### `invoice_item` (level 3 — the actual billed line)
@@ -91,7 +91,7 @@ Notable fields: `msisdn`, `subscription_id`, `subscription_type`,
 | `type` | line type (classifier — value set to confirm) |
 | `code` | product/charge code (classifier — value set to confirm) |
 | `vatType` | tax type (classifier — value set to confirm) |
-| `crud_amount`, `vat`, `vat_excl_amount`, `vat_incl_amount` | line-level amounts |
+| `vat_incl_amount`, `vat_excl_amount`, `vat` | line-level amounts (TTC / HT / tax); `crud_amount` is a technical VAT-table field |
 
 ## Relationships
 
@@ -119,7 +119,7 @@ level, which allows a deterministic roll-up: `invoice_item` → `invoice_group` 
 | grouping for presentation | `invoice_section` → `invoice_group` (`name`, `display_order`, `is_in_details`) |
 | `BillingCause` | derived from `invoice_item.type` + `code` + `vatType` (needs a code→cause catalogue) |
 | `Evidence` | the structured line itself (traceable); PDF is the fallback evidence path |
-| monetary inputs | `crud_amount`, `vat_excl_amount`, `vat_incl_amount`, `vat`, `vatIncTotal` |
+| monetary inputs | `vat_incl_amount` (TTC, comparison basis) / `vatIncTotal`, `vat_excl_amount`, `vat` — **integer cents** (confirmed 2026-09-09); `crud_amount` excluded (technical VAT-table field) |
 
 ## Impact on the strategy (structured source vs PDF — OQ-003 / ADR-0005)
 
@@ -141,12 +141,14 @@ field semantics below are confirmed.
 1. **Access route (blocking for the structured-source option):** are these tables
    exposed read-only, and via which `billing-api` route(s)? Or are they internal
    billing storage only (in which case PDF stays the evidence path)?
-2. **Amount semantics:** prices are **tax-included (TTC)** — confirmed by the BSS
-   owner 2026-09-09 → the customer-facing comparison basis is `vat_incl_amount` /
-   `vatIncTotal` (aligns with `invoice-extraction-json.md` `basis: tax_included`);
-   `vat_excl_amount` / `vat` are kept for audit. Still pending: the **unit** (euros
-   vs cents) to map onto the extraction contract's integer-cents convention, and
-   **what `crud_amount` means** (raw/gross? before discount?).
+2. **Amount semantics — resolved (2026-09-09):** prices are **tax-included (TTC)** →
+   the customer-facing comparison basis is `vat_incl_amount` / `vatIncTotal` (aligns
+   with `invoice-extraction-json.md` `basis: tax_included`); `vat_excl_amount` /
+   `vat` are kept for audit. The **unit is integer cents**. `crud_amount` is a
+   **technical field used to build the VAT table**, *not* a customer-facing amount —
+   it is **excluded** from the comparison. *Residual (P2):* tax rounding rules and
+   whether the invoice total includes previous balance / payments
+   (`balance_previous_bc`, `overdue_amount`) or only current-period lines.
 3. **Line classifier catalogue:** the full value sets of `invoice_item.type`,
    `code` and `vatType`, and how each maps to a V1 business cause (discount expiry,
    overage, option change, proration, tax, one-off fee, adjustment).
