@@ -140,7 +140,7 @@ Stakeholder-stated premises that shaped the scope below:
 | 8 | TASK-BE-045 | **Wire the billing chain behind the answer engine** — grounded explanation from the deterministic result (LLM phrases only) | Build (backend integration) | 1–6 | US-012 / DEC-002 / BR-004-1 |
 | 9 | TASK-BE-046 | **Billing KB entries** for confirmed causes' tariff/business wording (reviewed) | Build (KB content) | — | US-009 |
 | 10 | TASK-QA-019 | **Billing fixtures + Gherkin/Behave journeys** — nominal, discount expiry, overage, proration, insufficient, partial/unusable + latency slices | QA | 1–8 | US-007 / all AC |
-| 11 | TASK-INFRA-017 | **Galaxion inputs coordination package** — obtain real anonymized PDFs + `bill-run-documents` payloads + confirm identity/granularity/threshold rules | Doc / coordination | — | OQ-001/003/004 |
+| 11 | TASK-INFRA-017 | **Galaxion inputs coordination package** — obtain real anonymized PDFs + `bill-run-documents` payloads + confirm identity/granularity/threshold rules (**request doc drafted:** `docs/integrations/galaxion/galaxion-coordination-request.md`) | Doc / coordination | — | OQ-001/003/004 |
 | 12 | TASK-BE-047 | **Real Galaxion read-only adapter** behind `BssBillingPort` (REST + PDF retrieval via `bill-run-documents`) — **in scope** per 2026-09-08 decision | Build (backend adapter) | **OQ-003** | US-005 / ADR-0004 |
 | 13 | TASK-QA-020 | **Real-data validation** — run the extractor + comparison engine on the provided anonymized PDFs/payloads; confirm extraction-quality threshold (OQ-004) and reconciliation on real invoices | QA | 4,5,12 + real data | US-008/011 / BR-003-2 |
 
