@@ -141,9 +141,12 @@ field semantics below are confirmed.
 1. **Access route (blocking for the structured-source option):** are these tables
    exposed read-only, and via which `billing-api` route(s)? Or are they internal
    billing storage only (in which case PDF stays the evidence path)?
-2. **Amount semantics:** unit (euros vs cents), tax-included vs tax-excluded, and
-   **what `crud_amount` means** (raw/gross? before discount?). The `*_amount`
-   fields must be mapped to the extraction contract's integer-cents convention.
+2. **Amount semantics:** prices are **tax-included (TTC)** — confirmed by the BSS
+   owner 2026-09-09 → the customer-facing comparison basis is `vat_incl_amount` /
+   `vatIncTotal` (aligns with `invoice-extraction-json.md` `basis: tax_included`);
+   `vat_excl_amount` / `vat` are kept for audit. Still pending: the **unit** (euros
+   vs cents) to map onto the extraction contract's integer-cents convention, and
+   **what `crud_amount` means** (raw/gross? before discount?).
 3. **Line classifier catalogue:** the full value sets of `invoice_item.type`,
    `code` and `vatType`, and how each maps to a V1 business cause (discount expiry,
    overage, option change, proration, tax, one-off fee, adjustment).

@@ -97,8 +97,9 @@ Still pending on this OQ:
 
 - The **access route** — are these tables exposed read-only (which `billing-api`
   route), or internal billing storage only?
-- **Amount semantics** — cents vs euros, tax-included vs tax-excluded, and what
-  `crud_amount` represents (owner is checking).
+- **Amount semantics** — prices are **tax-included (TTC)** (confirmed 2026-09-09) →
+  comparison basis is `vat_incl_amount`/`vatIncTotal`. Still pending: cents vs euros,
+  and what `crud_amount` represents (owner is checking).
 - The **`type`/`code`/`vatType` catalogue** and its mapping to V1 business causes.
 - **Period/invoice enumeration** to select two comparable invoices (no explicit
   billing-period entity in the model).
