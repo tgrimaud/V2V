@@ -143,6 +143,45 @@ A short working session to walk through **request #1** (structured source vs PDF
 and receive one anonymized composed-invoice example + one PDF pair. That single
 answer decides whether PDF extraction is the primary path or a fallback for V1.
 
+## Appendix — Short email cover (ready to send)
+
+> Short version to send as an email body; the full request above is the attachment /
+> follow-up. Focused on the two remaining amount questions (unit + `crud_amount`).
+
+**Subject:** Galaxion Billing V1 — 2 quick questions on invoice amounts (+ full input list)
+
+Hi [name],
+
+We're building the V1 billing assistant that explains invoice changes to customers,
+using a deterministic comparison of two invoices. Thanks for the billing data model —
+it maps cleanly onto our target domain.
+
+**Two quick blockers I'd like to confirm first (invoice amounts):**
+
+1. **Unit** — are the monetary fields (`crud_amount`, `vat_excl_amount`,
+   `vat_incl_amount`, `vatIncTotal` / `AmountResponse`) in **euros or integer cents**?
+   (`defaultPrice` looks like cents, but `AmountResponse` is exposed as a bare
+   `number`, so I'd rather not assume.)
+2. **`crud_amount`** — what exactly does this field represent at each level (invoice /
+   section / group / item)? Is it the **gross/raw amount before discount**, or
+   something else? We need this to know which field drives the comparison.
+
+For context: we've already settled that prices are **tax-included (TTC)**, so our
+customer-facing comparison uses the tax-included amount; tax-excluded stays for audit.
+
+**Beyond those two**, I've put together a short, prioritized list of everything we
+need from the Galaxion/BSS side to validate V1 on real data — the biggest one being
+whether `GET /invoices/composed` can serve as the validated **structured invoice-line
+source** (which would let us avoid PDF parsing on the critical path), plus 2 anonymized
+invoice PDFs, the `type`/`code`/`vatType` catalogue, and the flow to list the two
+invoices to compare. Happy to share that document and walk through it in a 30-min call.
+
+None of this blocks us from starting — we're building on fixtures in the meantime — but
+your answers unlock validation against real invoices.
+
+Thanks,
+Thomas
+
 ## References
 
 - `docs/integrations/galaxion/bss-billing-data-model.md` (the shared real model)
