@@ -5,9 +5,9 @@ import java.util.Objects;
 
 // Monetary amount as integer minor units (e.g. cents) in a single currency. Amounts are the core of
 // billing correctness, so the domain never uses double or a bare long: arithmetic is exact (overflow
-// fails fast) and cross-currency operations are rejected. Adapters convert the BSS unit at the
-// boundary; invoice-extraction-json.md fixes integer minor units, and the euros-vs-cents question is
-// tracked on OQ-003 (INFRA-017).
+// fails fast) and cross-currency operations are rejected. The BSS amounts are integer cents
+// (confirmed 2026-09-09, OQ-003), which map directly to these minor units; adapters still convert at
+// the boundary.
 public record Money(long minorUnits, Currency currency) {
 
     public Money {
