@@ -16,7 +16,7 @@ Grounding docs: `docs/integrations/galaxion/bss-billing-data-model.md` (real BSS
 ## TASK-BE-038 — Billing domain model
 
 **Type:** Technical task (backend domain)
-**Status:** 🟢 In progress — `task/TASK-BE-038-billing-domain-model`
+**Status:** ✅ Validated by user (2026-09-09) — `task/TASK-BE-038-billing-domain-model` (merge-ready; not merged)
 **Parent:** EPIC-004 / US-010/011/012/013 · ADR-0003
 **Gate:** none (fixture-buildable)
 

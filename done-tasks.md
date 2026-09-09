@@ -1486,3 +1486,29 @@ behave**, backend **`mvn test`** OK; `deploy.yml` `--syntax-check` OK.
 - `deploy/ansible/deploy.yml`, `deploy/ansible/qa-validate-ansible.sh`, `deploy/ansible/README.md`,
   `deploy/compose/voice/.env.example`, `deploy/compose/README.md`
 - `voice-agent/web_voice/genesys_config.py` (comment only)
+
+## 2026-09-09 — TASK-BE-038 Billing domain model (Sprint 14, validated)
+
+**Ticket:** TASK-BE-038 · branch `task/TASK-BE-038-billing-domain-model` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user 2026-09-09 — merge-ready, **not merged** (merge on explicit request).
+
+**Summary:**
+
+- New pure bounded context `com.voicesupport.billing` (hexagonal/Hive, no Spring), mirroring the real
+  BSS hierarchy `invoice → invoice_section → invoice_group → invoice_item` with rolled-up amounts at
+  each level (`docs/integrations/galaxion/bss-billing-data-model.md`).
+- Value objects: `Money` (integer minor units = **cents**, exact/same-currency arithmetic, overflow
+  fail-fast), typed `InvoiceId`/`AccountId` (sanitized), `LineAmounts` (tax-included **TTC** basis +
+  HT/tax for audit), `BillingPeriod`, `Evidence`, `InvoiceLevel`, `LineCategory`.
+- Entities: `Invoice` (+ `lines()` flatten), `InvoiceSection`, `InvoiceGroup`, `InvoiceItem`
+  (carries raw BSS classifiers `type`/`code`/`vatType`).
+- Comparison output types (data only, for the TASK-BE-042 engine): `ChangeKind`, `LineDelta`,
+  `BillingCauseType`, `BillingCause`, `InvoiceComparison` (with a first-class `unexplainedAmount`).
+- Amount semantics confirmed by BSS owner 2026-09-09 (OQ-003): unit = **integer cents**;
+  `crud_amount` = **technical VAT-table field**, excluded from the comparison. Docs updated on
+  mainline (`bss-billing-data-model.md`, `galaxion-coordination-request.md` + email cover,
+  `v1-open-questions.md`).
+- Tests: `MoneyTest` (10), `LineAmountsTest` (3), `InvoiceIdTest` (3), `InvoiceTest` (3); ArchUnit
+  (Hexagonal/Naming/ContextBoundary) green. Not runtime-affecting (pure domain, no beans/endpoints).
+
+**Next (Sprint 14):** TASK-BE-039 (`BssBillingPort` + use cases), TASK-BE-040 (BSS mock + fixtures).
