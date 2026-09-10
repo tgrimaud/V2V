@@ -16,7 +16,7 @@ Grounding docs: `docs/integrations/galaxion/bss-billing-data-model.md` (real BSS
 ## TASK-BE-038 — Billing domain model
 
 **Type:** Technical task (backend domain)
-**Status:** ✅ Validated by user (2026-09-09) — `task/TASK-BE-038-billing-domain-model` (merge-ready; not merged)
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`)
 **Parent:** EPIC-004 / US-010/011/012/013 · ADR-0003
 **Gate:** none (fixture-buildable)
 
@@ -70,7 +70,7 @@ hexagonal layout used by `conversation` and `knowledge` (pure domain, no Spring)
 ## TASK-BE-039 — `BssBillingPort` + use cases
 
 **Type:** Technical task (backend port)
-**Status:** 📋 Proposed (next) — off the sprint branch
+**Status:** 🟢 In progress — `task/TASK-BE-039-bss-billing-port`
 **Parent:** US-005 · ADR-0004
 **Gate:** none (fixture-buildable)
 
