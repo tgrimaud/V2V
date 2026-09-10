@@ -168,12 +168,51 @@ grounded result (DEC-002); it never computes anything.
 - Like-for-like pair selection & `InvoiceLevel` matching → carried from BE-039 note.
 - PDF extraction path → TASK-BE-041.
 
+## TASK-BE-043 — Evidence-sufficiency / confidence gate
+
+**Type:** Technical task (backend domain)
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 93/100.
+**Parent:** US-012/013 · ADR-0003 · DEC-002 · BR-003 · OQ-002 (provisional thresholds)
+**Gate:** OQ-002 (provisional — thresholds tunable, refined when confidence policy is confirmed)
+
+### Context
+
+Before the LLM phrases a billing explanation (DEC-002), the deterministic result
+must be judged **safe to explain**. This gate turns an `InvoiceComparison` into an
+`ExplanationReadiness` verdict so the answer engine (BE-045) can phrase, phrase with
+a caveat, or withhold + escalate — with a traceable reason and the residual amount.
+
+### Scope
+
+- Inbound `AssessComparisonReadinessUseCase` + pure `ComparisonConfidenceService`.
+- Verdict model in the domain: `ExplanationConfidence` (EXPLAINABLE / PARTIAL /
+  INSUFFICIENT), `ReadinessReason`, `ExplanationReadiness` (confidence, reason,
+  `escalate`, `unexplainedAmount`).
+- Deterministic rules: no usable billed line on either side → INSUFFICIENT/escalate
+  (distinguishes the *unusable* journey from a genuine no-change); zero residual →
+  EXPLAINABLE; residual within `max-residual-ratio` of the total → PARTIAL; else
+  INSUFFICIENT/escalate.
+- Configurable provisional ratio (`voice-support.billing.confidence.max-residual-ratio`,
+  default 0.05); bean wired in `BillingConfig`.
+
+### Acceptance
+
+- Pure domain, no Spring/infra dependency (ArchUnit green).
+- Fully-reconciled fixture journeys → EXPLAINABLE; the unusable journey → INSUFFICIENT
+  (NO_USABLE_LINES, escalate); a small residual → PARTIAL; a large residual →
+  INSUFFICIENT (RESIDUAL_TOO_HIGH, escalate). Residual always surfaced (BR-003).
+- Unit tests drive the gate off real comparisons. `mvn test` green.
+
+### Out of scope
+
+- Wiring into the answer engine / escalation content → TASK-BE-045.
+- Final confidence policy & thresholds → OQ-002 resolution.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
 | TASK-BE-041 | Invoice PDF extractor → structured JSON (synthetic) + extraction status | fixtures |
-| TASK-BE-043 | Evidence-sufficiency / confidence gate before explanation | OQ-002 (provisional) |
 | TASK-BE-044 | Customer identity resolution (pilot mode) + ADR-0050 | OQ-001 (pilot) |
 | TASK-BE-045 | Wire billing chain behind the answer engine (grounded, LLM phrases only) | 1–6 |
 | TASK-BE-046 | Billing KB entries for confirmed causes | — |
