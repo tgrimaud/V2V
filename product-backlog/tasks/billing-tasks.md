@@ -106,7 +106,7 @@ periods) so the domain never talks to the BSS directly. Mirrors the
 ## TASK-BE-040 — BSS mock adapter + fixtures
 
 **Type:** Technical task (backend adapter + fixtures)
-**Status:** 🟢 In progress — `task/TASK-BE-040-bss-mock-fixtures`
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 94/100. Follow-up for BE-045: prod `source` default + OTel on billing path.
 **Parent:** US-005/007 · ADR-0004 · BR-003-3
 **Gate:** none (fixtures)
 
