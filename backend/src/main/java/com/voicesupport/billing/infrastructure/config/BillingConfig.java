@@ -4,10 +4,12 @@ import com.voicesupport.billing.domain.port.in.AssessComparisonReadinessUseCase;
 import com.voicesupport.billing.domain.port.in.CompareInvoicesUseCase;
 import com.voicesupport.billing.domain.port.in.RetrieveComparableInvoicesUseCase;
 import com.voicesupport.billing.domain.port.out.BssBillingPort;
+import com.voicesupport.billing.domain.port.out.InvoicePdfExtractorPort;
 import com.voicesupport.billing.domain.service.ComparableInvoiceService;
 import com.voicesupport.billing.domain.service.ComparisonConfidenceService;
 import com.voicesupport.billing.domain.service.InvoiceComparisonService;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.InMemoryBssBillingAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,5 +54,19 @@ public class BillingConfig {
     public AssessComparisonReadinessUseCase assessComparisonReadinessUseCase(
             @Value("${voice-support.billing.confidence.max-residual-ratio:0.05}") double maxResidualRatio) {
         return new ComparisonConfidenceService(maxResidualRatio);
+    }
+
+    // Invoice PDF extractor (ADR-0005 fallback path). `fixture` (default) = synthetic extractor over
+    // customer-eir-001..006; the real parser (e.g. PDFBox) registers under source=pdfbox once real
+    // PDFs are available (TASK-BE-047-adjacent). Selected via VOICE_SUPPORT_BILLING_PDF_SOURCE.
+    @Bean
+    public InvoicePdfExtractorPort invoicePdfExtractorPort(
+            @Value("${voice-support.billing.pdf.source:fixture}") String source) {
+        if (!"fixture".equalsIgnoreCase(source)) {
+            log.warn("[BILLING-PDF] source={} not available yet (real extractor is deferred) — using fixture extractor",
+                    source);
+        }
+        log.info("[BILLING-PDF] source=fixture — synthetic extractor (customer-eir-001..006)");
+        return new FixtureInvoicePdfExtractorAdapter(BssBillingFixtures.all());
     }
 }

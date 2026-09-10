@@ -208,11 +208,49 @@ a caveat, or withhold + escalate — with a traceable reason and the residual am
 - Wiring into the answer engine / escalation content → TASK-BE-045.
 - Final confidence policy & thresholds → OQ-002 resolution.
 
+## TASK-BE-041 — Invoice PDF extractor → structured invoice (fallback path)
+
+**Type:** Technical task (backend domain + synthetic adapter)
+**Status:** 🟢 In progress — `task/TASK-BE-041-pdf-extractor`
+**Parent:** US-005/007 · ADR-0005 · BR-003
+**Gate:** none (synthetic; real PDFBox parser deferred until real PDFs)
+
+### Context
+
+ADR-0005 fallback: when the structured BSS source (`GET /invoices/composed`) is not
+reachable read-only, the invoice PDF is extracted into the **same domain model**
+before any comparison — the LLM never reads the PDF. Because no real PDFs exist yet,
+BE-041 delivers the **contract + a synthetic extractor** (mock-first, like the BSS
+mock adapter); the real PDFBox parser registers later once real PDFs are provided.
+
+### Scope
+
+- Outbound `InvoicePdfExtractorPort` (`ExtractionResult extract(PdfSource)`).
+- Value objects: `PdfSource` (reference + defensively-copied bytes), `ExtractionStatus`
+  (SUCCESS / PARTIAL / FAILED), `ExtractionResult` (status + optional invoice + issues,
+  invariant-checked — a FAILED result carries no invoice, a non-FAILED one must).
+- `FixtureInvoicePdfExtractorAdapter`: maps a reference (fixture period id) to a structured
+  invoice; `-partial` suffix → PARTIAL with issues; empty/unknown → FAILED.
+- Bean wired in `BillingConfig` (`voice-support.billing.pdf.source`, default `fixture`).
+
+### Acceptance
+
+- Extraction **status is first-class** so a partial/failed extraction is never treated
+  as complete (BR-003).
+- Pure domain contract + infra adapter; ArchUnit green; context boots.
+- Unit tests: success / partial / empty-doc failed / unknown-ref failed / null guard;
+  `PdfSource` defensive copy + blank rejection; `ExtractionResult` invariants.
+  `mvn test` green.
+
+### Out of scope
+
+- Real PDF parsing (PDFBox) & real-invoice validation → deferred (with TASK-BE-047 / QA-020).
+- Choosing structured-source-vs-PDF at runtime → TASK-BE-045.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-041 | Invoice PDF extractor → structured JSON (synthetic) + extraction status | fixtures |
 | TASK-BE-044 | Customer identity resolution (pilot mode) + ADR-0050 | OQ-001 (pilot) |
 | TASK-BE-045 | Wire billing chain behind the answer engine (grounded, LLM phrases only) | 1–6 |
 | TASK-BE-046 | Billing KB entries for confirmed causes | — |
