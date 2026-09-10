@@ -106,7 +106,7 @@ periods) so the domain never talks to the BSS directly. Mirrors the
 ## TASK-BE-040 — BSS mock adapter + fixtures
 
 **Type:** Technical task (backend adapter + fixtures)
-**Status:** 📋 Proposed (next) — off the sprint branch
+**Status:** 🟢 In progress — `task/TASK-BE-040-bss-mock-fixtures`
 **Parent:** US-005/007 · ADR-0004 · BR-003-3
 **Gate:** none (fixtures)
 
