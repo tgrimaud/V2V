@@ -1532,3 +1532,24 @@ Adversarial code review: **96/100**, QA gate Pass (not runtime-affecting; OTel d
 - Tests: `ComparableInvoiceServiceTest` (6, fake port), `InvoiceSummaryTest` (2); ArchUnit green. mvn test green.
 
 **Next (Sprint 14):** TASK-BE-040 (BSS mock adapter + fixtures `customer-eir-001…006` + @Bean wiring).
+
+## 2026-09-10 — TASK-BE-040 BSS mock adapter + eir fixtures + wiring (Sprint 14, validated)
+
+**Ticket:** TASK-BE-040 · branch `task/TASK-BE-040-bss-mock-fixtures` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **94/100**, QA gate Pass.
+
+**Summary:**
+
+- `InMemoryBssBillingAdapter` behind `BssBillingPort`, fail-closed on identity (BR-002-1): unknown
+  account -> empty; `fetchInvoice` only returns an invoice belonging to the requested account.
+- `BssBillingFixtures` builds `customer-eir-001..006` (nominal, discount expiry, usage overage,
+  proration, insufficient data = single invoice, unusable = no lines) in the BE-038 domain model,
+  amounts integer cents with a consistent tax split + roll-up (feeds reconciliation later).
+- `BillingConfig` wires `BssBillingPort` (`voice-support.billing.bss.source`, default `mock`; real
+  billing-api adapter = TASK-BE-047) and the `RetrieveComparableInvoicesUseCase` bean.
+- Tests: `InMemoryBssBillingAdapterTest` (4, fail-closed scoping), `BssBillingFixturesTest` (4);
+  full `@SpringBootTest` context boots with the billing beans (wiring proven). mvn test green.
+- Review follow-up recorded for **BE-045**: prod `source` default (avoid silently serving mock) +
+  OTel instrumentation of the billing path (spans/metrics/logs) — blocking at integration time.
+
+**Next (Sprint 14):** TASK-BE-042 (deterministic comparison engine).
