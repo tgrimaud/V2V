@@ -211,7 +211,7 @@ a caveat, or withhold + escalate — with a traceable reason and the residual am
 ## TASK-BE-041 — Invoice PDF extractor → structured invoice (fallback path)
 
 **Type:** Technical task (backend domain + synthetic adapter)
-**Status:** 🟢 In progress — `task/TASK-BE-041-pdf-extractor`
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 93/100.
 **Parent:** US-005/007 · ADR-0005 · BR-003
 **Gate:** none (synthetic; real PDFBox parser deferred until real PDFs)
 

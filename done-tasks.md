@@ -1604,3 +1604,29 @@ lands (P2); duplicate line codes within one invoice keep the first (unique in V1
 confirm PARTIAL-vs-escalate policy; consider an absolute residual floor; OTel of the billing slice.
 
 **Next (Sprint 14):** TASK-BE-041 (invoice PDF extractor -> structured JSON, fallback path).
+
+## 2026-09-10 — TASK-BE-041 Invoice PDF extractor -> structured invoice (Sprint 14, validated)
+
+**Ticket:** TASK-BE-041 · branch `task/TASK-BE-041-pdf-extractor` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass.
+
+**Summary:**
+
+- ADR-0005 fallback contract, mock-first: `InvoicePdfExtractorPort` (out) +
+  `FixtureInvoicePdfExtractorAdapter` (real PDFBox parser deferred until real PDFs, mirrors the
+  real BssBillingPort adapter). The LLM never reads the PDF; the adapter yields the domain invoice.
+- Value objects: `PdfSource` (reference + defensively-copied bytes, blank-rejected),
+  `ExtractionStatus` (SUCCESS/PARTIAL/FAILED), `ExtractionResult` (status + optional invoice +
+  issues, invariant-checked: FAILED carries no invoice, non-FAILED must). Extraction status is
+  first-class so a partial/failed extraction is never treated as complete (BR-003).
+- `-partial` reference -> PARTIAL + issues; empty/unknown -> FAILED. Bean wired in `BillingConfig`
+  (`voice-support.billing.pdf.source=fixture` default, warns otherwise).
+- Tests: `FixtureInvoicePdfExtractorAdapterTest` (5), `PdfSourceTest` (2), `ExtractionResultTest`
+  (3). ArchUnit `..adapter.out..` naming rule flagged the initial name -> renamed to `...Adapter`
+  (rule works); ArchUnit green, `@SpringBootTest` context boots.
+
+**Follow-ups (deferred / BE-045):** real PDFBox parser + per-line PDF `Evidence` stamping +
+genuine partial-line handling (with BE-047 / QA-020); emit `ExtractionStatus` on the evidence slice
+(OTel) when wired into the answer engine.
+
+**Next (Sprint 14):** TASK-BE-044 (customer identity resolution, pilot mode + ADR-0050).
