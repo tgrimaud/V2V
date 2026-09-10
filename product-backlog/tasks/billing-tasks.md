@@ -250,7 +250,7 @@ mock adapter); the real PDFBox parser registers later once real PDFs are provide
 ## TASK-BE-044 — Customer identity resolution (pilot mode) + ADR-0050
 
 **Type:** Technical task (backend domain + synthetic adapter) + ADR
-**Status:** 🟢 In progress — `task/TASK-BE-044-customer-identity`
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 93/100. ADR-0050 Accepted.
 **Parent:** BR-002-1 · ADR-0004 · **ADR-0050** · OQ-001 (verification strength, pilot)
 **Gate:** OQ-001 (pilot trust model — real verification deferred)
 

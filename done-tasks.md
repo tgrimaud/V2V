@@ -1630,3 +1630,29 @@ genuine partial-line handling (with BE-047 / QA-020); emit `ExtractionStatus` on
 (OTel) when wired into the answer engine.
 
 **Next (Sprint 14):** TASK-BE-044 (customer identity resolution, pilot mode + ADR-0050).
+
+## 2026-09-10 — TASK-BE-044 Customer identity resolution (pilot) + ADR-0050 (Sprint 14, validated)
+
+**Ticket:** TASK-BE-044 · branch `task/TASK-BE-044-customer-identity` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass. **ADR-0050 Accepted.**
+
+**Summary:**
+
+- Fail-closed identity seam in the billing context (ADR-0050, BR-002-1): inbound
+  `ResolveCustomerIdentityUseCase` + pure `CustomerIdentityService` + outbound
+  `CustomerDirectoryPort`. Directory returns matches; domain maps 0 -> UNRESOLVED,
+  1 -> RESOLVED, >=2 -> AMBIGUOUS. Only RESOLVED grants billing access
+  (`IdentityResolution.canAccessBilling()`); no/ambiguous match never yields an account.
+- Value objects: `IdentityClaim` (channel + reference, sanitized, never logged in clear),
+  `IdentityStatus`, `IdentityResolution` (invariant-checked). `InMemoryCustomerDirectoryAdapter`
+  pilot directory aligned with `customer-eir-*` (case-insensitive, incl. ambiguous `EIR-DUP`).
+  Beans in `BillingConfig` (`voice-support.billing.identity.source=mock` default).
+- Pilot trust model: reference accepted at a low bar (synthetic accounts); real verification
+  strength deferred to **OQ-001**; the real CRM/BSS directory registers behind the same port.
+- Tests: `CustomerIdentityServiceTest` (5), `InMemoryCustomerDirectoryAdapterTest` (3),
+  `IdentityResolutionTest` (3), `IdentityClaimTest` (3). ArchUnit green; `@SpringBootTest` boots.
+
+**Follow-ups:** strong auth / enumeration protection on the real directory (OQ-001); channel
+allowlist; emit identity-resolution outcome on the billing trace when wired (BE-045).
+
+**Next (Sprint 14):** TASK-BE-045 (wire the billing chain behind the answer engine) — cadrage first.
