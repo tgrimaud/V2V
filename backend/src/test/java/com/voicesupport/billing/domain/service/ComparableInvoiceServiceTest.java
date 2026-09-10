@@ -43,6 +43,36 @@ class ComparableInvoiceServiceTest {
     }
 
     @Test
+    void available_invoices_breaks_a_same_date_tie_by_invoice_id() {
+        // GIVEN two invoices issued on the same date, given out of id order
+        LocalDate sameDate = LocalDate.of(2026, 2, 15);
+        InvoiceSummary b = summary("inv-b", sameDate);
+        InvoiceSummary a = summary("inv-a", sameDate);
+        FakeBssBillingPort port = new FakeBssBillingPort();
+        port.setInvoices(List.of(b, a));
+        ComparableInvoiceService service = new ComparableInvoiceService(port);
+
+        // WHEN the available invoices are listed
+        List<InvoiceSummary> result = service.availableInvoices(ACCOUNT);
+
+        // THEN the ordering is deterministic (tie broken by invoice id ascending)
+        assertThat(result).containsExactly(a, b);
+    }
+
+    @Test
+    void available_invoices_scopes_the_query_to_the_requested_account() {
+        // GIVEN a port that records the account it was queried with
+        FakeBssBillingPort port = new FakeBssBillingPort();
+        ComparableInvoiceService service = new ComparableInvoiceService(port);
+
+        // WHEN invoices are listed for a specific account
+        service.availableInvoices(ACCOUNT);
+
+        // THEN the port received that exact account (fail-closed scoping, BR-002-1)
+        assertThat(port.lastQueriedAccount()).isEqualTo(ACCOUNT);
+    }
+
+    @Test
     void available_invoices_returns_empty_when_the_account_has_none() {
         // GIVEN a port with no invoices for the account
         ComparableInvoiceService service = new ComparableInvoiceService(new FakeBssBillingPort());
@@ -79,13 +109,19 @@ class ComparableInvoiceServiceTest {
     private static final class FakeBssBillingPort implements BssBillingPort {
 
         private List<InvoiceSummary> invoices = new ArrayList<>();
+        private AccountId lastQueriedAccount;
 
         void setInvoices(List<InvoiceSummary> invoices) {
             this.invoices = new ArrayList<>(invoices);
         }
 
+        AccountId lastQueriedAccount() {
+            return lastQueriedAccount;
+        }
+
         @Override
         public List<InvoiceSummary> listInvoices(AccountId account) {
+            this.lastQueriedAccount = account;
             return List.copyOf(invoices);
         }
 

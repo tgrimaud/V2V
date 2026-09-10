@@ -93,6 +93,14 @@ periods) so the domain never talks to the BSS directly. Mirrors the
 - Port is an interface in `billing/domain/port/out`, read-only (no mutation).
 - Use case returns domain types; ArchUnit + naming green.
 
+### Deferred (adversarial review 2026-09-10)
+
+- `availableInvoices` returns **all** invoices of the account, ordered most-recent-first
+  (deterministic tie-break by invoice id). Restricting to **like-for-like comparability**
+  (same `InvoiceLevel` / subscription) and **selecting the pair** to compare are deferred
+  to **TASK-BE-041/042**. The account scoping (BR-002-1) is exercised by a service test;
+  the fail-closed enforcement lives in the adapters (TASK-BE-040/047).
+
 ---
 
 ## TASK-BE-040 — BSS mock adapter + fixtures
