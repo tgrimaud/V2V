@@ -171,7 +171,7 @@ grounded result (DEC-002); it never computes anything.
 ## TASK-BE-043 — Evidence-sufficiency / confidence gate
 
 **Type:** Technical task (backend domain)
-**Status:** 🟢 In progress — `task/TASK-BE-043-confidence-gate`
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 93/100.
 **Parent:** US-012/013 · ADR-0003 · DEC-002 · BR-003 · OQ-002 (provisional thresholds)
 **Gate:** OQ-002 (provisional — thresholds tunable, refined when confidence policy is confirmed)
 

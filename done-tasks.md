@@ -1579,3 +1579,28 @@ Adversarial code review: **96/100**, QA gate Pass (not runtime-affecting; OTel d
 lands (P2); duplicate line codes within one invoice keep the first (unique in V1 fixtures).
 
 **Next (Sprint 14):** TASK-BE-043 (evidence-sufficiency / confidence gate).
+
+## 2026-09-10 — TASK-BE-043 Evidence-sufficiency / confidence gate (Sprint 14, validated)
+
+**Ticket:** TASK-BE-043 · branch `task/TASK-BE-043-confidence-gate` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass.
+
+**Summary:**
+
+- `AssessComparisonReadinessUseCase` (port/in) + pure `ComparisonConfidenceService`: turns an
+  `InvoiceComparison` into an `ExplanationReadiness` verdict (`ExplanationConfidence`
+  EXPLAINABLE/PARTIAL/INSUFFICIENT + `ReadinessReason` + `escalate` + surfaced `unexplainedAmount`).
+- Rules: no usable billed line on either side -> INSUFFICIENT/escalate (distinguishes the *unusable*
+  journey from a genuine no-change, which needs the invoices not just the deltas); zero residual ->
+  EXPLAINABLE; residual within `max-residual-ratio` of the total -> PARTIAL; else
+  INSUFFICIENT/escalate. Residual always surfaced (BR-003), never hidden (DEC-002, pure arithmetic).
+- Provisional 5% ratio (OQ-002), tunable via `voice-support.billing.confidence.max-residual-ratio`;
+  bean wired in `BillingConfig`.
+- Tests: `ComparisonConfidenceServiceTest` (6) over real comparisons — reconciled -> EXPLAINABLE,
+  unusable -> INSUFFICIENT/NO_USABLE_LINES/escalate, 4% -> PARTIAL, 20% -> INSUFFICIENT/RESIDUAL_TOO_HIGH,
+  negative-ratio + null guards. ArchUnit green; `@SpringBootTest` context boots.
+
+**Follow-ups (BE-045 / OQ-002):** insufficient-data (single invoice) handled at the selection layer;
+confirm PARTIAL-vs-escalate policy; consider an absolute residual floor; OTel of the billing slice.
+
+**Next (Sprint 14):** TASK-BE-041 (invoice PDF extractor -> structured JSON, fallback path).
