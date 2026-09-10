@@ -2,13 +2,17 @@ package com.voicesupport.billing.infrastructure.config;
 
 import com.voicesupport.billing.domain.port.in.AssessComparisonReadinessUseCase;
 import com.voicesupport.billing.domain.port.in.CompareInvoicesUseCase;
+import com.voicesupport.billing.domain.port.in.ResolveCustomerIdentityUseCase;
 import com.voicesupport.billing.domain.port.in.RetrieveComparableInvoicesUseCase;
 import com.voicesupport.billing.domain.port.out.BssBillingPort;
+import com.voicesupport.billing.domain.port.out.CustomerDirectoryPort;
 import com.voicesupport.billing.domain.port.out.InvoicePdfExtractorPort;
 import com.voicesupport.billing.domain.service.ComparableInvoiceService;
 import com.voicesupport.billing.domain.service.ComparisonConfidenceService;
+import com.voicesupport.billing.domain.service.CustomerIdentityService;
 import com.voicesupport.billing.domain.service.InvoiceComparisonService;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.InMemoryBssBillingAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
 import org.slf4j.Logger;
@@ -68,5 +72,24 @@ public class BillingConfig {
         }
         log.info("[BILLING-PDF] source=fixture — synthetic extractor (customer-eir-001..006)");
         return new FixtureInvoicePdfExtractorAdapter(BssBillingFixtures.all());
+    }
+
+    // Customer directory (ADR-0050, BR-002-1). `mock` (default) = in-memory pilot directory aligned
+    // with the customer-eir-* fixtures; the real CRM/BSS directory registers later behind
+    // CustomerDirectoryPort. Selected via VOICE_SUPPORT_BILLING_IDENTITY_SOURCE.
+    @Bean
+    public CustomerDirectoryPort customerDirectoryPort(
+            @Value("${voice-support.billing.identity.source:mock}") String source) {
+        if (!"mock".equalsIgnoreCase(source)) {
+            log.warn("[BILLING-IDENTITY] source={} not available yet (real directory deferred) — using mock",
+                    source);
+        }
+        log.info("[BILLING-IDENTITY] source=mock — in-memory pilot directory (customer-eir-001..006)");
+        return new InMemoryCustomerDirectoryAdapter();
+    }
+
+    @Bean
+    public ResolveCustomerIdentityUseCase resolveCustomerIdentityUseCase(CustomerDirectoryPort directory) {
+        return new CustomerIdentityService(directory);
     }
 }

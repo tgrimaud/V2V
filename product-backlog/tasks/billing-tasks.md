@@ -247,11 +247,49 @@ mock adapter); the real PDFBox parser registers later once real PDFs are provide
 - Real PDF parsing (PDFBox) & real-invoice validation → deferred (with TASK-BE-047 / QA-020).
 - Choosing structured-source-vs-PDF at runtime → TASK-BE-045.
 
+## TASK-BE-044 — Customer identity resolution (pilot mode) + ADR-0050
+
+**Type:** Technical task (backend domain + synthetic adapter) + ADR
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 93/100. ADR-0050 Accepted.
+**Parent:** BR-002-1 · ADR-0004 · **ADR-0050** · OQ-001 (verification strength, pilot)
+**Gate:** OQ-001 (pilot trust model — real verification deferred)
+
+### Context
+
+Every billing access is scoped by `AccountId` (BR-002-1, fail-closed), but nothing yet
+turns *who is on the call/chat* into that account. The pilot has no strong auth
+(OQ-001) and runs on synthetic accounts, so BE-044 delivers the **fail-closed identity
+seam** (decision recorded in **ADR-0050**) that BE-045 will call before any BSS access.
+
+### Scope
+
+- Inbound `ResolveCustomerIdentityUseCase` + pure `CustomerIdentityService`.
+- Outbound `CustomerDirectoryPort` (returns matches; domain decides the verdict).
+- Value objects: `IdentityClaim` (channel + reference, sanitized, never logged in
+  clear), `IdentityStatus` (RESOLVED / UNRESOLVED / AMBIGUOUS), `IdentityResolution`
+  (status + optional account, invariant-checked, `canAccessBilling()`).
+- Resolution: **0 → UNRESOLVED, 1 → RESOLVED, ≥2 → AMBIGUOUS**; only RESOLVED grants
+  access — no/ambiguous match never yields an account (fail-closed).
+- `InMemoryCustomerDirectoryAdapter` (pilot) aligned with `customer-eir-*` fixtures,
+  case-insensitive, incl. an intentionally ambiguous reference; beans in `BillingConfig`.
+
+### Acceptance
+
+- Fail-closed: a caller can never obtain an `AccountId` without an unambiguous match.
+- Pure domain + infra adapter; ArchUnit green; context boots.
+- Unit tests: single/none/ambiguous match + null guards; adapter known/unknown/ambiguous
+  + case-insensitive; `IdentityResolution` + `IdentityClaim` invariants. `mvn test` green.
+- **ADR-0050** written + indexed.
+
+### Out of scope
+
+- Strong authentication / verification strength → OQ-001.
+- Wiring identity → billing access in the answer flow, escalation on unresolved → TASK-BE-045.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-044 | Customer identity resolution (pilot mode) + ADR-0050 | OQ-001 (pilot) |
 | TASK-BE-045 | Wire billing chain behind the answer engine (grounded, LLM phrases only) | 1–6 |
 | TASK-BE-046 | Billing KB entries for confirmed causes | — |
 | TASK-QA-019 | Billing fixtures + Gherkin/Behave journeys + latency slices | 1–8 |
