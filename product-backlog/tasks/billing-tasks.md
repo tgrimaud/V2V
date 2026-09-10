@@ -131,7 +131,7 @@ proration, insufficient data, unusable), so the engine is testable before real a
 ## TASK-BE-042 — Deterministic comparison engine
 
 **Type:** Technical task (backend domain)
-**Status:** 🟢 In progress — `task/TASK-BE-042-comparison-engine`
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 94/100.
 **Parent:** US-010/011/012/013 · ADR-0003 · DEC-002 · BR-003
 **Gate:** none (fixture-buildable)
 

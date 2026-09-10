@@ -1553,3 +1553,29 @@ Adversarial code review: **96/100**, QA gate Pass (not runtime-affecting; OTel d
   OTel instrumentation of the billing path (spans/metrics/logs) — blocking at integration time.
 
 **Next (Sprint 14):** TASK-BE-042 (deterministic comparison engine).
+
+## 2026-09-10 — TASK-BE-042 Deterministic invoice comparison engine (Sprint 14, validated)
+
+**Ticket:** TASK-BE-042 · branch `task/TASK-BE-042-comparison-engine` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **94/100**, QA gate Pass.
+
+**Summary:**
+
+- `CompareInvoicesUseCase` (port/in) + pure `InvoiceComparisonService` (domain/service): match
+  lines by code across previous/current, signed **TTC** contribution per line
+  (appeared/disappeared/changed), attribute each delta to a `BillingCauseType` from its
+  `LineCategory` (deterministic table; unmapped -> `UNEXPLAINED`), and expose
+  `unexplainedAmount = totalDelta - Sigma line contributions` so a header/line gap is always
+  surfaced (BR-003). No LLM, exact `Money` integer-cent arithmetic (DEC-002).
+- Wired `compareInvoicesUseCase` bean in `BillingConfig`.
+- Tests: `InvoiceComparisonServiceTest` (6) off the eir fixtures — nominal (no change),
+  discount-expiry (+500 -> DISCOUNT_EXPIRY, zero residual), overage (+1200 APPEARED ->
+  USAGE_OVERAGE), proration (+800 -> PRORATION), header/line reconciliation (+200 residual with an
+  UNEXPLAINED cause of 800), null-arg guard. ArchUnit green; `@SpringBootTest` context boots.
+- Not runtime-affecting yet (domain bean, not on any HTTP/voice path); OTel of the billing slice
+  is a BE-045 integration concern.
+
+**Follow-ups:** cause taxonomy stays coarse until the Galaxion `type`/`code`/`vatType` catalogue
+lands (P2); duplicate line codes within one invoice keep the first (unique in V1 fixtures).
+
+**Next (Sprint 14):** TASK-BE-043 (evidence-sufficiency / confidence gate).
