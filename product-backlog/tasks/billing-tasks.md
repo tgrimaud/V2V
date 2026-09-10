@@ -70,7 +70,7 @@ hexagonal layout used by `conversation` and `knowledge` (pure domain, no Spring)
 ## TASK-BE-039 — `BssBillingPort` + use cases
 
 **Type:** Technical task (backend port)
-**Status:** 🟢 In progress — `task/TASK-BE-039-bss-billing-port`
+**Status:** ✅ Validated by user (2026-09-10) — `task/TASK-BE-039-bss-billing-port` (merge-ready; not merged). Adversarial review 96/100.
 **Parent:** US-005 · ADR-0004
 **Gate:** none (fixture-buildable)
 
