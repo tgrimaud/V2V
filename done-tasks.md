@@ -1512,3 +1512,23 @@ behave**, backend **`mvn test`** OK; `deploy.yml` `--syntax-check` OK.
   (Hexagonal/Naming/ContextBoundary) green. Not runtime-affecting (pure domain, no beans/endpoints).
 
 **Next (Sprint 14):** TASK-BE-039 (`BssBillingPort` + use cases), TASK-BE-040 (BSS mock + fixtures).
+
+## 2026-09-10 — TASK-BE-039 BssBillingPort + list-invoices use case (Sprint 14, validated)
+
+**Ticket:** TASK-BE-039 · branch `task/TASK-BE-039-bss-billing-port` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user 2026-09-10 — merge-ready, **not merged** (merge on explicit request).
+Adversarial code review: **96/100**, QA gate Pass (not runtime-affecting; OTel deferred to BE-045).
+
+**Summary:**
+
+- Outbound read-only `BssBillingPort` (ADR-0004): `listInvoices(AccountId)` + `fetchInvoice(AccountId, InvoiceId)`,
+  both AccountId-scoped (fail-closed, BR-002-1), returning the BE-038 domain model. No mutation.
+- Inbound `RetrieveComparableInvoicesUseCase` (US-005) + pure `ComparableInvoiceService` ordering summaries
+  most-recent-first with a deterministic invoice-id tie-break (latest pair heads the list).
+- `InvoiceSummary` value object (id + period + TTC total) to list without loading the full line tree.
+- No live adapter yet: mock + `@Bean` wiring land in TASK-BE-040; real billing-api adapter in TASK-BE-047.
+- Adversarial-review follow-ups applied: tie-break determinism, test asserting AccountId propagation,
+  documented deferral of like-for-like comparability (`InvoiceLevel`/subscription) + pair selection to BE-041/042.
+- Tests: `ComparableInvoiceServiceTest` (6, fake port), `InvoiceSummaryTest` (2); ArchUnit green. mvn test green.
+
+**Next (Sprint 14):** TASK-BE-040 (BSS mock adapter + fixtures `customer-eir-001…006` + @Bean wiring).

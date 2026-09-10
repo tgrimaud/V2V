@@ -16,7 +16,7 @@ Grounding docs: `docs/integrations/galaxion/bss-billing-data-model.md` (real BSS
 ## TASK-BE-038 — Billing domain model
 
 **Type:** Technical task (backend domain)
-**Status:** ✅ Validated by user (2026-09-09) — `task/TASK-BE-038-billing-domain-model` (merge-ready; not merged)
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`)
 **Parent:** EPIC-004 / US-010/011/012/013 · ADR-0003
 **Gate:** none (fixture-buildable)
 
@@ -70,7 +70,7 @@ hexagonal layout used by `conversation` and `knowledge` (pure domain, no Spring)
 ## TASK-BE-039 — `BssBillingPort` + use cases
 
 **Type:** Technical task (backend port)
-**Status:** 📋 Proposed (next) — off the sprint branch
+**Status:** ✅ Validated by user (2026-09-10) — `task/TASK-BE-039-bss-billing-port` (merge-ready; not merged). Adversarial review 96/100.
 **Parent:** US-005 · ADR-0004
 **Gate:** none (fixture-buildable)
 
@@ -92,6 +92,14 @@ periods) so the domain never talks to the BSS directly. Mirrors the
 
 - Port is an interface in `billing/domain/port/out`, read-only (no mutation).
 - Use case returns domain types; ArchUnit + naming green.
+
+### Deferred (adversarial review 2026-09-10)
+
+- `availableInvoices` returns **all** invoices of the account, ordered most-recent-first
+  (deterministic tie-break by invoice id). Restricting to **like-for-like comparability**
+  (same `InvoiceLevel` / subscription) and **selecting the pair** to compare are deferred
+  to **TASK-BE-041/042**. The account scoping (BR-002-1) is exercised by a service test;
+  the fail-closed enforcement lives in the adapters (TASK-BE-040/047).
 
 ---
 
