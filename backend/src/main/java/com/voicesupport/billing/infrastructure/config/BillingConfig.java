@@ -1,8 +1,10 @@
 package com.voicesupport.billing.infrastructure.config;
 
+import com.voicesupport.billing.domain.port.in.CompareInvoicesUseCase;
 import com.voicesupport.billing.domain.port.in.RetrieveComparableInvoicesUseCase;
 import com.voicesupport.billing.domain.port.out.BssBillingPort;
 import com.voicesupport.billing.domain.service.ComparableInvoiceService;
+import com.voicesupport.billing.domain.service.InvoiceComparisonService;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.InMemoryBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
 import org.slf4j.Logger;
@@ -34,5 +36,10 @@ public class BillingConfig {
     @Bean
     public RetrieveComparableInvoicesUseCase retrieveComparableInvoicesUseCase(BssBillingPort bssBillingPort) {
         return new ComparableInvoiceService(bssBillingPort);
+    }
+
+    @Bean
+    public CompareInvoicesUseCase compareInvoicesUseCase() {
+        return new InvoiceComparisonService();
     }
 }

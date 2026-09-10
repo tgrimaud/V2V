@@ -128,12 +128,51 @@ proration, insufficient data, unusable), so the engine is testable before real a
 
 ---
 
+## TASK-BE-042 — Deterministic comparison engine
+
+**Type:** Technical task (backend domain)
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-10, `--no-ff`). Adversarial review 94/100.
+**Parent:** US-010/011/012/013 · ADR-0003 · DEC-002 · BR-003
+**Gate:** none (fixture-buildable)
+
+### Context
+
+The core billing reasoning: compare two invoices deterministically and produce the
+line deltas, the attributed business causes, and the residual the lines do not
+account for. Amounts and causes are computed **by code** — the LLM only phrases this
+grounded result (DEC-002); it never computes anything.
+
+### Scope
+
+- Inbound `CompareInvoicesUseCase` + pure `InvoiceComparisonService`.
+- Match lines by code across the two invoices (fallback to `type`/category label).
+- Signed contribution per line on the **tax-included (TTC)** basis; `ChangeKind`
+  (appeared / disappeared / changed) per line.
+- Attribute each non-zero delta to a `BillingCauseType` from its `LineCategory`
+  (deterministic table); unmapped categories fall to `UNEXPLAINED`.
+- Reconciliation: expose `unexplainedAmount` = header `totalDelta` − Σ line
+  contributions, so a header/line gap is always **surfaced, never hidden** (BR-003).
+- Register both use-case beans in `BillingConfig`.
+
+### Acceptance
+
+- Pure domain, no Spring/infra dependency (ArchUnit green).
+- The four comparable eir journeys attribute the expected cause (discount expiry,
+  overage, proration; nominal = no change) with a fully-explained (zero) residual.
+- A header/line mismatch yields a non-zero `unexplainedAmount`.
+- Unit tests drive the engine off `BssBillingFixtures`. `mvn test` green.
+
+### Out of scope
+
+- Evidence-sufficiency / confidence gate → TASK-BE-043.
+- Like-for-like pair selection & `InvoiceLevel` matching → carried from BE-039 note.
+- PDF extraction path → TASK-BE-041.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
 | TASK-BE-041 | Invoice PDF extractor → structured JSON (synthetic) + extraction status | fixtures |
-| TASK-BE-042 | Deterministic comparison engine (diff + cause attribution + reconciliation) | fixtures |
 | TASK-BE-043 | Evidence-sufficiency / confidence gate before explanation | OQ-002 (provisional) |
 | TASK-BE-044 | Customer identity resolution (pilot mode) + ADR-0050 | OQ-001 (pilot) |
 | TASK-BE-045 | Wire billing chain behind the answer engine (grounded, LLM phrases only) | 1–6 |
