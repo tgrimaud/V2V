@@ -289,9 +289,11 @@ seam** (decision recorded in **ADR-0050**) that BE-045 will call before any BSS 
 ## TASK-BE-045 — Wire billing chain behind the answer engine
 
 **Type:** Technical task (backend integration) — **runtime-affecting** (OTel mandatory)
-**Status:** 🟡 Cadrage — `task/TASK-BE-045-wire-billing-chain`. Design in
-`docs/architecture/billing-answer-integration-cadrage.md`; decisions **D1–D3 pending**;
-ADR-0051 to be written before coding. **Implementation not started.**
+**Status:** 🟡 Cadrage done — `task/TASK-BE-045-wire-billing-chain`. Design in
+`docs/architecture/billing-answer-integration-cadrage.md`; **decisions D1–D3 locked**
+(D1a evidence injection · D2a deterministic intent detector · D3c dedicated
+`POST /api/conversation/billing-explain`). **ADR-0051 next, then implementation
+(awaiting go).**
 **Parent:** US-005/007/010–013 · ADR-0003 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019
 **Gate:** BE-038/039/040/041/042/043/044 (all merged)
 
@@ -302,11 +304,12 @@ answer engine so the LLM **only phrases** a grounded, pre-computed result (DEC-0
 the bot **escalates fail-closed** on unresolved identity or non-explainable results.
 Verified constraints: no runtime intent classifier (BUG-007), no identity field on
 `ConverseRequest`, LLM grounding is only `List<RetrievedEvidence>` (OutputGuardrail vets
-amounts). Open decisions: **D1** how the deterministic result reaches the LLM (recommend
-evidence injection), **D2** billing-intent detection (recommend deterministic FR/EN
-detector ± channel/invoice signal), **D3** identity/invoice plumbing (recommend request
-fields, or a dedicated backend endpoint to prove the chain first). Full options + target
-flow + escalation + observability + sub-tasks: see the cadrage doc.
+amounts). Locked decisions: **D1a** deterministic result reaches the LLM as injected grounding
+evidence (reuse AnswerGeneratorPort + OutputGuardrail, DEC-002 by construction); **D2a**
+deterministic FR/EN billing-intent detector behind a port; **D3c** a dedicated
+`POST /api/conversation/billing-explain` endpoint (leave `/converse` + runtime to a
+follow-up). Next: write **ADR-0051**, then implement the 9 sub-tasks (full target flow +
+escalation + mandatory OTel slice + sub-tasks in the cadrage doc).
 
 ## Proposed (later this sprint — full sections created when picked up)
 

@@ -1,6 +1,6 @@
 # TASK-BE-045 — Cadrage: wiring the billing chain behind the answer engine
 
-**Status:** Cadrage (design, pre-implementation) — 2026-09-10. Decisions D1–D3 pending user/product/architecture confirmation; will crystallize into **ADR-0051** before coding.
+**Status:** Cadrage (design, pre-implementation) — 2026-09-10. **Decisions D1–D3 locked (2026-09-10, see §3).** ADR-0051 to be written next; implementation not started (awaiting go).
 **Scope ticket:** TASK-BE-045 (Sprint 14). Depends on BE-038/039/040/041/042/043/044 (all merged).
 
 > Goal: connect the deterministic billing chain (identity → comparable invoices →
@@ -27,14 +27,19 @@ Billing chain (`com.voicesupport.billing`, all merged): `ResolveCustomerIdentity
 
 ---
 
-## 2. Target flow (proposed)
+## 2. Target flow (locked)
 
-A new **billing orchestration** use case in the billing context, called by the conversation
-layer **before** KB grounding when the turn is a billing-explanation intent:
+For BE-045 the chain is exposed as a **dedicated backend endpoint** (D3c) —
+`POST /api/conversation/billing-explain` — that receives the identity claim + optional
+invoice ref + transcript, so `/converse` and the voice runtime stay untouched this ticket.
+The deterministic explanation is injected as **grounding evidence** (D1a) into the existing
+`AnswerGeneratorPort`; a deterministic **billing-intent detector** (D2a) is built behind a
+port and used by the endpoint as an intent guard (and is the reusable capital for the later
+`/converse` routing follow-up).
 
 ```
-turn (transcript + identity claim + optional invoice ref)
-  → [D2 intent] billing-explanation? ──no──▶ existing KB grounding (unchanged)
+POST /billing-explain (channel + reference + optional invoice_id + transcript)
+  → [D2a intent guard] billing-explanation? ──no──▶ decline/redirect (not a billing turn)
         │ yes
         ▼
   ResolveCustomerIdentity(claim)
@@ -63,42 +68,30 @@ contract, no LLM math.
 
 ---
 
-## 3. Decisions to confirm before coding
+## 3. Decisions (locked 2026-09-10)
 
-### D1 — How the deterministic result reaches the LLM (DEC-002)
+### D1 — How the deterministic result reaches the LLM (DEC-002) → **D1a**
 
-- **D1a (recommended):** Build a deterministic explanation string and inject it as
-  `RetrievedEvidence.text`; reuse `AnswerGeneratorPort` + `OutputGuardrail` untouched. The
-  LLM only rephrases; amount-grounding passes by construction. Minimal blast radius.
-- D1b: Return the deterministic text **as the answer** and skip the LLM (LLM adds nothing;
-  most deterministic, least natural). 
-- D1c: New structured grounding contract (facts object) into the prompt builder. Most work,
-  changes the LLM adapter contract.
+Build a deterministic explanation string and inject it as `RetrievedEvidence.text`; reuse
+`AnswerGeneratorPort` + `OutputGuardrail` untouched. The LLM only rephrases; amount-grounding
+passes by construction. Minimal blast radius.
+_(Rejected: D1b return text as-is, no LLM — too robotic; D1c structured grounding contract —
+changes the LLM adapter for no pilot benefit.)_
 
-### D2 — How a billing-explanation intent is detected (no runtime classifier today)
+### D2 — Billing-explanation intent detection → **D2a**
 
-- **D2a (recommended for pilot):** Deterministic billing-intent detector (FR/EN,
-  word-boundary keyword sets, env-tunable), same pattern as `ClosingIntentDetector`. Cheap,
-  deterministic, testable. Behind a port so it's swappable.
-- D2b: Explicit channel signal — the caller sets a billing mode / the presence of an
-  `invoice_id`/`customer_reference` triggers the billing branch. Simplest, but needs the
-  channel to know.
-- D2c: Embedding/similarity classifier at query time — heavier; BUG-007/OQ-008 caution
-  against forcing a query domain.
-- Likely **D2a + D2b combined**: billing branch fires when intent detector matches **and/or**
-  a customer/invoice reference is present.
+Deterministic billing-intent detector (FR/EN, word-boundary keyword sets, env-tunable), same
+pattern as `ClosingIntentDetector`, behind a port. In BE-045 it is the endpoint's **intent
+guard**; it is the reusable component the later `/converse` routing will call.
+_(Rejected for now: D2b channel-only signal; D2c embedding classifier — heavier, BUG-007/OQ-008.)_
 
-### D3 — How identity + invoice selection are plumbed for the pilot
+### D3 — Identity + invoice plumbing → **D3c**
 
-- **D3a (recommended):** Add optional `customer_reference` (+ optional `invoice_id`) to
-  `ConverseRequest` + `ChannelEnvelope`, supplied by the channel/test harness; if billing
-  intent fires without a usable reference → clarify (ask for it) then escalate. REST contract
-  change (documented), voice-runtime plumbing tracked as a sub-item.
-- D3b: In-dialog identity capture (multi-turn: bot asks the reference, stores it in memory,
-  resumes). No contract change but needs conversational state — bigger.
-- D3c: Backend-only for BE-045: expose a dedicated `POST /api/conversation/billing-explain`
-  (identity + invoice in body) + tests, defer the `/converse` routing + runtime plumbing to a
-  follow-up. Smallest, keeps `/converse` untouched, fastest to prove the chain end-to-end.
+Backend-only for BE-045: a dedicated `POST /api/conversation/billing-explain` (channel +
+reference + optional `invoice_id` + transcript in the body) + tests. `/converse` and the voice
+runtime stay untouched; their routing + reference plumbing is an explicit follow-up ticket.
+Smallest change, fastest to prove the whole chain end-to-end.
+_(Deferred: D3a `ConverseRequest`/envelope fields + `/converse` branch; D3b in-dialog capture.)_
 
 Invoice pair: compare the **two most recent comparable** invoices (BE-039 order); like-for-like
 `InvoiceLevel`/subscription matching stays deferred (already noted on BE-039). `<2` →
@@ -140,20 +133,29 @@ metrics + structured logs (p50/p95/p99 capable):
 
 ---
 
-## 6. Proposed BE-045 sub-tasks (once D1–D3 fixed)
+## 6. BE-045 sub-tasks (D1–D3 locked)
 
-1. `BillingExplanationUseCase` (billing context) orchestrating identity → list → compare →
-   readiness → deterministic explanation builder (FR/EN) → `ExplanationOutcome` (text +
-   evidence + escalate reason).
-2. Deterministic `BillingExplanationComposer` (amounts + causes + residual → grounded text,
-   language-aware), unit-tested on the six journeys.
-3. Conversation wiring per **D2/D3** (intent branch or dedicated endpoint), reusing
-   `AnswerGeneratorPort` + `OutputGuardrail` per **D1**.
-4. Escalation reason extension + handoff content for billing.
-5. OTel spans/metrics/logs (§5) + correlation-id continuity.
-6. Tests: billing journeys end-to-end (grounded phrasing, PARTIAL caveat, INSUFFICIENT
-   escalation, identity unresolved/ambiguous), OutputGuardrail amount-grounding, ArchUnit.
-7. Docs: architecture + API (if REST contract changes) + ADR-0051.
+1. **ADR-0051** — record the billing↔answer integration decision (D1a evidence injection,
+   D2a deterministic intent detector, D3c dedicated endpoint, escalation mapping) — write first.
+2. `BillingIntentDetector` (domain, FR/EN word-boundary keywords, env-tunable) behind a port
+   (D2a); unit-tested. Used by the endpoint as an intent guard.
+3. `BillingExplanationUseCase` (billing context) orchestrating identity → comparable invoices
+   → compare → readiness → deterministic explanation → `BillingExplanationOutcome`
+   (answer/evidence + confidence + escalation reason), fail-closed on every degraded branch (§4).
+4. Deterministic `BillingExplanationComposer` (amounts + causes + residual → grounded text,
+   language-aware via `AnswerLanguage`), unit-tested on the six journeys; feeds D1a evidence.
+5. `POST /api/conversation/billing-explain` controller + DTOs (D3c), api-key gated like
+   `/answer`; reuses `AnswerGeneratorPort` + `OutputGuardrail` (D1a). No `/converse` change.
+6. Escalation reason extension (`IDENTITY_UNVERIFIED`, `BILLING_UNEXPLAINED`) + by-reference
+   handoff content, threaded through `PrepareEscalationHandoffUseCase` (ADR-0019).
+7. OTel spans/metrics/logs (§5) + correlation-id continuity; no PII / no full invoice.
+8. Tests: end-to-end journeys (grounded phrasing, PARTIAL caveat, INSUFFICIENT escalation,
+   identity unresolved/ambiguous, <2 invoices), OutputGuardrail amount-grounding, ArchUnit.
+9. Docs: architecture.md + API docs (new endpoint) + ADR-0051; adversarial review before QA.
+
+**Follow-up ticket (out of BE-045):** route billing from `/converse` (D3a request/envelope
+fields + `/converse` intent branch) + voice-runtime plumbing, reusing the BE-045 use case +
+detector.
 
 ---
 
