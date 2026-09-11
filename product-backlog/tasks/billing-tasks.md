@@ -289,16 +289,17 @@ seam** (decision recorded in **ADR-0050**) that BE-045 will call before any BSS 
 ## TASK-BE-045 — Wire billing chain behind the answer engine
 
 **Type:** Technical task (backend integration) — **runtime-affecting** (OTel mandatory)
-**Status:** 🟢 Implemented — `task/TASK-BE-045-wire-billing-chain`. Design in
-`docs/architecture/billing-answer-integration-cadrage.md`; **decisions D1–D3 locked**
-(D1a evidence injection · D2a deterministic intent detector · D3c dedicated
-`POST /api/conversation/billing-explain`). **ADR-0051 Accepted.** Sub-tasks 1–8 done:
-`BillingIntentDetector` + `BillingExplanationComposer` + `ExplainBillingUseCase`
-(billing core, 18 tests); `BillingExplanationPort`/`InProcBillingExplanationAdapter`
-seam + `BillingAnswerService` + `POST /api/conversation/billing-explain` (10 tests);
+**Status:** ✅ Validated (user, 2026-09-11) — `task/TASK-BE-045-wire-billing-chain`,
+pushed. Design in `docs/architecture/billing-answer-integration-cadrage.md`;
+**decisions D1–D3 locked** (D1a evidence injection · D2a deterministic intent detector ·
+D3c dedicated `POST /api/conversation/billing-explain`). **ADR-0051 Accepted.** Sub-tasks
+1–8 done: `BillingIntentDetector` + `BillingExplanationComposer` + `ExplainBillingUseCase`
+(billing core, 18 tests); `BillingExplanationPort`/`InProcBillingExplanationAdapter` seam +
+`BillingAnswerService` + `POST /api/conversation/billing-explain` (10 tests);
 `EscalationReason` += IDENTITY_UNVERIFIED/BILLING_UNEXPLAINED; BILLING OTel slice.
-Full backend suite + ArchUnit green, Spring context boots. **Next: adversarial review
-before QA; awaiting user validation to merge.**
+Full backend suite (560 tests) + ArchUnit green, Spring context boots. Adversarial review
+**93/100** (QA gate: Pass). **Merge-ready** into `feat/sprint-14-billing-identity`
+(`--no-ff`) — awaiting explicit merge request.
 **Parent:** US-005/007/010–013 · ADR-0003 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019
 **Gate:** BE-038/039/040/041/042/043/044 (all merged)
 

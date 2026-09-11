@@ -1656,3 +1656,42 @@ genuine partial-line handling (with BE-047 / QA-020); emit `ExtractionStatus` on
 allowlist; emit identity-resolution outcome on the billing trace when wired (BE-045).
 
 **Next (Sprint 14):** TASK-BE-045 (wire the billing chain behind the answer engine) — cadrage first.
+
+---
+
+## 2026-09-11 — TASK-BE-045: wire the billing chain behind the answer engine ✅ Validated
+
+**Branch:** `task/TASK-BE-045-wire-billing-chain` (off `feat/sprint-14-billing-identity`), pushed.
+**ADR:** ADR-0051 (Accepted) — billing explanation behind the answer engine (D1a evidence
+injection · D2a deterministic intent detector · D3c dedicated endpoint).
+
+**What shipped:**
+- **Billing core (pure domain):** `BillingIntentDetector` (FR/EN accent/case-folded word-boundary
+  keywords, env-tunable), `BillingExplanationComposer` (grounded FR/EN text — every voiced amount
+  comes from the computed comparison so the OutputGuardrail passes; DEC-002 by construction),
+  `ExplainBillingUseCase`/`BillingExplanationService` (fail-closed chain: intent guard → identity
+  (BR-002-1) → comparable invoices → deterministic comparison → confidence gate (BR-003) → grounded
+  text; compares the two most recent invoices). `BillingExplanation(+Outcome)`,
+  `BillingExplanationQuery`; escalation carried as a stable code so billing never depends on
+  conversation.
+- **Conversation seam + endpoint:** `BillingExplanationPort` + `InProcBillingExplanationAdapter`
+  (in-proc seam mirroring the knowledge seam; maps outcome→grounding + code→EscalationReason;
+  records the `billing` OTel slice tagged by outcome, no PII). `BillingAnswerService`
+  (`AnswerBillingQuestionUseCase`): resolves language, reuses `AnswerGeneratorPort` +
+  `OutputGuardrail` to rephrase the grounded result, or voices a safe hand-off. `POST
+  /api/conversation/billing-explain` (D3c) + DTOs, api-key gated via `WebSecurityMvcConfig`;
+  `/converse` + voice runtime left untouched (routing from `/converse` = follow-up).
+  `EscalationReason` += `IDENTITY_UNVERIFIED`/`BILLING_UNEXPLAINED`; `GeneratedAnswer.escalated()`;
+  by-reference hand-off (ADR-0019/DEC-013).
+
+**Tests:** intent (6), composer (4), service across the six fixture journeys (8),
+`BillingAnswerService` (5, incl. DEC-002 amount block + no-LLM-on-escalation), adapter+telemetry
+mapping (5), `/billing-explain` api-key 401 (1). Full backend suite **560 tests, 0 failures**;
+ArchUnit + Spring context boot green. Adversarial review **93/100**, QA gate Pass.
+
+**Follow-ups:** route billing from `/converse` (D3a) + voice-runtime plumbing; include the current
+TTC total in the "unchanged" wording to avoid a false-positive block; targeted `invoiceId`
+selection; confidence thresholds (OQ-002); real Galaxion adapter (BE-047).
+
+**Merge:** merge-ready into `feat/sprint-14-billing-identity` (`--no-ff`) — awaiting explicit
+merge request.
