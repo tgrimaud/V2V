@@ -1,6 +1,6 @@
 # TASK-BE-045 — Cadrage: wiring the billing chain behind the answer engine
 
-**Status:** Cadrage (design, pre-implementation) — 2026-09-10. **Decisions D1–D3 locked (2026-09-10, see §3).** ADR-0051 to be written next; implementation not started (awaiting go).
+**Status:** Implemented — 2026-09-11. **Decisions D1–D3 locked (2026-09-10, see §3);** ADR-0051 Accepted; sub-tasks 1–8 done (see §6), all backend tests + ArchUnit green and the Spring context boots. Remaining: docs (this update) + adversarial review before QA.
 **Scope ticket:** TASK-BE-045 (Sprint 14). Depends on BE-038/039/040/041/042/043/044 (all merged).
 
 > Goal: connect the deterministic billing chain (identity → comparable invoices →
@@ -138,21 +138,29 @@ metrics + structured logs (p50/p95/p99 capable):
 1. **ADR-0051** — record the billing↔answer integration decision (D1a evidence injection,
    D2a deterministic intent detector, D3c dedicated endpoint, escalation mapping). ✅ **Written +
    Accepted (2026-09-11)** — `docs/architecture/adrs/ADR-0051-billing-explanation-behind-the-answer-engine.md`.
-2. `BillingIntentDetector` (domain, FR/EN word-boundary keywords, env-tunable) behind a port
-   (D2a); unit-tested. Used by the endpoint as an intent guard.
-3. `BillingExplanationUseCase` (billing context) orchestrating identity → comparable invoices
-   → compare → readiness → deterministic explanation → `BillingExplanationOutcome`
-   (answer/evidence + confidence + escalation reason), fail-closed on every degraded branch (§4).
-4. Deterministic `BillingExplanationComposer` (amounts + causes + residual → grounded text,
-   language-aware via `AnswerLanguage`), unit-tested on the six journeys; feeds D1a evidence.
-5. `POST /api/conversation/billing-explain` controller + DTOs (D3c), api-key gated like
-   `/answer`; reuses `AnswerGeneratorPort` + `OutputGuardrail` (D1a). No `/converse` change.
-6. Escalation reason extension (`IDENTITY_UNVERIFIED`, `BILLING_UNEXPLAINED`) + by-reference
-   handoff content, threaded through `PrepareEscalationHandoffUseCase` (ADR-0019).
-7. OTel spans/metrics/logs (§5) + correlation-id continuity; no PII / no full invoice.
-8. Tests: end-to-end journeys (grounded phrasing, PARTIAL caveat, INSUFFICIENT escalation,
-   identity unresolved/ambiguous, <2 invoices), OutputGuardrail amount-grounding, ArchUnit.
-9. Docs: architecture.md + API docs (new endpoint) + ADR-0051; adversarial review before QA.
+2. ✅ `BillingIntentDetector` (`billing.domain.service`, FR/EN accent/case-folded word-boundary
+   keywords, env-tunable via `voice-support.billing.intent.keywords`); unit-tested (6). Used by the
+   billing use case as the intent guard.
+3. ✅ `ExplainBillingUseCase` + `BillingExplanationService` (billing context) orchestrating intent
+   guard → identity → comparable invoices → compare → readiness → deterministic explanation →
+   `BillingExplanation`/`BillingExplanationOutcome` (text + confidence + escalation code),
+   fail-closed on every degraded branch (§4); unit-tested across the six fixture journeys (8).
+4. ✅ Deterministic `BillingExplanationComposer` (`billing.domain.service`; delta + per-cause impact
+   + residual → grounded text, FR/EN), unit-tested (4); every voiced amount comes from the
+   computed comparison so the OutputGuardrail passes. Feeds the D1a evidence.
+5. ✅ `POST /api/conversation/billing-explain` controller + DTOs (D3c), api-key gated via
+   `WebSecurityMvcConfig` like `/answer`. The `BillingAnswerService` (`conversation.application`)
+   reuses `AnswerGeneratorPort` + `OutputGuardrail` (D1a) via the `BillingExplanationPort` seam. No
+   `/converse` change.
+6. ✅ Escalation reason extension (`IDENTITY_UNVERIFIED`, `BILLING_UNEXPLAINED`) +
+   `GeneratedAnswer.escalated()`; by-reference handoff threaded through
+   `PrepareEscalationHandoffUseCase` (ADR-0019 / DEC-013).
+7. ✅ OTel: `BILLING` latency slice tagged by outcome in `InProcBillingExplanationAdapter` +
+   `[BILLING-EXPLAIN]` structured log with correlation-id continuity; no PII / no full invoice.
+8. ✅ Tests: billing core (18) + seam/adapter (10), incl. DEC-002 amount-grounding block, no-LLM on
+   escalation, telemetry slice; ArchUnit + Spring context boot green.
+9. Docs: architecture.md + API docs (new endpoint) + ADR-0051 (this update); **adversarial review
+   before QA** (next).
 
 **Follow-up ticket (out of BE-045):** route billing from `/converse` (D3a request/envelope
 fields + `/converse` intent branch) + voice-runtime plumbing, reusing the BE-045 use case +
