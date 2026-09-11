@@ -136,7 +136,8 @@ metrics + structured logs (p50/p95/p99 capable):
 ## 6. BE-045 sub-tasks (D1–D3 locked)
 
 1. **ADR-0051** — record the billing↔answer integration decision (D1a evidence injection,
-   D2a deterministic intent detector, D3c dedicated endpoint, escalation mapping) — write first.
+   D2a deterministic intent detector, D3c dedicated endpoint, escalation mapping). ✅ **Written +
+   Accepted (2026-09-11)** — `docs/architecture/adrs/ADR-0051-billing-explanation-behind-the-answer-engine.md`.
 2. `BillingIntentDetector` (domain, FR/EN word-boundary keywords, env-tunable) behind a port
    (D2a); unit-tested. Used by the endpoint as an intent guard.
 3. `BillingExplanationUseCase` (billing context) orchestrating identity → comparable invoices
