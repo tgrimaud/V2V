@@ -2,10 +2,13 @@ package com.voicesupport.shared.web.security;
 
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
+import com.voicesupport.conversation.domain.port.in.AnswerBillingQuestionUseCase;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
+import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.infrastructure.adapter.in.rest.AnswerController;
+import com.voicesupport.conversation.infrastructure.adapter.in.rest.BillingExplainController;
 import com.voicesupport.conversation.infrastructure.adapter.in.rest.RetrievalController;
 import com.voicesupport.knowledge.domain.port.in.IngestKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
@@ -31,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // TASK-BE-019: the answer, retrieve and knowledge endpoints had no authentication. With a shared
 // secret configured, the central ApiKeyAuthInterceptor must reject calls without a matching
 // x-api-key before any use case runs, returning the sanitized ErrorResponse contract (401).
-@WebMvcTest({AnswerController.class, RetrievalController.class, KnowledgeController.class})
+@WebMvcTest({AnswerController.class, RetrievalController.class, KnowledgeController.class,
+        BillingExplainController.class})
 @Import({JacksonConfig.class, WebSecurityMvcConfig.class})
 @TestPropertySource(properties = "voice-support.conversation.api-key=s3cret")
 @DisplayName("Protected endpoints require x-api-key (TASK-BE-019)")
@@ -61,6 +65,20 @@ class ProtectedEndpointsApiKeyTest {
         @Bean
         LanguageDetector languageDetector() {
             return new LanguageDetector(AnswerLanguage.ENGLISH);
+        }
+
+        @Bean
+        AnswerBillingQuestionUseCase answerBillingQuestionUseCase() {
+            return request -> {
+                throw new AssertionError("use case must not run for an unauthorized request");
+            };
+        }
+
+        @Bean
+        PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase() {
+            return command -> {
+                throw new AssertionError("use case must not run for an unauthorized request");
+            };
         }
 
         @Bean
@@ -127,6 +145,15 @@ class ProtectedEndpointsApiKeyTest {
     void retrieveRejectedWithoutKey() throws Exception {
         mockMvc.perform(post("/api/conversation/retrieve")
                         .contentType(MediaType.APPLICATION_JSON).content(RETRIEVE_BODY))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /billing-explain without api-key is rejected with 401")
+    void billingExplainRejectedWithoutKey() throws Exception {
+        mockMvc.perform(post("/api/conversation/billing-explain")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"transcript\":\"Pourquoi ma facture change ?\",\"reference\":\"EIR-1002\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
