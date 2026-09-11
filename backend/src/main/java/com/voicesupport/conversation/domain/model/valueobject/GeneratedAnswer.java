@@ -17,6 +17,14 @@ public record GeneratedAnswer(String text, Double confidence, boolean grounded, 
         return new GeneratedAnswer(text, null, false, null);
     }
 
+    // Safe fallback carrying a proactively-decided escalation reason (TASK-BE-045, ADR-0051): the
+    // billing chain escalates fail-closed (unverified identity / unexplained change) without a
+    // guardrail verdict, so the by-reference hand-off (ADR-0019 / DEC-013) still travels while the
+    // spoken text stays a safe operational message.
+    public static GeneratedAnswer escalated(String text, EscalationReason reason) {
+        return new GeneratedAnswer(text, null, false, reason);
+    }
+
     // Fallback choke point that also records the escalation reason a blocked verdict maps to
     // (empty for non-escalating verdicts), so the spoken wording is unchanged (ADR-0019) while the
     // machine-to-machine hand-off can travel by reference. Keeps escalation detection in the domain.
