@@ -298,8 +298,11 @@ D3c dedicated `POST /api/conversation/billing-explain`). **ADR-0051 Accepted.** 
 `BillingAnswerService` + `POST /api/conversation/billing-explain` (10 tests);
 `EscalationReason` += IDENTITY_UNVERIFIED/BILLING_UNEXPLAINED; BILLING OTel slice.
 Full backend suite (560 tests) + ArchUnit green, Spring context boots. Adversarial review
-**93/100** (QA gate: Pass). **Merge-ready** into `feat/sprint-14-billing-identity`
-(`--no-ff`) — awaiting explicit merge request.
+**93/100** (QA gate: Pass). **QA functional+latency: GO** (2026-09-11) — 8 Cucumber
+acceptance scenarios (`billing-explanation.feature`, BDD suite 44 green), api-key gating +
+DEC-002 block covered; `billing` deterministic slice p50 2.5µs/p95 6.4µs/p99 17.6µs (mock
+BSS), LLM slice unchanged from `/answer`. Report: `docs/qa/task-be-045-billing-explain-qa-report.md`.
+**Merge-ready** into `feat/sprint-14-billing-identity` (`--no-ff`) — awaiting explicit merge request.
 **Parent:** US-005/007/010–013 · ADR-0003 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019
 **Gate:** BE-038/039/040/041/042/043/044 (all merged)
 
