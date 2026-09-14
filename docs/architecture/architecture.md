@@ -28,8 +28,13 @@
 >   audience filters), input/output **guardrails** (incl. DEC-002 no-fabricated-amount),
 >   three-band retrieval **confidence**, conversation **memory**, and per-slice
 >   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
->   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up}`,
->   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
+>   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up,billing-explain}`,
+>   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI. `billing-explain` (TASK-BE-045,
+>   ADR-0051) runs the deterministic **billing** chain (identity → comparable invoices →
+>   comparison → confidence gate) behind the answer engine: the LLM only rephrases the
+>   grounded, pre-computed explanation (DEC-002) and the bot escalates fail-closed
+>   (unverified identity / unexplained change) by-reference. `/converse` is unchanged
+>   (billing routing from `/converse` is a follow-up).
 > - **Infra:** local `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama) for
 >   dev, **plus the Sprint 11 deployment packaging**: Docker images for both services,
 >   `deploy/compose/` stacks per tier, HAProxy/Keepalived VIPs, GitHub Actions CI, and

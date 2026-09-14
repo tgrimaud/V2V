@@ -286,11 +286,44 @@ seam** (decision recorded in **ADR-0050**) that BE-045 will call before any BSS 
 - Strong authentication / verification strength → OQ-001.
 - Wiring identity → billing access in the answer flow, escalation on unresolved → TASK-BE-045.
 
+## TASK-BE-045 — Wire billing chain behind the answer engine
+
+**Type:** Technical task (backend integration) — **runtime-affecting** (OTel mandatory)
+**Status:** ✅ Validated (user, 2026-09-11) — `task/TASK-BE-045-wire-billing-chain`,
+pushed. Design in `docs/architecture/billing-answer-integration-cadrage.md`;
+**decisions D1–D3 locked** (D1a evidence injection · D2a deterministic intent detector ·
+D3c dedicated `POST /api/conversation/billing-explain`). **ADR-0051 Accepted.** Sub-tasks
+1–8 done: `BillingIntentDetector` + `BillingExplanationComposer` + `ExplainBillingUseCase`
+(billing core, 18 tests); `BillingExplanationPort`/`InProcBillingExplanationAdapter` seam +
+`BillingAnswerService` + `POST /api/conversation/billing-explain` (10 tests);
+`EscalationReason` += IDENTITY_UNVERIFIED/BILLING_UNEXPLAINED; BILLING OTel slice.
+Full backend suite (560 tests) + ArchUnit green, Spring context boots. Adversarial review
+**93/100** (QA gate: Pass). **QA functional+latency: GO** (2026-09-11) — 8 Cucumber
+acceptance scenarios (`billing-explanation.feature`, BDD suite 44 green), api-key gating +
+DEC-002 block covered; `billing` deterministic slice p50 2.5µs/p95 6.4µs/p99 17.6µs (mock
+BSS), LLM slice unchanged from `/answer`. Report: `docs/qa/task-be-045-billing-explain-qa-report.md`.
+**Merge-ready** into `feat/sprint-14-billing-identity` (`--no-ff`) — awaiting explicit merge request.
+**Parent:** US-005/007/010–013 · ADR-0003 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019
+**Gate:** BE-038/039/040/041/042/043/044 (all merged)
+
+### Cadrage summary
+
+Connect identity → comparable invoices → comparison → confidence gate to the existing
+answer engine so the LLM **only phrases** a grounded, pre-computed result (DEC-002) and
+the bot **escalates fail-closed** on unresolved identity or non-explainable results.
+Verified constraints: no runtime intent classifier (BUG-007), no identity field on
+`ConverseRequest`, LLM grounding is only `List<RetrievedEvidence>` (OutputGuardrail vets
+amounts). Locked decisions: **D1a** deterministic result reaches the LLM as injected grounding
+evidence (reuse AnswerGeneratorPort + OutputGuardrail, DEC-002 by construction); **D2a**
+deterministic FR/EN billing-intent detector behind a port; **D3c** a dedicated
+`POST /api/conversation/billing-explain` endpoint (leave `/converse` + runtime to a
+follow-up). Next: write **ADR-0051**, then implement the 9 sub-tasks (full target flow +
+escalation + mandatory OTel slice + sub-tasks in the cadrage doc).
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-045 | Wire billing chain behind the answer engine (grounded, LLM phrases only) | 1–6 |
 | TASK-BE-046 | Billing KB entries for confirmed causes | — |
 | TASK-QA-019 | Billing fixtures + Gherkin/Behave journeys + latency slices | 1–8 |
 | TASK-BE-047 | Real Galaxion read-only adapter behind `BssBillingPort` | OQ-003 |

@@ -2,11 +2,15 @@ package com.voicesupport.billing.infrastructure.config;
 
 import com.voicesupport.billing.domain.port.in.AssessComparisonReadinessUseCase;
 import com.voicesupport.billing.domain.port.in.CompareInvoicesUseCase;
+import com.voicesupport.billing.domain.port.in.ExplainBillingUseCase;
 import com.voicesupport.billing.domain.port.in.ResolveCustomerIdentityUseCase;
 import com.voicesupport.billing.domain.port.in.RetrieveComparableInvoicesUseCase;
 import com.voicesupport.billing.domain.port.out.BssBillingPort;
 import com.voicesupport.billing.domain.port.out.CustomerDirectoryPort;
 import com.voicesupport.billing.domain.port.out.InvoicePdfExtractorPort;
+import com.voicesupport.billing.domain.service.BillingExplanationComposer;
+import com.voicesupport.billing.domain.service.BillingExplanationService;
+import com.voicesupport.billing.domain.service.BillingIntentDetector;
 import com.voicesupport.billing.domain.service.ComparableInvoiceService;
 import com.voicesupport.billing.domain.service.ComparisonConfidenceService;
 import com.voicesupport.billing.domain.service.CustomerIdentityService;
@@ -20,6 +24,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class BillingConfig {
@@ -91,5 +98,39 @@ public class BillingConfig {
     @Bean
     public ResolveCustomerIdentityUseCase resolveCustomerIdentityUseCase(CustomerDirectoryPort directory) {
         return new CustomerIdentityService(directory);
+    }
+
+    // Billing-explanation intent guard (ADR-0051 D2a). Deterministic FR/EN keyword set, env-tunable
+    // via VOICE_SUPPORT_BILLING_INTENT_KEYWORDS (CSV) so it can be tuned per deployment without a code
+    // change. Accent/case are folded by the detector, so keywords are written unaccented + lowercase.
+    @Bean
+    public BillingIntentDetector billingIntentDetector(
+            @Value("${voice-support.billing.intent.keywords:"
+                    + "facture,factures,facturation,montant,prelevement,tarif,augmente,augmentation,"
+                    + "remise,invoice,bill,billing,charge,charged,amount,price,increase,discount}")
+            String keywordsCsv) {
+        List<String> keywords = Arrays.stream(keywordsCsv.split(","))
+                .map(String::trim).filter(keyword -> !keyword.isBlank()).toList();
+        return new BillingIntentDetector(keywords);
+    }
+
+    @Bean
+    public BillingExplanationComposer billingExplanationComposer() {
+        return new BillingExplanationComposer();
+    }
+
+    @Bean
+    public ExplainBillingUseCase explainBillingUseCase(
+            BillingIntentDetector billingIntentDetector,
+            ResolveCustomerIdentityUseCase resolveCustomerIdentityUseCase,
+            RetrieveComparableInvoicesUseCase retrieveComparableInvoicesUseCase,
+            BssBillingPort bssBillingPort,
+            CompareInvoicesUseCase compareInvoicesUseCase,
+            AssessComparisonReadinessUseCase assessComparisonReadinessUseCase,
+            BillingExplanationComposer billingExplanationComposer) {
+        return new BillingExplanationService(
+                billingIntentDetector, resolveCustomerIdentityUseCase, retrieveComparableInvoicesUseCase,
+                bssBillingPort, compareInvoicesUseCase, assessComparisonReadinessUseCase,
+                billingExplanationComposer);
     }
 }

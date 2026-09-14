@@ -21,7 +21,22 @@ public enum EscalationReason {
             "Billing evidence uncertainty",
             "high",
             "unverified_amount",
-            "Route to a billing advisor to review the customer's billing details.");
+            "Route to a billing advisor to review the customer's billing details."),
+    // Billing-explanation escalation triggers (TASK-BE-045, ADR-0051), raised by the billing chain
+    // rather than a guardrail verdict: the customer identity could not be verified fail-closed
+    // (BR-002-1), or the deterministic comparison could not be sufficiently explained (BR-003).
+    IDENTITY_UNVERIFIED(
+            "identity_unverified",
+            "Customer identity not verified",
+            "high",
+            "unverified_identity",
+            "Verify the customer's identity, then route to a billing advisor."),
+    BILLING_UNEXPLAINED(
+            "billing_unexplained",
+            "Billing change not fully explained",
+            "high",
+            "insufficient_evidence",
+            "Route to a billing advisor to review the customer's bill.");
 
     private final String code;
     private final String label;
