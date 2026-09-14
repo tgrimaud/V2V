@@ -352,7 +352,7 @@ relation conseiller" entry (BR-003 / ADR-0019).
 ## TASK-QA-019 — Billing fixtures + Gherkin journeys + latency slices
 
 **Type:** QA (functional + latency) — validates the billing socle end-to-end
-**Status:** 🚧 In progress — `task/TASK-QA-019-billing-journeys` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-14, `--no-ff`). Six-journey matrix Pass; BDD 46 green, full backend 571 green; report GO.
 **Parent:** US-005/007/010–013 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019 · ADR-0051
 **Gate:** BE-038→046 (billing socle, all merged)
 
