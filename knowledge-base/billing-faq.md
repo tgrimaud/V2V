@@ -32,6 +32,8 @@ Les causes les plus fréquentes :
 3. **Fin de promotion** : votre offre découverte à prix réduit est peut-être terminée.
 4. **Option ajoutée** : vérifiez dans "Mes options" si une souscription récente a été faite.
 
+Pour le détail de chaque cause possible, voir "Comprendre les variations de facture" ci-dessous.
+
 ## Comprendre les variations de facture
 
 Quand votre facture change d'un mois sur l'autre, l'écart correspond presque toujours à l'une des causes ci-dessous. Vous pouvez la retrouver ligne par ligne dans le détail de votre facture (espace client > "Mes factures").
@@ -42,7 +44,7 @@ Une remise de bienvenue ou une promotion à durée limitée est arrivée à son 
 
 ### Dépassement hors-forfait
 
-Vous avez consommé au-delà de ce qui est inclus dans votre offre : appels vers l'international ou vers des numéros surtaxés, SMS hors-forfait, ou data au-delà de l'enveloppe incluse. Ces consommations apparaissent dans la rubrique "Hors-forfait" et s'ajoutent au tarif fixe de votre abonnement. Le détail des consommations est disponible dans votre espace client.
+Vous avez consommé au-delà de ce qui est inclus dans votre offre : appels vers l'international ou vers des numéros surtaxés, ou SMS hors-forfait. Ces consommations apparaissent dans la rubrique "Hors-forfait" et s'ajoutent au tarif fixe de votre abonnement. Le détail des consommations est disponible dans votre espace client.
 
 ### Changement d'option
 
@@ -50,7 +52,7 @@ Une option a été ajoutée ou retirée sur votre ligne (par exemple une chaîne
 
 ### Proration (changement en cours de mois)
 
-Lorsqu'un changement d'offre ou d'option intervient en cours de mois, la facturation est calculée au prorata : vous payez l'ancienne offre jusqu'à la date du changement, puis la nouvelle offre pour le reste de la période. Cela peut faire apparaître, sur une seule facture, deux montants partiels pour un même service. Le mois suivant, la facture revient à un montant plein régulier.
+Lorsqu'un changement d'offre ou d'option intervient en cours de mois, la facturation est calculée au prorata : vous payez l'ancienne offre jusqu'à la date du changement, puis la nouvelle offre pour le reste de la période. Cela peut faire apparaître, sur une seule facture, deux montants partiels pour un même service. Le mois suivant, la facture revient à un montant plein.
 
 ### Taxes
 
