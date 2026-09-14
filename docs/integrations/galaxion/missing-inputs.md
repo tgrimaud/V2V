@@ -1,5 +1,10 @@
 # Missing Galaxion / BSS Inputs
 
+> Update 2026-09-14: real Eir dev OpenAPI specs received for `billing-enquiry-service` and
+> `billing-service` — see `eir-billing-services-contract.md`. Amount unit is now known to be
+> `int64` and a structured enquiry breakdown exists (PDF becomes a fallback). The items below
+> that are answered there are marked inline; the rest still require an anonymized sample.
+
 ## Objective
 
 This list centralizes the information to request from Galaxion, BSS, billing and

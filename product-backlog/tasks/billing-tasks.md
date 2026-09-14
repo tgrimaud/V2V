@@ -383,6 +383,16 @@ runtime (STT/TTS/turn/barge-in).
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-047 | Real Galaxion read-only adapter behind `BssBillingPort` | OQ-003 |
+| TASK-BE-047 | Real Eir read-only adapter behind `BssBillingPort` | OQ-003 (unit) |
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data |
 | TASK-INFRA-017 | Galaxion inputs coordination package (`galaxion-coordination-request.md`) | — (drafted) |
+
+**BE-047 input received (2026-09-14):** real Eir dev OpenAPI specs for
+`billing-enquiry-service` (3.1.0) + `billing-service` (2.3.1) — contract analysis, port
+mapping and the **independent-adapter design** in
+`docs/integrations/galaxion/eir-billing-services-contract.md` (specs versioned under
+`docs/integrations/galaxion/assets/`). Answers OQ-003 unit (amounts are `int64`), reveals a
+structured enquiry breakdown (PDF becomes fallback) + a CSV `detail-report` line source. Still
+open before build: cents-vs-pennies on a sample, `InvoiceDetailsResponse`/CSV real shape,
+account-id typing (`billingAccountId` int64 vs `account_id` string), line catalogue for
+discount/option/proration attribution.

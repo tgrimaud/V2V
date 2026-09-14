@@ -1,0 +1,326 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "eir-billing-enquiry-service",
+        "description": "2026-06-02T11:42:02.240Z",
+        "version": "3.1.0-SNAPSHOT"
+    },
+    "servers": [
+        {
+            "url": "https://billing-enquiry-service.eir-dev.itsf.io",
+            "description": "Generated server url"
+        }
+    ],
+    "tags": [
+        {
+            "name": "bill-enquiry-rest",
+            "description": "Provides api for retrieving the bill history details"
+        }
+    ],
+    "paths": {
+        "/billing-enquiry/invoices/{invoiceId}": {
+            "get": {
+                "tags": [
+                    "bill-enquiry-rest"
+                ],
+                "summary": "Retrieve an invoice details",
+                "operationId": "getInvoiceDetails",
+                "parameters": [
+                    {
+                        "name": "invoiceId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "content": {
+                            "application/hal+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoiceResponseDTO"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Invoice id not found",
+                        "content": {
+                            "application/hal+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoiceResponseDTO"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/bill_enquiry": {
+            "get": {
+                "tags": [
+                    "bill-enquiry-rest"
+                ],
+                "summary": "Retrieves the bill history for given billing account number/invoice id",
+                "operationId": "getBillDetails",
+                "parameters": [
+                    {
+                        "name": "billingAccountId",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "invoiceId",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "REGISTERED",
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BillEnquiryResponseDTO"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "When user is not authorized",
+                        "content": {
+                            "application/hal+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BillEnquiryResponseDTO"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "When user has no permission",
+                        "content": {
+                            "application/hal+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BillEnquiryResponseDTO"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Bill details not found",
+                        "content": {
+                            "application/hal+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BillEnquiryResponseDTO"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "BillAmountResponseDTO": {
+                "type": "object",
+                "description": "Holds the bill amount details",
+                "properties": {
+                    "vatAmount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total of VAT on the bill.",
+                        "example": 23.0
+                    },
+                    "recurringAmount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total recurring charges on the bill.",
+                        "example": 50.0
+                    },
+                    "oneOffAmount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total one off charges on the bill.",
+                        "example": 30.0
+                    },
+                    "usageAmount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total out of bundle, charged usage on the bill.",
+                        "example": 20.0
+                    },
+                    "invoiceAmount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Total amount of the invoice.",
+                        "example": 123.0
+                    }
+                },
+                "required": [
+                    "invoiceAmount",
+                    "oneOffAmount",
+                    "recurringAmount",
+                    "usageAmount",
+                    "vatAmount"
+                ]
+            },
+            "InvoiceResponseDTO": {
+                "type": "object",
+                "description": "Holds an Invoice details",
+                "properties": {
+                    "accountId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The account id to which this invoice belongs.",
+                        "example": 12312
+                    },
+                    "invoiceId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The unique identifier of the invoice.",
+                        "example": 113444
+                    },
+                    "billPeriod": {
+                        "type": "string",
+                        "description": "The period to which this invoice applies.",
+                        "example": 201901
+                    },
+                    "billAmount": {
+                        "$ref": "#/components/schemas/BillAmountResponseDTO",
+                        "description": "An object to hold the bill billAmount details."
+                    },
+                    "effectiveDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Billing effective date/issued date.",
+                        "example": "2019-07-08T10:15:30"
+                    }
+                },
+                "required": [
+                    "accountId",
+                    "billAmount",
+                    "billPeriod",
+                    "effectiveDate",
+                    "invoiceId"
+                ]
+            },
+            "BillDetailResponseDTO": {
+                "type": "object",
+                "description": "Holds the bill details",
+                "properties": {
+                    "invoiceId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The unique identifier of the invoice.",
+                        "example": 113444
+                    },
+                    "billPeriod": {
+                        "type": "string",
+                        "description": "The period to which this invoice applies.",
+                        "example": 201901
+                    },
+                    "effectiveDate": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Billing effective date/issued date.",
+                        "example": "2019-07-08T10:15:30"
+                    },
+                    "billAmount": {
+                        "$ref": "#/components/schemas/BillAmountResponseDTO"
+                    }
+                },
+                "required": [
+                    "billAmount",
+                    "billPeriod",
+                    "effectiveDate",
+                    "invoiceId"
+                ]
+            },
+            "BillEnquiryResponseDTO": {
+                "type": "object",
+                "description": "Holds the bill enquire response details",
+                "properties": {
+                    "billingAccountId": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The account id to which this invoice belongs.",
+                        "example": 12312
+                    },
+                    "bills": {
+                        "type": "array",
+                        "description": "List of bills for an account",
+                        "items": {
+                            "$ref": "#/components/schemas/BillDetailResponseDTO"
+                        }
+                    }
+                },
+                "required": [
+                    "billingAccountId",
+                    "bills"
+                ]
+            }
+        }
+    }
+}

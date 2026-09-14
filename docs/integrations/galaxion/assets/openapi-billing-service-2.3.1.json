@@ -1,0 +1,690 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "billing-service",
+        "description": "2026-06-26T08:32:00.680Z",
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://springdoc.org"
+        },
+        "version": "2.3.1"
+    },
+    "externalDocs": {
+        "description": "SpringShop Wiki Documentation",
+        "url": "https://springshop.wiki.github.org/docs"
+    },
+    "servers": [
+        {
+            "url": "https://billing-service.eir-dev.itsf.io",
+            "description": "Generated server url"
+        }
+    ],
+    "tags": [
+        {
+            "name": "InvoiceController",
+            "description": "API for managing invoices"
+        },
+        {
+            "name": "ResendInvoiceController",
+            "description": "API for managing resend invoice"
+        }
+    ],
+    "paths": {
+        "/api/v1/invoices/{invoice_number}/accounts/{account_id}/resend": {
+            "post": {
+                "tags": [
+                    "ResendInvoiceController"
+                ],
+                "description": "Produce the PDF for the given invoice number with payer address.",
+                "operationId": "resendInvoice",
+                "parameters": [
+                    {
+                        "name": "invoice_number",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "account_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ResendInvoiceRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success to retrieve invoice PDF."
+                    },
+                    "404": {
+                        "description": "No invoice found, (roblem tile = invoice-not-found)."
+                    },
+                    "500": {
+                        "description": "No archive found, (Problem tile = billing-archive-error).\nproblem during upload in S3 storage (Problem tile = upload-file-error).\n"
+                    }
+                }
+            }
+        },
+        "/api/v1/invoices/{invoice_number}": {
+            "get": {
+                "tags": [
+                    "InvoiceController"
+                ],
+                "description": "Get the PDF for the given invoice number.",
+                "operationId": "getInvoice",
+                "parameters": [
+                    {
+                        "name": "invoice_number",
+                        "in": "path",
+                        "description": "The invoice number",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "example": 19030000000152
+                    },
+                    {
+                        "name": "accountId",
+                        "in": "query",
+                        "description": "The account id",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": 29580600
+                    },
+                    {
+                        "name": "optionalInvoice",
+                        "in": "query",
+                        "description": "If true, it download the optional version of the invoice",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        },
+                        "example": false
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "REGISTERED",
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success to retrieve invoice PDF.",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Account id is missing (Problem tile = 'britebill-missing-account-id').",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Britebill invoice not found (Problem tile = 'britebill-invoice-not-found').",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "412": {
+                        "description": "The billing archive file token is null (Problem tile = 'archive-file-token-is-null').",
+                        "content": {
+                            "application/pdf": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/invoices/{invoice_number}/summary-report": {
+            "get": {
+                "tags": [
+                    "InvoiceController"
+                ],
+                "description": "Get the billing archive summary report for the given invoice number.",
+                "operationId": "getBillingArchiveSummaryCsv",
+                "parameters": [
+                    {
+                        "name": "invoice_number",
+                        "in": "path",
+                        "description": "The invoice number",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "example": 19030000000152
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "REGISTERED",
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success to retrieve summary csv.",
+                        "content": {
+                            "text/csv": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "412": {
+                        "description": "The billing archive file token is null (Problem tile = 'archive-file-token-is-null').",
+                        "content": {
+                            "text/csv": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/invoices/{invoice_number}/details": {
+            "get": {
+                "tags": [
+                    "InvoiceController"
+                ],
+                "description": "Retrieve an invoice details.",
+                "operationId": "getInvoiceDetails",
+                "parameters": [
+                    {
+                        "name": "invoice_number",
+                        "in": "path",
+                        "description": "The invoice id",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "example": 12345
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Invoice details retrieved.",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoiceDetailsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Invoice not found.",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/InvoiceDetailsResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/invoices/{invoice_number}/detail-report": {
+            "get": {
+                "tags": [
+                    "InvoiceController"
+                ],
+                "description": "Get the billing archive detail report for the given invoice number.",
+                "operationId": "getBillingArchiveDetailCsv",
+                "parameters": [
+                    {
+                        "name": "invoice_number",
+                        "in": "path",
+                        "description": "The invoice number",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "example": 19030000000152
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "REGISTERED",
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success to retrieve detail csv.",
+                        "content": {
+                            "text/csv": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "412": {
+                        "description": "The billing archive file token is null (Problem tile = 'archive-file-token-is-null').",
+                        "content": {
+                            "text/csv": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/invoices/accounts/{account_id}/resend-eligibility": {
+            "get": {
+                "tags": [
+                    "ResendInvoiceController"
+                ],
+                "description": "Get the resend paper invoice response for given accountId.",
+                "operationId": "getResendInvoiceEligibilityResponse",
+                "parameters": [
+                    {
+                        "name": "account_id",
+                        "in": "path",
+                        "description": "The account number",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": 1234567
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resend paper invoice response received.",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ResendInvoiceEligibilityResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{account_id}/invoices": {
+            "get": {
+                "tags": [
+                    "InvoiceController"
+                ],
+                "description": "Return the invoice history for the given billing account id.",
+                "operationId": "getInvoiceHistory",
+                "parameters": [
+                    {
+                        "name": "account_id",
+                        "in": "path",
+                        "description": "The account id",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": 5432554
+                    },
+                    {
+                        "name": "galaxion-user-type",
+                        "in": "header",
+                        "description": "Galaxion user type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "REGISTERED",
+                                "PRIVILEGED",
+                                "SYSTEM"
+                            ],
+                            "example": "SYSTEM"
+                        }
+                    },
+                    {
+                        "name": "galaxion-user-identifier",
+                        "in": "header",
+                        "description": "Galaxion user identifier",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "SYSTEM"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success.",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/InvoiceHistoryResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized to access the bill, (Problem tile = access-not-authorized).",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/InvoiceHistoryResponse"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Account not found, (Problem tile = account-not-found).",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/InvoiceHistoryResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ResendInvoicePostalAddressRequest": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The id of the address to resend invoice",
+                        "example": 17
+                    },
+                    "firstName": {
+                        "type": "string",
+                        "description": "The first name of the customer",
+                        "example": "Marie",
+                        "minLength": 1
+                    },
+                    "lastName": {
+                        "type": "string",
+                        "description": "The last name of the customer",
+                        "example": "Curie",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "firstName",
+                    "id",
+                    "lastName"
+                ]
+            },
+            "ResendInvoiceRequest": {
+                "type": "object",
+                "properties": {
+                    "applyCharge": {
+                        "type": "boolean",
+                        "description": "Do you need to charge the resend ? Default value is 'true'.",
+                        "example": false
+                    },
+                    "postalAddress": {
+                        "$ref": "#/components/schemas/ResendInvoicePostalAddressRequest",
+                        "description": "The postal address to resend the invoice. If null, the default address is used."
+                    }
+                }
+            },
+            "InvoiceDetailsResponse": {
+                "type": "object",
+                "properties": {
+                    "accountId": {
+                        "type": "string",
+                        "description": "The account id for this invoice",
+                        "example": 12312
+                    },
+                    "invoiceNumber": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The invoice number",
+                        "example": 113444
+                    }
+                },
+                "required": [
+                    "accountId",
+                    "invoiceNumber"
+                ]
+            },
+            "ResendInvoiceEligibilityResponse": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "The amount of the reprint",
+                        "example": 2000
+                    },
+                    "reprintAvailable": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "InvoiceHistoryResponse": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Amount",
+                        "example": 100
+                    },
+                    "invoiceNumber": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Invoice number",
+                        "example": 19030000000152
+                    },
+                    "invoiceDate": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Invoice Date",
+                        "example": "2019-04-08"
+                    },
+                    "dueDate": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Due Date",
+                        "example": "2019-04-08"
+                    }
+                },
+                "required": [
+                    "amount",
+                    "dueDate",
+                    "invoiceDate",
+                    "invoiceNumber"
+                ]
+            }
+        }
+    }
+}
