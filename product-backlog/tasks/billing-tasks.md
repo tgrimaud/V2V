@@ -323,7 +323,7 @@ escalation + mandatory OTel slice + sub-tasks in the cadrage doc).
 ## TASK-BE-046 — Billing KB entries for confirmed causes
 
 **Type:** Knowledge-base content (FR) — **not runtime-affecting** (no code; no OTel change)
-**Status:** 🚧 In progress — `task/TASK-BE-046-billing-kb-causes` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-14, `--no-ff`). Editorial pass applied (hors-forfait factual fix, cross-reference, wording trim); KB tests green.
 **Parent:** US-005/010–013 · **BR-003** · ADR-0030 (domain tagging at ingestion)
 **Gate:** BE-040 (comparison `BillingCauseType`), BE-045 (explanation path)
 
