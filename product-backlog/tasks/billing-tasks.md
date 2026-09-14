@@ -349,11 +349,40 @@ relation conseiller" entry (BR-003 / ADR-0019).
 - Front-matter preserved (`domain: billing`), so ingestion tags the chunks `billing`.
 - Markdown well-formed (`git diff --check`); existing KB tests stay green.
 
+## TASK-QA-019 — Billing fixtures + Gherkin journeys + latency slices
+
+**Type:** QA (functional + latency) — validates the billing socle end-to-end
+**Status:** 🚧 In progress — `task/TASK-QA-019-billing-journeys` (off `feat/sprint-14-billing-identity`).
+**Parent:** US-005/007/010–013 · **DEC-002** · BR-002-1 · BR-003 · ADR-0019 · ADR-0051
+**Gate:** BE-038→046 (billing socle, all merged)
+
+### Cadrage summary
+
+Consolidate QA acceptance over the **six canonical fixture journeys** (`BssBillingFixtures`,
+accounts `eir-001..006`): nominal (unchanged), discount expiry, usage overage, proration,
+insufficient data (single invoice), unusable (no billable lines). BE-045 QA already covered
+four journeys + DEC-002 + identity + non-billing through `POST /api/conversation/billing-explain`;
+QA-019 **completes the matrix** by adding the missing grounded journeys (usage overage,
+proration) so every fixture journey has an explicit product-observable acceptance scenario,
+and formalizes the QA report + latency slice for the billing socle.
+
+Automation layer: **Cucumber for Java** (`billing-explanation.feature`, 10 scenarios,
+`RunKnowledgeBddTest` suite 46 green). **Behave is N/A** here — the billing socle is a pure
+backend chain with no Python voice-runtime behavior; Behave stays reserved for the voice
+runtime (STT/TTS/turn/barge-in).
+
+### Acceptance
+
+- The six fixture journeys each map to a product-observable scenario (grounded or degraded).
+- DEC-002 amount-grounding block, identity fail-closed, and non-billing redirect covered.
+- `billing` OTel slice measured (deterministic chain) and reported; LLM slice attribution stated.
+- QA report `docs/qa/task-qa-019-billing-journeys-qa-report.md` with the journey matrix,
+  latency and residual risks; defects (if any) logged as bug tickets.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-QA-019 | Billing fixtures + Gherkin/Behave journeys + latency slices | 1–8 |
 | TASK-BE-047 | Real Galaxion read-only adapter behind `BssBillingPort` | OQ-003 |
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data |
 | TASK-INFRA-017 | Galaxion inputs coordination package (`galaxion-coordination-request.md`) | — (drafted) |

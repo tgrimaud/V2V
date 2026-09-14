@@ -13,6 +13,22 @@ Feature: Billing explanation behind the answer engine
     And the explanation mentions "5.00 €"
     And the assistant does not escalate
 
+  Scenario: A verified customer who exceeded their plan gets a grounded explanation
+    Given a customer whose consumption exceeded their plan
+    And the language model rephrases the explanation as "Votre facture a augmenté de 12.00 € en raison d'un dépassement de consommation."
+    When the customer asks why their bill increased
+    Then the assistant voices a grounded explanation
+    And the explanation mentions "12.00 €"
+    And the assistant does not escalate
+
+  Scenario: A verified customer billed a mid-month pro-rata gets a grounded explanation
+    Given a customer whose offer changed mid-month
+    And the language model rephrases the explanation as "Votre facture a augmenté de 8.00 € à cause d'un ajustement au prorata."
+    When the customer asks why their bill increased
+    Then the assistant voices a grounded explanation
+    And the explanation mentions "8.00 €"
+    And the assistant does not escalate
+
   Scenario: The assistant never voices an amount that was not computed (DEC-002)
     Given a customer whose recent discount expired
     And the language model would fabricate "Vous devez 99,00 € au total."
