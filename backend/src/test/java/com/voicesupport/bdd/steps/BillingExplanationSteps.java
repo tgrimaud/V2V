@@ -72,6 +72,16 @@ public class BillingExplanationSteps {
         reference = "EIR-1001";
     }
 
+    @Given("a customer whose consumption exceeded their plan")
+    public void aCustomerWhoExceededTheirPlan() {
+        reference = "EIR-1003";
+    }
+
+    @Given("a customer whose offer changed mid-month")
+    public void aCustomerWhoseOfferChangedMidMonth() {
+        reference = "EIR-1004";
+    }
+
     @Given("a customer reference that matches no account")
     public void aReferenceMatchingNoAccount() {
         reference = "UNKNOWN-REF";
