@@ -320,11 +320,39 @@ deterministic FR/EN billing-intent detector behind a port; **D3c** a dedicated
 follow-up). Next: write **ADR-0051**, then implement the 9 sub-tasks (full target flow +
 escalation + mandatory OTel slice + sub-tasks in the cadrage doc).
 
+## TASK-BE-046 — Billing KB entries for confirmed causes
+
+**Type:** Knowledge-base content (FR) — **not runtime-affecting** (no code; no OTel change)
+**Status:** 🚧 In progress — `task/TASK-BE-046-billing-kb-causes` (off `feat/sprint-14-billing-identity`).
+**Parent:** US-005/010–013 · **BR-003** · ADR-0030 (domain tagging at ingestion)
+**Gate:** BE-040 (comparison `BillingCauseType`), BE-045 (explanation path)
+
+### Cadrage summary
+
+The deterministic comparison engine attributes each invoice delta to a `BillingCauseType`
+(`DISCOUNT_EXPIRY`, `USAGE_OVERAGE`, `OPTION_CHANGE`, `PRORATION`, `TAX`, `ONE_OFF_FEE`,
+`ADJUSTMENT`, plus the fail-closed `UNEXPLAINED`). BE-045 phrases the customer's *own*
+computed result from injected evidence, but the generic RAG path (`/converse`, `/answer`)
+had no dedicated, retrievable explanation of **what each confirmed cause means**. BE-046
+adds one customer-facing KB entry per confirmed cause to `knowledge-base/billing-faq.md`
+(`domain: billing`, `language: fr`), so a general "pourquoi ma facture a changé" question
+retrieves a clear, evidence-backed explanation — **no invented amounts, no policy claims**,
+purely educational (what the cause is, how to check it, what to do). The fail-closed
+`UNEXPLAINED` case is covered by a "montant que nous ne pouvons pas expliquer → mise en
+relation conseiller" entry (BR-003 / ADR-0019).
+
+### Acceptance
+
+- One retrievable section per confirmed `BillingCauseType`, in French, customer language.
+- Aligned 1:1 with the engine taxonomy (a reviewer can map each section to an enum value).
+- No fabricated figures, no account-specific data; consistent with existing billing FAQ.
+- Front-matter preserved (`domain: billing`), so ingestion tags the chunks `billing`.
+- Markdown well-formed (`git diff --check`); existing KB tests stay green.
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-046 | Billing KB entries for confirmed causes | — |
 | TASK-QA-019 | Billing fixtures + Gherkin/Behave journeys + latency slices | 1–8 |
 | TASK-BE-047 | Real Galaxion read-only adapter behind `BssBillingPort` | OQ-003 |
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data |
