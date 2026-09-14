@@ -416,6 +416,13 @@ structured enquiry breakdown (PDF becomes fallback) + a CSV `detail-report` line
 - Tests: `EirBssBillingAdapterTest` (mapping + fail-closed: non-numeric id, not-found, skip unusable),
   `EirBillingJsonMappingTest` (camelCase-under-SNAKE_CASE guard). ArchUnit green.
 
+### Adversarial review
+
+`docs/qa/task-be-047-eir-bss-adapter-review.md` — **91/100, QA gate Pass** for the mock-default slice.
+One blocking finding (BSS hop not observable) **fixed** (`slice=bss`, `provider=eir`); BR-002-1
+`fetchInvoice` ownership check + real-data validations recorded as **accepted residuals**, prerequisites
+to enabling `source=eir` (not to merge).
+
 ### Still open before enabling `source=eir` (needs the test account / samples → QA-020)
 
 - cents-vs-pennies on a real sample; real shape of `InvoiceDetailsResponse` and the CSV `detail-report`;
