@@ -25,6 +25,7 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingSe
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,12 +65,12 @@ public class BillingConfig {
     }
 
     @Bean
-    public BssBillingPort bssBillingPort(BillingBssProperties properties) {
+    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry) {
         if ("eir".equalsIgnoreCase(properties.source())) {
             log.info("[BILLING-BSS] source=eir — enquiry={} service={} currency={} user-type={}",
                     properties.enquiryBaseUrl(), properties.serviceBaseUrl(),
                     properties.currency(), properties.userType());
-            return eirAdapter(properties);
+            return eirAdapter(properties, telemetry);
         }
         if (!"mock".equalsIgnoreCase(properties.source())) {
             log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());
@@ -78,13 +79,13 @@ public class BillingConfig {
         return new InMemoryBssBillingAdapter(BssBillingFixtures.all());
     }
 
-    private static BssBillingPort eirAdapter(BillingBssProperties p) {
+    private static BssBillingPort eirAdapter(BillingBssProperties p, BackendTelemetry telemetry) {
         BillingEnquiryClient enquiry = new RestBillingEnquiryAdapter(
                 restClient(p.enquiryBaseUrl(), p.connectMs(), p.readMs()));
         BillingServiceClient service = new RestBillingServiceAdapter(
                 restClient(p.serviceBaseUrl(), p.connectMs(), p.readMs()));
         return new EirBssBillingAdapter(enquiry, service,
-                Currency.getInstance(p.currency()), new GalaxionUser(p.userType(), p.userIdentifier()));
+                Currency.getInstance(p.currency()), new GalaxionUser(p.userType(), p.userIdentifier()), telemetry);
     }
 
     private static RestClient restClient(String baseUrl, long connectMs, long readMs) {

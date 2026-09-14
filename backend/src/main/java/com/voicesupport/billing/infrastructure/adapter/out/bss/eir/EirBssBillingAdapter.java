@@ -14,6 +14,8 @@ import com.voicesupport.billing.domain.model.valueobject.LineAmounts;
 import com.voicesupport.billing.domain.model.valueobject.LineCategory;
 import com.voicesupport.billing.domain.model.valueobject.Money;
 import com.voicesupport.billing.domain.port.out.BssBillingPort;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.observability.Slices;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.BillAmount;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.GalaxionUser;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.InvoiceResponse;
@@ -34,22 +36,30 @@ import java.util.Optional;
 // tree is a single synthetic group (finer lines need the CSV detail-report / PDF — a follow-up).
 public class EirBssBillingAdapter implements BssBillingPort {
 
+    private static final String PROVIDER = "eir";
+
     private final BillingEnquiryClient enquiryClient;
     private final BillingServiceClient serviceClient;
     private final Currency currency;
     private final GalaxionUser user;
+    private final BackendTelemetry telemetry;
 
     public EirBssBillingAdapter(BillingEnquiryClient enquiryClient, BillingServiceClient serviceClient,
-            Currency currency, GalaxionUser user) {
+            Currency currency, GalaxionUser user, BackendTelemetry telemetry) {
         this.enquiryClient = Objects.requireNonNull(enquiryClient, "enquiryClient must not be null");
         this.serviceClient = Objects.requireNonNull(serviceClient, "serviceClient must not be null");
         this.currency = Objects.requireNonNull(currency, "currency must not be null");
         this.user = Objects.requireNonNull(user, "user must not be null");
+        this.telemetry = Objects.requireNonNull(telemetry, "telemetry must not be null");
     }
 
     @Override
     public List<InvoiceSummary> listInvoices(AccountId account) {
         Objects.requireNonNull(account, "account must not be null");
+        return telemetry.time(Slices.BSS, PROVIDER, () -> mapSummaries(account));
+    }
+
+    private List<InvoiceSummary> mapSummaries(AccountId account) {
         List<InvoiceSummary> summaries = new ArrayList<>();
         for (InvoiceHistory dto : serviceClient.listAccountInvoices(account.value(), user)) {
             InvoiceSummary summary = toSummary(dto);
@@ -68,9 +78,10 @@ public class EirBssBillingAdapter implements BssBillingPort {
         if (numericId == null) {
             return Optional.empty();
         }
-        return enquiryClient.fetchInvoice(numericId, user)
-                .map(dto -> toInvoice(account, invoiceId, dto))
-                .filter(Objects::nonNull);
+        return telemetry.time(Slices.BSS, PROVIDER,
+                () -> enquiryClient.fetchInvoice(numericId, user)
+                        .map(dto -> toInvoice(account, invoiceId, dto))
+                        .filter(Objects::nonNull));
     }
 
     private InvoiceSummary toSummary(InvoiceHistory dto) {

@@ -10,6 +10,9 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquir
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.GalaxionUser;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.InvoiceResponse;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingServiceClient.InvoiceHistory;
+import com.voicesupport.shared.observability.BackendTelemetry;
+import com.voicesupport.shared.observability.Slices;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -24,6 +27,13 @@ class EirBssBillingAdapterTest {
 
     private static final GalaxionUser USER = new GalaxionUser("SYSTEM", "SYSTEM");
 
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    private final BackendTelemetry telemetry = new BackendTelemetry(registry);
+
+    private EirBssBillingAdapter adapterWith(BillingEnquiryClient enquiry, BillingServiceClient service) {
+        return new EirBssBillingAdapter(enquiry, service, java.util.Currency.getInstance("EUR"), USER, telemetry);
+    }
+
     @Test
     void listInvoices_mapsEntriesAndSkipsUnusableOnes() {
         // GIVEN billing-service returns two usable invoices, one with a null number and one with no date
@@ -32,7 +42,7 @@ class EirBssBillingAdapterTest {
                 new InvoiceHistory(113443L, 4500L, "2026-01-15", "2026-02-01"),
                 new InvoiceHistory(null, 100L, "2026-01-15", null),
                 new InvoiceHistory(999L, 100L, null, null)));
-        EirBssBillingAdapter adapter = new EirBssBillingAdapter(new FakeEnquiryClient(), service, java.util.Currency.getInstance("EUR"), USER);
+        EirBssBillingAdapter adapter = adapterWith(new FakeEnquiryClient(), service);
 
         // WHEN the account's invoices are listed
         List<InvoiceSummary> summaries = adapter.listInvoices(AccountId.of("12312"));
@@ -44,6 +54,9 @@ class EirBssBillingAdapterTest {
         assertEquals(LocalDate.of(2026, 2, 15), summaries.get(0).period().invoiceDate());
         assertEquals("12312", service.lastAccountId);
         assertEquals(USER, service.lastUser);
+        // AND the BSS network hop is timed as its own slice (provider=eir) so QA can report p50/p95/p99
+        assertTrue(registry.find("voice_support.slice").tag("slice", Slices.BSS).tag("provider", "eir")
+                .timer().count() >= 1, "BSS slice must be recorded");
     }
 
     @Test
@@ -52,7 +65,7 @@ class EirBssBillingAdapterTest {
         FakeEnquiryClient enquiry = new FakeEnquiryClient();
         enquiry.next = Optional.of(new InvoiceResponse(12312L, 113444L, "2026-02",
                 new BillAmount(5000L, 3000L, 0L, 1200L, 800L), "2026-02-15T00:00:00Z"));
-        EirBssBillingAdapter adapter = new EirBssBillingAdapter(enquiry, new FakeServiceClient(List.of()), java.util.Currency.getInstance("EUR"), USER);
+        EirBssBillingAdapter adapter = adapterWith(enquiry, new FakeServiceClient(List.of()));
 
         // WHEN the invoice is fetched
         Invoice invoice = adapter.fetchInvoice(AccountId.of("12312"), InvoiceId.of("113444")).orElseThrow();
@@ -75,7 +88,7 @@ class EirBssBillingAdapterTest {
     void fetchInvoice_returnsEmptyForNonNumericInvoiceIdWithoutCallingEnquiry() {
         // GIVEN a non-numeric invoice id (Eir invoice ids are int64)
         FakeEnquiryClient enquiry = new FakeEnquiryClient();
-        EirBssBillingAdapter adapter = new EirBssBillingAdapter(enquiry, new FakeServiceClient(List.of()), java.util.Currency.getInstance("EUR"), USER);
+        EirBssBillingAdapter adapter = adapterWith(enquiry, new FakeServiceClient(List.of()));
 
         // WHEN fetching with a non-numeric id
         Optional<Invoice> result = adapter.fetchInvoice(AccountId.of("12312"), InvoiceId.of("eir-XYZ"));
@@ -88,7 +101,7 @@ class EirBssBillingAdapterTest {
     @Test
     void fetchInvoice_returnsEmptyWhenEnquiryHasNoInvoice() {
         // GIVEN the enquiry service reports no invoice
-        EirBssBillingAdapter adapter = new EirBssBillingAdapter(new FakeEnquiryClient(), new FakeServiceClient(List.of()), java.util.Currency.getInstance("EUR"), USER);
+        EirBssBillingAdapter adapter = adapterWith(new FakeEnquiryClient(), new FakeServiceClient(List.of()));
 
         // WHEN fetching
         Optional<Invoice> result = adapter.fetchInvoice(AccountId.of("12312"), InvoiceId.of("113444"));
