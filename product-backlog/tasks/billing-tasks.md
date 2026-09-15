@@ -379,20 +379,61 @@ runtime (STT/TTS/turn/barge-in).
 - QA report `docs/qa/task-qa-019-billing-journeys-qa-report.md` with the journey matrix,
   latency and residual risks; defects (if any) logged as bug tickets.
 
+## TASK-BE-047 — Real Eir read-only adapter behind `BssBillingPort`
+
+**Type:** Backend integration — **runtime-affecting** (default `source=mock`, no runtime change yet)
+**Status:** 🚧 In progress — `task/TASK-BE-047-eir-bss-adapter` (off `feat/sprint-14-billing-identity`).
+First slice implemented: the **enquiry-based structured path** behind `BssBillingPort`, config-selected
+(`source=mock` default → `eir`), independent per-service clients, mapped to the billing domain, unit-tested
+without network (577 backend tests green). **Blocked for validation** on a real test account + sample
+payloads (OQ-003 cents-vs-pennies, real `details`/CSV shape) → QA-020.
+**Parent:** US-005/007/010–013 · ADR-0004 · BR-002-1 · OQ-003/004
+**Gate:** BE-038→046 (billing socle merged) · real access (INFRA-017)
+
+### Input received (2026-09-14)
+
+Real Eir dev OpenAPI specs for `billing-enquiry-service` (3.1.0) + `billing-service` (2.3.1) —
+contract analysis, port mapping and the **independent-adapter design** in
+`docs/integrations/galaxion/eir-billing-services-contract.md` (specs versioned under
+`docs/integrations/galaxion/assets/`). Answers OQ-003 unit (amounts are `int64`), reveals a
+structured enquiry breakdown (PDF becomes fallback) + a CSV `detail-report` line source.
+
+### Implemented (this slice)
+
+- Two independent per-service seams (interfaces) — `BillingEnquiryClient` (invoice breakdown) and
+  `BillingServiceClient` (account invoice list) — with `RestClient` adapters
+  (`RestBillingEnquiryAdapter` / `RestBillingServiceAdapter`) sending the two `galaxion-user-*`
+  authorization headers; 404 → empty, other errors → sanitized 503.
+- `EirBssBillingAdapter implements BssBillingPort` composes both clients and maps their DTOs onto the
+  domain (`Invoice`/`InvoiceSummary`/`LineAmounts`); **no Eir type crosses the adapter boundary**.
+  The enquiry breakdown (recurring/oneOff/usage/vat/total) becomes a single synthetic invoice group;
+  totals use the TTC `invoiceAmount` + tax split; lines reconcile to the total.
+- DTOs pinned with `@JsonProperty` (immune to the backend's global SNAKE_CASE) and nested in the
+  client interfaces (keeps the `..adapter.out..` naming convention clean).
+- Config-driven selection + settings (`voice-support.billing.bss.source`,
+  `…bss.eir.{enquiry-base-url,service-base-url,currency,user-type,user-identifier,connect-ms,read-ms}`),
+  **`mock` default** so nothing changes at runtime until validated.
+- Tests: `EirBssBillingAdapterTest` (mapping + fail-closed: non-numeric id, not-found, skip unusable),
+  `EirBillingJsonMappingTest` (camelCase-under-SNAKE_CASE guard). ArchUnit green.
+
+### Adversarial review
+
+`docs/qa/task-be-047-eir-bss-adapter-review.md` — **91/100, QA gate Pass** for the mock-default slice.
+One blocking finding (BSS hop not observable) **fixed** (`slice=bss`, `provider=eir`); BR-002-1
+`fetchInvoice` ownership check + real-data validations recorded as **accepted residuals**, prerequisites
+to enabling `source=eir` (not to merge).
+
+### Still open before enabling `source=eir` (needs the test account / samples → QA-020)
+
+- cents-vs-pennies on a real sample; real shape of `InvoiceDetailsResponse` and the CSV `detail-report`;
+- account-id typing (`billingAccountId` int64 vs `account_id` string) + `invoiceId`↔`invoiceNumber` linkage;
+- line catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside `recurringAmount`
+  (needs the CSV/PDF lines) — until then those deltas surface as `UNEXPLAINED` and fail closed;
+- identity → `galaxion-user-*` header derivation (pilot uses a configured default; coordination P4).
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-BE-047 | Real Eir read-only adapter behind `BssBillingPort` | OQ-003 (unit) |
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data |
 | TASK-INFRA-017 | Galaxion inputs coordination package (`galaxion-coordination-request.md`) | — (drafted) |
-
-**BE-047 input received (2026-09-14):** real Eir dev OpenAPI specs for
-`billing-enquiry-service` (3.1.0) + `billing-service` (2.3.1) — contract analysis, port
-mapping and the **independent-adapter design** in
-`docs/integrations/galaxion/eir-billing-services-contract.md` (specs versioned under
-`docs/integrations/galaxion/assets/`). Answers OQ-003 unit (amounts are `int64`), reveals a
-structured enquiry breakdown (PDF becomes fallback) + a CSV `detail-report` line source. Still
-open before build: cents-vs-pennies on a sample, `InvoiceDetailsResponse`/CSV real shape,
-account-id typing (`billingAccountId` int64 vs `account_id` string), line catalogue for
-discount/option/proration attribution.

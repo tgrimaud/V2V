@@ -17,6 +17,10 @@ public final class Slices {
     // (identity -> comparable invoices -> comparison -> confidence gate -> grounded text) behind the
     // conversation seam, tagged by outcome, so the billing path is reportable per-slice like RAG/LLM.
     public static final String BILLING = "billing";
+    // BSS evidence slice (TASK-BE-047, ADR-0018 BSS/PDF-evidence): times each real read-only BSS
+    // network hop (account invoice list / one invoice breakdown) separately from the whole billing
+    // chain, tagged provider=eir + outcome, so BSS latency is reportable per-slice like RAG/LLM.
+    public static final String BSS = "bss";
 
     private Slices() {
     }

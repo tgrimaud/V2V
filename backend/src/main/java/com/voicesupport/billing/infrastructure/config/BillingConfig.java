@@ -16,16 +16,26 @@ import com.voicesupport.billing.domain.service.ComparisonConfidenceService;
 import com.voicesupport.billing.domain.service.CustomerIdentityService;
 import com.voicesupport.billing.domain.service.InvoiceComparisonService;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.InMemoryBssBillingAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingEnquiryClient.GalaxionUser;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingServiceClient;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.EirBssBillingAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEnquiryAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.shared.observability.BackendTelemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
+import java.util.Currency;
 import java.util.List;
 
 @Configuration
@@ -34,18 +44,55 @@ public class BillingConfig {
     private static final Logger log = LoggerFactory.getLogger(BillingConfig.class);
 
     // BSS billing source (ADR-0004). `mock` (default) = in-memory fixtures customer-eir-001..006 so
-    // the billing chain runs before live access; the real read-only billing-api adapter (TASK-BE-047)
-    // will register under source=billing-api once OQ-003 access is confirmed. Selected via
+    // the billing chain runs before live access; `eir` = the real read-only adapter over the two Eir
+    // services (TASK-BE-047), enabled once real access is validated. Selected via
     // VOICE_SUPPORT_BILLING_BSS_SOURCE.
+    // Eir BSS settings (used only when source=eir). Defaults keep the mock source; the galaxion-user-*
+    // headers default to SYSTEM for the pilot while identity -> header derivation is a follow-up
+    // (coordination P4). Base URLs / currency / timeouts are env-tunable (VOICE_SUPPORT_BILLING_BSS_*).
     @Bean
-    public BssBillingPort bssBillingPort(
-            @Value("${voice-support.billing.bss.source:mock}") String source) {
-        if (!"mock".equalsIgnoreCase(source)) {
-            log.warn("[BILLING-BSS] source={} not available yet (real adapter is TASK-BE-047) — using mock fixtures",
-                    source);
+    public BillingBssProperties billingBssProperties(
+            @Value("${voice-support.billing.bss.source:mock}") String source,
+            @Value("${voice-support.billing.bss.eir.enquiry-base-url:}") String enquiryBaseUrl,
+            @Value("${voice-support.billing.bss.eir.service-base-url:}") String serviceBaseUrl,
+            @Value("${voice-support.billing.bss.eir.currency:EUR}") String currency,
+            @Value("${voice-support.billing.bss.eir.user-type:SYSTEM}") String userType,
+            @Value("${voice-support.billing.bss.eir.user-identifier:SYSTEM}") String userIdentifier,
+            @Value("${voice-support.billing.bss.eir.connect-ms:2000}") long connectMs,
+            @Value("${voice-support.billing.bss.eir.read-ms:5000}") long readMs) {
+        return new BillingBssProperties(source, enquiryBaseUrl, serviceBaseUrl, currency,
+                userType, userIdentifier, connectMs, readMs);
+    }
+
+    @Bean
+    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry) {
+        if ("eir".equalsIgnoreCase(properties.source())) {
+            log.info("[BILLING-BSS] source=eir — enquiry={} service={} currency={} user-type={}",
+                    properties.enquiryBaseUrl(), properties.serviceBaseUrl(),
+                    properties.currency(), properties.userType());
+            return eirAdapter(properties, telemetry);
+        }
+        if (!"mock".equalsIgnoreCase(properties.source())) {
+            log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());
         }
         log.info("[BILLING-BSS] source=mock — in-memory fixtures (customer-eir-001..006)");
         return new InMemoryBssBillingAdapter(BssBillingFixtures.all());
+    }
+
+    private static BssBillingPort eirAdapter(BillingBssProperties p, BackendTelemetry telemetry) {
+        BillingEnquiryClient enquiry = new RestBillingEnquiryAdapter(
+                restClient(p.enquiryBaseUrl(), p.connectMs(), p.readMs()));
+        BillingServiceClient service = new RestBillingServiceAdapter(
+                restClient(p.serviceBaseUrl(), p.connectMs(), p.readMs()));
+        return new EirBssBillingAdapter(enquiry, service,
+                Currency.getInstance(p.currency()), new GalaxionUser(p.userType(), p.userIdentifier()), telemetry);
+    }
+
+    private static RestClient restClient(String baseUrl, long connectMs, long readMs) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) connectMs);
+        factory.setReadTimeout((int) readMs);
+        return RestClient.builder().requestFactory(factory).baseUrl(baseUrl).build();
     }
 
     @Bean
