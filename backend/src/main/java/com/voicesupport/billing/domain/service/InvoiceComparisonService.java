@@ -38,7 +38,12 @@ public class InvoiceComparisonService implements CompareInvoicesUseCase {
         List<CategorizedDelta> categorized = lineDeltas(previous, current);
         List<LineDelta> deltas = categorized.stream().map(CategorizedDelta::delta).toList();
         List<BillingCause> causes = causes(categorized, currency);
-        Money unexplained = totalDelta.minus(sum(deltas, currency));
+        // The residual is what no *identified* business cause accounts for: the arithmetic gap between
+        // the header total and the line deltas PLUS any amount that fell into the UNEXPLAINED bucket
+        // (a bare subscription move, a payment, an unmapped line). A line being present is not the same
+        // as being explained, so UNEXPLAINED-category amounts stay in the residual and the confidence
+        // gate can escalate them (fixes the "explained by an unexplained part" contradiction).
+        Money unexplained = totalDelta.minus(explainedSum(categorized, currency));
         return new InvoiceComparison(previous, current, totalDelta, deltas, causes, unexplained);
     }
 
@@ -76,12 +81,26 @@ public class InvoiceComparisonService implements CompareInvoicesUseCase {
         }
         List<BillingCause> result = new ArrayList<>();
         for (BillingCauseType type : BillingCauseType.values()) {
+            // UNEXPLAINED is not a business cause: its amount is surfaced as the residual, never voiced
+            // as if it explained the change.
+            if (type == BillingCauseType.UNEXPLAINED) {
+                continue;
+            }
             List<LineDelta> deltas = byCause.get(type);
             if (deltas != null) {
                 result.add(new BillingCause(type, sum(deltas, currency), deltas));
             }
         }
         return result;
+    }
+
+    // Sum of the contributions attributed to an identified business cause (everything except the
+    // UNEXPLAINED bucket) — the part the explanation can actually stand behind.
+    private static Money explainedSum(List<CategorizedDelta> categorized, Currency currency) {
+        return categorized.stream()
+                .filter(item -> item.cause() != BillingCauseType.UNEXPLAINED)
+                .map(item -> item.delta().contribution())
+                .reduce(Money.zero(currency), Money::plus);
     }
 
     private static Map<String, InvoiceItem> index(List<InvoiceItem> lines) {
