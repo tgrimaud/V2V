@@ -66,8 +66,8 @@ Enabling `source=eir` stays **blocked** by the three required actions below (res
 ## Required Developer Actions (before `source=eir`)
 
 1. ✅ **Done (2026-09-15):** BR-002-1 ownership check on `fetchInvoice` — id linkage confirmed (same space), fail-closed guard + test added.
-2. Validate on a real sample: unit (cents/pence), `invoiceAmount` reconciliation, currency.
-3. Map the CSV `detail-report` for fine-grained cause attribution (discount/option/proration) → out of `UNEXPLAINED`.
+2. ✅ **Done (2026-09-15, live account 5):** unit = **cents** confirmed; `invoiceId`==`invoiceNumber`; **mapping bug fixed** — `vatAmount` is inside the TTC total, not additive, so no separate TAX line; category lines reconcile to `invoiceAmount`.
+3. **Blocked:** CSV `detail-report` (and PDF `summary-report`) return **HTTP 412 `archive-file-token-is-null`** — need the archive token before fine-grained cause attribution (discount/option/proration) can leave `UNEXPLAINED`. Also need a two-invoice account for a real delta (account 5 has one).
 
 ## Residual Risk If Accepted (mock-default merge)
 

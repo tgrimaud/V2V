@@ -114,6 +114,10 @@ public class EirBssBillingAdapter implements BssBillingPort {
                 new BillingPeriod(periodId, date), totals, List.of(section));
     }
 
+    // The category amounts (recurring/oneOff/usage) are tax-included (TTC) and sum to invoiceAmount;
+    // vatAmount is the tax already contained in that total (confirmed on real data 2026-09-15:
+    // invoiceAmount 3999 == recurringAmount 3999, vatAmount 748 is the 23% VAT inside), so VAT is NOT
+    // a separate line — it is carried only in the invoice-level totals split. Zero components are skipped.
     private List<InvoiceItem> items(BillAmount amounts) {
         if (amounts == null) {
             return List.of();
@@ -122,7 +126,6 @@ public class EirBssBillingAdapter implements BssBillingPort {
         addItem(items, "recurring", LineCategory.SUBSCRIPTION, orZero(amounts.recurringAmount()));
         addItem(items, "usage", LineCategory.OVERAGE, orZero(amounts.usageAmount()));
         addItem(items, "one-off", LineCategory.ONE_OFF, orZero(amounts.oneOffAmount()));
-        addItem(items, "vat", LineCategory.TAX, orZero(amounts.vatAmount()));
         return List.copyOf(items);
     }
 
@@ -130,13 +133,15 @@ public class EirBssBillingAdapter implements BssBillingPort {
         if (minorUnits == 0L) {
             return;
         }
-        LineAmounts amounts = category == LineCategory.TAX
-                ? new LineAmounts(money(minorUnits), Money.zero(currency), money(minorUnits))
-                : new LineAmounts(money(minorUnits), money(minorUnits), Money.zero(currency));
+        // TTC line: taxIncluded is the comparison basis; taxExcluded/tax stay audit-only and are 0 here
+        // because the enquiry breakdown exposes tax only at invoice level (totals), not per category.
+        LineAmounts amounts = new LineAmounts(money(minorUnits), money(minorUnits), Money.zero(currency));
         items.add(new InvoiceItem(id, null, null, null, category, amounts,
                 new Evidence("eir-billing-enquiry", null, category + " " + minorUnits)));
     }
 
+    // Invoice-level totals: taxIncluded is the TTC invoiceAmount (the comparison basis), tax is the
+    // vatAmount contained within it, taxExcluded is the remainder.
     private LineAmounts totals(BillAmount amounts) {
         long total = amounts == null ? 0L : orZero(amounts.invoiceAmount());
         long tax = amounts == null ? 0L : orZero(amounts.vatAmount());

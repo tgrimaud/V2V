@@ -423,20 +423,29 @@ One blocking finding (BSS hop not observable) **fixed** (`slice=bss`, `provider=
 `fetchInvoice` ownership check now **implemented** (see below); the remaining real-data validations stay
 **accepted residuals**, prerequisites to enabling `source=eir` (not to merge).
 
-### Resolved after review
+### Live-validated against test account 5 (2026-09-15)
 
-- **Account-id linkage confirmed (2026-09-15):** billing-service `account_id` (string) **==** enquiry
-  `billingAccountId` (int64) — same identifier space. `fetchInvoice` now enforces **BR-002-1
-  defense-in-depth**: the enquiry endpoint takes only an `invoiceId`, so the adapter verifies the returned
-  `accountId` equals the requested account (numeric compare) and **fails closed** on a missing/mismatching
-  owner. Test: `EirBssBillingAdapterTest.fetchInvoice_failsClosedWhenInvoiceBelongsToAnotherAccount`.
+Real calls to the Eir dev services (see `docs/integrations/galaxion/eir-billing-services-contract.md`
+§ Live validation) confirmed and fixed several things:
 
-### Still open before enabling `source=eir` (needs the test account / samples → QA-020)
+- **Unit = cents** (`amount 3999` = €39.99); **`invoiceId` == `invoiceNumber`**; **`accountId` = 5 (int)**
+  → BR-002-1 numeric ownership guard validated on real data.
+- **Account-id linkage confirmed:** billing-service `account_id` (string) **==** enquiry `billingAccountId`
+  (int64). `fetchInvoice` enforces **BR-002-1 defense-in-depth** (numeric owner compare, fail-closed).
+  Test: `fetchInvoice_failsClosedWhenInvoiceBelongsToAnotherAccount`.
+- **Mapping bug fixed:** `vatAmount` is **inside** `invoiceAmount` (TTC), not additive
+  (`invoiceAmount 3999 == recurringAmount 3999`, `vat 748` = 23% inside). The adapter no longer emits a
+  separate TAX line; category (TTC) lines reconcile to `invoiceAmount`, VAT stays in the totals split.
+  Tests: `fetchInvoice_mapsRealAccount5Breakdown_vatStaysInsideTheTotal`, `…_multiCategoryLinesReconcileToTheTtcTotal`.
 
-- cents-vs-pennies on a real sample; real shape of `InvoiceDetailsResponse` and the CSV `detail-report`;
-- `invoiceId`↔`invoiceNumber` linkage between the two services (confirm on a real pair);
-- line catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside `recurringAmount`
-  (needs the CSV/PDF lines) — until then those deltas surface as `UNEXPLAINED` and fail closed;
+### Still open before enabling `source=eir` (→ QA-020)
+
+- **Archive token** required by `detail-report` (CSV) / `summary-report` (PDF) — both return **HTTP 412
+  `archive-file-token-is-null`** without it → line-level cause attribution (discount/option/proration)
+  blocked until the token/flow is provided; until then those deltas surface as `UNEXPLAINED` (fail-closed).
+- A **two-invoice** account (or a second period) — account 5 has a single invoice, so no real delta to
+  compare yet.
+- Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - identity → `galaxion-user-*` header derivation (pilot uses a configured default; coordination P4).
 
 ## Proposed (later this sprint — full sections created when picked up)
