@@ -99,6 +99,21 @@ class EirBssBillingAdapterTest {
     }
 
     @Test
+    void fetchInvoice_failsClosedWhenInvoiceBelongsToAnotherAccount() {
+        // GIVEN the enquiry returns an invoice owned by a different account (BR-002-1)
+        FakeEnquiryClient enquiry = new FakeEnquiryClient();
+        enquiry.next = Optional.of(new InvoiceResponse(99999L, 113444L, "2026-02",
+                new BillAmount(5000L, 3000L, 0L, 1200L, 800L), "2026-02-15T00:00:00Z"));
+        EirBssBillingAdapter adapter = adapterWith(enquiry, new FakeServiceClient(List.of()));
+
+        // WHEN the invoice is fetched for account 12312
+        Optional<Invoice> result = adapter.fetchInvoice(AccountId.of("12312"), InvoiceId.of("113444"));
+
+        // THEN it is dropped rather than exposing another account's invoice
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
     void fetchInvoice_returnsEmptyWhenEnquiryHasNoInvoice() {
         // GIVEN the enquiry service reports no invoice
         EirBssBillingAdapter adapter = adapterWith(new FakeEnquiryClient(), new FakeServiceClient(List.of()));

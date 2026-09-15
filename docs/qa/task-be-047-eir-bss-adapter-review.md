@@ -25,7 +25,7 @@ Enabling `source=eir` stays **blocked** by the three required actions below (res
 
 | Severity | Finding | Evidence | Recommendation |
 |---|---|---|---|
-| High (blocks `eir`) | BR-002-1 not enforced on `fetchInvoice` — the enquiry invoice is not verified to belong to the requested account | `toInvoice()` ignores `dto.accountId()` | Add the ownership check once the `account_id` (string) ↔ `billingAccountId` (int64) linkage is confirmed (QA-020). Low practical risk: `invoiceId` always comes from the account-scoped `listInvoices` |
+| High (blocks `eir`) | BR-002-1 not enforced on `fetchInvoice` — the enquiry invoice is not verified to belong to the requested account | `toInvoice()` ignored `dto.accountId()` | ✅ **Fixed (2026-09-15)**: account-id linkage confirmed (billing-service `account_id` == enquiry `billingAccountId`); `ownsInvoice()` compares the returned owner to the requested account and fails closed. Test: `fetchInvoice_failsClosedWhenInvoiceBelongsToAnotherAccount` |
 | Medium | Reconciliation assumption `invoiceAmount = recurring+oneOff+usage+vat` | `totals()` sets `taxIncluded=invoiceAmount`, lines = 4 buckets | Any gap (credits/adjustments) → residual → confidence gate → escalate (fail-closed). Validate on a real sample |
 | Medium | EUR default + `usageAmount→OVERAGE` + `recurring→SUBSCRIPTION` coded defaults | `EirBssBillingAdapter` | Confirm currency on a real payload; undetailed `recurring` → discount/option/proration deltas surface as `UNEXPLAINED` (fail-closed) until the CSV `detail-report` is mapped |
 | Low | Server-side upstream-error logs may contain the BSS response body | `GlobalExceptionHandler.handleUpstream` logs full `ex`; client sees generic `ERR_UPSTREAM` | Acceptable (server-only); watch for invoice data in logs during QA |
@@ -65,7 +65,7 @@ Enabling `source=eir` stays **blocked** by the three required actions below (res
 
 ## Required Developer Actions (before `source=eir`)
 
-1. Enforce BR-002-1 on `fetchInvoice` (ownership check) once the id linkage is confirmed.
+1. ✅ **Done (2026-09-15):** BR-002-1 ownership check on `fetchInvoice` — id linkage confirmed (same space), fail-closed guard + test added.
 2. Validate on a real sample: unit (cents/pence), `invoiceAmount` reconciliation, currency.
 3. Map the CSV `detail-report` for fine-grained cause attribution (discount/option/proration) → out of `UNEXPLAINED`.
 

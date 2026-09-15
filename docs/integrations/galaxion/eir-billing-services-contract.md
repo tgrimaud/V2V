@@ -117,9 +117,10 @@ Per the directive to keep port implementations as decoupled as possible:
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - Line-level catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside
   `recurringAmount` (needs the CSV/PDF lines + a code/type catalogue).
-- Account id typing mismatch: enquiry uses `billingAccountId` **int64**, billing-service uses
-  `account_id` **string** — confirm the canonical account identifier and the invoice-id linkage
-  (`invoiceId` vs `invoiceNumber`).
+- ~~Account id typing mismatch~~ **Resolved 2026-09-15:** enquiry `billingAccountId` (int64) and
+  billing-service `account_id` (string) are the **same identifier** (one space). The Eir adapter now
+  enforces BR-002-1 defense-in-depth on `fetchInvoice` (numeric owner compare, fail-closed). Still
+  confirm the invoice-id linkage (`invoiceId` vs `invoiceNumber`) on a real pair.
 - Error format + behaviour for not-found / multiple matches / slow BSS (for degraded modes).
 
 ## Corrections To Earlier Assumptions
