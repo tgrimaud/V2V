@@ -60,28 +60,47 @@ class EirBssBillingAdapterTest {
     }
 
     @Test
-    void fetchInvoice_mapsBreakdownIntoLinesAndTotals() {
-        // GIVEN the enquiry service returns an invoice whose breakdown is recurring + usage + vat
+    void fetchInvoice_mapsRealAccount5Breakdown_vatStaysInsideTheTotal() {
+        // GIVEN the real account-5 invoice: invoiceAmount == recurringAmount, vat is INSIDE the total
+        // (TTC), not additive (confirmed against the live Eir dev services 2026-09-15)
         FakeEnquiryClient enquiry = new FakeEnquiryClient();
-        enquiry.next = Optional.of(new InvoiceResponse(12312L, 113444L, "2026-02",
-                new BillAmount(5000L, 3000L, 0L, 1200L, 800L), "2026-02-15T00:00:00Z"));
+        enquiry.next = Optional.of(new InvoiceResponse(5L, 2608020000000067L, "202608",
+                new BillAmount(3999L, 3999L, 0L, 0L, 748L), "2026-09-01T00:00:00"));
         EirBssBillingAdapter adapter = adapterWith(enquiry, new FakeServiceClient(List.of()));
 
         // WHEN the invoice is fetched
-        Invoice invoice = adapter.fetchInvoice(AccountId.of("12312"), InvoiceId.of("113444")).orElseThrow();
+        Invoice invoice = adapter.fetchInvoice(AccountId.of("5"), InvoiceId.of("2608020000000067")).orElseThrow();
 
-        // THEN totals use the invoice total (TTC) and the tax split, and lines cover the non-zero parts
-        assertEquals(113444L, enquiry.lastInvoiceId);
-        assertEquals(5000L, invoice.totals().taxIncluded().minorUnits());
-        assertEquals(800L, invoice.totals().tax().minorUnits());
-        assertEquals(4200L, invoice.totals().taxExcluded().minorUnits());
+        // THEN totals are TTC=invoiceAmount with the VAT split, and there is NO separate tax line
+        assertEquals(2608020000000067L, enquiry.lastInvoiceId);
+        assertEquals(3999L, invoice.totals().taxIncluded().minorUnits());
+        assertEquals(748L, invoice.totals().tax().minorUnits());
+        assertEquals(3251L, invoice.totals().taxExcluded().minorUnits());
         List<InvoiceItem> lines = invoice.lines();
-        assertEquals(3, lines.size(), "recurring + usage + vat (one-off is zero -> skipped)");
-        assertTrue(lines.stream().anyMatch(l -> l.category() == LineCategory.SUBSCRIPTION && l.amounts().taxIncluded().minorUnits() == 3000L));
-        assertTrue(lines.stream().anyMatch(l -> l.category() == LineCategory.OVERAGE && l.amounts().taxIncluded().minorUnits() == 1200L));
-        assertTrue(lines.stream().anyMatch(l -> l.category() == LineCategory.TAX && l.amounts().taxIncluded().minorUnits() == 800L));
+        assertEquals(1, lines.size(), "only the recurring TTC line (usage/one-off are zero, vat is not a line)");
+        assertEquals(LineCategory.SUBSCRIPTION, lines.get(0).category());
+        assertEquals(3999L, lines.get(0).amounts().taxIncluded().minorUnits());
+        assertTrue(lines.stream().noneMatch(l -> l.category() == LineCategory.TAX), "VAT is inside the total, never a line");
+    }
+
+    @Test
+    void fetchInvoice_multiCategoryLinesReconcileToTheTtcTotal() {
+        // GIVEN a TTC breakdown with recurring + usage (VAT inside the total, not additive)
+        FakeEnquiryClient enquiry = new FakeEnquiryClient();
+        enquiry.next = Optional.of(new InvoiceResponse(5L, 113444L, "2026-02",
+                new BillAmount(4200L, 3000L, 0L, 1200L, 785L), "2026-02-15T00:00:00Z"));
+        EirBssBillingAdapter adapter = adapterWith(enquiry, new FakeServiceClient(List.of()));
+
+        // WHEN the invoice is fetched
+        Invoice invoice = adapter.fetchInvoice(AccountId.of("5"), InvoiceId.of("113444")).orElseThrow();
+
+        // THEN the category (TTC) lines reconcile exactly to invoiceAmount
+        List<InvoiceItem> lines = invoice.lines();
+        assertEquals(2, lines.size());
         long lineSum = lines.stream().mapToLong(l -> l.amounts().taxIncluded().minorUnits()).sum();
-        assertEquals(5000L, lineSum, "lines must reconcile to the invoice total");
+        assertEquals(4200L, lineSum, "TTC category lines must reconcile to the invoice total");
+        assertEquals(4200L, invoice.totals().taxIncluded().minorUnits());
+        assertEquals(785L, invoice.totals().tax().minorUnits());
     }
 
     @Test

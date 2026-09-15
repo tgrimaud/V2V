@@ -109,19 +109,45 @@ Per the directive to keep port implementations as decoupled as possible:
   is much safer than PDF for line-level causes.
 - **Auth model:** two `galaxion-user-*` headers (type enum + identifier), no token scheme in the spec.
 
+## Live validation — test account 5 (2026-09-15)
+
+First real calls against the Eir dev services (VPN), `galaxion-user-type: SYSTEM` (enum is
+`PRIVILEGED|SYSTEM`), `galaxion-user-identifier: SYSTEM`:
+
+- `GET /api/v1/accounts/5/invoices` → `200` `[{"amount":3999,"invoiceNumber":2608020000000067,"invoiceDate":"2026-07-08","dueDate":"2026-07-22"}]`.
+- `GET /billing-enquiry/invoices/2608020000000067` → `200` `{"accountId":5,"invoiceId":2608020000000067,"billPeriod":"202608","billAmount":{"vatAmount":748,"recurringAmount":3999,"oneOffAmount":0,"usageAmount":0,"invoiceAmount":3999},"effectiveDate":"2026-09-01T00:00:00"}`.
+- `GET /bill_enquiry?billingAccountId=5` → `200` same bill nested under `bills[]` (richer list, breakdown per period).
+
+**Confirmed:**
+- **Unit = cents.** `3999` = €39.99; `vatAmount 748` = 23% Irish VAT (3999/1.23 ≈ 3251 + 748).
+- **`invoiceId` == `invoiceNumber`** (`2608020000000067` addresses both services) — linkage resolved.
+- **`accountId` = 5** (int) on the enquiry response → BR-002-1 numeric ownership guard validates.
+- **VAT is contained in the total, not additive:** `invoiceAmount 3999 == recurringAmount 3999`,
+  `vatAmount 748` is inside it → the adapter no longer emits a separate TAX line (bug fixed this session).
+- **Date/period:** `effectiveDate` `2026-09-01T00:00:00` (no `Z`), `billPeriod` `202608` (yyyyMM) —
+  `parseDate` (first 10 chars) handles both.
+
+**Still blocked / open:**
+- `GET …/{invoice}/details` → `200` but **empty** (`{"accountId":"5","invoiceNumber":…}`), no lines.
+- `GET …/{invoice}/detail-report` (CSV) and `…/summary-report` (PDF) → **HTTP 412**
+  `archive-file-token-is-null` — both need an **archive token** we don't have → line-level extraction
+  (fine-grained cause attribution) is blocked until that token/flow is provided.
+- Error format is **RFC7807** `application/problem+json` (`errorCode`, `title`, `status`, `detail`,
+  `sources`) — use for degraded-mode handling.
+- Account 5 has a **single invoice** → no two-invoice comparison possible; need another account or a
+  second period for a real delta (QA-020).
+
 ## Missing Inputs / Open Questions
 
-- Real shape of `InvoiceDetailsResponse` and of the **CSV** `detail-report` (columns) on a sample
-  — the OpenAPI under-describes the details endpoint.
-- Is `int64` in **cents** (or pennies)? Confirm on one anonymized example.
+- ~~Is `int64` in cents?~~ **Resolved: cents** (account 5). Confirm currency field is absent → EUR default holds.
+- The **archive token** required by `detail-report` / `summary-report` (412 without it) — how is it obtained?
+- Real shape of the **CSV** `detail-report` columns (blocked by the token above).
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - Line-level catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside
   `recurringAmount` (needs the CSV/PDF lines + a code/type catalogue).
 - ~~Account id typing mismatch~~ **Resolved 2026-09-15:** enquiry `billingAccountId` (int64) and
-  billing-service `account_id` (string) are the **same identifier** (one space). The Eir adapter now
-  enforces BR-002-1 defense-in-depth on `fetchInvoice` (numeric owner compare, fail-closed). Still
-  confirm the invoice-id linkage (`invoiceId` vs `invoiceNumber`) on a real pair.
-- Error format + behaviour for not-found / multiple matches / slow BSS (for degraded modes).
+  billing-service `account_id` (string) are the **same identifier** (one space); `invoiceId` == `invoiceNumber`.
+  The Eir adapter enforces BR-002-1 defense-in-depth on `fetchInvoice` (numeric owner compare, fail-closed).
 
 ## Corrections To Earlier Assumptions
 
