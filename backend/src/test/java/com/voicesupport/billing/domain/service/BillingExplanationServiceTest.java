@@ -116,6 +116,52 @@ class BillingExplanationServiceTest {
         assertThat(explanation.text()).contains("unchanged");
     }
 
+    @Test
+    void a_listed_but_unfetchable_invoice_escalates_instead_of_failing_with_a_500() {
+        // GIVEN a resolved customer whose BSS lists two invoices but cannot fetch them (BSS race, or the
+        // BR-002-1 ownership guard dropping a foreign invoice)
+        BssBillingPort unfetchable = new ListsButDoesNotFetchBssPort();
+        BillingExplanationService service = new BillingExplanationService(
+                new BillingIntentDetector(List.of("facture", "augmente", "invoice", "bill")),
+                new CustomerIdentityService(new InMemoryCustomerDirectoryAdapter()),
+                new ComparableInvoiceService(unfetchable), unfetchable,
+                new InvoiceComparisonService(), new ComparisonConfidenceService(0.05),
+                new BillingExplanationComposer());
+
+        // WHEN a resolved customer asks (EIR-1001 -> eir-001)
+        BillingExplanation explanation = service.explain(
+                BillingExplanationQuery.of("web", BILLING_QUESTION, "EIR-1001", null, "fr"));
+
+        // THEN it degrades to a safe escalation (NOT_ENOUGH_DATA), never a thrown 500
+        assertThat(explanation.outcome()).isEqualTo(BillingExplanationOutcome.NOT_ENOUGH_DATA);
+        assertThat(explanation.escalate()).isTrue();
+    }
+
+    // Lists two invoice summaries but never returns a fetchable invoice (empty Optional).
+    private static final class ListsButDoesNotFetchBssPort implements BssBillingPort {
+        @Override
+        public List<com.voicesupport.billing.domain.model.valueobject.InvoiceSummary> listInvoices(
+                com.voicesupport.billing.domain.model.valueobject.AccountId account) {
+            var eur = java.util.Currency.getInstance("EUR");
+            return List.of(
+                    new com.voicesupport.billing.domain.model.valueobject.InvoiceSummary(
+                            com.voicesupport.billing.domain.model.valueobject.InvoiceId.of("2"),
+                            new com.voicesupport.billing.domain.model.valueobject.BillingPeriod("2", java.time.LocalDate.of(2026, 2, 1)),
+                            com.voicesupport.billing.domain.model.valueobject.Money.ofMinorUnits(4000L, eur)),
+                    new com.voicesupport.billing.domain.model.valueobject.InvoiceSummary(
+                            com.voicesupport.billing.domain.model.valueobject.InvoiceId.of("1"),
+                            new com.voicesupport.billing.domain.model.valueobject.BillingPeriod("1", java.time.LocalDate.of(2026, 1, 1)),
+                            com.voicesupport.billing.domain.model.valueobject.Money.ofMinorUnits(3500L, eur)));
+        }
+
+        @Override
+        public java.util.Optional<com.voicesupport.billing.domain.model.Invoice> fetchInvoice(
+                com.voicesupport.billing.domain.model.valueobject.AccountId account,
+                com.voicesupport.billing.domain.model.valueobject.InvoiceId invoiceId) {
+            return java.util.Optional.empty();
+        }
+    }
+
     private static BillingExplanationService newService() {
         BssBillingPort bss = new InMemoryBssBillingAdapter(BssBillingFixtures.all());
         return new BillingExplanationService(

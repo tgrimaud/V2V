@@ -21,6 +21,7 @@ import com.voicesupport.billing.domain.port.out.BssBillingPort;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 // Orchestrates the billing explanation chain fail-closed (TASK-BE-045, ADR-0051): intent guard ->
 // identity (BR-002-1) -> comparable invoices -> deterministic comparison -> confidence gate (BR-003,
@@ -81,23 +82,26 @@ public class BillingExplanationService implements ExplainBillingUseCase {
         if (summaries.size() < MIN_COMPARABLE_INVOICES) {
             return BillingExplanation.notEnoughData(composer.notEnoughData(language));
         }
-        InvoiceComparison comparison = compareTwoMostRecent(account, summaries);
-        ExplanationReadiness readiness = assess.assess(comparison);
-        return fromReadiness(comparison, readiness, language);
+        Optional<InvoiceComparison> comparison = compareTwoMostRecent(account, summaries);
+        if (comparison.isEmpty()) {
+            return BillingExplanation.notEnoughData(composer.notEnoughData(language));
+        }
+        ExplanationReadiness readiness = assess.assess(comparison.get());
+        return fromReadiness(comparison.get(), readiness, language);
     }
 
     // Summaries are most-recent-first (RetrieveComparableInvoicesUseCase contract): current is the
     // latest, previous the one before. Uses an iterator (never index access) per the code guidelines.
-    private InvoiceComparison compareTwoMostRecent(AccountId account, List<InvoiceSummary> summaries) {
+    // A listed invoice can still be unfetchable (BSS race, or the BR-002-1 ownership guard dropping a
+    // foreign invoice): that degrades to an empty comparison -> safe escalation, never a 500 (BUG-020).
+    private Optional<InvoiceComparison> compareTwoMostRecent(AccountId account, List<InvoiceSummary> summaries) {
         Iterator<InvoiceSummary> iterator = summaries.iterator();
-        Invoice current = fetch(account, iterator.next().id());
-        Invoice previous = fetch(account, iterator.next().id());
-        return compare.compare(previous, current);
-    }
-
-    private Invoice fetch(AccountId account, InvoiceId invoiceId) {
-        return bss.fetchInvoice(account, invoiceId)
-                .orElseThrow(() -> new IllegalStateException("listed invoice not fetchable: " + invoiceId.value()));
+        Optional<Invoice> current = bss.fetchInvoice(account, iterator.next().id());
+        Optional<Invoice> previous = bss.fetchInvoice(account, iterator.next().id());
+        if (current.isEmpty() || previous.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(compare.compare(previous.get(), current.get()));
     }
 
     private BillingExplanation fromReadiness(
