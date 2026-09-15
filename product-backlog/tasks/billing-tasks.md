@@ -419,14 +419,22 @@ structured enquiry breakdown (PDF becomes fallback) + a CSV `detail-report` line
 ### Adversarial review
 
 `docs/qa/task-be-047-eir-bss-adapter-review.md` — **91/100, QA gate Pass** for the mock-default slice.
-One blocking finding (BSS hop not observable) **fixed** (`slice=bss`, `provider=eir`); BR-002-1
-`fetchInvoice` ownership check + real-data validations recorded as **accepted residuals**, prerequisites
-to enabling `source=eir` (not to merge).
+One blocking finding (BSS hop not observable) **fixed** (`slice=bss`, `provider=eir`). BR-002-1
+`fetchInvoice` ownership check now **implemented** (see below); the remaining real-data validations stay
+**accepted residuals**, prerequisites to enabling `source=eir` (not to merge).
+
+### Resolved after review
+
+- **Account-id linkage confirmed (2026-09-15):** billing-service `account_id` (string) **==** enquiry
+  `billingAccountId` (int64) — same identifier space. `fetchInvoice` now enforces **BR-002-1
+  defense-in-depth**: the enquiry endpoint takes only an `invoiceId`, so the adapter verifies the returned
+  `accountId` equals the requested account (numeric compare) and **fails closed** on a missing/mismatching
+  owner. Test: `EirBssBillingAdapterTest.fetchInvoice_failsClosedWhenInvoiceBelongsToAnotherAccount`.
 
 ### Still open before enabling `source=eir` (needs the test account / samples → QA-020)
 
 - cents-vs-pennies on a real sample; real shape of `InvoiceDetailsResponse` and the CSV `detail-report`;
-- account-id typing (`billingAccountId` int64 vs `account_id` string) + `invoiceId`↔`invoiceNumber` linkage;
+- `invoiceId`↔`invoiceNumber` linkage between the two services (confirm on a real pair);
 - line catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside `recurringAmount`
   (needs the CSV/PDF lines) — until then those deltas surface as `UNEXPLAINED` and fail closed;
 - identity → `galaxion-user-*` header derivation (pilot uses a configured default; coordination P4).

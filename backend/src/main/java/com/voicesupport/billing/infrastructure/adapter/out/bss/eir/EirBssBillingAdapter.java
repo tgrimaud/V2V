@@ -97,6 +97,9 @@ public class EirBssBillingAdapter implements BssBillingPort {
     }
 
     private Invoice toInvoice(AccountId account, InvoiceId id, InvoiceResponse dto) {
+        if (!ownsInvoice(account, dto)) {
+            return null;
+        }
         LocalDate date = parseDate(dto.effectiveDate());
         if (date == null) {
             return null;
@@ -138,6 +141,17 @@ public class EirBssBillingAdapter implements BssBillingPort {
         long total = amounts == null ? 0L : orZero(amounts.invoiceAmount());
         long tax = amounts == null ? 0L : orZero(amounts.vatAmount());
         return new LineAmounts(money(total), money(total - tax), money(tax));
+    }
+
+    // BR-002-1 defense-in-depth: the enquiry endpoint takes only an invoiceId, so this verifies the
+    // returned invoice belongs to the requested account before it is mapped. The two identifiers share
+    // one space (billing-service account_id == enquiry billingAccountId, confirmed 2026-09-15), so the
+    // requested AccountId is compared numerically to the response accountId. Fail-closed: a missing or
+    // mismatching owner (or a non-numeric account) drops the invoice (Optional.empty upstream).
+    private static boolean ownsInvoice(AccountId account, InvoiceResponse dto) {
+        Long owner = dto.accountId();
+        Long requested = parseLong(account.value());
+        return owner != null && requested != null && owner.equals(requested);
     }
 
     private Money money(Long minorUnits) {
