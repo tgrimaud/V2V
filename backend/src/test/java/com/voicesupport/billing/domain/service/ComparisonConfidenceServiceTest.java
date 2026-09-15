@@ -68,10 +68,10 @@ class ComparisonConfidenceServiceTest {
 
     @Test
     void a_small_residual_within_tolerance_is_partial_without_escalation() {
-        // GIVEN a +10000 total with a single +9600 line -> 400 residual (4% <= 5% tolerance)
+        // GIVEN a +10000 total with a single identified +9600 usage line -> 400 residual (4% <= 5%)
         InvoiceComparison comparison = comparisonService.compare(
                 header("prev", 0L, List.of()),
-                header("curr", 10000L, List.of(line("misc", LineCategory.OTHER, 9600L))));
+                header("curr", 10000L, List.of(line("data", LineCategory.USAGE, 9600L))));
 
         // WHEN the gate assesses it
         ExplanationReadiness readiness = gate.assess(comparison);
@@ -85,10 +85,10 @@ class ComparisonConfidenceServiceTest {
 
     @Test
     void a_residual_above_tolerance_is_insufficient_and_escalates() {
-        // GIVEN a +1000 total with only an +800 line -> 200 residual (20% > 5% tolerance)
+        // GIVEN a +1000 total with only an identified +800 usage line -> 200 residual (20% > 5%)
         InvoiceComparison comparison = comparisonService.compare(
                 header("prev", 0L, List.of()),
-                header("curr", 1000L, List.of(line("misc", LineCategory.OTHER, 800L))));
+                header("curr", 1000L, List.of(line("data", LineCategory.USAGE, 800L))));
 
         // WHEN the gate assesses it
         ExplanationReadiness readiness = gate.assess(comparison);
@@ -98,6 +98,24 @@ class ComparisonConfidenceServiceTest {
         assertThat(readiness.reason()).isEqualTo(ReadinessReason.RESIDUAL_TOO_HIGH);
         assertThat(readiness.escalate()).isTrue();
         assertThat(readiness.unexplainedAmount().minorUnits()).isEqualTo(200L);
+    }
+
+    @Test
+    void a_delta_attributed_only_to_the_unexplained_bucket_escalates() {
+        // GIVEN the coarse Eir case: a +500 change carried entirely by a bare subscription line
+        // (maps to UNEXPLAINED) — a line is present but the change is not business-explained
+        InvoiceComparison comparison = comparisonService.compare(
+                header("prev", 0L, List.of()),
+                header("curr", 500L, List.of(line("base", LineCategory.SUBSCRIPTION, 500L))));
+
+        // WHEN the gate assesses it
+        ExplanationReadiness readiness = gate.assess(comparison);
+
+        // THEN the full amount is residual and it escalates (never "explained by an unexplained part")
+        assertThat(readiness.confidence()).isEqualTo(ExplanationConfidence.INSUFFICIENT);
+        assertThat(readiness.reason()).isEqualTo(ReadinessReason.RESIDUAL_TOO_HIGH);
+        assertThat(readiness.escalate()).isTrue();
+        assertThat(readiness.unexplainedAmount().minorUnits()).isEqualTo(500L);
     }
 
     @Test

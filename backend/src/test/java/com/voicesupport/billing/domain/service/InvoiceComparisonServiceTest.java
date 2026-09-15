@@ -97,20 +97,38 @@ class InvoiceComparisonServiceTest {
 
     @Test
     void surfaces_the_residual_when_line_deltas_do_not_reconcile_with_the_total() {
-        // GIVEN a header total that changed by 1000 but only an 800 line (of an unmapped category)
+        // GIVEN a header total that changed by 1000 but only an 800 identified (usage) line
         Invoice previous = header("prev", 0L, List.of());
-        Invoice current = header("curr", 1000L, List.of(line("misc", LineCategory.OTHER, 800L)));
+        Invoice current = header("curr", 1000L, List.of(line("data", LineCategory.USAGE, 800L)));
 
         // WHEN they are compared
         InvoiceComparison comparison = service.compare(previous, current);
 
-        // THEN the 800 goes to an UNEXPLAINED cause and the 200 header/line gap is the residual
+        // THEN the 800 is an identified USAGE_OVERAGE cause and the 200 header/line gap is the residual
         assertThat(comparison.totalDelta().minorUnits()).isEqualTo(1000L);
         assertThat(comparison.causes()).singleElement().satisfies(cause -> {
-            assertThat(cause.type()).isEqualTo(BillingCauseType.UNEXPLAINED);
+            assertThat(cause.type()).isEqualTo(BillingCauseType.USAGE_OVERAGE);
             assertThat(cause.impact().minorUnits()).isEqualTo(800L);
         });
         assertThat(comparison.unexplainedAmount().minorUnits()).isEqualTo(200L);
+    }
+
+    @Test
+    void an_unexplained_category_line_is_not_a_cause_and_becomes_the_residual() {
+        // GIVEN a +500 change carried entirely by a bare subscription line (maps to UNEXPLAINED) —
+        // the coarse Eir case: recurringAmount moved but no finer line says why
+        Invoice previous = header("prev", 0L, List.of());
+        Invoice current = header("curr", 500L, List.of(line("base", LineCategory.SUBSCRIPTION, 500L)));
+
+        // WHEN they are compared
+        InvoiceComparison comparison = service.compare(previous, current);
+
+        // THEN no business cause is claimed and the whole 500 is surfaced as residual (never voiced as
+        // "explained by an unexplained part")
+        assertThat(comparison.totalDelta().minorUnits()).isEqualTo(500L);
+        assertThat(comparison.lineDeltas()).hasSize(1);
+        assertThat(comparison.causes()).isEmpty();
+        assertThat(comparison.unexplainedAmount().minorUnits()).isEqualTo(500L);
     }
 
     @Test
