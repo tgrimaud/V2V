@@ -1,6 +1,6 @@
 # Galaxion / BSS — Coordination Request (Billing V1)
 
-> Ticket: TASK-INFRA-017 · Sprint 14 (Billing Identity + BSS/PDF Evidence + Deterministic Comparison) · Status: **request ready to send**
+> Ticket: TASK-INFRA-017 · Sprint 14 (Billing Identity + BSS/PDF Evidence + Deterministic Comparison) · Status: **request finalized — ready to send** (refreshed 2026-09-16 after the live validation on test account 5)
 > Audience: Galaxion / BSS billing owners + our backend/product team.
 
 ## 1. Purpose
@@ -8,184 +8,189 @@
 We are building the V1 billing assistant: it explains to a customer **why an
 invoice changed** by comparing two invoices with a **deterministic engine**
 (amounts and causes computed by code; the LLM only phrases the confirmed, traceable
-result — it never computes amounts). This document centralizes everything we need
+result — it never computes amounts). This document centralizes what we still need
 from the Galaxion / BSS side to validate V1 against **real** data.
 
-It groups, prioritizes and assigns an owner to the open items currently scattered
-across `missing-inputs.md`, `bss-integration-plan.md`, `bss-billing-data-model.md`,
-`galaxion-billing-contracts.md` and the V1 open questions (OQ-001/003/004). The
-build does **not** wait on these answers (we start on fixtures + a BSS mock), but
-**real-data acceptance does**.
+Since the previous version, we have **integrated the real Eir dev services**
+(`billing-enquiry-service` 3.1.0 + `billing-service` 2.3.1) behind our read-only
+`BssBillingPort` and **validated the structured path live on test account 5**
+(`docs/integrations/galaxion/eir-billing-services-contract.md` § Live validation).
+That closed several earlier questions (see §2) and narrowed the remaining blockers
+to **two concrete items** (see §3, P1). The build does **not** wait on these — we run
+on fixtures + a BSS mock and `source=mock` by default — but **real-data acceptance
+(QA-020) and enabling `source=eir`** do.
 
-## 2. What is already decided on our side (please do not re-answer)
+## 2. What is already decided or validated on our side (please do not re-answer)
 
-- **Billing source = `billing-api` only** (`billing-service` is not used).
+Settled by us:
+
+- **Real sources = `billing-enquiry-service` (invoice breakdown) + `billing-service`
+  (account invoice list)**, Eir dev. This supersedes the earlier `billing-api` /
+  `invoices/composed` framing.
 - **Prices are tax-included (TTC)** (confirmed 2026-09-09) → the customer-facing
-  comparison basis is the tax-included amount (`amountTaxesIncluded` /
-  `vat_incl_amount` / `vatIncTotal`); tax-excluded amounts are kept for audit only.
-- **Access goes through a typed read-only port** (`BssBillingPort`, ADR-0004); we
-  never mutate BSS data in V1.
-- We already have the **real billing data model** you shared (2026-09-08):
-  `invoice → invoice_section → invoice_group → invoice_item`, amounts at each level
-  (`bss-billing-data-model.md`). It matches the shape of `ComposedInvoiceResponse`
-  from `billing-api` — which drives request #1 below.
+  comparison basis is the tax-included amount; tax-excluded stays for audit only.
+- **Access is read-only** through a typed port (`BssBillingPort`, ADR-0004); we never
+  mutate BSS data in V1.
+
+Confirmed live on **test account 5** (2026-09-15) — no need to re-answer:
+
+- **Unit = integer cents.** `amount 3999` = €39.99; `vatAmount 748` = 23% Irish VAT
+  contained inside the total (closes the OQ-003 unit question).
+- **VAT is inside `invoiceAmount`, not additive:** `invoiceAmount 3999 ==
+  recurringAmount 3999`, `vatAmount 748` is the contained tax. Our mapping reconciles
+  category (TTC) lines to `invoiceAmount` and keeps the VAT split at invoice level only.
+- **Identifier linkage:** enquiry `billingAccountId` (int64) and billing-service
+  `account_id` (string) are the **same identifier space**; `invoiceId` ==
+  `invoiceNumber`. We enforce BR-002-1 ownership (numeric owner compare, fail-closed)
+  on `fetchInvoice`.
+- **Auth model:** two headers `galaxion-user-type` (enum `PRIVILEGED|SYSTEM`) +
+  `galaxion-user-identifier`; no token scheme in the spec.
+- **Error format:** RFC 7807 `application/problem+json` (`errorCode`, `title`,
+  `status`, `detail`, `sources`) — wired into our degraded-mode handling.
 
 ## 3. Requests (prioritized)
 
-### P1 — Structured invoice-line source (biggest lever)
+### P1 — Archive token for the line-level invoice detail (top blocker)
 
-The data model you shared is a structured invoice tree. `billing-api` documents
-`GET /invoices/composed` (`ComposedInvoiceResponse`: `sections[]`, `items[]`,
-`taxes[]`, `amount`) and `GET /invoices/selected` (`SelectedInvoiceResponse`), whose
-items carry `code`, `type`, `defaultPrice` (cents), `amount` (tax-excl/tax-incl),
-`volume`, `percentage`, `effectiveAt`, `referencePeriod`, `effectivePeriod`.
+On account 5, the structured enquiry breakdown returns only **coarse** amounts
+(`recurringAmount`, `oneOffAmount`, `usageAmount`, `vatAmount`, `invoiceAmount`). The
+**line-level** endpoints both fail without an archive token:
 
-**Question:** can `GET /invoices/composed` (or `/invoices/selected`) be the
-**validated read-only structured source** for invoice lines?
+- `GET /billing-enquiry/invoices/{invoiceId}/detail-report` (CSV) → **HTTP 412
+  `archive-file-token-is-null`**;
+- `GET /billing-enquiry/invoices/{invoiceId}/summary-report` (PDF) → **HTTP 412
+  `archive-file-token-is-null`**;
+- `GET /billing-enquiry/invoices/{invoiceId}/details` → `200` but **empty** (no lines).
 
-**Why it matters:** if yes, our comparison engine consumes structured lines
-directly and **PDF extraction becomes a fallback**, not the primary path — a major
-reliability gain (no fragile PDF parsing on the critical path). Please confirm:
+**Question:** how is the **archive token** obtained (which endpoint / flow / header),
+and does it apply to both `detail-report` and `summary-report`?
 
-- which of the two (`composed` vs `selected`) is authoritative for a customer
-  invoice, and the difference between them;
-- one **anonymized example response** for a real invoice;
-- whether every needed level is present (invoice total, sections, items) and stable
-  month to month.
+**Why it matters:** without line-level detail we can only attribute deltas to the
+coarse buckets. A change **inside** `recurringAmount` (expired discount vs option
+change vs proration) cannot be separated, so those deltas surface as `UNEXPLAINED`
+(fail-closed, safe but low-value). The token unlocks fine-grained cause attribution —
+the core V1 value.
 
-### P1 — Anonymized invoice PDFs (for the fallback path + fixtures)
+### P1 — An account (or period) with two comparable invoices
 
-- 2 anonymized invoice PDFs, ideally **two consecutive months for the same
-  account**, with **at least one visible delta**;
-- if possible one simple and one complex case (expired discount, out-of-bundle
-  usage, proration, or an option activated mid-period);
-- the matching **`GET /bill-run-documents/search` responses** (`id`, `filename`,
-  `contentType`) and the invoice linkage metadata (`accountId`, `invoiceNumber`,
-  `billPeriodId`, `billRunId`, `billRunAccountId`, `BillRunAccount` status).
+Account 5 has a **single** invoice, so there is **no real delta to compare** yet — our
+comparison engine and QA-020 need two invoices for the same account.
 
-### P2 — Amount semantics (finish OQ-003)
+**Request:** a dev account with **at least two consecutive invoices** (or a second
+billing period on account 5) exhibiting a **visible delta**; ideally one simple case
+(expired discount / out-of-bundle usage) and one complex case (proration / mid-period
+option change).
 
-- **Unit:** are amounts in **euros or integer cents**? (`defaultPrice` looks like
-  cents, but `AmountResponse` is exposed as a bare `number` — we need certainty to
-  map onto our integer-cents convention.)
-- **`crud_amount`** (present at every level in the shared model): what does it
-  represent — raw/gross, before discount, something else?
-- How are **taxes rounded**, and does the invoice total include **previous balance /
-  payments** (`balance_previous_bc`, `overdue_amount`) or only current-period lines?
+### P2 — `invoiceAmount` composition
+
+Does `invoiceAmount` cover **only the current-period charges**, or does it also include
+**previous balance / payments / overdue**? This decides whether we compare period totals
+directly or must isolate current-period charges before diffing.
 
 ### P2 — Line classifier catalogue (drives business causes)
 
-For `invoice_item` / `ComposedItemResponse`, the full value sets of:
+Once the archive token unlocks the CSV/PDF lines, we need the value sets and mapping for
+the line fields (`type` / `code` / `vatType` or the CSV column equivalents) onto the V1
+business causes: **discount expiry, usage overage, option change, proration, tax,
+one-off fee, adjustment**. In particular: do **discounts / proration** appear as negative
+lines, a dedicated `type`/`code`, or a section-level reduction?
 
-- **`type`**, **`code`**, **`vatType`**;
+### P2 — CSV `detail-report` column shape
 
-and how each maps to a V1 **business cause**: discount expiry, usage overage, option
-change, proration, tax, one-off fee, adjustment. In particular:
-
-- do **discounts / proration** appear as **negative items**, a dedicated
-  `type`/`code`, or a section-level reduction?
-
-### P2 — Enumerating the two invoices to compare
-
-From an `accountId`, the concrete flow to list the **two latest comparable
-invoices** (there is no explicit billing-period entity in the shared model). We
-believe it is `GET /bill-periods?year=` → `bill-runs` →
-`GET /bill-runs/{id}/bill-run-accounts/search?accountIdTerm=` →
-`billRunAccountId` / `invoiceNumber` → `invoices/composed` (or PDF). Please confirm
-or correct, and tell us which `BillRunAccountResponse.status` values mean an invoice
-is usable.
-
-### P3 — Business-cause evidence (per cause)
-
-For each cause (expired discount, mid-period option, proration, out-of-bundle,
-offer change, adjustment, one-off fee, tax): the main evidence field, the effective
-date, and the **customer-facing wording accepted by billing** (so the KB entries
-stay consistent with BSS evidence).
+The exact columns of the CSV `detail-report` (blocked today by the P1 token) so we can
+map them onto our structured invoice model deterministically.
 
 ### P3 — Errors and edge cases (for the mock + degraded behaviour)
 
-Standard Galaxion error format; behaviour when the account/invoice/document is not
-found, when several documents match, when the BSS is slow/partial; timeouts and
-pagination limits.
+Beyond the RFC 7807 format we already see: behaviour when the account/invoice is not
+found, when several documents match, when the service is slow/partial; timeouts and
+pagination limits on the invoice list.
 
-### P4 — Customer identification (deferred for the pilot, but needed later)
+### P3 — Business-cause evidence (per cause)
+
+For each cause (expired discount, mid-period option, proration, out-of-bundle, offer
+change, adjustment, one-off fee, tax): the main evidence field, the effective date, and
+the **customer-facing wording accepted by billing**, so the KB entries stay consistent
+with BSS evidence.
+
+### P4 — Customer identification + `galaxion-user-*` derivation (deferred for the pilot)
 
 How the customer is identified on the **phone** (Genesys IVR/ANI) and **web voice**
-channels, the **minimum confidence** for invoice access, and which data may be
-**spoken / displayed / must be masked in logs** (OQ-001). *The pilot ships with a
-known/manual identity, so this is a follow-up, not a blocker for Sprint 14.*
+channels, the **minimum confidence** for invoice access, what may be
+**spoken / displayed / must be masked in logs** (OQ-001), and **how the two
+`galaxion-user-*` header values are derived** per real caller (the pilot currently uses a
+configured default). *Follow-up, not a Sprint 14 blocker.*
 
 ## 4. Who provides what
 
-| Item | Owner |
-|------|-------|
-| `invoices/composed` vs `selected` as structured source + example (P1) | Galaxion billing owner |
-| Anonymized PDFs + `bill-run-documents/search` responses + linkage metadata (P1) | Galaxion billing owner |
-| Amount unit (euros/cents) + `crud_amount` meaning + tax rounding (P2) | Galaxion billing owner |
-| `type` / `code` / `vatType` catalogue + cause mapping (P2) | Galaxion billing owner + our product |
-| Two-invoice enumeration flow + usable statuses (P2) | Galaxion billing owner |
-| Per-cause evidence + accepted customer wording (P3) | Billing SME + our product |
-| Error format + edge cases (P3) | Galaxion billing owner |
-| Customer identification rules + masking (P4) | Galaxion / Security + our product |
+| Item | Priority | Owner |
+|------|----------|-------|
+| Archive-token flow for `detail-report` / `summary-report` | P1 | Galaxion billing owner |
+| Dev account with ≥2 comparable invoices (or a 2nd period) | P1 | Galaxion billing owner |
+| `invoiceAmount` composition (current-period vs balance/payments) | P2 | Galaxion billing owner |
+| Line catalogue (`type`/`code`/`vatType` or CSV cols) + cause mapping | P2 | Galaxion billing owner + our product |
+| CSV `detail-report` column shape | P2 | Galaxion billing owner |
+| Error/edge-case behaviour + pagination limits | P3 | Galaxion billing owner |
+| Per-cause evidence + accepted customer wording | P3 | Billing SME + our product |
+| Customer identification rules + `galaxion-user-*` derivation + masking | P4 | Galaxion / Security + our product |
 
 ## 5. What we do without waiting
 
-Per `missing-inputs.md`, we proceed in parallel on fixtures/mock: the billing domain
-model (mirroring your `invoice → section → group → item` hierarchy), the
-`BssBillingPort` + use cases, the BSS mock with `customer-eir-001…006` fixtures, the
-PDF extractor on synthetic PDFs, the deterministic comparison engine, and the QA
-journeys. When your answers arrive, the **real `billing-api` read-only adapter** and
-**real-data validation** drop in behind the same port without changing the domain.
+We proceed on fixtures/mock (`source=mock` default): the billing domain model, the
+`BssBillingPort` + use cases, the BSS mock with `customer-eir-001…006` fixtures, the PDF
+extractor on synthetic PDFs, the deterministic comparison engine, and the QA journeys.
+The **real Eir adapter is already implemented** behind the port and validated on the
+coarse structured path; enabling `source=eir` for line-level attribution and running
+QA-020 is what the P1 items above unlock.
 
 ## 6. Next step
 
-A short working session to walk through **request #1** (structured source vs PDF)
-and receive one anonymized composed-invoice example + one PDF pair. That single
-answer decides whether PDF extraction is the primary path or a fallback for V1.
+A short working session on the **two P1 blockers**: (1) the archive-token flow so we can
+retrieve the CSV/PDF line detail, and (2) a dev account with two comparable invoices.
+Those two answers move us from coarse (`UNEXPLAINED`) to fine-grained cause attribution
+and unblock real-data acceptance (QA-020).
 
 ## Appendix — Short email cover (ready to send)
 
-> Short version to send as an email body; the full request above is the attachment /
-> follow-up. Focused on the two remaining amount questions (unit + `crud_amount`).
+> Focused on the two concrete P1 blockers surfaced by the live test on account 5.
 
-**Subject:** Galaxion Billing V1 — 2 quick questions on invoice amounts (+ full input list)
+**Subject:** Eir Billing V1 — 2 blockers after live validation (archive token + a 2-invoice test account)
 
 Hi [name],
 
-We're building the V1 billing assistant that explains invoice changes to customers,
-using a deterministic comparison of two invoices. Thanks for the billing data model —
-it maps cleanly onto our target domain.
+Thanks — we've integrated the Eir dev billing services (`billing-enquiry-service` +
+`billing-service`) behind our read-only port and validated the structured path live on
+**test account 5**. That confirmed the essentials on our side: amounts are in **cents**,
+**VAT is contained in the invoice total** (not additive), and `invoiceId` ==
+`invoiceNumber` with a single shared account identifier — all good.
 
-**Two quick blockers I'd like to confirm first (invoice amounts):**
+**Two blockers remain before we can validate real invoice explanations:**
 
-1. **Unit** — are the monetary fields (`crud_amount`, `vat_excl_amount`,
-   `vat_incl_amount`, `vatIncTotal` / `AmountResponse`) in **euros or integer cents**?
-   (`defaultPrice` looks like cents, but `AmountResponse` is exposed as a bare
-   `number`, so I'd rather not assume.)
-2. **`crud_amount`** — what exactly does this field represent at each level (invoice /
-   section / group / item)? Is it the **gross/raw amount before discount**, or
-   something else? We need this to know which field drives the comparison.
+1. **Archive token** — `…/invoices/{id}/detail-report` (CSV) and `…/summary-report`
+   (PDF) both return **HTTP 412 `archive-file-token-is-null`**, and `…/details` comes
+   back empty. How is the archive token obtained (endpoint / flow / header)? Without the
+   line detail we can only see coarse buckets (`recurring`/`usage`/`one-off`/`vat`), so a
+   change **inside** the subscription amount (expired discount vs option change vs
+   proration) can't be separated and is reported as "unexplained".
+2. **A 2-invoice test account** — account 5 has a single invoice, so there's **no delta
+   to compare**. Could we get a dev account with at least two consecutive invoices (or a
+   second period on account 5) showing a visible change — ideally one simple and one
+   complex case?
 
-For context: we've already settled that prices are **tax-included (TTC)**, so our
-customer-facing comparison uses the tax-included amount; tax-excluded stays for audit.
+Secondary, when convenient: does `invoiceAmount` include previous balance/payments or
+only current-period charges, and the line `type`/`code`/`vatType` catalogue (or CSV
+columns) so we can map each line to a business cause.
 
-**Beyond those two**, I've put together a short, prioritized list of everything we
-need from the Galaxion/BSS side to validate V1 on real data — the biggest one being
-whether `GET /invoices/composed` can serve as the validated **structured invoice-line
-source** (which would let us avoid PDF parsing on the critical path), plus 2 anonymized
-invoice PDFs, the `type`/`code`/`vatType` catalogue, and the flow to list the two
-invoices to compare. Happy to share that document and walk through it in a 30-min call.
-
-None of this blocks us from starting — we're building on fixtures in the meantime — but
-your answers unlock validation against real invoices.
+None of this blocks our build — we run on fixtures in the meantime — but these two items
+unlock validation against real invoices. Happy to walk through it in a 30-min call.
 
 Thanks,
 Thomas
 
 ## References
 
-- `docs/integrations/galaxion/bss-billing-data-model.md` (the shared real model)
-- `docs/integrations/galaxion/galaxion-billing-contracts.md` (`billing-api` routes)
+- `docs/integrations/galaxion/eir-billing-services-contract.md` (real Eir services + live validation on account 5)
+- `docs/integrations/galaxion/bss-billing-data-model.md` (shared real model)
 - `docs/integrations/galaxion/bss-integration-plan.md` (access routing)
 - `docs/integrations/galaxion/invoice-extraction-json.md` (normalized contract)
 - `docs/integrations/galaxion/missing-inputs.md` (source list this consolidates)

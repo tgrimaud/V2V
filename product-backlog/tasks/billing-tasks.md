@@ -448,9 +448,48 @@ Real calls to the Eir dev services (see `docs/integrations/galaxion/eir-billing-
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - identity → `galaxion-user-*` header derivation (pilot uses a configured default; coordination P4).
 
+## TASK-INFRA-017 — Galaxion inputs coordination package
+
+**Type:** Doc / coordination — **not runtime-affecting** (no code; no OTel change)
+**Status:** ✅ Request **finalized — ready to send** (2026-09-16). Refreshed after the live
+validation on test account 5: records what the live test resolved (unit=cents, VAT-inside-total,
+identifier linkage, auth headers, RFC 7807 errors) and narrows the outstanding asks to two concrete
+P1 blockers. Deliverable: `docs/integrations/galaxion/galaxion-coordination-request.md`.
+**Parent:** OQ-001/003/004 · INFRA-017
+**Gate:** — (parallel track; unblocks BE-047 real-data + QA-020)
+
+### Context
+
+Consolidates and prioritizes everything still needed from the Galaxion / BSS side to validate V1 on
+real data, with an owner per item and a ready-to-send email cover. The build never waits on these
+(fixtures/mock, `source=mock` default); they gate **real-data acceptance (QA-020)** and enabling
+`source=eir` for line-level cause attribution.
+
+### Finalized asks (post account-5 live validation)
+
+- **P1 — Archive token:** `detail-report` (CSV) + `summary-report` (PDF) return HTTP 412
+  `archive-file-token-is-null`; `details` is empty. Without line detail, sub-`recurringAmount` deltas
+  (discount/option/proration) stay `UNEXPLAINED` (fail-closed). Need the token flow.
+- **P1 — Two-invoice account:** account 5 has a single invoice → no real delta to compare (QA-020).
+- **P2:** `invoiceAmount` composition (current-period vs balance/payments); line catalogue
+  (`type`/`code`/`vatType` or CSV columns) → business-cause mapping; CSV column shape.
+- **P3:** error/edge-case behaviour + pagination; per-cause evidence + accepted customer wording.
+- **P4 (deferred):** customer identification + `galaxion-user-*` header derivation + log masking (OQ-001).
+
+### Resolved by the live test (recorded so Galaxion does not re-answer)
+
+Unit = cents; VAT contained in the total; `invoiceId` == `invoiceNumber`; enquiry `billingAccountId`
+== billing-service `account_id` (one identifier space); auth via `galaxion-user-type|identifier`
+headers; RFC 7807 error format.
+
+### Acceptance
+
+- Prioritized asks with owners + ready-to-send email cover (done).
+- Live-validated facts recorded as "do not re-answer" (done).
+- Markdown well-formed (`git diff --check`).
+
 ## Proposed (later this sprint — full sections created when picked up)
 
 | Ticket | Title | Gate |
 |--------|-------|------|
-| TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data |
-| TASK-INFRA-017 | Galaxion inputs coordination package (`galaxion-coordination-request.md`) | — (drafted) |
+| TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data + INFRA-017 P1 answers |
