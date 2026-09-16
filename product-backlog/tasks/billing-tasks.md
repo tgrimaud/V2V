@@ -451,10 +451,11 @@ Real calls to the Eir dev services (see `docs/integrations/galaxion/eir-billing-
 ## TASK-BE-048 — Billing escalation `reason` telemetry dimension
 
 **Type:** Technical task (backend observability) — **runtime-affecting** (OTel dimension added)
-**Status:** 🚧 In progress — `task/TASK-BE-048-billing-telemetry-reason` (off `feat/sprint-14-billing-identity`).
-Follow-up to the BUG-020 review (Info finding): the `billing` slice `outcome=not_enough_data` collapses
-three distinct escalation situations, so Ops/QA cannot tell an unfetchable-evidence escalation from a
-genuine no-data one.
+**Status:** ✅ Validated + merged into `feat/sprint-14-billing-identity` (2026-09-16, `--no-ff`).
+Adversarial review **96/100 PASS** (`docs/qa/task-be-048-billing-reason-telemetry-review.md`); backend
+583 green. Follow-up to the BUG-020 review (Info finding): the `billing` slice `outcome=not_enough_data`
+collapsed three distinct escalation situations, so Ops/QA could not tell an unfetchable-evidence
+escalation from a genuine no-data one.
 **Parent:** BUG-020 review · BR-003 · ADR-0028
 **Gate:** none
 
