@@ -34,12 +34,15 @@ public class InProcBillingExplanationAdapter implements BillingExplanationPort {
     public BillingGrounding explain(BillingExplanationRequest request) {
         long start = System.nanoTime();
         String outcome = "error";
+        String reason = null;
         try {
             BillingExplanation explanation = explainBilling.explain(toQuery(request));
             outcome = explanation.outcome().name().toLowerCase(java.util.Locale.ROOT);
+            reason = explanation.reason();
             return toGrounding(explanation);
         } finally {
-            telemetry.recordLatency(Slices.BILLING, PROVIDER, outcome, Duration.ofNanos(System.nanoTime() - start));
+            telemetry.recordLatency(
+                    Slices.BILLING, PROVIDER, outcome, reason, Duration.ofNanos(System.nanoTime() - start));
         }
     }
 

@@ -448,6 +448,46 @@ Real calls to the Eir dev services (see `docs/integrations/galaxion/eir-billing-
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - identity → `galaxion-user-*` header derivation (pilot uses a configured default; coordination P4).
 
+## TASK-BE-048 — Billing escalation `reason` telemetry dimension
+
+**Type:** Technical task (backend observability) — **runtime-affecting** (OTel dimension added)
+**Status:** 🚧 In progress — `task/TASK-BE-048-billing-telemetry-reason` (off `feat/sprint-14-billing-identity`).
+Follow-up to the BUG-020 review (Info finding): the `billing` slice `outcome=not_enough_data` collapses
+three distinct escalation situations, so Ops/QA cannot tell an unfetchable-evidence escalation from a
+genuine no-data one.
+**Parent:** BUG-020 review · BR-003 · ADR-0028
+**Gate:** none
+
+### Context
+
+`InProcBillingExplanationAdapter` records the `billing` slice tagged only by `outcome`
+(`explanation.outcome()`). Three different domain situations all surface as `not_enough_data`:
+fewer than two comparable invoices, a listed-but-unfetchable invoice (BUG-020: BSS race / BR-002-1
+ownership drop), and the confidence gate's INSUFFICIENT verdict (`NO_USABLE_LINES` /
+`RESIDUAL_TOO_HIGH`). They are operationally different (data gap vs evidence-fetch failure vs
+reconciliation gap) but indistinguishable in metrics/logs.
+
+### Scope
+
+- Add an optional stable `reason` code to `BillingExplanation` (nullable; set on the not-enough-data
+  paths): `insufficient_history`, `evidence_unfetchable`, `no_usable_lines`, `residual_too_high`.
+- `BillingExplanationService` sets the reason at each not-enough-data producer (including the BUG-020
+  empty-comparison path and the gate's INSUFFICIENT reasons).
+- Add a consistent `reason` tag (default `n/a`) to the `voice_support.slice` timer + `[TELEMETRY]`
+  log via `BackendTelemetry` (kept uniform across all slices so tag keys stay consistent); a new
+  `recordLatency(slice, provider, outcome, reason, elapsed)` overload; the billing adapter passes the
+  domain reason.
+
+### Acceptance
+
+- `outcome` tag stays stable (`not_enough_data`); the `reason` tag distinguishes the three cases.
+- All other slices keep recording (with `reason=n/a`); existing telemetry lookups stay green (tag
+  filters are subset matches).
+- Unit tests: the adapter records the right `reason` per not-enough-data situation; non-escalating
+  outcomes record `reason=n/a`. Full backend suite green. No PII in the new dimension.
+
+---
+
 ## TASK-INFRA-017 — Galaxion inputs coordination package
 
 **Type:** Doc / coordination — **not runtime-affecting** (no code; no OTel change)

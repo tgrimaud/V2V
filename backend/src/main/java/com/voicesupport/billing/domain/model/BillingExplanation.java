@@ -8,10 +8,17 @@ import java.util.Objects;
 // code the conversation seam maps to an EscalationReason, and a provisional confidence. The billing
 // context owns escalation as a stable code string so it never depends on the conversation context.
 public record BillingExplanation(BillingExplanationOutcome outcome, String text, boolean escalate,
-        String escalationCode, Double confidence) {
+        String escalationCode, Double confidence, String reason) {
 
     public static final String CODE_IDENTITY_UNVERIFIED = "identity_unverified";
     public static final String CODE_BILLING_UNEXPLAINED = "billing_unexplained";
+
+    // Stable, non-PII refinement of a NOT_ENOUGH_DATA escalation (TASK-BE-048), so Ops/QA can tell a
+    // data gap from an evidence-fetch failure from a reconciliation gap. Never carries account/amount.
+    public static final String REASON_INSUFFICIENT_HISTORY = "insufficient_history";
+    public static final String REASON_EVIDENCE_UNFETCHABLE = "evidence_unfetchable";
+    public static final String REASON_NO_USABLE_LINES = "no_usable_lines";
+    public static final String REASON_RESIDUAL_TOO_HIGH = "residual_too_high";
 
     public BillingExplanation {
         Objects.requireNonNull(outcome, "outcome must not be null");
@@ -19,25 +26,29 @@ public record BillingExplanation(BillingExplanationOutcome outcome, String text,
     }
 
     public static BillingExplanation explained(String text, double confidence) {
-        return new BillingExplanation(BillingExplanationOutcome.EXPLAINED, text, false, null, confidence);
+        return new BillingExplanation(BillingExplanationOutcome.EXPLAINED, text, false, null, confidence, null);
     }
 
     public static BillingExplanation partiallyExplained(String text, double confidence) {
-        return new BillingExplanation(BillingExplanationOutcome.PARTIALLY_EXPLAINED, text, false, null, confidence);
+        return new BillingExplanation(BillingExplanationOutcome.PARTIALLY_EXPLAINED, text, false, null, confidence, null);
     }
 
     public static BillingExplanation identityUnresolved(String text) {
         return new BillingExplanation(
-                BillingExplanationOutcome.IDENTITY_UNRESOLVED, text, true, CODE_IDENTITY_UNVERIFIED, null);
+                BillingExplanationOutcome.IDENTITY_UNRESOLVED, text, true, CODE_IDENTITY_UNVERIFIED, null, null);
     }
 
     public static BillingExplanation notEnoughData(String text) {
+        return notEnoughData(text, null);
+    }
+
+    public static BillingExplanation notEnoughData(String text, String reason) {
         return new BillingExplanation(
-                BillingExplanationOutcome.NOT_ENOUGH_DATA, text, true, CODE_BILLING_UNEXPLAINED, null);
+                BillingExplanationOutcome.NOT_ENOUGH_DATA, text, true, CODE_BILLING_UNEXPLAINED, null, reason);
     }
 
     public static BillingExplanation notABillingRequest(String text) {
-        return new BillingExplanation(BillingExplanationOutcome.NOT_A_BILLING_REQUEST, text, false, null, null);
+        return new BillingExplanation(BillingExplanationOutcome.NOT_A_BILLING_REQUEST, text, false, null, null, null);
     }
 
     // True when the text is a grounded explanation the LLM should rephrase; false when the text is a
