@@ -1,6 +1,6 @@
 # Galaxion / BSS — Coordination Request (Billing V1)
 
-> Ticket: TASK-INFRA-017 · Sprint 14 (Billing Identity + BSS/PDF Evidence + Deterministic Comparison) · Status: **request finalized — ready to send** (refreshed 2026-09-16 after the live validation on test account 5)
+> Ticket: TASK-INFRA-017 (finalized) · follow-up **TASK-INFRA-018** (B2C granularity pivot) · Sprint 14 · Status: **request finalized — ready to send** (refreshed 2026-09-16: Galaxion confirmed line-level detail is B2B-only → the ask pivots to raw-PDF availability for B2C)
 > Audience: Galaxion / BSS billing owners + our backend/product team.
 
 ## 1. Purpose
@@ -50,28 +50,37 @@ Confirmed live on **test account 5** (2026-09-15) — no need to re-answer:
 
 ## 3. Requests (prioritized)
 
-### P1 — Archive token for the line-level invoice detail (top blocker)
+### P1 — B2C line-level granularity: is the raw invoice PDF available for residential? (top blocker)
 
-On account 5, the structured enquiry breakdown returns only **coarse** amounts
-(`recurringAmount`, `oneOffAmount`, `usageAmount`, `vatAmount`, `invoiceAmount`). The
-**line-level** endpoints both fail without an archive token:
+**New finding (2026-09-16):** Galaxion confirmed the line-level `billing-service`
+endpoints (`/api/v1/invoices/{invoice_number}/{details,detail-report,summary-report}`)
+return data **only for B2B accounts**. Our test account 5 is B2C/residential, which is
+why `details` is empty and `detail-report`/`summary-report` return HTTP 412
+`archive-file-token-is-null`. **V1 targets B2C end users**, so for the actual audience
+the archived line detail (and its archive token) **does not apply** — chasing the token
+is moot for V1.
 
-- `GET /billing-enquiry/invoices/{invoiceId}/detail-report` (CSV) → **HTTP 412
-  `archive-file-token-is-null`**;
-- `GET /billing-enquiry/invoices/{invoiceId}/summary-report` (PDF) → **HTTP 412
-  `archive-file-token-is-null`**;
-- `GET /billing-enquiry/invoices/{invoiceId}/details` → `200` but **empty** (no lines).
+For B2C, the only remaining line-level lever is the **raw invoice PDF**
+`GET /api/v1/invoices/{invoice_number}` (`getInvoice`) — distinct from the B2B archive
+reports (its `galaxion-user-type` enum even allows `REGISTERED`).
 
-**Question:** how is the **archive token** obtained (which endpoint / flow / header),
-and does it apply to both `detail-report` and `summary-report`?
+**Pivotal question:** is `getInvoice` (raw PDF) served for a **B2C/residential**
+account?
 
-**Why it matters:** without line-level detail we can only attribute deltas to the
-coarse buckets. A change **inside** `recurringAmount` (expired discount vs option
-change vs proration) cannot be separated, so those deltas surface as `UNEXPLAINED`
-(fail-closed, safe but low-value). The token unlocks fine-grained cause attribution —
-the core V1 value.
+- **If yes** → we extract the PDF into structured JSON deterministically before any
+  comparison (ADR-0005; the LLM never reads the PDF), which stays the V1 line-level path.
+  We would then need 2 anonymized B2C PDFs (two periods, one visible delta).
+- **If no** → confirm there is **no** line-level source for B2C; V1 then explains at the
+  coarse-bucket level (recurring/usage/one-off/vat) and escalates any change it cannot
+  attribute — an explicit, accepted V1 limitation.
 
-### P1 — An account (or period) with two comparable invoices
+### P2 (was P1) — Archive token / B2B detail (only if B2B ever enters scope)
+
+If a B2B path is ever in V1 scope: how is the archive token/flow obtained for
+`detail-report` / `summary-report`, and the CSV column shape. **Out of the V1 critical
+path** given the B2C-only decision.
+
+### P2 — A B2C account (or period) with two comparable invoices
 
 Account 5 has a **single** invoice, so there is **no real delta to compare** yet — our
 comparison engine and QA-020 need two invoices for the same account.
@@ -125,11 +134,11 @@ configured default). *Follow-up, not a Sprint 14 blocker.*
 
 | Item | Priority | Owner |
 |------|----------|-------|
-| Archive-token flow for `detail-report` / `summary-report` | P1 | Galaxion billing owner |
-| Dev account with ≥2 comparable invoices (or a 2nd period) | P1 | Galaxion billing owner |
+| **Is `getInvoice` (raw PDF) available for a B2C account?** (else confirm no B2C line source) | P1 | Galaxion billing owner |
+| B2C dev account with ≥2 comparable invoices (or a 2nd period) | P2 | Galaxion billing owner |
 | `invoiceAmount` composition (current-period vs balance/payments) | P2 | Galaxion billing owner |
-| Line catalogue (`type`/`code`/`vatType` or CSV cols) + cause mapping | P2 | Galaxion billing owner + our product |
-| CSV `detail-report` column shape | P2 | Galaxion billing owner |
+| Archive-token flow + CSV columns (only if B2B ever in scope) | P2 | Galaxion billing owner |
+| Line catalogue (`type`/`code`/`vatType`) + cause mapping (if a line source exists for B2C) | P2 | Galaxion billing owner + our product |
 | Error/edge-case behaviour + pagination limits | P3 | Galaxion billing owner |
 | Per-cause evidence + accepted customer wording | P3 | Billing SME + our product |
 | Customer identification rules + `galaxion-user-*` derivation + masking | P4 | Galaxion / Security + our product |
@@ -145,44 +154,46 @@ QA-020 is what the P1 items above unlock.
 
 ## 6. Next step
 
-A short working session on the **two P1 blockers**: (1) the archive-token flow so we can
-retrieve the CSV/PDF line detail, and (2) a dev account with two comparable invoices.
-Those two answers move us from coarse (`UNEXPLAINED`) to fine-grained cause attribution
-and unblock real-data acceptance (QA-020).
+A short working session on the **pivotal B2C question**: does `getInvoice` return the raw
+PDF for a residential account? That single answer decides whether V1 can attribute
+fine-grained causes (via deterministic PDF extraction, ADR-0005) or explains at the
+coarse-bucket level and escalates the rest — and, with a B2C 2-invoice account, unblocks
+real-data acceptance (QA-020, TASK-INFRA-018).
 
 ## Appendix — Short email cover (ready to send)
 
 > Focused on the two concrete P1 blockers surfaced by the live test on account 5.
 
-**Subject:** Eir Billing V1 — 2 blockers after live validation (archive token + a 2-invoice test account)
+**Subject:** Eir Billing V1 (B2C) — line-level detail for residential accounts + a 2-invoice test account
 
 Hi [name],
 
 Thanks — we've integrated the Eir dev billing services (`billing-enquiry-service` +
 `billing-service`) behind our read-only port and validated the structured path live on
-**test account 5**. That confirmed the essentials on our side: amounts are in **cents**,
-**VAT is contained in the invoice total** (not additive), and `invoiceId` ==
-`invoiceNumber` with a single shared account identifier — all good.
+**test account 5**. Essentials confirmed: amounts are in **cents**, **VAT is contained
+in the invoice total** (not additive), and `invoiceId` == `invoiceNumber` with a single
+shared account identifier.
 
-**Two blockers remain before we can validate real invoice explanations:**
+Thanks also for confirming the **line-level endpoints** (`…/details`,
+`…/detail-report`, `…/summary-report`) are **B2B-only** — that explains the empty
+`details` / HTTP 412 on account 5 (which is B2C). Since **our V1 targets B2C /
+residential end users**, that reframes what we need:
 
-1. **Archive token** — `…/invoices/{id}/detail-report` (CSV) and `…/summary-report`
-   (PDF) both return **HTTP 412 `archive-file-token-is-null`**, and `…/details` comes
-   back empty. How is the archive token obtained (endpoint / flow / header)? Without the
-   line detail we can only see coarse buckets (`recurring`/`usage`/`one-off`/`vat`), so a
-   change **inside** the subscription amount (expired discount vs option change vs
-   proration) can't be separated and is reported as "unexplained".
-2. **A 2-invoice test account** — account 5 has a single invoice, so there's **no delta
-   to compare**. Could we get a dev account with at least two consecutive invoices (or a
-   second period on account 5) showing a visible change — ideally one simple and one
-   complex case?
+1. **Is the raw invoice PDF available for a B2C account?** i.e. does
+   `GET /api/v1/invoices/{invoice_number}` (`getInvoice`) return the PDF for a
+   residential account? If yes, we extract it into structured data deterministically
+   before any explanation (we never let the model read the PDF). If **no** line-level
+   source exists for B2C, please confirm — we'll then explain at the coarse level
+   (subscription / usage / one-off / VAT) and hand off anything we can't attribute.
+2. **A B2C test account with two invoices** — account 5 has a single invoice, so there's
+   **no delta to compare**. Could we get a residential dev account with at least two
+   consecutive invoices (or a second period) showing a visible change?
 
 Secondary, when convenient: does `invoiceAmount` include previous balance/payments or
-only current-period charges, and the line `type`/`code`/`vatType` catalogue (or CSV
-columns) so we can map each line to a business cause.
+only current-period charges.
 
-None of this blocks our build — we run on fixtures in the meantime — but these two items
-unlock validation against real invoices. Happy to walk through it in a 30-min call.
+None of this blocks our build — we run on fixtures in the meantime — but these unlock
+validation against real B2C invoices. Happy to walk through it in a 30-min call.
 
 Thanks,
 Thomas

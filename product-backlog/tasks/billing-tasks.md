@@ -440,9 +440,12 @@ Real calls to the Eir dev services (see `docs/integrations/galaxion/eir-billing-
 
 ### Still open before enabling `source=eir` (→ QA-020)
 
-- **Archive token** required by `detail-report` (CSV) / `summary-report` (PDF) — both return **HTTP 412
-  `archive-file-token-is-null`** without it → line-level cause attribution (discount/option/proration)
-  blocked until the token/flow is provided; until then those deltas surface as `UNEXPLAINED` (fail-closed).
+- **Line-level detail is B2B-only (Galaxion, 2026-09-16).** `detail-report` (CSV) / `summary-report`
+  (PDF) / `details` on `billing-service` only return data for B2B accounts; account 5 is B2C (empty /
+  HTTP 412 `archive-file-token-is-null`). **V1 is B2C-only**, so the archive token is moot for V1. Pivot
+  → **TASK-INFRA-018**: is the raw PDF `getInvoice` available for B2C (→ ADR-0005 extraction stays the
+  line-level path) or is V1 coarse-bucket + escalate for B2C (explicit limitation)? Until resolved,
+  intra-`recurringAmount` deltas surface as `UNEXPLAINED` (fail-closed).
 - A **two-invoice** account (or a second period) — account 5 has a single invoice, so no real delta to
   compare yet.
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
@@ -486,6 +489,44 @@ reconciliation gap) but indistinguishable in metrics/logs.
   filters are subset matches).
 - Unit tests: the adapter records the right `reason` per not-enough-data situation; non-escalating
   outcomes record `reason=n/a`. Full backend suite green. No PII in the new dimension.
+
+---
+
+## TASK-INFRA-018 — B2C billing granularity pivot (line-level detail is B2B-only)
+
+**Type:** Doc / coordination + open-question — **not runtime-affecting**
+**Status:** 🚧 Open — recorded 2026-09-16. Blocks fine-grained B2C cause attribution acceptance.
+**Parent:** OQ-003 · BR-003 · ADR-0005 · follows TASK-INFRA-017
+**Gate:** Galaxion answer (raw-PDF availability for B2C)
+
+### Context
+
+Galaxion confirmed the line-level `billing-service` endpoints
+(`/api/v1/invoices/{invoice_number}/{details,detail-report,summary-report}`) return data **only for
+B2B accounts**. Test account 5 is B2C (empty `details` / HTTP 412 `archive-file-token-is-null`).
+**V1 targets B2C end users** (decision 2026-09-16), so the archived line detail — and its archive
+token — do not apply to the V1 audience; the coarse `billing-enquiry` breakdown is all we have for B2C
+today, which pushes intra-`recurringAmount` deltas to `UNEXPLAINED` (escalate, fail-closed).
+
+### Pivotal open question
+
+Is the **raw invoice PDF** `GET /api/v1/invoices/{invoice_number}` (`getInvoice`, distinct from the
+B2B archive reports; enum allows `REGISTERED`) available for a **B2C** account?
+- **Yes** → ADR-0005 PDF→JSON deterministic extraction stays the V1 line-level path (need 2 anonymized
+  B2C PDFs, 2 periods, one delta).
+- **No** → V1 for B2C is coarse-bucket explanation + escalate on any non-attributable change — an
+  explicit, accepted V1 limitation.
+
+### Deliverables
+
+- Recorded in `docs/integrations/galaxion/eir-billing-services-contract.md`, the OQ-003 finding in
+  `product-backlog/open-questions/v1-open-questions.md`, and the reframed ask + email in
+  `galaxion-coordination-request.md` (raw-PDF-for-B2C is now the P1 question; archive token demoted).
+
+### Acceptance
+
+- Galaxion answers the raw-PDF-for-B2C question; the V1 granularity decision (fine via PDF vs
+  coarse-only) is recorded, and BE-047/QA-020 residuals updated accordingly.
 
 ---
 

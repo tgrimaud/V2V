@@ -105,6 +105,31 @@ Still pending on this OQ:
   billing-period entity in the model).
 - History depth, freshness, and confidentiality/masking limits (unchanged).
 
+### Material finding (2026-09-16) — line-level detail is B2B-only (impacts V1 = B2C)
+
+Galaxion confirmed that the **line-level** `billing-service` endpoints
+(`/api/v1/invoices/{invoice_number}/{details,detail-report,summary-report}`) only
+return data for a **B2B account**. The dev test account 5 is **B2C/residential**,
+which is why `details` is empty and `detail-report`/`summary-report` return HTTP 412
+`archive-file-token-is-null` (TASK-INFRA-018, see the Eir contract doc).
+
+**V1 is B2C-only** (decision 2026-09-16), so for the actual target audience the
+line-level detail is **not available** via these endpoints, and the archive token is
+largely moot for V1. The only remaining B2C granularity levers are:
+
+- the **coarse** `billing-enquiry-service` breakdown we already consume
+  (recurring/oneOff/usage/vat/total) — intra-`recurringAmount` deltas therefore stay
+  `UNEXPLAINED` and escalate (fail-closed);
+- the **raw invoice PDF** `GET /api/v1/invoices/{invoice_number}` (`getInvoice`,
+  distinct from the B2B archive reports; its `galaxion-user-type` enum even allows
+  `REGISTERED`) — **availability for B2C is the pivotal open sub-decision**. If the
+  raw PDF is served for residential accounts, the ADR-0005 PDF→JSON extraction remains
+  the V1 line-level path; if not, **V1 for B2C is coarse-bucket + escalate**, to be
+  accepted as an explicit V1 limitation.
+
+**Pivotal sub-decision to close:** is `getInvoice` (raw PDF) available for a **B2C**
+account? Requested from Galaxion via the coordination package (INFRA-017/018).
+
 ---
 
 ## OQ-004 - Invoice PDF Extraction Reliability And Fixture Coverage
