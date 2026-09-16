@@ -68,9 +68,20 @@ class InProcBillingExplanationAdapterTest {
         // GIVEN any explanation
         explain(BillingExplanation.explained("Your bill increased by 5.00 €.", 0.9));
 
-        // THEN the BILLING slice timer is recorded, tagged with the outcome
+        // THEN the BILLING slice timer is recorded, tagged with the outcome and a n/a reason
         assertThat(registry.find("voice_support.slice").tag("slice", Slices.BILLING)
-                .tag("outcome", "explained").timer()).isNotNull();
+                .tag("outcome", "explained").tag("reason", "n/a").timer()).isNotNull();
+    }
+
+    @Test
+    void records_the_escalation_reason_so_ops_can_tell_not_enough_data_situations_apart() {
+        // GIVEN a not-enough-data escalation refined with the unfetchable-evidence reason (BUG-020 case)
+        explain(BillingExplanation.notEnoughData(
+                "Not enough to compare.", BillingExplanation.REASON_EVIDENCE_UNFETCHABLE));
+
+        // THEN the BILLING slice keeps the stable not_enough_data outcome but carries the fine reason
+        assertThat(registry.find("voice_support.slice").tag("slice", Slices.BILLING)
+                .tag("outcome", "not_enough_data").tag("reason", "evidence_unfetchable").timer()).isNotNull();
     }
 
     private BillingGrounding explain(BillingExplanation explanation) {

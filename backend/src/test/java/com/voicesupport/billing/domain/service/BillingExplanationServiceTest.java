@@ -87,10 +87,11 @@ class BillingExplanationServiceTest {
         BillingExplanation explanation = service.explain(
                 BillingExplanationQuery.of("web", BILLING_QUESTION, "EIR-1005", null, "fr"));
 
-        // THEN there is nothing to compare -> NOT_ENOUGH_DATA, escalate by-reference
+        // THEN there is nothing to compare -> NOT_ENOUGH_DATA, escalate by-reference, reason = history
         assertThat(explanation.outcome()).isEqualTo(BillingExplanationOutcome.NOT_ENOUGH_DATA);
         assertThat(explanation.escalate()).isTrue();
         assertThat(explanation.escalationCode()).isEqualTo(BillingExplanation.CODE_BILLING_UNEXPLAINED);
+        assertThat(explanation.reason()).isEqualTo(BillingExplanation.REASON_INSUFFICIENT_HISTORY);
     }
 
     @Test
@@ -99,9 +100,10 @@ class BillingExplanationServiceTest {
         BillingExplanation explanation = service.explain(
                 BillingExplanationQuery.of("web", BILLING_QUESTION, "EIR-1006", null, "fr"));
 
-        // THEN the confidence gate finds no usable lines -> NOT_ENOUGH_DATA, escalate
+        // THEN the confidence gate finds no usable lines -> NOT_ENOUGH_DATA, escalate, reason = lines
         assertThat(explanation.outcome()).isEqualTo(BillingExplanationOutcome.NOT_ENOUGH_DATA);
         assertThat(explanation.escalate()).isTrue();
+        assertThat(explanation.reason()).isEqualTo(BillingExplanation.REASON_NO_USABLE_LINES);
     }
 
     @Test
@@ -132,9 +134,10 @@ class BillingExplanationServiceTest {
         BillingExplanation explanation = service.explain(
                 BillingExplanationQuery.of("web", BILLING_QUESTION, "EIR-1001", null, "fr"));
 
-        // THEN it degrades to a safe escalation (NOT_ENOUGH_DATA), never a thrown 500
+        // THEN it degrades to a safe escalation (NOT_ENOUGH_DATA), reason = unfetchable evidence, no 500
         assertThat(explanation.outcome()).isEqualTo(BillingExplanationOutcome.NOT_ENOUGH_DATA);
         assertThat(explanation.escalate()).isTrue();
+        assertThat(explanation.reason()).isEqualTo(BillingExplanation.REASON_EVIDENCE_UNFETCHABLE);
     }
 
     // Lists two invoice summaries but never returns a fetchable invoice (empty Optional).

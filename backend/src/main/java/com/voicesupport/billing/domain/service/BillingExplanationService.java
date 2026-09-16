@@ -6,6 +6,7 @@ import com.voicesupport.billing.domain.model.ExplanationReadiness;
 import com.voicesupport.billing.domain.model.IdentityResolution;
 import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.InvoiceComparison;
+import com.voicesupport.billing.domain.model.ReadinessReason;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.domain.model.valueobject.BillingExplanationQuery;
 import com.voicesupport.billing.domain.model.valueobject.IdentityClaim;
@@ -79,11 +80,13 @@ public class BillingExplanationService implements ExplainBillingUseCase {
     private BillingExplanation explainForAccount(AccountId account, String language) {
         List<InvoiceSummary> summaries = retrieveComparable.availableInvoices(account);
         if (summaries.size() < MIN_COMPARABLE_INVOICES) {
-            return BillingExplanation.notEnoughData(composer.notEnoughData(language));
+            return BillingExplanation.notEnoughData(
+                    composer.notEnoughData(language), BillingExplanation.REASON_INSUFFICIENT_HISTORY);
         }
         Optional<InvoiceComparison> comparison = compareTwoMostRecent(account, summaries);
         if (comparison.isEmpty()) {
-            return BillingExplanation.notEnoughData(composer.notEnoughData(language));
+            return BillingExplanation.notEnoughData(
+                    composer.notEnoughData(language), BillingExplanation.REASON_EVIDENCE_UNFETCHABLE);
         }
         ExplanationReadiness readiness = assess.assess(comparison.get());
         return fromReadiness(comparison.get(), readiness, language);
@@ -112,6 +115,18 @@ public class BillingExplanationService implements ExplainBillingUseCase {
             return BillingExplanation.partiallyExplained(
                     composer.compose(comparison, readiness, language), CONFIDENCE_PARTIAL);
         }
-        return BillingExplanation.notEnoughData(composer.notEnoughData(language));
+        return BillingExplanation.notEnoughData(composer.notEnoughData(language), reasonOf(readiness.reason()));
+    }
+
+    // Maps the confidence-gate reason onto the stable NOT_ENOUGH_DATA telemetry reason (TASK-BE-048).
+    // Only INSUFFICIENT verdicts reach here, so the two escalating gate reasons are the cases to map.
+    private static String reasonOf(ReadinessReason reason) {
+        if (reason == ReadinessReason.NO_USABLE_LINES) {
+            return BillingExplanation.REASON_NO_USABLE_LINES;
+        }
+        if (reason == ReadinessReason.RESIDUAL_TOO_HIGH) {
+            return BillingExplanation.REASON_RESIDUAL_TOO_HIGH;
+        }
+        return null;
     }
 }
