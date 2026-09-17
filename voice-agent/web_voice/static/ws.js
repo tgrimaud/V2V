@@ -15,6 +15,17 @@ const USER_ON = 0.02; // mic RMS above this = user speaking
 const USER_OFF = 0.012; // mic RMS below this = user silent
 const SILENCE_HANGOVER_MS = 500; // sustained silence before a turn is "ended"
 
+// TASK-WEB-046 (BUG-018 fix #2): browser watchdog window. If a turn enters "Thinking…" and no
+// bot audio (nor a terminal signal) ever arrives, the UI must not stay stuck until a manual
+// refresh. The window sits ABOVE the server-side per-turn wall-clock deadline (TASK-WEB-045,
+// ~13 s) so a slow-but-progressing turn — where the runtime degrades and still speaks a safe
+// fallback — is never cut prematurely. `?watchdog=<ms>` overrides it for dev.
+function watchdogMs() {
+  const raw = parseInt(new URLSearchParams(window.location.search).get("watchdog") || "", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 20000;
+}
+const WATCHDOG_MS = watchdogMs();
+
 const connectBtn = document.getElementById("connect");
 const disconnectBtn = document.getElementById("disconnect");
 const languageEl = document.getElementById("language");
@@ -46,6 +57,31 @@ let lastLoudTs = 0;
 let awaitingBot = false;
 let userEndTs = 0;
 const latencies = [];
+
+// TASK-WEB-046: armed while a turn is "Thinking…" (awaiting the bot); cleared as soon as the
+// bot produces audio, the user speaks again, a terminal signal arrives, or the call ends.
+let thinkingWatchdog = null;
+
+function armThinkingWatchdog() {
+  clearThinkingWatchdog();
+  thinkingWatchdog = window.setTimeout(() => {
+    thinkingWatchdog = null;
+    // Progressing turns are exempt: the bot already answered (awaitingBot cleared) or audio
+    // is currently playing. Otherwise leave "Thinking" and invite a retry — never fabricate
+    // an answer client-side (DEC-002); the live socket lets the user simply speak again.
+    if (!awaitingBot || activeSources.length > 0) return;
+    awaitingBot = false;
+    console.warn("voice watchdog fired: no bot response within " + WATCHDOG_MS + " ms — inviting retry");
+    setStatus("No response — please speak again to retry.", "error");
+  }, WATCHDOG_MS);
+}
+
+function clearThinkingWatchdog() {
+  if (thinkingWatchdog !== null) {
+    window.clearTimeout(thinkingWatchdog);
+    thinkingWatchdog = null;
+  }
+}
 
 function setStatus(text, cls) {
   statusText.textContent = text;
@@ -140,12 +176,23 @@ function onSocketMessage(data) {
 function handleControl(message) {
   const type = message && message.type;
   if (type === "opened") setStatus("Live — speak now", "live");
-  else if (type === "barge_in") stopPlayback(); // server interrupted the bot → drop queued audio
-  else if (type === "call_end") endCall();
+  else if (type === "barge_in") {
+    clearThinkingWatchdog(); // a new turn is starting → the previous "Thinking" wait is moot
+    stopPlayback(); // server interrupted the bot → drop queued audio
+  } else if (type === "call_end") endCall();
+  else if (type === "turn_error") {
+    // Defensive: honour a server-emitted terminal error signal (TASK-WEB-046 runtime half) if
+    // present, so a backend error ends the turn visibly instead of relying only on the watchdog.
+    clearThinkingWatchdog();
+    awaitingBot = false;
+    stopPlayback();
+    setStatus("The assistant could not answer — please try again.", "error");
+  }
 }
 
 function onBotAudio(int16) {
   if (awaitingBot) {
+    clearThinkingWatchdog(); // the bot responded → the turn is progressing
     reportLatency(Math.round(performance.now() - userEndTs));
     awaitingBot = false;
     setStatus("Bot answering…", "live");
@@ -195,7 +242,10 @@ function stopPlayback() {
 function trackUserTurn(micRms, now) {
   if (micRms > USER_OFF) lastLoudTs = now;
   if (micRms > USER_ON) {
-    if (!userWasSpeaking) setStatus("Listening…", "live");
+    if (!userWasSpeaking) {
+      setStatus("Listening…", "live");
+      clearThinkingWatchdog(); // the user is speaking (a fresh turn / retry) → cancel the wait
+    }
     userWasSpeaking = true;
     awaitingBot = false;
   } else if (userWasSpeaking && now - lastLoudTs > SILENCE_HANGOVER_MS) {
@@ -203,6 +253,7 @@ function trackUserTurn(micRms, now) {
     awaitingBot = true;
     userEndTs = lastLoudTs;
     setStatus("Thinking…", "live");
+    armThinkingWatchdog(); // bound the wait so a dropped/dead turn can't strand the UI
   }
 }
 
@@ -219,6 +270,7 @@ function resetTurnState() {
   awaitingBot = false;
   lastLoudTs = performance.now();
   userEndTs = 0;
+  clearThinkingWatchdog();
 }
 
 function onSocketClose(event) {
@@ -259,6 +311,7 @@ async function disconnect() {
 }
 
 function cleanupAudio() {
+  clearThinkingWatchdog();
   stopPlayback();
   if (sourceNode) sourceNode.disconnect();
   if (workletNode) workletNode.disconnect();
