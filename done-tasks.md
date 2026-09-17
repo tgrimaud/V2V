@@ -1809,3 +1809,30 @@ selection; confidence thresholds (OQ-002); real Galaxion adapter (BE-047).
 
 **Merge:** merge-ready into `feat/sprint-14-billing-identity` (`--no-ff`) — awaiting explicit
 merge request.
+
+---
+
+## 2026-09-17 — v0.9.0 released + deployed to the eir-ai4cc-tst pilot
+
+**Tag:** `v0.9.0` (annotated) on mainline `feat/restart-from-scratch` @ `ad89479`. CI
+(`images.yml`, trigger `v*.*.*`) built + pushed GHCR images `voice-support-backend:0.9.0`
+and `voice-support-voice:0.9.0` (image tag drops the leading `v`).
+
+**Scope:** Sprint 14 (billing explanation + customer identity, ADR-0052/ADR-0050, DEC-002
+preserved, BR-002-1 fail-closed) on top of Sprint 15 (OpenAI gpt-5 default LLM, ADR-0051)
+and Sprint 16 (review remediation) already on mainline. Adversarial code+doc review 94/100 PASS;
+backend `mvn test` 577 green.
+
+**Deploy (Ansible `deploy.yml -e image_tag=0.9.0`):** all tiers now on `0.9.0`, healthy —
+redis `vlb-t02` (recreated, healthy), backend `vla-t03`/`vla-t04` (`/actuator/health` 200),
+voice `vla-t01`/`vla-t02` (container `(healthy)`, LAN `:8090` 200). Pilot LLM stays pinned
+`mistral-api` (ADR-0045 benchmark pending).
+
+**Incident + workaround (→ BUG-021):** the post-deploy KB sync got a cold-start `401` on the
+just-recreated first backend node (api-key gate not yet effective though `/actuator/health` was
+200), which aborted the first rolling run (`serial:1`/`max_fail 0`) before t04 + voice. Verified
+the key is valid (retrieve 200 w/ key, 401 w/o; extraction = 64 chars; async+header pattern
+reproduces 200 post-settle), so it is a cold-start race, not a broken playbook. Completed the
+rollout with `-e kb_sync_after_deploy=false`, then triggered the KB sync out-of-band as a detached
+`kbsync-090.service` on the first backend node (shared pgvector → one sync covers both backends).
+Follow-up hardening tracked in **BUG-021** (gated readiness pre-check before the async sync).
