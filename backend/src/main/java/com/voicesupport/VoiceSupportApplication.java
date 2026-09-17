@@ -4,21 +4,34 @@ import org.springframework.ai.model.mistralai.autoconfigure.MistralAiChatAutoCon
 import org.springframework.ai.model.mistralai.autoconfigure.MistralAiEmbeddingAutoConfiguration;
 import org.springframework.ai.model.mistralai.autoconfigure.MistralAiModerationAutoConfiguration;
 import org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.security.Security;
 
 // Ollama is used for embeddings only (nomic-embed-text, 768d) feeding the pgvector store;
-// its chat auto-configuration is excluded. Mistral is the LLM chat provider, but its chat
-// model is built manually in the conversation LlmConfig (provider selectable via
-// voice-support.llm.provider), so the Mistral chat/embedding/moderation auto-configurations
-// are excluded — embeddings must stay on Ollama (768d), never Mistral (1024d).
+// its chat auto-configuration is excluded. Mistral (default) and OpenAI are LLM chat providers,
+// but their chat models are built manually in the conversation LlmConfig (provider selectable via
+// voice-support.llm.provider), so their chat/embedding/moderation (+ OpenAI image/audio) auto-
+// configurations are excluded — embeddings must stay on Ollama (768d), never Mistral (1024d) or
+// OpenAI; OpenAI STT/TTS stay on the voice runtime, not the backend.
 @SpringBootApplication(exclude = {
         OllamaChatAutoConfiguration.class,
         MistralAiChatAutoConfiguration.class,
         MistralAiEmbeddingAutoConfiguration.class,
-        MistralAiModerationAutoConfiguration.class
+        MistralAiModerationAutoConfiguration.class,
+        OpenAiChatAutoConfiguration.class,
+        OpenAiEmbeddingAutoConfiguration.class,
+        OpenAiModerationAutoConfiguration.class,
+        OpenAiImageAutoConfiguration.class,
+        OpenAiAudioSpeechAutoConfiguration.class,
+        OpenAiAudioTranscriptionAutoConfiguration.class
 })
 public class VoiceSupportApplication {
 
