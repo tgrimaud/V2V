@@ -13,6 +13,14 @@ public final class Slices {
     // above so first-token latency (RF-021) is reported separately from total answer time.
     public static final String LLM_FIRST_TOKEN = "llm_first_token";
     public static final String BACKEND_FIRST_TOKEN = "backend_first_token";
+    // Billing-explanation slice (TASK-BE-045, ADR-0051): times the whole deterministic billing chain
+    // (identity -> comparable invoices -> comparison -> confidence gate -> grounded text) behind the
+    // conversation seam, tagged by outcome, so the billing path is reportable per-slice like RAG/LLM.
+    public static final String BILLING = "billing";
+    // BSS evidence slice (TASK-BE-047, ADR-0018 BSS/PDF-evidence): times each real read-only BSS
+    // network hop (account invoice list / one invoice breakdown) separately from the whole billing
+    // chain, tagged provider=eir + outcome, so BSS latency is reportable per-slice like RAG/LLM.
+    public static final String BSS = "bss";
 
     private Slices() {
     }

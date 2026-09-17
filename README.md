@@ -75,8 +75,11 @@ across two services:
   embeddings are distinct models. Envs relying on the default must set `OPENAI_API_KEY`
   (+ `OPENAI_BASE_URL` for the Azure Foundry endpoint).
 - Endpoints: `POST /api/conversation/converse`, `/converse-stream`, `/answer`,
-  `/retrieve`, `/warm-up`; `POST /api/knowledge/ingest`, `/sync`, `/sync/{sourceType}`;
-  OpenAPI/Swagger UI.
+  `/retrieve`, `/warm-up`, `/billing-explain`; `POST /api/knowledge/ingest`, `/sync`,
+  `/sync/{sourceType}`; OpenAPI/Swagger UI. `billing-explain` (ADR-0051) runs the
+  deterministic billing chain (identity → comparable invoices → comparison → confidence
+  gate) behind the answer engine — the LLM only rephrases the grounded result (DEC-002),
+  escalating fail-closed by-reference.
 
 Delivered capability = **audio in → transcript → RAG-grounded answer → spoken
 answer out**, streaming or batch, with a single correlation id and per-slice

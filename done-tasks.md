@@ -1568,3 +1568,212 @@ default flip. Tickets tracked in `product-backlog/tasks/review-2026-09-17-remedi
 **Validation:** backend `mvn clean test` green (exit 0); voice-agent 715 unittest + 51 behave scenarios
 green; `git diff --check` clean; no lint errors. **BUG-018** stays open (2/3 fixes done; TASK-OPS-010
 drain + the deferred server-side terminal signal remain).
+
+## 2026-09-09 — TASK-BE-038 Billing domain model (Sprint 14, validated)
+
+**Ticket:** TASK-BE-038 · branch `task/TASK-BE-038-billing-domain-model` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user 2026-09-09 — merge-ready, **not merged** (merge on explicit request).
+
+**Summary:**
+
+- New pure bounded context `com.voicesupport.billing` (hexagonal/Hive, no Spring), mirroring the real
+  BSS hierarchy `invoice → invoice_section → invoice_group → invoice_item` with rolled-up amounts at
+  each level (`docs/integrations/galaxion/bss-billing-data-model.md`).
+- Value objects: `Money` (integer minor units = **cents**, exact/same-currency arithmetic, overflow
+  fail-fast), typed `InvoiceId`/`AccountId` (sanitized), `LineAmounts` (tax-included **TTC** basis +
+  HT/tax for audit), `BillingPeriod`, `Evidence`, `InvoiceLevel`, `LineCategory`.
+- Entities: `Invoice` (+ `lines()` flatten), `InvoiceSection`, `InvoiceGroup`, `InvoiceItem`
+  (carries raw BSS classifiers `type`/`code`/`vatType`).
+- Comparison output types (data only, for the TASK-BE-042 engine): `ChangeKind`, `LineDelta`,
+  `BillingCauseType`, `BillingCause`, `InvoiceComparison` (with a first-class `unexplainedAmount`).
+- Amount semantics confirmed by BSS owner 2026-09-09 (OQ-003): unit = **integer cents**;
+  `crud_amount` = **technical VAT-table field**, excluded from the comparison. Docs updated on
+  mainline (`bss-billing-data-model.md`, `galaxion-coordination-request.md` + email cover,
+  `v1-open-questions.md`).
+- Tests: `MoneyTest` (10), `LineAmountsTest` (3), `InvoiceIdTest` (3), `InvoiceTest` (3); ArchUnit
+  (Hexagonal/Naming/ContextBoundary) green. Not runtime-affecting (pure domain, no beans/endpoints).
+
+**Next (Sprint 14):** TASK-BE-039 (`BssBillingPort` + use cases), TASK-BE-040 (BSS mock + fixtures).
+
+## 2026-09-10 — TASK-BE-039 BssBillingPort + list-invoices use case (Sprint 14, validated)
+
+**Ticket:** TASK-BE-039 · branch `task/TASK-BE-039-bss-billing-port` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user 2026-09-10 — merge-ready, **not merged** (merge on explicit request).
+Adversarial code review: **96/100**, QA gate Pass (not runtime-affecting; OTel deferred to BE-045).
+
+**Summary:**
+
+- Outbound read-only `BssBillingPort` (ADR-0004): `listInvoices(AccountId)` + `fetchInvoice(AccountId, InvoiceId)`,
+  both AccountId-scoped (fail-closed, BR-002-1), returning the BE-038 domain model. No mutation.
+- Inbound `RetrieveComparableInvoicesUseCase` (US-005) + pure `ComparableInvoiceService` ordering summaries
+  most-recent-first with a deterministic invoice-id tie-break (latest pair heads the list).
+- `InvoiceSummary` value object (id + period + TTC total) to list without loading the full line tree.
+- No live adapter yet: mock + `@Bean` wiring land in TASK-BE-040; real billing-api adapter in TASK-BE-047.
+- Adversarial-review follow-ups applied: tie-break determinism, test asserting AccountId propagation,
+  documented deferral of like-for-like comparability (`InvoiceLevel`/subscription) + pair selection to BE-041/042.
+- Tests: `ComparableInvoiceServiceTest` (6, fake port), `InvoiceSummaryTest` (2); ArchUnit green. mvn test green.
+
+**Next (Sprint 14):** TASK-BE-040 (BSS mock adapter + fixtures `customer-eir-001…006` + @Bean wiring).
+
+## 2026-09-10 — TASK-BE-040 BSS mock adapter + eir fixtures + wiring (Sprint 14, validated)
+
+**Ticket:** TASK-BE-040 · branch `task/TASK-BE-040-bss-mock-fixtures` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **94/100**, QA gate Pass.
+
+**Summary:**
+
+- `InMemoryBssBillingAdapter` behind `BssBillingPort`, fail-closed on identity (BR-002-1): unknown
+  account -> empty; `fetchInvoice` only returns an invoice belonging to the requested account.
+- `BssBillingFixtures` builds `customer-eir-001..006` (nominal, discount expiry, usage overage,
+  proration, insufficient data = single invoice, unusable = no lines) in the BE-038 domain model,
+  amounts integer cents with a consistent tax split + roll-up (feeds reconciliation later).
+- `BillingConfig` wires `BssBillingPort` (`voice-support.billing.bss.source`, default `mock`; real
+  billing-api adapter = TASK-BE-047) and the `RetrieveComparableInvoicesUseCase` bean.
+- Tests: `InMemoryBssBillingAdapterTest` (4, fail-closed scoping), `BssBillingFixturesTest` (4);
+  full `@SpringBootTest` context boots with the billing beans (wiring proven). mvn test green.
+- Review follow-up recorded for **BE-045**: prod `source` default (avoid silently serving mock) +
+  OTel instrumentation of the billing path (spans/metrics/logs) — blocking at integration time.
+
+**Next (Sprint 14):** TASK-BE-042 (deterministic comparison engine).
+
+## 2026-09-10 — TASK-BE-042 Deterministic invoice comparison engine (Sprint 14, validated)
+
+**Ticket:** TASK-BE-042 · branch `task/TASK-BE-042-comparison-engine` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **94/100**, QA gate Pass.
+
+**Summary:**
+
+- `CompareInvoicesUseCase` (port/in) + pure `InvoiceComparisonService` (domain/service): match
+  lines by code across previous/current, signed **TTC** contribution per line
+  (appeared/disappeared/changed), attribute each delta to a `BillingCauseType` from its
+  `LineCategory` (deterministic table; unmapped -> `UNEXPLAINED`), and expose
+  `unexplainedAmount = totalDelta - Sigma line contributions` so a header/line gap is always
+  surfaced (BR-003). No LLM, exact `Money` integer-cent arithmetic (DEC-002).
+- Wired `compareInvoicesUseCase` bean in `BillingConfig`.
+- Tests: `InvoiceComparisonServiceTest` (6) off the eir fixtures — nominal (no change),
+  discount-expiry (+500 -> DISCOUNT_EXPIRY, zero residual), overage (+1200 APPEARED ->
+  USAGE_OVERAGE), proration (+800 -> PRORATION), header/line reconciliation (+200 residual with an
+  UNEXPLAINED cause of 800), null-arg guard. ArchUnit green; `@SpringBootTest` context boots.
+- Not runtime-affecting yet (domain bean, not on any HTTP/voice path); OTel of the billing slice
+  is a BE-045 integration concern.
+
+**Follow-ups:** cause taxonomy stays coarse until the Galaxion `type`/`code`/`vatType` catalogue
+lands (P2); duplicate line codes within one invoice keep the first (unique in V1 fixtures).
+
+**Next (Sprint 14):** TASK-BE-043 (evidence-sufficiency / confidence gate).
+
+## 2026-09-10 — TASK-BE-043 Evidence-sufficiency / confidence gate (Sprint 14, validated)
+
+**Ticket:** TASK-BE-043 · branch `task/TASK-BE-043-confidence-gate` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass.
+
+**Summary:**
+
+- `AssessComparisonReadinessUseCase` (port/in) + pure `ComparisonConfidenceService`: turns an
+  `InvoiceComparison` into an `ExplanationReadiness` verdict (`ExplanationConfidence`
+  EXPLAINABLE/PARTIAL/INSUFFICIENT + `ReadinessReason` + `escalate` + surfaced `unexplainedAmount`).
+- Rules: no usable billed line on either side -> INSUFFICIENT/escalate (distinguishes the *unusable*
+  journey from a genuine no-change, which needs the invoices not just the deltas); zero residual ->
+  EXPLAINABLE; residual within `max-residual-ratio` of the total -> PARTIAL; else
+  INSUFFICIENT/escalate. Residual always surfaced (BR-003), never hidden (DEC-002, pure arithmetic).
+- Provisional 5% ratio (OQ-002), tunable via `voice-support.billing.confidence.max-residual-ratio`;
+  bean wired in `BillingConfig`.
+- Tests: `ComparisonConfidenceServiceTest` (6) over real comparisons — reconciled -> EXPLAINABLE,
+  unusable -> INSUFFICIENT/NO_USABLE_LINES/escalate, 4% -> PARTIAL, 20% -> INSUFFICIENT/RESIDUAL_TOO_HIGH,
+  negative-ratio + null guards. ArchUnit green; `@SpringBootTest` context boots.
+
+**Follow-ups (BE-045 / OQ-002):** insufficient-data (single invoice) handled at the selection layer;
+confirm PARTIAL-vs-escalate policy; consider an absolute residual floor; OTel of the billing slice.
+
+**Next (Sprint 14):** TASK-BE-041 (invoice PDF extractor -> structured JSON, fallback path).
+
+## 2026-09-10 — TASK-BE-041 Invoice PDF extractor -> structured invoice (Sprint 14, validated)
+
+**Ticket:** TASK-BE-041 · branch `task/TASK-BE-041-pdf-extractor` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass.
+
+**Summary:**
+
+- ADR-0005 fallback contract, mock-first: `InvoicePdfExtractorPort` (out) +
+  `FixtureInvoicePdfExtractorAdapter` (real PDFBox parser deferred until real PDFs, mirrors the
+  real BssBillingPort adapter). The LLM never reads the PDF; the adapter yields the domain invoice.
+- Value objects: `PdfSource` (reference + defensively-copied bytes, blank-rejected),
+  `ExtractionStatus` (SUCCESS/PARTIAL/FAILED), `ExtractionResult` (status + optional invoice +
+  issues, invariant-checked: FAILED carries no invoice, non-FAILED must). Extraction status is
+  first-class so a partial/failed extraction is never treated as complete (BR-003).
+- `-partial` reference -> PARTIAL + issues; empty/unknown -> FAILED. Bean wired in `BillingConfig`
+  (`voice-support.billing.pdf.source=fixture` default, warns otherwise).
+- Tests: `FixtureInvoicePdfExtractorAdapterTest` (5), `PdfSourceTest` (2), `ExtractionResultTest`
+  (3). ArchUnit `..adapter.out..` naming rule flagged the initial name -> renamed to `...Adapter`
+  (rule works); ArchUnit green, `@SpringBootTest` context boots.
+
+**Follow-ups (deferred / BE-045):** real PDFBox parser + per-line PDF `Evidence` stamping +
+genuine partial-line handling (with BE-047 / QA-020); emit `ExtractionStatus` on the evidence slice
+(OTel) when wired into the answer engine.
+
+**Next (Sprint 14):** TASK-BE-044 (customer identity resolution, pilot mode + ADR-0050).
+
+## 2026-09-10 — TASK-BE-044 Customer identity resolution (pilot) + ADR-0050 (Sprint 14, validated)
+
+**Ticket:** TASK-BE-044 · branch `task/TASK-BE-044-customer-identity` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Validated by user + merged 2026-09-10 (`--no-ff`). Adversarial review **93/100**, QA gate Pass. **ADR-0050 Accepted.**
+
+**Summary:**
+
+- Fail-closed identity seam in the billing context (ADR-0050, BR-002-1): inbound
+  `ResolveCustomerIdentityUseCase` + pure `CustomerIdentityService` + outbound
+  `CustomerDirectoryPort`. Directory returns matches; domain maps 0 -> UNRESOLVED,
+  1 -> RESOLVED, >=2 -> AMBIGUOUS. Only RESOLVED grants billing access
+  (`IdentityResolution.canAccessBilling()`); no/ambiguous match never yields an account.
+- Value objects: `IdentityClaim` (channel + reference, sanitized, never logged in clear),
+  `IdentityStatus`, `IdentityResolution` (invariant-checked). `InMemoryCustomerDirectoryAdapter`
+  pilot directory aligned with `customer-eir-*` (case-insensitive, incl. ambiguous `EIR-DUP`).
+  Beans in `BillingConfig` (`voice-support.billing.identity.source=mock` default).
+- Pilot trust model: reference accepted at a low bar (synthetic accounts); real verification
+  strength deferred to **OQ-001**; the real CRM/BSS directory registers behind the same port.
+- Tests: `CustomerIdentityServiceTest` (5), `InMemoryCustomerDirectoryAdapterTest` (3),
+  `IdentityResolutionTest` (3), `IdentityClaimTest` (3). ArchUnit green; `@SpringBootTest` boots.
+
+**Follow-ups:** strong auth / enumeration protection on the real directory (OQ-001); channel
+allowlist; emit identity-resolution outcome on the billing trace when wired (BE-045).
+
+**Next (Sprint 14):** TASK-BE-045 (wire the billing chain behind the answer engine) — cadrage first.
+
+---
+
+## 2026-09-11 — TASK-BE-045: wire the billing chain behind the answer engine ✅ Validated
+
+**Branch:** `task/TASK-BE-045-wire-billing-chain` (off `feat/sprint-14-billing-identity`), pushed.
+**ADR:** ADR-0051 (Accepted) — billing explanation behind the answer engine (D1a evidence
+injection · D2a deterministic intent detector · D3c dedicated endpoint).
+
+**What shipped:**
+- **Billing core (pure domain):** `BillingIntentDetector` (FR/EN accent/case-folded word-boundary
+  keywords, env-tunable), `BillingExplanationComposer` (grounded FR/EN text — every voiced amount
+  comes from the computed comparison so the OutputGuardrail passes; DEC-002 by construction),
+  `ExplainBillingUseCase`/`BillingExplanationService` (fail-closed chain: intent guard → identity
+  (BR-002-1) → comparable invoices → deterministic comparison → confidence gate (BR-003) → grounded
+  text; compares the two most recent invoices). `BillingExplanation(+Outcome)`,
+  `BillingExplanationQuery`; escalation carried as a stable code so billing never depends on
+  conversation.
+- **Conversation seam + endpoint:** `BillingExplanationPort` + `InProcBillingExplanationAdapter`
+  (in-proc seam mirroring the knowledge seam; maps outcome→grounding + code→EscalationReason;
+  records the `billing` OTel slice tagged by outcome, no PII). `BillingAnswerService`
+  (`AnswerBillingQuestionUseCase`): resolves language, reuses `AnswerGeneratorPort` +
+  `OutputGuardrail` to rephrase the grounded result, or voices a safe hand-off. `POST
+  /api/conversation/billing-explain` (D3c) + DTOs, api-key gated via `WebSecurityMvcConfig`;
+  `/converse` + voice runtime left untouched (routing from `/converse` = follow-up).
+  `EscalationReason` += `IDENTITY_UNVERIFIED`/`BILLING_UNEXPLAINED`; `GeneratedAnswer.escalated()`;
+  by-reference hand-off (ADR-0019/DEC-013).
+
+**Tests:** intent (6), composer (4), service across the six fixture journeys (8),
+`BillingAnswerService` (5, incl. DEC-002 amount block + no-LLM-on-escalation), adapter+telemetry
+mapping (5), `/billing-explain` api-key 401 (1). Full backend suite **560 tests, 0 failures**;
+ArchUnit + Spring context boot green. Adversarial review **93/100**, QA gate Pass.
+
+**Follow-ups:** route billing from `/converse` (D3a) + voice-runtime plumbing; include the current
+TTC total in the "unchanged" wording to avoid a false-positive block; targeted `invoiceId`
+selection; confidence thresholds (OQ-002); real Galaxion adapter (BE-047).
+
+**Merge:** merge-ready into `feat/sprint-14-billing-identity` (`--no-ff`) — awaiting explicit
+merge request.

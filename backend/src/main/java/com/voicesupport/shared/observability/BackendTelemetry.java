@@ -35,6 +35,9 @@ public class BackendTelemetry {
     private static final String ESCALATION_HANDOFF = "voice_support.escalation_handoff";
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_ERROR = "error";
+    // Optional non-PII refinement of an outcome (e.g. why a billing turn escalated). Kept uniform
+    // across all slices so the voice_support.slice timer always carries the same tag keys.
+    private static final String REASON_NONE = "n/a";
     private static final String CHANNEL_NONE = "n/a";
     private static final String CHANNEL_OTHER = "other";
     // `web_voice` is the web Voice2Voice runtime channel (TASK-BE-008) and `genesys` is the Genesys
@@ -69,7 +72,14 @@ public class BackendTelemetry {
     // timings are measured by the caller (there is no Supplier to wrap around a push stream), so
     // they are recorded on the same timer/log as time(...) with an explicit outcome.
     public void recordLatency(String slice, String provider, String outcome, Duration elapsed) {
-        record(slice, provider, outcome == null ? OUTCOME_SUCCESS : outcome, elapsed.toNanos());
+        record(slice, provider, outcome == null ? OUTCOME_SUCCESS : outcome, REASON_NONE, elapsed.toNanos());
+    }
+
+    // Same as recordLatency but carries an optional non-PII outcome refinement (TASK-BE-048): the
+    // billing seam uses it to distinguish why a not_enough_data turn escalated (insufficient history
+    // vs unfetchable evidence vs reconciliation gap) without changing the stable `outcome` tag.
+    public void recordLatency(String slice, String provider, String outcome, String reason, Duration elapsed) {
+        record(slice, provider, outcome == null ? OUTCOME_SUCCESS : outcome, reason, elapsed.toNanos());
     }
 
     // Prompt-size observability (TASK-BE-011): records the char breakdown of the LLM system
@@ -183,23 +193,25 @@ public class BackendTelemetry {
             outcome = OUTCOME_ERROR;
             throw e;
         } finally {
-            record(slice, provider, outcome, System.nanoTime() - start);
+            record(slice, provider, outcome, REASON_NONE, System.nanoTime() - start);
         }
     }
 
-    private void record(String slice, String provider, String outcome, long elapsedNanos) {
+    private void record(String slice, String provider, String outcome, String reason, long elapsedNanos) {
         String channel = normalizeChannel(CorrelationId.currentChannel());
         String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
+        String safeReason = reason == null || reason.isBlank() ? REASON_NONE : reason;
         Timer.builder(TIMER)
                 .tag("slice", slice)
                 .tag("channel", channel)
                 .tag("provider", safeProvider)
                 .tag("outcome", outcome)
+                .tag("reason", safeReason)
                 .publishPercentiles(0.5, 0.95, 0.99)
                 .register(registry)
                 .record(Duration.ofNanos(elapsedNanos));
-        log.info("[TELEMETRY] slice={} channel={} provider={} outcome={} correlation_id={} duration_ms={}",
-                slice, channel, safeProvider, outcome, CorrelationId.current(), elapsedNanos / 1_000_000);
+        log.info("[TELEMETRY] slice={} channel={} provider={} outcome={} reason={} correlation_id={} duration_ms={}",
+                slice, channel, safeProvider, outcome, safeReason, CorrelationId.current(), elapsedNanos / 1_000_000);
     }
 
     private String normalizeChannel(String raw) {
