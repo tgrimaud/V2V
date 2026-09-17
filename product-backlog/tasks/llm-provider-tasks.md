@@ -54,6 +54,23 @@ Add `openai` as a third value of `voice-support.llm.provider`, built manually in
   branch base (the 10 pre-existing `RunKnowledgeBddTest` errors are unrelated).
 - Adversarial code review ≥ 90%.
 
+### Live smoke test — 2026-09-17 (Azure AI Foundry, OpenAI-compatible v1)
+
+Endpoint is **Azure AI Foundry** (`*.services.ai.azure.com`) on its **OpenAI-compatible `/openai/v1`**
+surface — not classic Azure OpenAI. It speaks the OpenAI protocol, so the existing `OpenAiApi`
+wiring works unchanged: `Authorization: Bearer <key>`, path `/v1/chat/completions`, **no
+`api-version`**. Config: `OPENAI_BASE_URL=https://Ai4cc-POC-SWD.services.ai.azure.com/openai` (root
+**without** `/v1`; Spring AI appends `/v1/chat/completions`), `OPENAI_CHAT_MODEL=gpt-5`.
+
+Direct `curl` to `.../openai/v1/chat/completions` → **HTTP 200**, model resolved to
+`gpt-5-2025-08-07`, valid grounded FR answer, Azure content filters "safe".
+
+- ⚠️ **Latency (voice-critical):** `gpt-5` is a **reasoning** model. A trivial turn returned
+  `engine_ttft ≈ 59 ms` but **total ≈ 2.6 s** with **128 reasoning tokens**. For the mouth-to-ear
+  budget this is a real cost → evaluate `reasoning_effort=minimal` as a latency lever in the
+  benchmark (follow-up; Spring AI `OpenAiChatOptions` reasoning-effort support to confirm).
+- Auth confirmed as Bearer (API key). Temperature left at the gpt-5 default (1.0).
+
 ### How to test live
 
 ```bash
