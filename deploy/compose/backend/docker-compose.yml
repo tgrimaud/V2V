@@ -24,10 +24,16 @@ services:
       # Default points at the co-located ollama sidecar below (compose service DNS).
       OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://ollama:11434}"
       OLLAMA_EMBEDDING_MODEL: "${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
-      # --- Chat LLM (Mistral cloud) ---
+      # --- Chat LLM (provider-selectable, DEC-011/ADR-0051) ---
+      # App default is openai; compose defaults LLM_PROVIDER to the PINNED pilot provider
+      # (mistral-api). To run OpenAI, set LLM_PROVIDER=openai + the OPENAI_* vars in .env.
       LLM_PROVIDER: "${LLM_PROVIDER:-mistral-api}"
       MISTRAL_API_KEY: "${MISTRAL_API_KEY}"
       MISTRAL_CHAT_MODEL: "${MISTRAL_CHAT_MODEL:-mistral-small-latest}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com}"
+      OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-5}"
+      OPENAI_REASONING_EFFORT: "${OPENAI_REASONING_EFFORT:-minimal}"
       # --- API gate (must be non-empty in tst; matches the voice bridge key) ---
       CONVERSATION_API_KEY: "${CONVERSATION_API_KEY}"
       # --- Shared conversation memory (Redis .107 - ADR-0008 / TASK-BE-021) ---

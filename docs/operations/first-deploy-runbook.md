@@ -92,7 +92,8 @@ Required values:
 |-----|---------|
 | `vault_db_password` | Postgres app-user password (used in step 4 and the backend `.env`) |
 | `vault_redis_password` | Redis `requirepass`, shared with the backend |
-| `vault_mistral_api_key` | Chat LLM (cloud) |
+| `vault_mistral_api_key` | Chat LLM (cloud) — the pinned pilot provider (`llm_provider: mistral-api`) |
+| `vault_openai_api_key` | Chat LLM (cloud, OpenAI/Azure Foundry) — **only** if switching the pilot to `llm_provider: openai` (ADR-0051; app default is openai, pilot pins mistral-api). Optional otherwise. |
 | `vault_gradium_api_key` | STT/TTS (cloud) |
 | `vault_conversation_api_key` | Shared `x-api-key`: backend `CONVERSATION_API_KEY` **==** voice `VOICE_BACKEND_API_KEY` |
 | `vault_registry_username` / `vault_registry_token` | GHCR read-only pull (private packages); `registry_login_required: true` |
