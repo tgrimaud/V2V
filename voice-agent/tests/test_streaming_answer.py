@@ -36,6 +36,7 @@ from voice_pipeline.answer import AnswerProcessor  # noqa: E402
 from voice_pipeline.streaming_answer import (  # noqa: E402
     BACKEND_FIRST_TOKEN_SPAN,
     BACKEND_REQUEST_SPAN,
+    BACKEND_STREAM_DEADLINE_EVENT,
     BACKEND_STREAM_INTERRUPTED_EVENT,
     BACKEND_STREAM_LOW_CONFIDENCE_EVENT,
     BACKEND_STREAMED_EVENT,
@@ -261,6 +262,39 @@ class StreamedAnswerRunnerTest(unittest.IsolatedAsyncioTestCase):
         # THEN the already-vetted sentence stays spoken and the turn degrades (no crash)
         self.assertEqual(pushed, ["premiere phrase"])
         self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+
+    async def test_wall_clock_deadline_bounds_a_never_terminating_stream(self) -> None:
+        # GIVEN a backend that yields one vetted sentence then never terminates (TASK-WEB-045)
+        backend = _BlockingStreamBackend()
+        telemetry = TelemetryRecorder()
+        runner = StreamedAnswerRunner(backend, telemetry, confidence_threshold=0.5, deadline_ms=50)
+        # WHEN the turn runs under a short overall wall-clock deadline
+        pushed, result = await _collect(runner, _request())
+        # THEN the turn ends bounded, keeps the already-spoken sentence, and degrades (no fabrication)
+        self.assertEqual(pushed, ["sentence one"])
+        self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+        self.assertEqual(result.text, "sentence one")
+        # AND a deadline-hit outcome is recorded with the turn's correlation id
+        deadline = next(e for e in telemetry.events() if e.name == BACKEND_STREAM_DEADLINE_EVENT)
+        self.assertEqual(deadline.attributes["correlation_id"], "corr-1")
+        # AND the stream was aborted so the backend loop unblocks (socket closed)
+        await asyncio.sleep(0.05)
+        self.assertTrue(backend.stopped_seen)
+
+    async def test_fast_turn_records_no_deadline_event(self) -> None:
+        # GIVEN a fast terminating stream and a generous deadline
+        backend = _ScriptedStreamBackend(
+            [
+                AnswerStreamEvent(kind=CHUNK, text="Bonjour."),
+                AnswerStreamEvent(kind=DONE, text="Bonjour.", confidence=0.9, grounded=True),
+            ]
+        )
+        telemetry = TelemetryRecorder()
+        runner = StreamedAnswerRunner(backend, telemetry, confidence_threshold=0.5, deadline_ms=5000)
+        # WHEN the turn runs -> THEN it completes normally and no deadline-hit outcome is recorded
+        _pushed, result = await _collect(runner, _request())
+        self.assertIs(result.outcome, AnswerOutcome.SUCCESS)
+        self.assertFalse(any(e.name == BACKEND_STREAM_DEADLINE_EVENT for e in telemetry.events()))
 
     async def test_barge_in_cancels_stream_no_post_cancel_speech(self) -> None:
         # GIVEN a stream that blocks after the first sentence
