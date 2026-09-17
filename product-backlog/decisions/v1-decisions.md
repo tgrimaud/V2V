@@ -264,23 +264,28 @@ review when Genesys participates in the interaction.
 
 ---
 
-## DEC-011 - Chat LLM Provider Strategy (Mistral For Development, OpenAI For The POC)
+## DEC-011 - Chat LLM Provider Strategy (OpenAI Default, Mistral/Ollama Selectable)
 
 **Status:** Accepted (user decision)
-**Date:** 2026-07-17
+**Date:** 2026-07-17 · **Updated:** 2026-09-17 (OpenAI validated + made default — see ADR-0051)
 
 ### Decision
 
 The answer engine's chat LLM stays behind the replaceable provider port (DEC-005).
-Two providers are in scope for V1:
+Three providers are in scope for V1, selectable by `LLM_PROVIDER` with no domain change:
 
-- **Mistral API** (`mistral-small-latest`) is the **development default** so
-  implementation can progress immediately.
-- **OpenAI** is the **POC target** provider. Its adapter is built to the same
-  port, but **live validation is gated on OpenAI credentials**, which are not yet
-  available.
+- **OpenAI** (`gpt-5`) is the **default** provider since Sprint 15 (TASK-BE-050, ADR-0051). It was
+  live- and end-to-end-validated in TASK-BE-049 on the Azure AI Foundry OpenAI-compatible endpoint
+  (`reasoning_effort=minimal` for voice latency). Any env relying on the default must set
+  `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for Azure Foundry).
+- **Mistral API** (`mistral-small-latest`) remains a fully selectable alternative and is the
+  **explicitly pinned pilot provider** (`LLM_PROVIDER=mistral-api`) until the ADR-0045 / TASK-BE-033
+  benchmark justifies switching the pilot to OpenAI.
+- **Ollama** remains the local/offline alternative for chat.
 
-Ollama remains the local/offline alternative for chat.
+> Historical note (superseded 2026-09-17): from 2026-07-17 to Sprint 15, Mistral was the development
+> default and OpenAI was the POC target whose live validation was gated on credentials (then
+> unavailable). Credentials arrived in Sprint 15; OpenAI is now validated and the default.
 
 The **embedding** model is a **separate model** that must not be confused with the
 chat LLM. It **stays Ollama `nomic-embed-text` (768 dim) as the default**, but —
@@ -307,8 +312,9 @@ benchmarkable), and lets Mistral vs OpenAI be compared once the engine exists.
   a dimension change requires recreating `vector_store` + re-syncing.
 - The framework decision (OQ-007 / TASK-BE-001) must support all three chat
   providers **and** a swappable embedding provider, with streaming tokens.
-- OpenAI live/POC validation is deferred until credentials are provided; until
-  then, functional and latency runs use Mistral (or Ollama offline).
+- OpenAI live/POC validation is **done** (Sprint 15, TASK-BE-049): OpenAI is validated and is the
+  default (ADR-0051). Functional/latency runs can use any provider; the **pilot** stays pinned to
+  Mistral until the ADR-0045 benchmark (TASK-BE-033) decides.
 
 ---
 

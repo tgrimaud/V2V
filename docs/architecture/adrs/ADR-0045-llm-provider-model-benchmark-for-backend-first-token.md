@@ -7,6 +7,12 @@ deferred** until the benchmark spike **TASK-BE-033** produces the data. Scopes
 **Direction A** of ADR-0029 ("OpenAI as the cascade chat LLM") — not Direction B
 (Realtime speech-to-speech, which stays out of scope per ADR-0012/ADR-0029).
 
+> **Note (2026-09-17, ADR-0051):** the **default** chat provider was independently flipped to
+> **OpenAI `gpt-5`** (TASK-BE-050) — a cheap, reversible config default behind the port. This does
+> **not** resolve this benchmark: the **pilot** provider stays pinned to Mistral until TASK-BE-033
+> produces TTFT/quality/cost/residency data (and this ADR benchmarks `gpt-4o-mini`, not `gpt-5`).
+> This ADR governs the *pilot* choice; ADR-0051 governs the *code default*.
+
 ## Context
 
 The ADR-0029 pilot latency gate (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio`
