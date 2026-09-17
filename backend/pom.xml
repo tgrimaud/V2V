@@ -139,6 +139,15 @@
             <artifactId>spring-ai-starter-model-mistral-ai</artifactId>
         </dependency>
 
+        <!-- Spring AI: OpenAI chat (gpt-5) as a third selectable LLM wording provider (DEC-011,
+             TASK-BE-049). The chat model is built manually in the conversation LlmConfig; the OpenAI
+             chat/embedding/moderation/image/audio auto-configurations are excluded on the main class
+             (embeddings stay Ollama, 768d; STT/TTS stay on the voice runtime). -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
