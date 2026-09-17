@@ -65,6 +65,11 @@ spring:
           # gpt-5 accepts only the default temperature (1.0); a lower value is rejected with 400.
           # Override via OPENAI_CHAT_TEMPERATURE only for models that allow tuning it.
           temperature: ${OPENAI_CHAT_TEMPERATURE:1.0}
+          # Voice latency lever (TASK-BE-049): gpt-5 is a reasoning model. 'minimal' drops reasoning
+          # tokens to ~0 (measured ~0.95s vs ~2.6s at default) for the mouth-to-ear budget. Values:
+          # minimal|low|medium|high. Set OPENAI_REASONING_EFFORT= (empty) for a non-reasoning model
+          # (e.g. gpt-4o) so the parameter is not sent (avoids a 400).
+          reasoning-effort: ${OPENAI_REASONING_EFFORT:minimal}
     vectorstore:
       pgvector:
         # Embedding dimension is fixed at table creation. Changing the embedding

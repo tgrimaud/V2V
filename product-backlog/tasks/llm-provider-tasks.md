@@ -34,7 +34,8 @@ Add `openai` as a third value of `voice-support.llm.provider`, built manually in
 - `OpenAiAnswerAdapter` — thin subclass of `AbstractChatClientAnswerAdapter` (provider name
   `openai`, same grounded DEC-002 voice prompt with `{context}`).
 - `application.yml` — `spring.ai.openai` section (`OPENAI_API_KEY`, `OPENAI_BASE_URL`,
-  `OPENAI_CHAT_MODEL=gpt-5`, `OPENAI_CHAT_TEMPERATURE=1.0`) + provider doc mentions `openai`.
+  `OPENAI_CHAT_MODEL=gpt-5`, `OPENAI_CHAT_TEMPERATURE=1.0`, `OPENAI_REASONING_EFFORT=minimal`) +
+  provider doc mentions `openai`.
 
 ### Notes / caveats
 
@@ -65,10 +66,12 @@ wiring works unchanged: `Authorization: Bearer <key>`, path `/v1/chat/completion
 Direct `curl` to `.../openai/v1/chat/completions` → **HTTP 200**, model resolved to
 `gpt-5-2025-08-07`, valid grounded FR answer, Azure content filters "safe".
 
-- ⚠️ **Latency (voice-critical):** `gpt-5` is a **reasoning** model. A trivial turn returned
-  `engine_ttft ≈ 59 ms` but **total ≈ 2.6 s** with **128 reasoning tokens**. For the mouth-to-ear
-  budget this is a real cost → evaluate `reasoning_effort=minimal` as a latency lever in the
-  benchmark (follow-up; Spring AI `OpenAiChatOptions` reasoning-effort support to confirm).
+- ⚠️→✅ **Latency (voice-critical), fixed:** `gpt-5` is a **reasoning** model. At the default effort
+  a trivial turn spent **128 reasoning tokens / total ≈ 2.6 s**. Setting **`reasoning_effort=minimal`**
+  drops it to **0 reasoning tokens / ≈ 0.95 s** (measured on this endpoint). Spring AI 1.0.0
+  `OpenAiChatOptions.Builder.reasoningEffort(String)` exists, so this is now **wired**: default
+  `minimal` (voice-first), `OPENAI_REASONING_EFFORT` overrides (minimal|low|medium|high), and blank
+  disables it so a non-reasoning model (gpt-4o) is not rejected with a 400.
 - Auth confirmed as Bearer (API key). Temperature left at the gpt-5 default (1.0).
 
 ### How to test live

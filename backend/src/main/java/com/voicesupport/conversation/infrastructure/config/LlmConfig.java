@@ -105,6 +105,11 @@ public class LlmConfig {
             // gpt-5 accepts only the default temperature (1.0); a lower value is rejected with a 400.
             // Kept configurable via OPENAI_CHAT_TEMPERATURE for models that allow tuning it.
             @Value("${spring.ai.openai.chat.options.temperature:1.0}") double temperature,
+            // Voice latency lever (TASK-BE-049): gpt-5 is a reasoning model. Without this it spends
+            // ~128 reasoning tokens on a trivial turn (~2.6 s); reasoning_effort=minimal drops that to
+            // 0 tokens (~0.95 s), which matters for the mouth-to-ear budget. Blank disables it (send
+            // nothing) so a non-reasoning model (e.g. gpt-4o) is not rejected with a 400.
+            @Value("${spring.ai.openai.chat.options.reasoning-effort:minimal}") String reasoningEffort,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
             @Value("${voice-support.llm.connect-timeout-ms:3000}") long connectMs) {
         // Provider HTTP read timeout closes a stalled socket (TASK-BE-012 medium fix); the executor
@@ -114,12 +119,15 @@ public class LlmConfig {
                 .apiKey(apiKey)
                 .restClientBuilder(timeoutRestClientBuilder(connectMs, timeoutMs))
                 .build();
+        OpenAiChatOptions.Builder options = OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(temperature);
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) {
+            options.reasoningEffort(reasoningEffort.trim());
+        }
         return OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(model)
-                        .temperature(temperature)
-                        .build())
+                .defaultOptions(options.build())
                 .build();
     }
 
