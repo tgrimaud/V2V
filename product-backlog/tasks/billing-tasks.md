@@ -528,6 +528,25 @@ B2B archive reports; enum allows `REGISTERED`) available for a **B2C** account?
 - Galaxion answers the raw-PDF-for-B2C question; the V1 granularity decision (fine via PDF vs
   coarse-only) is recorded, and BE-047/QA-020 residuals updated accordingly.
 
+### ⏸️ Parked 2026-09-17 — resume checklist (billing/Galaxion track paused)
+
+Work set aside to start the OpenAI provider track. To resume the billing real-data path, in order:
+
+1. **Send** the reframed coordination email (`galaxion-coordination-request.md` § Appendix): the P1
+   question is now *"is `getInvoice` (raw PDF) served for a B2C/residential account?"* + request a **B2C
+   dev account with ≥2 invoices**. (Archive token demoted to P2 — B2B-only, moot for V1.)
+2. **Await** Galaxion's answer on raw-PDF-for-B2C.
+3. **Product decision** (use `product-business`): if no B2C line source exists, formally accept the
+   **V1 limitation** = coarse-bucket explanation + escalate any non-attributable change; else plan the
+   ADR-0005 PDF→JSON extraction on real B2C PDFs.
+4. **Then** resume **BE-047** (enable `source=eir` for whatever granularity is confirmed) and **QA-020**
+   (real-data validation on a 2-invoice B2C account).
+
+**Git state at pause:** all billing work is merged into `feat/sprint-14-billing-identity`
+(BE-038→048, QA-019, BUG-019/020, INFRA-017) **except** this **INFRA-018** finding, which lives on
+`task/TASK-INFRA-018-b2c-billing-granularity` (pushed, **merge-ready, not merged**). BE-047 stays
+in progress (mock default; real path gated on step 2–3 above).
+
 ---
 
 ## TASK-INFRA-017 — Galaxion inputs coordination package
