@@ -1569,6 +1569,38 @@ default flip. Tickets tracked in `product-backlog/tasks/review-2026-09-17-remedi
 green; `git diff --check` clean; no lint errors. **BUG-018** stays open (2/3 fixes done; TASK-OPS-010
 drain + the deferred server-side terminal signal remain).
 
+## 2026-09-17 — Sprint 14 closed (billing explanation + customer identity)
+
+Closed Sprint 14 (`feat/sprint-14-billing-identity`, forked from and merged back into
+`feat/restart-from-scratch` with `--no-ff`, merge `5650e15`). Theme: prove billing value —
+identify a customer, retrieve billing evidence read-only, compute the invoice delta + business
+causes deterministically, and let the LLM **only phrase** the grounded, traceable result
+(DEC-002 by construction — the deterministic explanation is injected as synthetic evidence and
+reuses `AnswerGeneratorPort` + `OutputGuardrail` unchanged).
+
+**Delivered:** domain model (BE-038), read-only `BssBillingPort` (BE-039), BSS mock + fixtures
+(BE-040), PDF extractor (BE-041), comparison engine (BE-042), confidence gate (BE-043), customer
+identity (BE-044), wired billing chain + `POST /api/conversation/billing-explain` (BE-045),
+billing KB causes (BE-046), real EIR BSS adapter enquiry path live-validated on test account 5
+(BE-047), billing escalation-reason telemetry (BE-048); fixed BUG-019 (UNEXPLAINED counts as
+residual, not explained) and BUG-020 (listed-but-unfetchable invoice escalates instead of HTTP
+500); six-journey billing QA acceptance + report (QA-019); Galaxion coordination request
+finalized after the account-5 live validation (INFRA-017). Fail-closed on unverified identity /
+unexplained change, by-reference handoff; `/converse` unchanged (billing routing is a follow-up).
+
+**Merge conflict + id-collision resolution:** `done-tasks.md` / `architecture.md` resolved by
+union (kept the Sprint 15/16 truth **and** the billing endpoint/chain); `galaxion-coordination-request.md`
+took the Sprint 14 (2026-09-16 live-validated) version. The sprint's billing ADR was authored as
+**ADR-0051** but Sprint 16 had independently allocated ADR-0051 (OpenAI default) on mainline — a
+textbook cross-branch id collision. Renumbered the billing ADR to **ADR-0052** (file + adrs/README
+meta note & table row + `billing-answer-integration-cadrage.md` + `billing-tasks.md`); the OpenAI
+ADR-0051 is untouched. ADR-0050 (pilot customer identity) landed as a real file this merge.
+
+**Validation:** backend `mvn test` = **577 tests, 0 failures / 0 errors, BUILD SUCCESS** (ArchUnit +
+BDD green) on the merged tree. User-validated 2026-09-17. **Follow-ups tracked (INFRA-017):** archive
+token for the line-level invoice detail, a dev account with two comparable invoices (QA-020),
+and enabling `source=eir`.
+
 ## 2026-09-09 — TASK-BE-038 Billing domain model (Sprint 14, validated)
 
 **Ticket:** TASK-BE-038 · branch `task/TASK-BE-038-billing-domain-model` (off `feat/sprint-14-billing-identity`).

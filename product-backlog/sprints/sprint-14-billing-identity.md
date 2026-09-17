@@ -254,8 +254,14 @@ only at closure on the user's explicit request (two-level model).
 
 ## Status
 
-**Status:** 📋 **Planned — ready to start** — scoping decided 2026-09-08: start now on the
-fixtures/mock build; **pilot identity = known/manual** (real Genesys IVR/ANI deferred,
-OQ-001); **real Galaxion read-only adapter + real-data validation IN scope** (real
-anonymized PDFs/payloads to be provided — OQ-003/004 answered as data arrives, tracked by
-INFRA-017). Resequenced from Sprint 12 → 14 on 2026-08-15. File prepared 2026-09-08.
+**Status:** ✅ **Done (closed 2026-09-17)** — merged into `feat/restart-from-scratch`
+(`--no-ff`, merge `5650e15`). Delivered the full billing chain behind the answer engine
+(BE-038…048, DEC-002 preserved), fixed BUG-019/BUG-020, six-journey QA acceptance (QA-019),
+and the real EIR BSS adapter (BE-047, live-validated on test account 5). At merge, the
+sprint's billing ADR (authored as ADR-0051) was renumbered to **ADR-0052** to resolve a
+cross-branch id collision with Sprint 16's ADR-0051 (OpenAI default). Backend `mvn test`
+= 577 tests, 0 failures (ArchUnit + BDD green). Remaining follow-ups (archive token for
+line-level detail, a two-invoice account for real-data QA-020, `source=eir` enablement)
+stay tracked via INFRA-017. — scoping decided 2026-09-08: **pilot identity = known/manual**
+(real Genesys IVR/ANI deferred, OQ-001); **real Galaxion read-only adapter IN scope**
+(OQ-003/004 answered as data arrives). Resequenced from Sprint 12 → 14 on 2026-08-15.
