@@ -68,9 +68,10 @@ queryable with zero extra instrumentation.
 
 ### Context
 
-Mistral (`mistral-api`, default) and Ollama (`ollama`, local) are the two selectable LLM
-wording providers. We received OpenAI access and want to benchmark **GPT (`gpt-5`)** against
-Mistral for the voice wording step. The `AnswerGeneratorPort` seam (DEC-011) already supports
+Mistral (`mistral-api`) and Ollama (`ollama`, local) were the two selectable LLM wording providers
+(Mistral was the default at the time of this ticket; OpenAI later became the default in TASK-BE-050 /
+ADR-0051). We received OpenAI access and want to benchmark **GPT (`gpt-5`)** against Mistral for the
+voice wording step. The `AnswerGeneratorPort` seam (DEC-011) already supports
 adding a provider with no domain change.
 
 ### Goal

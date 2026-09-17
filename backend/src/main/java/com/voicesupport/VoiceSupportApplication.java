@@ -16,7 +16,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import java.security.Security;
 
 // Ollama is used for embeddings only (nomic-embed-text, 768d) feeding the pgvector store;
-// its chat auto-configuration is excluded. Mistral (default) and OpenAI are LLM chat providers,
+// its chat auto-configuration is excluded. OpenAI (default, ADR-0051) and Mistral are LLM chat providers,
 // but their chat models are built manually in the conversation LlmConfig (provider selectable via
 // voice-support.llm.provider), so their chat/embedding/moderation (+ OpenAI image/audio) auto-
 // configurations are excluded — embeddings must stay on Ollama (768d), never Mistral (1024d) or

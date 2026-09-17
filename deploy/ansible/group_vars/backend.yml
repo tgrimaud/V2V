@@ -41,9 +41,17 @@ backend_net_subnet: "10.123.0.0/24"
 # unreachable so HAProxy drains the node (true on this tier; ollama is present).
 embedding_health_enabled: true
 
-# Chat LLM (Mistral cloud).
+# Chat LLM (provider-selectable, DEC-011 / ADR-0051). The application/local default is
+# openai (gpt-5); the PILOT pins mistral-api (the validated path) until the ADR-0045 /
+# TASK-BE-033 benchmark. To switch the pilot to OpenAI: set llm_provider: "openai", add
+# vault_openai_api_key to group_vars/all/vault.yml, and set openai_base_url (no code change).
 llm_provider: "mistral-api"
 mistral_chat_model: "mistral-small-latest"
+# OpenAI (used only when llm_provider == openai). base-url is the ROOT without /v1
+# (Azure AI Foundry: https://<resource>.services.ai.azure.com/openai). Key comes from vault.
+openai_base_url: "https://api.openai.com"
+openai_chat_model: "gpt-5"
+openai_reasoning_effort: "minimal"
 
 # Shared conversation memory (Redis .107, ADR-0008 / TASK-BE-021).
 conversation_store: "redis"

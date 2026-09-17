@@ -94,7 +94,7 @@
 
 ## Common mistakes to avoid
 
-- Confusing **LLM** and **embedding**: they are 2 distinct models. Chat uses Mistral (API), embedding uses Ollama (`nomic-embed-text`, 768 dim). "Switching to Mistral" does NOT change embeddings (Mistral embedding auto-config is excluded).
+- Confusing **LLM** and **embedding**: they are 2 distinct models. Chat uses the configured provider (default **OpenAI `gpt-5`** since ADR-0051; `mistral-api`/`ollama` selectable), embedding uses Ollama (`nomic-embed-text`, 768 dim). Changing the chat provider does NOT change embeddings (embedding auto-configs are excluded — always Ollama).
 - Running `ALTER TABLE vector_store` to add metadata: unnecessary, metadata is stored as **JSONB**. However, **changing the embedding model** (and therefore the dimension) requires recreating the table + re-syncing.
 - Forgetting that rows seeded through the old `curl /ingest` have no `source_id` -> `deleteBySource` does not clean them up. Empty `vector_store` once before the first sync.
 - Adding a method to an outbound port (`VectorStorePort`, etc.) without updating **all** implementers, including **test fakes**.

@@ -277,9 +277,11 @@ class SessionFactory:
             # echo does not self-interrupt; VOICE_BARGE_IN_FRAMES sets the sustained-onset
             # count. Unset -> the processor defaults apply.
             **_barge_in_config(),
-            # End-of-turn hold, tunable without a code change (TASK-WEB-015 lever 3):
+            # End-of-turn hold, tunable without a code change (TASK-WEB-015/022 lever 3):
             # VOICE_END_OF_TURN_SILENCE_MS shortens the trailing-silence confirmation to
-            # shave latency, clamped to a safe floor. Unset -> the processor default (500 ms).
+            # shave latency, clamped to a safe floor. Unset -> the tuned pilot runtime default
+            # (PILOT_END_OF_TURN_SILENCE_MS, 350 ms); the detector library default (500 ms) is
+            # only used by batch/fixture callers that pass no window.
             **_silence_window_config(),
             # Bounded finalize budget (TASK-WEB-035): caps the post-end-of-turn wait on a
             # stalled provider terminal by finalizing from the partials already received.

@@ -1522,3 +1522,49 @@ errors on mainline (Cucumber WIP steps) are unrelated to this sprint.
 - `docs/qa/task-be-049-openai-provider-review.md`
 - `product-backlog/sprints/sprint-15-llm-providers.md`, `product-backlog/tasks/llm-provider-tasks.md`
 - `product-backlog/backlog-index.md` (Planned Sprints + Technical Tasks rows)
+
+## 2026-09-17 — Full adversarial review remediation (`feat/sprint-16-review-remediation`, merged, user-validated)
+
+**Summary:** Closed the P1/P2/P3 findings + the minor residual from the whole-branch adversarial
+review (`docs/architecture/reviews/full-adversarial-review-2026-09-17.md`) after the Sprint 15 OpenAI
+default flip. Tickets tracked in `product-backlog/tasks/review-2026-09-17-remediation-tasks.md`.
+
+**P1 (must-fix before deploy):**
+- **TASK-DOC-008** — new **ADR-0051** (OpenAI `gpt-5` as the default LLM wording provider) + updated
+  DEC-011, ADR-0006 (default clause superseded), ADR-0045 (benchmark reconciliation), ADR index.
+- **TASK-DOC-007** — doc truth sweep: ~15 authoritative docs flipped from "Mistral is the default" to
+  "OpenAI default since ADR-0051; Mistral pinned pilot provider; Ollama alt"; internal contradictions
+  annotated.
+- **TASK-INFRA-019** — wired `OPENAI_*` across compose / Ansible / runbooks; documented source-of-truth
+  (app default = openai; pilot pins `mistral-api` until the ADR-0045 benchmark).
+- **TASK-BE-051** — `RunKnowledgeBddTest` made deterministic against a dirty `target/` (explicit
+  per-feature `@SelectClasspathResource`).
+
+**P2 (should-fix before pilot):**
+- **TASK-BE-053** — de-triplicated the DEC-002 voice system prompt into a single shared constant in
+  `AbstractChatClientAnswerAdapter`.
+- **TASK-BE-054** — added `genesys` to the `application.yml` telemetry channel allow-list (match the
+  code default).
+- **TASK-BE-052** — `ApplicationContextRunner` provider-selection wiring tests (openai/mistral-api/
+  ollama + unknown→startup failure).
+
+**P3 (deferred-safe) + residual:**
+- **TASK-WEB-045** (BUG-018 #1) — overall per-turn wall-clock deadline (`VOICE_TURN_DEADLINE_MS`,
+  default 13 s, `<=0` disables) in `StreamedAnswerRunner`; on timeout aborts the stream + degrades to
+  the safe fallback (spoken sentences kept, DEC-002) + `voice.turn.deadline_exceeded` telemetry. Unit
+  tests added.
+- **TASK-WEB-046** (BUG-018 #2) — browser thinking-watchdog in `ws.js` (`WATCHDOG_MS` 20 s > the server
+  deadline; cleared on bot audio / new speech / terminal signal / call end; on fire exits to a retry,
+  no fabrication) + defensive `turn_error` client handler. **Deferred (tracked):** a new server-side
+  `turn_error` terminal signal on every WS/WebRTC/Genesys teardown (cross-transport protocol change).
+- **TASK-BE-055** — broaden `OutputGuardrail` beyond currency: **designed & deferred to billing V1**
+  (review-recommended; behaviour-changing with false-positive risk pre-billing).
+- **§3.11 hygiene** — split `ConversationConfig` (218 non-blank > 200) → new `EscalationHandoffConfig`
+  (191 non-blank now; Spring wires by type, behaviour preserved); fixed the stale 350 ms EOT comment in
+  `session_factory.py`.
+- **Residual** — `architecture.md` Mermaid + outbound/port tables now show 3 LLM adapters (OpenAI
+  default, Mistral pinned pilot, Ollama alt).
+
+**Validation:** backend `mvn clean test` green (exit 0); voice-agent 715 unittest + 51 behave scenarios
+green; `git diff --check` clean; no lint errors. **BUG-018** stays open (2/3 fixes done; TASK-OPS-010
+drain + the deferred server-side terminal signal remain).

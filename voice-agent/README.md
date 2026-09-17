@@ -313,7 +313,7 @@ answers instead of the stub). From the repository root:
 docker compose up -d postgres ollama
 docker exec -it voice-support-bot-ollama-1 ollama pull nomic-embed-text   # first run only
 
-# 2. Java answer engine on :8080 (Mistral chat + Ollama embeddings + pgvector)
+# 2. Java answer engine on :8080 (OpenAI gpt-5 chat by default — Mistral/Ollama selectable — + Ollama embeddings + pgvector)
 cd backend && set -a && . ../.env && set +a && mvn spring-boot:run
 #    First run only: sync the knowledge base once the app is up
 curl -s -X POST http://localhost:8080/api/knowledge/sync

@@ -180,7 +180,10 @@ the compose stack (`podman compose`) consumes. Defaults below are the code defau
 | `DB_URL` | `jdbc:postgresql://192.168.0.102:5432/<db>` | default `...localhost:5433/voicesupport` |
 | DB user / password | from secrets | default `voicesupport`/`voicesupport` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` (co-located CPU sidecar, ADR-0039) | model `nomic-embed-text` (768 dim) pulled at deploy; no cloud egress for embeddings |
-| `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) |
+| `LLM_PROVIDER` | `mistral-api` (pinned pilot) | provider select (DEC-011/ADR-0051); app default is `openai`, pilot pins `mistral-api` until the ADR-0045 benchmark |
+| `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) — pinned pilot provider |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | from secrets / `https://api.openai.com` | chat LLM (OpenAI/Azure Foundry) — **only** when `LLM_PROVIDER=openai`; base-url is the ROOT without `/v1` (Azure Foundry: `https://<res>.services.ai.azure.com/openai`). Egress: `api.openai.com:443` or the Foundry host. |
+| `OPENAI_CHAT_MODEL` / `OPENAI_REASONING_EFFORT` | `gpt-5` / `minimal` | reasoning latency lever; empty effort for a non-reasoning model |
 | `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only) |
 | `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default `memory` (in-process) |
 | `REDIS_HOST` / `REDIS_PORT` | `192.168.0.107` / `6379` | Redis for shared memory (TASK-BE-021) |

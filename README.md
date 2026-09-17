@@ -70,8 +70,10 @@ across two services:
   retrieval **confidence** policy, conversation **memory** (in-memory by default,
   **Redis-backed** via `CONVERSATION_STORE=redis`), and per-slice correlation-id
   observability (OpenTelemetry-ready).
-- **Chat LLM = Mistral** (`mistral-small-latest`, default; Ollama alternative);
-  **embeddings = Ollama** — the two are distinct models.
+- **Chat LLM = OpenAI** (`gpt-5`, default since ADR-0051; Mistral `mistral-small-latest` and
+  Ollama `llama3.1:8b` selectable via `LLM_PROVIDER`); **embeddings = Ollama** — chat and
+  embeddings are distinct models. Envs relying on the default must set `OPENAI_API_KEY`
+  (+ `OPENAI_BASE_URL` for the Azure Foundry endpoint).
 - Endpoints: `POST /api/conversation/converse`, `/converse-stream`, `/answer`,
   `/retrieve`, `/warm-up`; `POST /api/knowledge/ingest`, `/sync`, `/sync/{sourceType}`;
   OpenAPI/Swagger UI.

@@ -109,7 +109,7 @@ present on this branch: the standalone React `frontend/` and the legacy `agent/b
 
 ## Two distinct AI models (DO NOT confuse)
 
-- **LLM / chat** = **Mistral AI** (cloud API, `mistral-small-latest`) — writes the response. Provider configurable via `voice-support.llm.provider` (`mistral-api` default, `ollama` alternative). Built manually in `DomainServiceConfig` (chat auto-configurations are excluded in `VoiceSupportApplication`).
+- **LLM / chat** = writes the response. Provider configurable via `voice-support.llm.provider`: **`openai` (`gpt-5`) is the default** since ADR-0051 (TASK-BE-050); `mistral-api` (`mistral-small-latest`) and `ollama` (`llama3.1:8b`) are selectable alternatives. Built manually in **`LlmConfig`** (chat auto-configurations — Mistral/Ollama/OpenAI — are excluded in `VoiceSupportApplication`). Envs relying on the default must set `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for the Azure Foundry endpoint); the **pilot deploy pins `LLM_PROVIDER=mistral-api`** until the ADR-0045 benchmark.
 - **Embedding** = local **Ollama** (`nomic-embed-text`, **768 dim**) — vectorizes chunks and queries. `MistralAiEmbeddingAutoConfiguration` is **excluded** -> embeddings are always Ollama. Recorded decision: **stay on Ollama** for embeddings (local/free).
 
 ## Architecture (backend)

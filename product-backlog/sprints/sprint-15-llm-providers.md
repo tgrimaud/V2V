@@ -27,8 +27,9 @@ the backend.
 
 ## Definition of Done (per ticket)
 
-- Provider selectable via `LLM_PROVIDER=openai` with **no domain change**; Mistral remains
-  the default (`mistral-api`).
+- Provider selectable via `LLM_PROVIDER=openai` with **no domain change**. (Original DoD kept
+  Mistral as the default; **superseded during the sprint by TASK-BE-050** — OpenAI became the
+  default, ADR-0051. Mistral/Ollama stay selectable; the pilot deploy pins `mistral-api`.)
 - `mvn test` green (ArchUnit + hexagonal + unit); no new failures vs the branch base.
 - Adversarial code review ≥ 90% before QA acceptance.
 - Docs updated (`application.yml` provider doc + README env vars) in the same change.

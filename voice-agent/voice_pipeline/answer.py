@@ -54,6 +54,12 @@ BACKEND_REQUEST_SPAN = "backend.request"
 # It is a *safety net* below the backend grounding guardrail, not a replacement for it.
 CONFIDENCE_THRESHOLD_ENV_VAR = "VOICE_BACKEND_CONFIDENCE_THRESHOLD"
 
+# TASK-WEB-045 (BUG-018 fix #1): overall per-turn wall-clock deadline for the streamed path,
+# complementing the per-read socket timeout. ~13 s sits inside the ADR-0029 mouth-to-ear budget
+# and its degraded ceiling. Env-tunable; <= 0 disables it.
+TURN_DEADLINE_ENV_VAR = "VOICE_TURN_DEADLINE_MS"
+DEFAULT_TURN_DEADLINE_MS = 13000.0
+
 # TASK-WEB-021 (lever 2): fire a best-effort backend warm-up (POST /warm-up) once at
 # pipeline start so the first real turn does not pay the cold LLM + embedding cost. Off
 # the critical path, non-blocking, and easily disabled per deployment via env.
@@ -94,6 +100,24 @@ def backend_warmup_enabled() -> bool:
     if raw is None:
         return True
     return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
+def resolve_turn_deadline_ms() -> float | None:
+    """Resolve the overall per-turn wall-clock deadline (TASK-WEB-045, BUG-018 fix #1).
+
+    Unset or non-numeric -> `DEFAULT_TURN_DEADLINE_MS`. A value <= 0 disables the deadline
+    (falls back to the per-read socket timeout only), so an operator can opt out without a
+    code change; a bad value degrades gracefully rather than crashing the turn (mirrors
+    `resolve_confidence_threshold`).
+    """
+    raw = os.environ.get(TURN_DEADLINE_ENV_VAR)
+    if raw is None:
+        return DEFAULT_TURN_DEADLINE_MS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_TURN_DEADLINE_MS
+    return value if value > 0 else None
 
 
 def resolve_confidence_threshold() -> float:
@@ -231,6 +255,7 @@ class AnswerProcessor(FrameProcessor):
         filler_phrases: Sequence[str] | None = None,
         backend_warmup: bool | None = None,
         backend_stream: bool | None = None,
+        turn_deadline_ms: float | None = None,
     ) -> None:
         super().__init__()
         self._backend = backend
@@ -254,6 +279,11 @@ class AnswerProcessor(FrameProcessor):
         # (tests / callers) still wins over the environment.
         self._confidence_threshold = (
             confidence_threshold if confidence_threshold is not None else resolve_confidence_threshold()
+        )
+        # TASK-WEB-045: overall per-turn wall-clock deadline for the streamed path; explicit
+        # override (tests) wins over the env. `0`/negative disables it (per-read timeout only).
+        self._turn_deadline_ms = (
+            turn_deadline_ms if turn_deadline_ms is not None else resolve_turn_deadline_ms()
         )
         # TASK-WEB-019: spoken filler config resolved once; explicit overrides win over env.
         self._filler_enabled = filler_enabled() if filler_enabled_flag is None else filler_enabled_flag
@@ -344,7 +374,9 @@ class AnswerProcessor(FrameProcessor):
             await self.push_frame(TextFrame(text=text), direction)
 
         runner = StreamedAnswerRunner(
-            self._backend, self._telemetry, confidence_threshold=self._confidence_threshold
+            self._backend, self._telemetry,
+            confidence_threshold=self._confidence_threshold,
+            deadline_ms=self._turn_deadline_ms,
         )
         return await runner.run(request, push)
 

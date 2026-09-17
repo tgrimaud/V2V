@@ -49,6 +49,12 @@ BACKEND_STREAM_INTERRUPTED_EVENT = "voice.backend.stream.interrupted"
 # Advisory low-confidence signal (option A): the grounded answer was already spoken; this
 # only records that its confidence was below the client floor, for QA / escalation tuning.
 BACKEND_STREAM_LOW_CONFIDENCE_EVENT = "voice.backend.stream.low_confidence"
+# TASK-WEB-045 (BUG-018 fix #1): the whole streamed turn is bounded by an overall wall-clock
+# deadline in addition to the per-read socket timeout, so a backend that trickles bytes but never
+# emits a terminal done/error cannot hold the turn open. Hitting it aborts the stream and degrades
+# to the safe fallback — already-spoken sentences are kept, never un-said (DEC-002) — and records
+# this event (elapsed + where in the turn it fired).
+BACKEND_STREAM_DEADLINE_EVENT = "voice.turn.deadline_exceeded"
 
 _SENTINEL = object()
 
@@ -67,6 +73,7 @@ class _StreamState:
         self.done_seen = False
         self.error_code: str | None = None
         self.error_reason: str | None = None
+        self.deadline_exceeded = False
         self._voiced: list[str] = []
 
     def add_sentence(self, text: str, first_ms: float) -> None:
@@ -89,11 +96,13 @@ class StreamedAnswerRunner:
         *,
         confidence_threshold: float,
         provider: str | None = None,
+        deadline_ms: float | None = None,
     ) -> None:
         self._backend = backend
         self._telemetry = telemetry
         self._confidence_threshold = confidence_threshold
         self._provider = provider or getattr(backend, "name", "backend")
+        self._deadline_ms = deadline_ms
 
     async def run(self, request: AnswerRequest, push: PushSentence) -> AnswerResult:
         control = StreamControl()
@@ -101,7 +110,7 @@ class StreamedAnswerRunner:
         state = _StreamState()
         iterator = self._backend.answer_stream(request, control)
         try:
-            await self._consume(iterator, push, state, timer)
+            await self._consume_bounded(iterator, push, state, timer)
         except asyncio.CancelledError:
             control.abort()
             self._emit_interrupted(request, state, timer.elapsed_ms())
@@ -111,6 +120,13 @@ class StreamedAnswerRunner:
             # path so the caller stays silent (no fallback, no degraded telemetry).
             control.abort()
             raise
+        except asyncio.TimeoutError:
+            # TASK-WEB-045: the overall wall-clock deadline fired mid-turn (a live-but-never-
+            # terminating stream). Abort the read (closes the socket so the blocked next()
+            # unblocks) and degrade to the safe fallback via _finalize; any sentence already
+            # spoken is kept, never un-said (DEC-002).
+            control.abort()
+            state.deadline_exceeded = True
         except Exception as exc:  # noqa: BLE001 - a raising adapter degrades safely, never crashes the turn
             control.abort()
             state.error_code = state.error_code or "stream_error"
@@ -124,6 +140,15 @@ class StreamedAnswerRunner:
             await push(result.text)
         self._emit_telemetry(request, result, state, timer.elapsed_ms())
         return result
+
+    async def _consume_bounded(self, iterator: Any, push: PushSentence, state: _StreamState, timer: Timer) -> None:
+        # TASK-WEB-045: bound the whole turn by an overall wall-clock deadline (in addition to the
+        # per-read socket timeout). <= 0 / None disables it (per-read timeout only). asyncio.wait_for
+        # cancels the inner consume on timeout, surfacing as TimeoutError to run().
+        if self._deadline_ms is not None and self._deadline_ms > 0:
+            await asyncio.wait_for(self._consume(iterator, push, state, timer), timeout=self._deadline_ms / 1000.0)
+        else:
+            await self._consume(iterator, push, state, timer)
 
     async def _consume(self, iterator: Any, push: PushSentence, state: _StreamState, timer: Timer) -> None:
         while True:
@@ -189,6 +214,15 @@ class StreamedAnswerRunner:
         self._telemetry.record(BACKEND_STREAMED_EVENT, backend_request_ms=round(total_ms, 3), **attrs)
         if result.outcome is AnswerOutcome.DEGRADED:
             self._telemetry.log("warning", "backend streamed degraded fallback served", **attrs)
+        if state.deadline_exceeded:
+            # TASK-WEB-045: make the wall-clock deadline hit observable (elapsed + sentences =
+            # where in the turn it fired) so a live-but-stuck backend is visible next time.
+            self._telemetry.record(
+                BACKEND_STREAM_DEADLINE_EVENT,
+                elapsed_ms=round(total_ms, 3),
+                deadline_ms=self._deadline_ms,
+                **attrs,
+            )
         self._maybe_log_low_confidence(result, attrs)
 
     def _maybe_log_low_confidence(self, result: AnswerResult, attrs: dict[str, Any]) -> None:

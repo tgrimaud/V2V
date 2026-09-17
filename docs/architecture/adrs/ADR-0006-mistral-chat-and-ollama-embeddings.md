@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted — the chat/embedding separation stands; the **default chat provider clause is superseded
+by [ADR-0051](ADR-0051-openai-default-llm-wording-provider.md)** (2026-09-17): the default chat LLM
+is now OpenAI `gpt-5`, not Mistral. Embeddings are unaffected (still Ollama `nomic-embed-text`, 768).
 
 ## Context
 
@@ -16,8 +18,9 @@ constraints, and migration paths.
 
 ## Decision
 
-The default chat LLM is Mistral AI (`mistral-small-latest`) through the backend
-LLM ports.
+The chat LLM is selected through the backend LLM ports (DEC-011). At the time of this ADR the
+default was Mistral AI (`mistral-small-latest`); **since 2026-09-17 the default is OpenAI `gpt-5`
+(ADR-0051)**, with Mistral and Ollama selectable via `LLM_PROVIDER`.
 
 Embeddings remain on local Ollama `nomic-embed-text` with 768 dimensions.
 

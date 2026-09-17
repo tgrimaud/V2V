@@ -43,11 +43,11 @@ them.
 
 | Role | Model | Provider | When it runs |
 |------|-------|----------|--------------|
-| **Generation** (text → answer) | `mistral-small-latest` (default) or a local Ollama chat model | Mistral API (default) / Ollama | On every answered question |
+| **Generation** (text → answer) | `gpt-5` (default) or `mistral-small-latest` or a local Ollama chat model | OpenAI (default) / Mistral API / Ollama | On every answered question |
 | **Embedding** (text → vector) | `nomic-embed-text` (768 dimensions) | **Ollama (local)** | At ingestion (each chunk) **and** on every query (the question) |
 
 - The generation provider is configurable via `voice-support.llm.provider`
-  (`mistral-api` default, `ollama` alternative).
+  (`openai` `gpt-5` default since ADR-0051; `mistral-api` and `ollama` selectable).
 - Embeddings are **always** served by Ollama today. `MistralAiEmbeddingAutoConfiguration`
   is excluded at startup. Switching embeddings to Mistral (`mistral-embed`, 1024
   dim) would require changing `pgvector.dimensions` and recreating the
