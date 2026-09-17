@@ -35,7 +35,7 @@ public class LlmConfig {
 
     private static final Set<String> SUPPORTED_PROVIDERS = Set.of("mistral-api", "ollama", "openai");
 
-    @Value("${voice-support.llm.provider:mistral-api}")
+    @Value("${voice-support.llm.provider:openai}")
     private String provider;
 
     // Fail fast on a misconfigured provider: without this, an unknown value builds no ChatModel bean
@@ -49,7 +49,7 @@ public class LlmConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api")
     public MistralAiChatModel mistralChatModel(
             @Value("${spring.ai.mistralai.api-key:}") String apiKey,
             @Value("${spring.ai.mistralai.base-url:https://api.mistral.ai}") String baseUrl,
@@ -97,7 +97,7 @@ public class LlmConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "openai")
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "openai", matchIfMissing = true)
     public OpenAiChatModel openAiChatModel(
             @Value("${spring.ai.openai.api-key:}") String apiKey,
             @Value("${spring.ai.openai.base-url:https://api.openai.com}") String baseUrl,
@@ -140,7 +140,7 @@ public class LlmConfig {
     // AnswerGeneratorPort and the StreamingAnswerGeneratorPort (TASK-BE-007); both are implemented
     // by AbstractChatClientAnswerAdapter.
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api", matchIfMissing = true)
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "mistral-api")
     public MistralAnswerAdapter mistralAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
@@ -160,7 +160,7 @@ public class LlmConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "openai")
+    @ConditionalOnProperty(name = "voice-support.llm.provider", havingValue = "openai", matchIfMissing = true)
     public OpenAiAnswerAdapter openAiAnswerGenerator(
             ChatClient answerChatClient, BackendTelemetry telemetry,
             @Value("${voice-support.llm.timeout-ms:8000}") long timeoutMs,
