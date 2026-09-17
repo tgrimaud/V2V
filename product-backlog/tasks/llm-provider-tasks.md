@@ -7,7 +7,8 @@ tasks only select the **chat** provider via `voice-support.llm.provider`.
 
 ## TASK-BE-049 — OpenAI chat provider (`gpt-5`)
 
-**Type:** Technical task · **Sprint:** 15 · **Status:** 🧪 Dev done, review pending
+**Type:** Technical task · **Sprint:** 15 · **Status:** ✅ Review passed (94/100) — E2E pending
+**Review:** `docs/qa/task-be-049-openai-provider-review.md` (2026-09-17, QA gate PASS, no blocking)
 **Branch:** `task/TASK-BE-049-openai-chat-provider` (off `feat/sprint-15-llm-providers`)
 
 ### Context
