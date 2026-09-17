@@ -5,6 +5,45 @@ tasks only select the **chat** provider via `voice-support.llm.provider`.
 
 ---
 
+## TASK-BE-050 — Default LLM provider = OpenAI
+
+**Type:** Technical task · **Sprint:** 15 · **Status:** ✅ Validated (user-requested default flip)
+**Branch:** `task/TASK-BE-050-default-llm-openai` (off `feat/sprint-15-llm-providers`)
+
+### Context / decision
+
+After BE-049 was validated live + E2E, the user chose **OpenAI (gpt-5) as the default LLM wording
+provider** (previously `mistral-api`). Mistral and Ollama remain selectable via `LLM_PROVIDER`.
+
+### Changes
+
+- `application.yml` — `voice-support.llm.provider` default `${LLM_PROVIDER:openai}` (+ provider doc:
+  openai=default, mistral-api/ollama=alternatives).
+- `LlmConfig` — `@Value` default `:openai`; **`matchIfMissing=true` moved** from the Mistral beans to
+  the OpenAI `OpenAiChatModel` + `OpenAiAnswerAdapter` beans, so a fully-absent property also
+  resolves to OpenAI (consistent default at every layer).
+
+### Deployment implication (documented)
+
+With the default = openai, **any environment that does not set `LLM_PROVIDER` must provide
+`OPENAI_API_KEY`** (and `OPENAI_BASE_URL` for the Azure Foundry OpenAI-compatible endpoint, else the
+call goes to public `api.openai.com`). The pilot Ansible/compose env must set these or pin
+`LLM_PROVIDER=mistral-api` explicitly. Embeddings are unaffected (always Ollama).
+
+### Review (inline)
+
+Trivial, runtime-affecting config default flip. No domain/logic change; provider wiring already
+reviewed (BE-049, 94/100). No test locked the old default (`mistral-api` only appears as arbitrary
+telemetry tag values). Residual risk = the deployment implication above; **accepted** by the user's
+explicit default-change request. `mvn test` green (ArchUnit + hexagonal + provider tests).
+
+### Acceptance
+
+- `LLM_PROVIDER` unset → OpenAI provider selected; `LLM_PROVIDER=mistral-api`/`ollama` still work.
+- `mvn test` green; no new failures vs the branch base.
+
+---
+
 ## TASK-BE-049 — OpenAI chat provider (`gpt-5`)
 
 **Type:** Technical task · **Sprint:** 15 · **Status:** ✅ Validated (review 94/100 + E2E OK)
