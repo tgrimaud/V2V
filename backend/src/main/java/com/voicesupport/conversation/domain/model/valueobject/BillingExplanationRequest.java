@@ -1,6 +1,6 @@
 package com.voicesupport.conversation.domain.model.valueobject;
 
-// A billing-explanation turn as the answer engine sees it (TASK-BE-045, ADR-0051): the transcript to
+// A billing-explanation turn as the answer engine sees it (TASK-BE-045, ADR-0052): the transcript to
 // answer, the channel + customer reference that scope identity resolution (BR-002-1), an optional
 // invoice id, the resolved answer-language code, and the traceability ids. Conversation-owned so the
 // answer engine never depends on the billing context's types; the outbound seam maps it across.

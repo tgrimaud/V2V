@@ -3,7 +3,7 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.BillingExplanationRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-// Dedicated billing-explanation contract (TASK-BE-045, ADR-0051 D3c). Wire field names are
+// Dedicated billing-explanation contract (TASK-BE-045, ADR-0052 D3c). Wire field names are
 // snake_case via the global Jackson strategy (e.g. invoice_id, conversation_id, correlation_id). The
 // customer reference scopes identity resolution (BR-002-1) and is potentially personal data — it is
 // never logged in clear. /converse is intentionally left untouched; routing billing from /converse is

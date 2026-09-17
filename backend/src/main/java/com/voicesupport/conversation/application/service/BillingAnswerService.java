@@ -14,7 +14,7 @@ import com.voicesupport.conversation.domain.service.OutputGuardrail;
 
 import java.util.List;
 
-// Wires the deterministic billing explanation into the answer engine (TASK-BE-045, ADR-0051 D1a).
+// Wires the deterministic billing explanation into the answer engine (TASK-BE-045, ADR-0052 D1a).
 // It resolves the answer language once, asks the billing seam for the grounded result, then:
 //  - answerable  -> rephrase the grounded text via the LLM and re-run the OutputGuardrail (DEC-002),
 //                   so the LLM can only reword computed amounts and never introduce one;

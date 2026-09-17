@@ -22,7 +22,7 @@ public enum EscalationReason {
             "high",
             "unverified_amount",
             "Route to a billing advisor to review the customer's billing details."),
-    // Billing-explanation escalation triggers (TASK-BE-045, ADR-0051), raised by the billing chain
+    // Billing-explanation escalation triggers (TASK-BE-045, ADR-0052), raised by the billing chain
     // rather than a guardrail verdict: the customer identity could not be verified fail-closed
     // (BR-002-1), or the deterministic comparison could not be sufficiently explained (BR-003).
     IDENTITY_UNVERIFIED(

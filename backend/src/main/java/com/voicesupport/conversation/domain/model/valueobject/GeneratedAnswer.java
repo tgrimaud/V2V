@@ -17,7 +17,7 @@ public record GeneratedAnswer(String text, Double confidence, boolean grounded, 
         return new GeneratedAnswer(text, null, false, null);
     }
 
-    // Safe fallback carrying a proactively-decided escalation reason (TASK-BE-045, ADR-0051): the
+    // Safe fallback carrying a proactively-decided escalation reason (TASK-BE-045, ADR-0052): the
     // billing chain escalates fail-closed (unverified identity / unexplained change) without a
     // guardrail verdict, so the by-reference hand-off (ADR-0019 / DEC-013) still travels while the
     // spoken text stays a safe operational message.

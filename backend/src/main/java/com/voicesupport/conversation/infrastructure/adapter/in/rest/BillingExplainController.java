@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Locale;
 
-// Dedicated billing-explanation endpoint (TASK-BE-045, ADR-0051 D3c): the deterministic billing chain
+// Dedicated billing-explanation endpoint (TASK-BE-045, ADR-0052 D3c): the deterministic billing chain
 // behind the answer engine, exposed as its own surface so /converse and the voice runtime stay
 // untouched until a follow-up wires billing routing into /converse. api-key gated via
 // WebSecurityMvcConfig (same as /answer). On an escalation turn the response carries only the

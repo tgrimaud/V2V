@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 import java.util.Locale;
 
 // Turns a deterministic comparison + confidence verdict into grounded, language-aware explanation
-// text (TASK-BE-045, ADR-0051 D1a). Every currency amount it voices comes from the computed comparison
+// text (TASK-BE-045, ADR-0052 D1a). Every currency amount it voices comes from the computed comparison
 // (delta, per-cause impact, residual), so the downstream OutputGuardrail (DEC-002) passes: the LLM may
 // only rephrase this text and can never introduce an amount that is not here. Also owns the safe
 // operational / hand-off messages for the degraded branches, kept language-consistent with answers.

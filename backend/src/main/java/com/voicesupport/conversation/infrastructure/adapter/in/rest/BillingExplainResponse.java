@@ -4,7 +4,7 @@ import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffR
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-// Billing-explanation response (TASK-BE-045, ADR-0051): the text to speak plus an optional confidence
+// Billing-explanation response (TASK-BE-045, ADR-0052): the text to speak plus an optional confidence
 // signal, and — only on an escalation turn — the by-reference hand-off token (ADR-0019 / DEC-013).
 // The escalation_context carries ONLY the handoff_id + non-PII routing metadata; the audited context
 // (customer reference, summary) stays backend-owned. Same shape family as ConverseResponse.

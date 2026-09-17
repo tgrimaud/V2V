@@ -2,7 +2,7 @@ package com.voicesupport.billing.domain.model;
 
 import java.util.Objects;
 
-// The deterministic result the billing context hands to the answer engine (TASK-BE-045, ADR-0051):
+// The deterministic result the billing context hands to the answer engine (TASK-BE-045, ADR-0052):
 // the outcome, the grounded text (a fully-computed explanation the LLM may only rephrase — DEC-002 —
 // or a safe operational/hand-off message), whether the turn must escalate fail-closed, the escalation
 // code the conversation seam maps to an EscalationReason, and a provisional confidence. The billing

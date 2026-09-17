@@ -147,7 +147,7 @@ public class BillingConfig {
         return new CustomerIdentityService(directory);
     }
 
-    // Billing-explanation intent guard (ADR-0051 D2a). Deterministic FR/EN keyword set, env-tunable
+    // Billing-explanation intent guard (ADR-0052 D2a). Deterministic FR/EN keyword set, env-tunable
     // via VOICE_SUPPORT_BILLING_INTENT_KEYWORDS (CSV) so it can be tuned per deployment without a code
     // change. Accent/case are folded by the detector, so keywords are written unaccented + lowercase.
     @Bean

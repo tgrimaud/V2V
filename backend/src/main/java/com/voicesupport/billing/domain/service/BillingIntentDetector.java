@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-// Deterministic, no-LLM billing-explanation intent guard (TASK-BE-045, ADR-0051 D2a). Matches
+// Deterministic, no-LLM billing-explanation intent guard (TASK-BE-045, ADR-0052 D2a). Matches
 // accent-insensitive, word-boundary keywords (FR + EN) against the transcript so the dedicated
 // billing endpoint (and, later, /converse routing) can decide whether a turn is a billing question
 // without a runtime LLM classifier. The keyword set is injected (env-tunable) so it can be tuned per

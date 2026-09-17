@@ -1,6 +1,6 @@
 package com.voicesupport.billing.domain.model;
 
-// Outcome of the billing explanation orchestration (TASK-BE-045, ADR-0051). Drives whether the
+// Outcome of the billing explanation orchestration (TASK-BE-045, ADR-0052). Drives whether the
 // answer engine phrases a grounded explanation or escalates fail-closed:
 //   EXPLAINED           - fully reconciled, safe to phrase;
 //   PARTIALLY_EXPLAINED - phrase with a caveat (a residual remains);

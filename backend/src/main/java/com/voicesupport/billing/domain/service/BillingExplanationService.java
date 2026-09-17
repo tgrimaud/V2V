@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-// Orchestrates the billing explanation chain fail-closed (TASK-BE-045, ADR-0051): intent guard ->
+// Orchestrates the billing explanation chain fail-closed (TASK-BE-045, ADR-0052): intent guard ->
 // identity (BR-002-1) -> comparable invoices -> deterministic comparison -> confidence gate (BR-003,
 // DEC-002) -> grounded text. Pure domain: it depends only on billing ports/services, never on the
 // answer engine or Spring, so DEC-002 (the LLM never computes amounts) holds by construction — the

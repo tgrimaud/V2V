@@ -12,7 +12,7 @@ import com.voicesupport.shared.observability.Slices;
 
 import java.time.Duration;
 
-// Outbound seam from the answer engine to the billing context (TASK-BE-045, ADR-0051), mirroring the
+// Outbound seam from the answer engine to the billing context (TASK-BE-045, ADR-0052), mirroring the
 // knowledge retrieval seam (ADR-0027). It translates the conversation-owned request into a billing
 // query, invokes the billing use case, and maps the deterministic BillingExplanation onto a
 // conversation BillingGrounding (including the escalation-reason mapping) so the answer engine never

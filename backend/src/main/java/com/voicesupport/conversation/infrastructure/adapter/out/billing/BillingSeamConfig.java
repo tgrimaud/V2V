@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 
 // Wiring for the outbound billing seam lives inside the seam package: it is the only place that
 // references the billing context's published API (ExplainBillingUseCase), mirroring the knowledge
-// seam (ADR-0027). Also wires the answer-engine use case that consumes the seam (ADR-0051 D3c).
+// seam (ADR-0027). Also wires the answer-engine use case that consumes the seam (ADR-0052 D3c).
 @Configuration
 public class BillingSeamConfig {
 
