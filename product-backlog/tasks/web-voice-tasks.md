@@ -3995,9 +3995,9 @@ Scenario: The caller is never stranded when our endpoint is unavailable
 **Related:** BUG-018 (stuck-in-thinking incident — P1 fix #1), TASK-BE-025 (backend streaming inter-signal timeout — the backend-side bound this complements on the runtime side), TASK-STT-014 (STT finalize-tail, contributing mitigation, separate ticket)
 **Depends on:** —
 **Classification:** V1 voice runtime — reliability / robustness
-**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Status:** ✅ Done — implemented + user-validated 2026-09-17 on `feat/sprint-16-review-remediation`. Overall wall-clock deadline (`VOICE_TURN_DEADLINE_MS`, default 13 s, `<=0` disables) in `StreamedAnswerRunner`; on timeout aborts the stream + degrades to the safe fallback (spoken sentences kept, DEC-002) + records `voice.turn.deadline_exceeded`. Unit tests cover a never-terminating stream (bounded+degraded+event) and a fast turn (no event).
 **Priority:** High
-**Branch:** `task/TASK-WEB-045-voice-turn-wall-clock-deadline` (to create when work starts)
+**Branch:** `task/TASK-WEB-045-voice-turn-wall-clock-deadline` (delivered under the sprint-16 remediation branch)
 **Surfaced by:** BUG-018 read-only investigation (2026-08-27) — the leading hypothesis for the "stuck in thinking until refresh" incident.
 
 ### Context
@@ -4069,9 +4069,9 @@ Scenario: A normal fast turn is unaffected
 **Related:** BUG-018 (stuck-in-thinking incident — P1 fix #2), TASK-WEB-045 (wall-clock deadline — the backend-timeout half), TASK-WEB-030 (WS per-slice telemetry / correlation id)
 **Depends on:** —
 **Classification:** V1 voice runtime + `web_voice` browser client — reliability
-**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Status:** ✅ Done (browser watchdog) — implemented + user-validated 2026-09-17 on `feat/sprint-16-review-remediation`. `ws.js` arms a bounded thinking-watchdog (`WATCHDOG_MS`, default 20 s > the WEB-045 server deadline, `?watchdog=` override) cleared on bot audio / new user speech / terminal signal / call end; on fire it leaves "Thinking" and invites a retry (no fabricated answer, DEC-002). A defensive `turn_error` control handler is wired client-side. **Deferred (tracked here):** emitting a *new* server-side `turn_error` terminal control signal on every WS/WebRTC/Genesys error/teardown path (a cross-transport protocol change: new `ControlSignalType`, per-transport teardown wiring, Genesys AudioHook mapping, Behave coverage). The watchdog already guarantees the AC ("the UI can never be permanently stuck").
 **Priority:** High
-**Branch:** `task/TASK-WEB-046-terminal-signal-and-watchdog` (to create when work starts)
+**Branch:** `task/TASK-WEB-046-terminal-signal-and-watchdog` (client half delivered under the sprint-16 remediation branch)
 **Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a dropped/broken connection or an unsignalled failure can strand the UI in "thinking".
 
 ### Context

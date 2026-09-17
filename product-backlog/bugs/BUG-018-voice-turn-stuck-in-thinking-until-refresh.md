@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-018
 - **Title:** The web voice UI can stay stuck in "thinking" for a long time and only recovers on a manual page refresh
-- **Status:** New (planning only — investigation done, fixes ticketed, not yet implemented)
+- **Status:** In progress — 2 of 3 fixes implemented + user-validated 2026-09-17 (`feat/sprint-16-review-remediation`): TASK-WEB-045 (overall wall-clock deadline) + TASK-WEB-046 (browser thinking-watchdog). Remaining: TASK-OPS-010 (deploy-time active-session drain) + the deferred server-side `turn_error` terminal signal on teardown.
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot)
@@ -175,4 +175,4 @@ Filled per P1 ticket during resolution. Investigation-time notes (read-only):
 
 - **Closed by:**
 - **Closed date:**
-- **Closure reason:** pending (closes when TASK-WEB-045 + TASK-WEB-046 + TASK-OPS-010 are validated)
+- **Closure reason:** pending — TASK-WEB-045 ✅ + TASK-WEB-046 ✅ (client watchdog) implemented + validated 2026-09-17; closes when TASK-OPS-010 + the deferred server-side `turn_error` terminal signal are also validated
