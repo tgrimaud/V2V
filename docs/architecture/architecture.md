@@ -129,6 +129,7 @@ graph TB
             RAGPipeline["RAG Pipeline"]
         end
         subgraph adaptersOut [Adapters OUT]
+            OpenAiAdapter[OpenAiLlmAdapter]
             MistralAdapter[MistralLlmAdapter]
             OllamaAdapter[OllamaLlmAdapter]
             PgVecAdapter[PgVectorStoreAdapter]
@@ -136,6 +137,7 @@ graph TB
     end
 
     %% ─── External: LLM + DB (near the backend that calls them) ───
+    OpenAiAPI["🔴 OpenAI / Azure Foundry Cloud"]
     MistralAPI["🔴 Mistral AI Cloud"]
     Ollama["🔴 Ollama Local :11434"]
     PgVector["🔴 PostgreSQL + pgvector :5433"]
@@ -167,6 +169,7 @@ graph TB
 
     %% ─── RAG pipeline → Adapters ───
     RAGPipeline --> PgVecAdapter
+    RAGPipeline --> OpenAiAdapter
     RAGPipeline --> MistralAdapter
     RAGPipeline --> OllamaAdapter
 
@@ -175,6 +178,7 @@ graph TB
     BridgeServer -.->|"legacy WSS"| GradiumTTS
 
     %% ─── Backend → External services ───
+    OpenAiAdapter -->|"generation HTTPS streaming (default)"| OpenAiAPI
     MistralAdapter -->|"generation HTTPS streaming"| MistralAPI
     OllamaAdapter -->|"generation HTTP streaming"| Ollama
     PgVecAdapter -->|"retrieval SQL + HNSW"| PgVector
@@ -188,7 +192,8 @@ The system calls the following external services:
 
 | Flow | Protocol | Source → Destination | Content |
 |------|-----------|---------------------|---------|
-| **LLM Generation** | HTTPS (streaming) | `MistralLlmAdapter` → Mistral API | Prompt + RAG context → streamed tokens |
+| **LLM Generation** | HTTPS (streaming) | `OpenAiLlmAdapter` → OpenAI / Azure Foundry | Prompt + RAG context → streamed tokens (`gpt-5`, **default** since ADR-0051) |
+| **LLM Generation (pilot pin)** | HTTPS (streaming) | `MistralLlmAdapter` → Mistral API | Prompt + RAG context → streamed tokens (pinned pilot provider) |
 | **LLM Generation (alt)** | HTTP (streaming) | `OllamaLlmAdapter` → Ollama local :11434 | Prompt + context → streamed tokens |
 | **Vector Search** | SQL (TCP :5433) | `PgVectorStoreAdapter` → PostgreSQL/pgvector | Query embedding → top-K HNSW chunks |
 | **Embedding Generation** | HTTP | Spring AI → Ollama (nomic-embed-text) | Text → 768-dimensional vector |
@@ -344,8 +349,8 @@ this abstraction before returning to the domain.
 
 | Port | Contract | Adapters |
 |------|---------|----------|
-| `LlmPort` | Generate a complete response (blocking `.call()`) + variant with dynamic system prompt | `MistralLlmAdapter`, `OllamaLlmAdapter` |
-| `LlmStreamingPort` | Stream response tokens (`TokenStream`) + variant with dynamic system prompt | `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmPort` | Generate a complete response (blocking `.call()`) + variant with dynamic system prompt | `OpenAiLlmAdapter` (default), `MistralLlmAdapter`, `OllamaLlmAdapter` |
+| `LlmStreamingPort` | Stream response tokens (`TokenStream`) + variant with dynamic system prompt | `OpenAiLlmAdapter` (default), `MistralLlmAdapter`, `OllamaLlmAdapter` |
 | `VectorSearchPort` | Search relevant chunks (global or domain-filtered) | `PgVectorStoreAdapter` |
 | `VectorStorePort` | Store a chunk (`store` legacy + `storeChunk` with metadata enriched from a `SourceDocument`) and delete by source (`deleteBySource`) | `PgVectorStoreAdapter` |
 | `KnowledgeSourceConnector` | List `SourceDocument` entries from a source (`sourceType()` + `fetchAll()`) — one connector per source type | `MarkdownFolderConnector` (reference); Confluence/PDF/DB coming later |
