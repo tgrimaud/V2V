@@ -36,9 +36,12 @@ the backend.
 
 ## Status
 
-🚧 In progress (opened 2026-09-17) — forked from `feat/restart-from-scratch`. TASK-BE-049 merged
-into the sprint branch (`--no-ff`). Sprint not yet closed (closure = merge sprint →
-`feat/restart-from-scratch` on the user's explicit request).
+✅ **Done (closed 2026-09-17)** — merged into `feat/restart-from-scratch` (`--no-ff`). Delivered
+TASK-BE-049 (OpenAI `gpt-5` as a third selectable LLM chat provider behind the existing port,
+live + E2E validated, adversarial review 94/100, `reasoning_effort=minimal` voice-latency lever)
+and TASK-BE-050 (OpenAI made the **default** provider). Mistral/Ollama still selectable via
+`LLM_PROVIDER`. Note: environments relying on the default must set `OPENAI_API_KEY`
+(+ `OPENAI_BASE_URL` for the Azure Foundry endpoint).
 
 > Note: `feat/restart-from-scratch` currently carries **10 pre-existing errors** in
 > `RunKnowledgeBddTest` (Cucumber steps still `PendingException`, WIP knowledge feature).

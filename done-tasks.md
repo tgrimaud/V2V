@@ -1486,3 +1486,39 @@ behave**, backend **`mvn test`** OK; `deploy.yml` `--syntax-check` OK.
 - `deploy/ansible/deploy.yml`, `deploy/ansible/qa-validate-ansible.sh`, `deploy/ansible/README.md`,
   `deploy/compose/voice/.env.example`, `deploy/compose/README.md`
 - `voice-agent/web_voice/genesys_config.py` (comment only)
+
+## 2026-09-17 — Sprint 15 closed (LLM providers — OpenAI gpt-5) + default flip
+
+Opened and closed Sprint 15 (`feat/sprint-15-llm-providers`, forked from and merged back into
+`feat/restart-from-scratch` with `--no-ff`). Theme: make the LLM chat provider a first-class,
+swappable choice for benchmarking (DEC-011), with **no domain change** — providers stay behind the
+existing `AnswerGeneratorPort`/`StreamingAnswerGeneratorPort` seam.
+
+- **TASK-BE-049 — OpenAI (`gpt-5`) as a third selectable LLM chat provider.** `voice-support.llm.provider=openai`
+  builds an `OpenAiChatModel` manually in `LlmConfig` (OpenAI chat/embedding/moderation/image/audio
+  auto-configs excluded; embeddings stay Ollama 768d, STT/TTS stay on the voice runtime) driving a
+  thin `OpenAiAnswerAdapter` (same DEC-002 voice prompt). **Live-validated** on the Azure AI Foundry
+  **OpenAI-compatible `/openai/v1`** endpoint (HTTP 200, `gpt-5-2025-08-07`, `Authorization: Bearer`,
+  no `api-version`) + **full backend E2E RAG turn** (grounded FR billing answer + fail-closed
+  escalation on low confidence; telemetry `slice=llm_wording provider=openai`). Adversarial review
+  **94/100 (QA-PASS)**. **`reasoning_effort=minimal`** wired as a voice-latency lever (Spring AI 1.0.0
+  `OpenAiChatOptions.reasoningEffort`) — a trivial turn drops from ~128 reasoning tokens/~2.6 s to
+  0/~0.95 s. `gpt-5` temperature pinned to its only accepted value (1.0).
+- **TASK-BE-050 — OpenAI made the default provider.** `application.yml` default `LLM_PROVIDER:openai`,
+  `LlmConfig` `@Value` default `:openai`, `matchIfMissing=true` moved from the Mistral beans to the
+  OpenAI beans. Mistral (`mistral-api`) and Ollama (`ollama`) remain selectable. **Deployment note:**
+  any environment relying on the default must provide `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for the
+  Azure Foundry endpoint) or the first LLM call 401s.
+
+`mvn test` green (ArchUnit + hexagonal + provider/telemetry). Pre-existing `RunKnowledgeBddTest`
+errors on mainline (Cucumber WIP steps) are unrelated to this sprint.
+
+### Files changed
+- `backend/pom.xml` (spring-ai-starter-model-openai), `backend/src/main/java/com/voicesupport/VoiceSupportApplication.java`
+- `backend/src/main/java/com/voicesupport/conversation/infrastructure/config/LlmConfig.java`
+- `backend/src/main/java/com/voicesupport/conversation/infrastructure/adapter/out/llm/OpenAiAnswerAdapter.java`
+- `backend/src/test/java/com/voicesupport/conversation/infrastructure/adapter/out/llm/OpenAiAnswerAdapterTest.java`
+- `backend/src/main/resources/application.yml`
+- `docs/qa/task-be-049-openai-provider-review.md`
+- `product-backlog/sprints/sprint-15-llm-providers.md`, `product-backlog/tasks/llm-provider-tasks.md`
+- `product-backlog/backlog-index.md` (Planned Sprints + Technical Tasks rows)
