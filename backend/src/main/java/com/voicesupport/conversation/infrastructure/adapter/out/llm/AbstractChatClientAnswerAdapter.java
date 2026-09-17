@@ -29,6 +29,30 @@ public abstract class AbstractChatClientAnswerAdapter
     private static final String HISTORY_HEADER =
             "\n\nHistorique de la conversation (ne répète PAS de salutation si un échange a déjà eu lieu) :\n";
 
+    // Single source for the DEC-002 grounded, voice-first French system prompt shared by every
+    // provider adapter (Mistral/Ollama/OpenAI) — de-triplicated (TASK-BE-053). Trimmed for latency
+    // (TASK-BE-011: fewer prefill tokens = faster first token); all DEC-002 rules are preserved.
+    // The answer language and the exact hand-off sentence are appended per call as the AnswerLanguage
+    // directive (TASK-BE-015), so the assistant answers in the customer's language (the OutputGuardrail
+    // matches both FR/EN hand-off markers) instead of being biased to French by this prompt. A provider
+    // that needs a different prompt overrides systemPromptTemplate().
+    protected static final String DEC002_VOICE_SYSTEM_PROMPT = """
+            Tu es un agent de support client Telecom/FAI (box internet, mobile, facturation). \
+            Réponds en style vocal : phrases courtes, claires, polies et empathiques.
+
+            Règles ABSOLUES :
+            - Réponds UNIQUEMENT à partir du CONTEXTE ci-dessous ; n'invente rien.
+            - Exploite le CONTEXTE pour aider le client même s'il ne traite le sujet que \
+            partiellement ; ne renvoie vers un conseiller que si le CONTEXTE est vide ou sans \
+            rapport avec la question.
+            - N'annonce JAMAIS un montant ou tarif absent du CONTEXTE ; propose plutôt de vérifier \
+            le dossier avec un conseiller.
+            - Ne salue pas si un échange a déjà eu lieu.
+
+            CONTEXTE :
+            {context}
+            """;
+
     private final ChatClient chatClient;
     private final BackendTelemetry telemetry;
     private final long timeoutMs;
@@ -53,7 +77,11 @@ public abstract class AbstractChatClientAnswerAdapter
         this.maxAnswerSentences = maxAnswerSentences;
     }
 
-    protected abstract String systemPromptTemplate();
+    // Default = the shared DEC-002 voice prompt (TASK-BE-053). Override only for a provider-specific
+    // prompt (a test double does this).
+    protected String systemPromptTemplate() {
+        return DEC002_VOICE_SYSTEM_PROMPT;
+    }
 
     protected abstract String providerName();
 
