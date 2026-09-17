@@ -109,8 +109,8 @@ cd backend && mvn test
 Backend endpoints (port `8080`): `POST /api/conversation/converse` (sync answer),
 `/converse-stream` (SSE), `/answer`, `/retrieve`; `POST /api/knowledge/ingest`
 (one-shot upload) and `/sync` / `/sync/{sourceType}` (connector sync); Swagger UI
-and `/v3/api-docs`. Chat = **Mistral** (`voice-support.llm.provider=mistral-api`,
-default; `ollama` alternative); embeddings = **Ollama** `nomic-embed-text` (768-dim).
+and `/v3/api-docs`. Chat = **OpenAI** (`voice-support.llm.provider=openai`, `gpt-5`, default since
+ADR-0051; `mistral-api` and `ollama` selectable); embeddings = **Ollama** `nomic-embed-text` (768-dim).
 The wiring lives in split config classes (`ConversationConfig`, `KnowledgeConfig`,
 `LlmConfig`, `KnowledgeSeamConfig`), not a single `DomainServiceConfig`.
 
@@ -199,7 +199,7 @@ public OpenAILlmAdapter openAiLlmAdapter(ChatClient chatClient) {
 ```yaml
 voice-support:
   llm:
-    provider: openai  # or mistral-api (default) or ollama
+    provider: openai  # default (gpt-5); or mistral-api or ollama
 ```
 
 ### Change the STT/TTS Provider (voice agent)

@@ -3,7 +3,8 @@ package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.ai.chat.client.ChatClient;
 
-// Mistral wording adapter (mistral-small-latest), the development default provider (DEC-011).
+// Mistral wording adapter (mistral-small-latest), a selectable provider (DEC-011); the default is
+// OpenAI since ADR-0051. Mistral stays the explicitly pinned pilot provider until the ADR-0045 benchmark.
 public class MistralAnswerAdapter extends AbstractChatClientAnswerAdapter {
 
     private static final String PROVIDER = "mistral-api";

@@ -27,7 +27,7 @@
 >   app with **RAG** over **pgvector** (Ollama `nomic-embed-text`, 768-dim, domain +
 >   audience filters), input/output **guardrails** (incl. DEC-002 no-fabricated-amount),
 >   three-band retrieval **confidence**, conversation **memory**, and per-slice
->   correlation-id observability. Chat = **Mistral** (default), embeddings = **Ollama**.
+>   correlation-id observability. Chat = **OpenAI** (`gpt-5`, default since ADR-0051; Mistral/Ollama selectable), embeddings = **Ollama**.
 >   Endpoints: `POST /api/conversation/{converse,converse-stream,answer,retrieve,warm-up}`,
 >   `POST /api/knowledge/{ingest,sync}`, OpenAPI/Swagger UI.
 > - **Infra:** local `docker-compose.yml` (Postgres/`pgvector` on 5433 + Ollama) for
@@ -208,8 +208,9 @@ The system calls the following external services:
 | **Custom legacy bridge** | Python | WebSocket POC/fallback path, Gradium STT/TTS, sentence splitting, SSE consumer |
 | **Gradium** | Cloud API | STT (transcription) and TTS (speech synthesis) |
 | **Backend Java** | Java (Spring Boot) | RAG, LLM streaming (SSE), business logic, escalation, admin |
-| **Mistral AI** | Cloud API | LLM generation (default provider, streaming) |
-| **Ollama** | Local | Local LLM inference (configurable alternative) |
+| **OpenAI** | Cloud API (OpenAI / Azure Foundry-compatible) | LLM generation (`gpt-5`, **default** provider since ADR-0051, streaming) |
+| **Mistral AI** | Cloud API | LLM generation (selectable; pinned pilot provider, streaming) |
+| **Ollama** | Local | Local LLM inference (configurable alternative) + embeddings (`nomic-embed-text`) |
 | **PostgreSQL + pgvector** | — | Vector storage and similarity search |
 
 ## Channel / Backend Contract
@@ -508,10 +509,10 @@ The system uses **two separate AI models**, which should not be confused:
 
 | Role | Model (default) | Provider | When |
 |------|-----------------|-------------|-------|
-| **LLM / chat** (writes the response) | `mistral-small-latest` | **Mistral AI** (cloud API) | On every response generation |
+| **LLM / chat** (writes the response) | `gpt-5` (default) / `mistral-small-latest` / Ollama chat | **OpenAI** (default) / Mistral AI / Ollama | On every response generation |
 | **Embedding** (text → vector) | `nomic-embed-text` (768 dim) | **Ollama** (local) | During ingestion (each chunk) AND on every request (the question) |
 
-> The LLM provider is configurable (`voice-support.llm.provider`: `mistral-api` by default, `ollama` as an alternative). Embedding is currently **always** served by Ollama: `MistralAiEmbeddingAutoConfiguration` is excluded in `VoiceSupportApplication`. Moving embeddings to Mistral (`mistral-embed`, 1024 dim) would require changing `pgvector.dimensions`, recreating the `vector_store` table, and resynchronizing.
+> The LLM provider is configurable (`voice-support.llm.provider`: `openai` `gpt-5` by default since ADR-0051; `mistral-api` and `ollama` selectable; the pilot deploy pins `mistral-api`). Embedding is currently **always** served by Ollama: `MistralAiEmbeddingAutoConfiguration` is excluded in `VoiceSupportApplication`. Moving embeddings to Mistral (`mistral-embed`, 1024 dim) would require changing `pgvector.dimensions`, recreating the `vector_store` table, and resynchronizing.
 
 ## Multi-Source Knowledge Base (Synchronization)
 
@@ -670,10 +671,11 @@ The LLM provider is configurable through `voice-support.llm.provider`:
 
 | Provider | Value | Streaming | First-token latency | Usage |
 |----------|--------|-----------|--------------------|----|
-| **Mistral API** (default) | `mistral-api` | Yes (SSE) | ~150ms | Production |
+| **OpenAI** (default, ADR-0051) | `openai` | Yes (SSE) | `gpt-5` + `reasoning_effort=minimal` ~0.95 s | Default (app/local); benchmark |
+| Mistral API | `mistral-api` | Yes (SSE) | ~150ms | Pinned pilot provider |
 | Ollama local | `ollama` | Yes (SSE) | ~500ms | Offline development |
 
-Both adapters implement `LlmPort` (blocking) and `LlmStreamingPort`. The domain
+All three adapters implement `AnswerGeneratorPort` (blocking) and `StreamingAnswerGeneratorPort`. The domain
 exposes a `TokenStream`; adapters may use Reactor or the provider's streaming
 API internally, but that dependency does not cross the port.
 

@@ -33,7 +33,7 @@ QA gate: **Pass**
 | Acceptance criterion | Covered? | Evidence |
 |---|---|---|
 | `openai` selectable via `voice-support.llm.provider`, no domain change | ✅ | `SUPPORTED_PROVIDERS` + `@ConditionalOnProperty` beans; domain unchanged (adapter only) |
-| Mistral stays the default | ✅ | `mistral-api` `matchIfMissing=true`; openai beans inactive unless selected |
+| Mistral stays the default *(BE-049 criterion — superseded by TASK-BE-050/ADR-0051: OpenAI is now the default)* | ✅ (at BE-049) | `mistral-api` `matchIfMissing=true` at review time; openai beans inactive unless selected. Flipped in BE-050. |
 | Embeddings stay on Ollama (768d) | ✅ | `OpenAiEmbeddingAutoConfiguration` excluded; no OpenAI embedding bean |
 | Grounded DEC-002 voice prompt | ✅ | `OpenAiAnswerAdapterTest.usesGroundedDec002Prompt` |
 | Boots + answers a grounded turn on the real endpoint | ✅ (endpoint) | Live smoke test HTTP 200, gpt-5→gpt-5-2025-08-07, valid FR answer (ticket § Live smoke test). Full backend E2E: next step. |

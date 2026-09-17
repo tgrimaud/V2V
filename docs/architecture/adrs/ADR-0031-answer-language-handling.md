@@ -52,9 +52,9 @@ language, distinct from `voice-support.knowledge.default-language` (the KB inges
 The decided `AnswerLanguage` is passed through `AnswerGeneratorPort` /
 `StreamingAnswerGeneratorPort` (new parameter) to the provider adapter, which appends the
 language directive **last** in the system message (recency reliably overrides the French base
-framing). The two provider prompts (Mistral, Ollama) drop the old *"answer in the question's
-language"* line and the hardcoded French refusal sentence — both now come from the per-call
-directive. The domain still owns all wording; the SDK stays in infrastructure.
+framing). The provider prompts (Mistral, Ollama, and — since Sprint 15 — OpenAI) drop the old
+*"answer in the question's language"* line and the hardcoded French refusal sentence — both now
+come from the per-call directive. The domain still owns all wording; the SDK stays in infrastructure.
 
 ### 4. Consistent guardrail wording + language-independent hand-off
 
