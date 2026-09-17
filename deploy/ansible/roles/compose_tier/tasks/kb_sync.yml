@@ -33,6 +33,32 @@
   run_once: true
   no_log: true
 
+# BUG-021: guard the cold-start race. A just-recreated backend can serve
+# /actuator/health=200 before the api-key gate consistently accepts the rendered key (and,
+# during `compose up -d`, the prior container may still briefly answer on the same port with
+# a different/older key). Either way the long async sync below then 401s and, under
+# serial:1 / max_fail_percentage:0, aborts the whole rolling deploy before the remaining
+# nodes/tiers are upgraded. Poll the api-key-gated, side-effect-free warm-up endpoint until
+# it answers 200 with the freshly-rendered key, so the sync only fires once the new node has
+# fully taken over and the gate accepts the key. 401 is treated as a not-ready signal to
+# retry (not a hard failure); if it never reaches 200 within the window the task fails (a
+# real misconfiguration, not a race). Warm-up also primes embedding + LLM for the first turn.
+- name: "Wait until the api-key gate accepts the key (readiness gate, BUG-021)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ backend_port }}/api/conversation/warm-up"
+    method: POST
+    headers:
+      x-api-key: "{{ kb_sync_api_key }}"
+    status_code: [200, 401]
+    timeout: "{{ kb_sync_gate_timeout | default(120) }}"
+  register: kb_sync_gate
+  until: (kb_sync_gate.status | default(0) | int) == 200
+  retries: "{{ kb_sync_gate_retries | default(12) }}"
+  delay: "{{ kb_sync_gate_delay | default(5) }}"
+  run_once: true
+  changed_when: false          # readiness probe: never a state change
+  no_log: true                 # args carry the api-key header
+
 - name: "Trigger the KB sync (POST /api/knowledge/sync, async)"
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ backend_port }}/api/knowledge/sync"

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-021
 - **Title:** Post-deploy KB sync 401 on a freshly-recreated backend aborts the whole rollout
-- **Status:** New
+- **Status:** Ready for adversarial review
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** User validation (v0.9.0 pilot release)
@@ -70,32 +70,51 @@ aborted after only the first backend node was upgraded.
 
 ## Acceptance Criteria For Fix
 
-- [ ] Add a readiness pre-check before the async sync: poll a cheap gated endpoint
-      (e.g. `POST /api/conversation/warm-up` or `/retrieve`) with the api-key until `200`
-      (bounded retries) so the gate is proven effective before the long sync fires.
-- [ ] A deploy against a freshly recreated backend no longer 401s / aborts.
-- [ ] Consider making the KB-sync failure non-fatal to the *other* tiers (KB is shared
-      Postgres, so voice/second-backend rollout need not depend on it) — or document why it stays a hard gate.
-- [ ] Relevant deploy logs/telemetry present.
+- [x] Add a readiness pre-check before the async sync: poll a cheap gated endpoint
+      (`POST /api/conversation/warm-up`) with the api-key until `200` (bounded retries,
+      401 = not-ready → retry) so the gate is proven effective before the long sync fires.
+- [x] A deploy against a freshly recreated backend no longer 401s / aborts — validated in
+      isolation (readiness gate returns 200 on t03); full cold-start reproduction is a QA
+      retest deferred to the next real deploy (see QA Retest).
+- [x] Decision on non-fatal-to-other-tiers: **keep the hard gate.** The `assert processed >= min`
+      is a deliberate quality gate (never leave RAG markdown-only), and the readiness pre-check
+      removes the cold-start race that made it abort spuriously. Decoupling the voice/second-backend
+      rollout from the KB sync would require reordering the `deploy.yml` plays (out of scope for
+      this hotfix); the shared-Postgres nuance is documented here instead.
+- [x] Relevant deploy logs present (the async result surfaces HTTP status/body; readiness gate is `no_log` as it carries the key).
 - [ ] Adversarial review ≥ 90%.
 - [ ] QA retest: a clean end-to-end deploy from cold containers completes with the sync green.
 
 ## Developer Notes
 
-- root cause (hypothesis): cold-start race — `/actuator/health` UP precedes the api-key
-  security filter being fully effective for `/api/knowledge/**` on the just-recreated node.
-- files to change: `deploy/ansible/roles/compose_tier/tasks/kb_sync.yml` (add gated readiness poll before the async trigger).
-- tests added/updated: —
-- OpenTelemetry added/updated: —
-- residual risk: —
+- root cause: cold-start race — a just-recreated backend serves `/actuator/health`=200
+  before the api-key gate consistently accepts the rendered key (and/or the prior container
+  briefly still answers on the same port with an older/different key during `compose up -d`),
+  so the immediately-fired async KB sync 401s. Confirmed the key itself is valid and the
+  async+templated-header pattern is sound (reproduces 200 post-settle); the variable is timing.
+- files changed: `deploy/ansible/roles/compose_tier/tasks/kb_sync.yml` — added a bounded
+  readiness gate (`POST /api/conversation/warm-up` with the key, `until status==200`,
+  `status_code: [200,401]`, `retries: 12`, `delay: 5`, tunables `kb_sync_gate_{timeout,retries,delay}`)
+  before the async sync trigger. Warm-up is api-key-gated + side-effect-free and also primes
+  embedding + LLM for the first turn.
+- validation: `ansible-playbook deploy.yml --syntax-check` PASS; isolated run of the exact
+  readiness-gate task against the live `vla-t03` → `warm_up_status=200 attempts=1`.
+- OpenTelemetry added/updated: n/a (deploy automation; no runtime code changed).
+- residual risk: the true cold-start reproduction (a fresh container recreate racing the gate)
+  is not exercised by the isolated test; covered by the deferred QA retest on the next deploy.
+  If a legitimate misconfiguration ever keeps the gate at 401, the readiness task now fails
+  fast (retries exhausted) with a clear signal instead of the sync 401 mid-rollout.
 
 ## QA Retest
 
-- **Retested by:**
+- **Retested by:** (deferred)
 - **Retest date:**
-- **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+- **Scenarios rerun:** on the next real deploy, run `deploy.yml -e image_tag=<next>` (with
+  `kb_sync_after_deploy` default true) against freshly recreated backend containers and
+  confirm the readiness gate absorbs any cold-start 401 and the KB sync completes green on the
+  first rolling node (no `NO MORE HOSTS LEFT`).
+- **Result:** pending
+- **Retest evidence:** (isolated pre-validation already captured: readiness gate → 200 on `vla-t03`)
 
 ## Closure
 
