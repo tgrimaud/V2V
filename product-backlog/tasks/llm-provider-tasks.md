@@ -7,8 +7,24 @@ tasks only select the **chat** provider via `voice-support.llm.provider`.
 
 ## TASK-BE-049 — OpenAI chat provider (`gpt-5`)
 
-**Type:** Technical task · **Sprint:** 15 · **Status:** ✅ Review passed (94/100) — E2E pending
+**Type:** Technical task · **Sprint:** 15 · **Status:** ✅ Validated (review 94/100 + E2E OK)
 **Review:** `docs/qa/task-be-049-openai-provider-review.md` (2026-09-17, QA gate PASS, no blocking)
+
+### E2E backend run — 2026-09-17 (real RAG turn via OpenAI provider)
+
+Booted `LLM_PROVIDER=openai` (single JVM) against Dockerized Postgres pgvector + local Ollama
+embeddings, `vector_store` populated from the 3 KB files. Two `POST /api/conversation/converse`
+turns, both **HTTP 200**:
+
+- **Billing** ("pourquoi ma facture peut augmenter") → **grounded** FR answer citing real KB content
+  (3900, prorata, remises hors % d'augmentation), `confidence≈0.74`, ~2.28 s total.
+- **Support** ("mon internet ne fonctionne plus") → **fail-closed escalation** (`low_confidence` +
+  `escalation_context`) — correct guardrail behavior on insufficient grounding, not an OpenAI error.
+
+Telemetry confirms the provider actually used: `slice=llm_wording provider=openai outcome=success
+duration_ms≈1993/2094`, `[LANGUAGE]/[PROMPT]/[ANSWER] provider=openai`, `slice=retrieval
+provider=pgvector ~175ms`. Per-provider tagging works → the benchmark (p50/p95 by provider) is
+queryable with zero extra instrumentation.
 **Branch:** `task/TASK-BE-049-openai-chat-provider` (off `feat/sprint-15-llm-providers`)
 
 ### Context
