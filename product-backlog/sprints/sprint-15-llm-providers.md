@@ -14,9 +14,10 @@ the backend.
 
 ## Scope
 
-- **TASK-BE-049 — OpenAI chat provider (`gpt-5`).** Add `openai` as a third selectable
-  provider behind the existing port, mirroring the Mistral/Ollama wiring. First step to
-  benchmark GPT vs Mistral for the wording step.
+- **TASK-BE-049 — OpenAI chat provider (`gpt-5`).** ✅ **Done (merged 2026-09-17).** `openai` is a
+  third selectable provider behind the existing port, mirroring the Mistral/Ollama wiring.
+  Live-validated (Azure AI Foundry OpenAI-compatible v1 endpoint) + full backend E2E RAG turn;
+  adversarial review 94/100; `reasoning_effort=minimal` wired as the voice-latency lever.
 
 ### Follow-ups (candidate, not yet ticketed)
 
@@ -35,7 +36,9 @@ the backend.
 
 ## Status
 
-🚧 In progress (opened 2026-09-17) — forked from `feat/restart-from-scratch`.
+🚧 In progress (opened 2026-09-17) — forked from `feat/restart-from-scratch`. TASK-BE-049 merged
+into the sprint branch (`--no-ff`). Sprint not yet closed (closure = merge sprint →
+`feat/restart-from-scratch` on the user's explicit request).
 
 > Note: `feat/restart-from-scratch` currently carries **10 pre-existing errors** in
 > `RunKnowledgeBddTest` (Cucumber steps still `PendingException`, WIP knowledge feature).
