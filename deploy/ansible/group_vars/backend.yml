@@ -52,7 +52,7 @@ llm_provider: "openai"
 mistral_chat_model: "mistral-small-latest"
 # OpenAI (used only when llm_provider == openai). base-url is the ROOT without /v1
 # (Azure AI Foundry: https://<resource>.services.ai.azure.com/openai). Key comes from vault.
-openai_base_url: "https://api.openai.com"
+openai_base_url: "https://Ai4cc-POC-SWD.services.ai.azure.com/openai"
 openai_chat_model: "gpt-5"
 openai_reasoning_effort: "minimal"
 
