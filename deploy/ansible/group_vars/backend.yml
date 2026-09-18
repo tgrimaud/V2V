@@ -42,10 +42,13 @@ backend_net_subnet: "10.123.0.0/24"
 embedding_health_enabled: true
 
 # Chat LLM (provider-selectable, DEC-011 / ADR-0051). The application/local default is
-# openai (gpt-5); the PILOT pins mistral-api (the validated path) until the ADR-0045 /
-# TASK-BE-033 benchmark. To switch the pilot to OpenAI: set llm_provider: "openai", add
-# vault_openai_api_key to group_vars/all/vault.yml, and set openai_base_url (no code change).
-llm_provider: "mistral-api"
+# openai (gpt-5). The pilot originally pinned mistral-api (the validated path) until the
+# ADR-0045 / TASK-BE-033 benchmark, but was switched to OpenAI gpt-5 on 2026-09-17: the pilot
+# Mistral key was hard rate-limited on light traffic (HTTP 429 "Rate limit exceeded", code
+# 1300 from api.mistral.ai), so every real answer degraded to the safe fallback. Revert to
+# "mistral-api" once the Mistral quota is raised (or after the ADR-0045 benchmark decides).
+# OpenAI key comes from vault_openai_api_key; openai_base_url below is the ROOT (no /v1).
+llm_provider: "openai"
 mistral_chat_model: "mistral-small-latest"
 # OpenAI (used only when llm_provider == openai). base-url is the ROOT without /v1
 # (Azure AI Foundry: https://<resource>.services.ai.azure.com/openai). Key comes from vault.
