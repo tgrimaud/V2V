@@ -8,7 +8,7 @@ provider wiring.
 
 ## TASK-BE-056 — Eir English persona prompt ("Bob") adapted from the Invoice-Variation reference
 
-**Type:** Technical task · **Status:** 🟡 Implemented — awaiting adversarial review + user validation
+**Type:** Technical task · **Status:** ✅ Validated (user, 2026-09-18) — merged to `feat/restart-from-scratch`, released `v0.9.1`, deployed to pilot backend tier
 **Branch:** `task/TASK-BE-056-eir-english-persona-prompt` (off `feat/restart-from-scratch`)
 
 ### Context / decision
@@ -84,4 +84,4 @@ rejected because it would instruct gpt-5 to call non-existent tools and answer i
 - [x] `{context}` placeholder + per-call language/concision directives intact.
 - [x] Backend suite green (577/0).
 - [x] Adversarial code review ≥ 90% (93/100, inline).
-- [ ] User validation, then deploy to the pilot (re-render/redeploy backend tier).
+- [x] User validation (2026-09-18) → merged to mainline, released `v0.9.1`, backend tier redeployed.
