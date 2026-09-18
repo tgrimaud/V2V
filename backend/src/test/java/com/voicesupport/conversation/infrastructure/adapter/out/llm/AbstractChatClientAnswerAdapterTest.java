@@ -45,7 +45,7 @@ class AbstractChatClientAnswerAdapterTest {
 
         // THEN only the first carries the history block
         assertTrue(withHistory.contains("USER: bonjour\nASSISTANT: bonjour"));
-        assertFalse(withoutHistory.contains("Historique de la conversation"));
+        assertFalse(withoutHistory.contains("Conversation history"));
     }
 
     @Test

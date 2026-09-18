@@ -31,9 +31,9 @@ class OpenAiAnswerAdapterTest {
 
         // THEN it carries the DEC-002 grounding rules and the injectable context placeholder
         assertTrue(prompt.contains("{context}"), "prompt must expose the {context} placeholder");
-        assertTrue(prompt.contains("UNIQUEMENT à partir du CONTEXTE"),
+        assertTrue(prompt.contains("Answer ONLY from the CONTEXT"),
                 "prompt must forbid ungrounded answers (DEC-002)");
-        assertTrue(prompt.contains("N'annonce JAMAIS un montant"),
+        assertTrue(prompt.contains("NEVER state an amount"),
                 "prompt must forbid inventing amounts/prices");
     }
 }
