@@ -3,6 +3,31 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-18 — v0.9.1 release: Eir English persona prompt ("Bob") + pilot LLM fix
+
+**Summary:**
+
+- **TASK-BE-056 — Eir English persona prompt.** Rewrote the shared DEC-002 voice system prompt
+  (`AbstractChatClientAnswerAdapter.DEC002_VOICE_SYSTEM_PROMPT`) as an **English "Bob" / Eir** persona,
+  adapting the stakeholder reference (`InvoiceVariationdocx.docx` — Tigo Paraguay / Alicia, Spanish,
+  MCP tool-calling). The reference's tool-calling rules (`GetCustomerAccounts`, `transferToLiza`,
+  `CDA`-as-a-tool, `msisdn`/595, `{{$now}}`) have no counterpart in our RAG pipeline and were
+  re-expressed as CONTEXT grounding + the existing spoken hand-off. Transposed guardrails: grounding-
+  only, never state amounts/data absent from CONTEXT, on-topic-only, prompt-confidentiality/anti-
+  injection, no repeated greeting. `HISTORY_HEADER` translated to English. Per-call language/concision
+  directives unchanged; DEC-002 preserved. Tests updated (English grounding phrases); `mvn test` 577/0.
+  Adversarial review 93/100 (inline). Merged `--no-ff` → mainline, released `v0.9.1`, backend tier
+  redeployed (t03+t04, `IMAGE_TAG=0.9.1`). Verified live: `/converse` answers in English, HTTP 200.
+- **Pilot LLM provider fix (mainline `a48cd3d`).** The pilot OpenAI credentials are **Azure AI
+  Foundry** (not public OpenAI): repointed `openai_base_url` to the Foundry root
+  (`…services.ai.azure.com/openai`) and added `vault_openai_api_key` to the git-ignored vault. This
+  resolved the Mistral 429 / OpenAI 401 fallback — `/converse` now returns grounded gpt-5 answers.
+  Public-VIP WS smoke: 4/4 turns audible, time_to_first_audio p50 ~2.2 s.
+- **Known caveat:** the KB is still French, so English questions retrieve weakly (more clarifications/
+  escalations) until an English/bilingual KB lands; the English **voice** (TTS) also needs a Gradium
+  English voice id (`gradium_voice_id_en` is empty) — text path is English, spoken path still falls
+  back to the French voice.
+
 ## 2026-06-22 — Agent name badges, conversation fixes, dead code cleanup
 
 **Summary:**
