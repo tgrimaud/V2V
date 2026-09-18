@@ -3,6 +3,35 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-18 — TASK-OPS-013: pilot RAG corpus switched to English (Eir) + BUG-022 found
+
+**Summary:**
+
+- **TASK-OPS-013 — Pilot English KB (Eir).** The pilot RAG corpus was pinned to the French
+  translation (`articles-fr.csv`), so English Eir questions deflected to an advisor. The **original
+  English Eir corpus already existed in-repo** (`articles-sample.kb.csv`, 306 articles) — the source
+  `articles-fr.csv` was translated from. Renamed it to `articles-en.csv` and pointed the `csv-article`
+  connector at it (`kb_csv_filename: articles-en.csv`, `kb_csv_language: en`); no backend code change
+  (the backend is already bilingual-capable — `csv-article` EN + `csv-article-fr` FR connectors, and
+  each chunk already carries `language` metadata). Also **translated the 3 markdown FAQ** files FR→EN
+  (`billing`/`telecom`/`commercial`, domain routing preserved). Both CSV and markdown are **mounted
+  assets** (not baked into the image), so this shipped at image `0.9.1` via **deploy + KB re-sync**,
+  no rebuild/release. English-only single-corpus (bilingual + retrieval language filter stays the
+  target **TASK-BE-034**). `mvn test` 577/0. Merged `--no-ff` → mainline.
+- **Deploy + verify.** Backend redeployed on t03+t04 (assets recopied), KB re-synced **manually with
+  a warm-up gate** (BUG-021 cold-start 401 avoided). `vector_store` now holds **4872 `csv-article`/en
+  chunks + 44 markdown (EN content)**; FR `csv-article` fully replaced. **English grounding is live**
+  on both nodes — verified: slow-internet, view-bill, FTTC→FTTH (CSV article 775), cancellation
+  (confidence 0.69–0.83), all answered in English from English content, no advisor deflection.
+- **BUG-022 discovered (High, open).** The CSV sync **hangs deterministically in the chunk-embedding
+  store phase** after parse completes — the Ollama embedding call never returns and has no read
+  timeout, the sidecar goes idle, the sync never emits a `SyncReport`, and while hung it saturates the
+  embedding path (live `/converse` → 503 `ERR_UPSTREAM`). The store commits incrementally (bulk of the
+  corpus is in; a small tail may be missing). Mitigation shipped: `kb_sync_after_deploy: false` (so
+  future deploys don't hang/abort) + a manual gated (re)sync procedure. Root-cause hypotheses +
+  proposed fix (embedding read-timeout + skip-on-timeout, degenerate/oversized-chunk guard) in
+  `tasks/bug-022-kb-sync-store-hang.md`.
+
 ## 2026-09-18 — v0.9.1 release: Eir English persona prompt ("Bob") + pilot LLM fix
 
 **Summary:**

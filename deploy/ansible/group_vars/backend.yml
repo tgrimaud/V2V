@@ -83,7 +83,17 @@ kb_csv_language: "en"
 # POST /api/knowledge/sync so a (re)deploy never leaves the RAG markdown-only or empty
 # (the image ships no KB; the sync loads the mounted assets into pgvector). Idempotent:
 # a second run skips unchanged sources by content_hash. Backend tier only.
-kb_sync_after_deploy: true
+#
+# ⚠️ BUG-022: on the English corpus the sync HANGS deterministically in the chunk-embedding
+# store phase (after parse completes) — the embedding call to the Ollama sidecar never
+# returns and has no read timeout, so the sync never emits its SyncReport, saturates the
+# embedding endpoint (live retrieval starts returning 503 ERR_UPSTREAM) and, with
+# serial:1/max_fail_percentage:0 + the 90x30s poll, would abort the whole rollout. Until
+# BUG-022 is fixed, auto-sync is DISABLED: the EN corpus is already ingested (4872
+# csv-article/en chunks + the EN markdown FAQ, persisted in pgvector), so a redeploy does
+# not need it. To (re)load KB content, use the manual gated procedure in BUG-022 (warm-up
+# gate → POST /api/knowledge/sync async → monitor → tolerate the partial tail).
+kb_sync_after_deploy: false
 # The first CSV sync is slow: ~300 articles are embedded on the CPU Ollama sidecar AND
 # each is domain-classified by an embedding call at parse time (ADR-0030), so a full run
 # takes ~15-30 min on the pilot. kb_sync.yml fires the sync async (poll:0) and waits via
