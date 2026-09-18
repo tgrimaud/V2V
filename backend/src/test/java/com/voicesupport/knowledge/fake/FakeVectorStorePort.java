@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.fake;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.model.valueobject.StoreResult;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 
@@ -17,6 +18,10 @@ public class FakeVectorStorePort implements VectorStorePort {
     public int storeChunksCalls = 0;
     // When set, storeChunks throws for this sourceId to exercise the fail-fast / failure-observability path.
     public String failOnSourceId = null;
+    // When set, storeChunks returns a PARTIAL StoreResult (stored < attempted) for this sourceId to
+    // exercise the BUG-022 incomplete-not-committed path (a sub-batch was skipped after a timeout).
+    public String partialOnSourceId = null;
+    public int partialStored = 0;
 
     @Override
     public void store(String content, String source, String section, int chunkIndex, String domain) {
@@ -26,7 +31,7 @@ public class FakeVectorStorePort implements VectorStorePort {
     }
 
     @Override
-    public int storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
+    public StoreResult storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
         storeChunksCalls++;
         if (document.sourceId().equals(failOnSourceId)) {
             throw new IllegalStateException("vector store write failed for " + document.sourceId());
@@ -37,7 +42,10 @@ public class FakeVectorStorePort implements VectorStorePort {
             storedChunkDomains.add(document.domain());
             storedChunkContents.add(chunk.content());
         }
-        return chunks.size();
+        if (document.sourceId().equals(partialOnSourceId)) {
+            return StoreResult.of(partialStored, chunks.size());
+        }
+        return StoreResult.of(chunks.size(), chunks.size());
     }
 
     @Override

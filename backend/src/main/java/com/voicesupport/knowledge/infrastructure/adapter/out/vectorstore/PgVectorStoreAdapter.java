@@ -2,6 +2,7 @@ package com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore;
 
 import com.voicesupport.knowledge.domain.model.valueobject.KnowledgeChunk;
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.model.valueobject.StoreResult;
 import com.voicesupport.knowledge.domain.port.out.VectorSearchPort;
 import com.voicesupport.knowledge.domain.port.out.VectorStorePort;
 import com.voicesupport.knowledge.domain.service.TextChunker;
@@ -65,14 +66,14 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
     // are dropped (never embed empty content) and a batch that still fails/times out is skipped and
     // logged instead of aborting or hanging the whole corpus sync. Returns the count actually stored.
     @Override
-    public int storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
+    public StoreResult storeChunks(SourceDocument document, List<TextChunker.Chunk> chunks) {
         List<Document> documents = toDocuments(document, chunks);
         int stored = 0;
         for (int from = 0; from < documents.size(); from += storeBatchSize) {
             int to = Math.min(from + storeBatchSize, documents.size());
             stored += storeBatch(document, documents.subList(from, to));
         }
-        return stored;
+        return StoreResult.of(stored, documents.size());
     }
 
     private List<Document> toDocuments(SourceDocument document, List<TextChunker.Chunk> chunks) {

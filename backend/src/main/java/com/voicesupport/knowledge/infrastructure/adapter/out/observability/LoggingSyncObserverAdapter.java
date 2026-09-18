@@ -29,6 +29,7 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
     private static final String CHUNKS_SUMMARY = "voice_support.kb_sync_chunks";
     private static final String SYNC_TIMER = "voice_support.kb_sync";
     private static final String SYNC_FAILURES = "voice_support.kb_sync_failures";
+    private static final String SYNC_SKIPPED = "voice_support.kb_sync_skipped";
 
     private final MeterRegistry registry;
     private final int progressEvery;
@@ -54,6 +55,16 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
         if (done % progressEvery == 0) {
             log.info("[KB-SYNC] op=progress source_type={} batches_ingested={}", sourceType, done);
         }
+    }
+
+    @Override
+    public void batchSkipped(String sourceType, String sourceId, int skippedChunks) {
+        // BUG-022: partial ingestion — the document is left uncommitted and retried next sync.
+        // The counter lets ops alert on a degraded corpus; the WARN names the resumable document.
+        registry.counter(SYNC_SKIPPED, "source_type", sourceType).increment(skippedChunks);
+        log.warn("[KB-SYNC] op=batch-skipped source_type={} source_id={} skipped_chunks={} "
+                        + "(document left uncommitted; retried on next sync)",
+                sourceType, sourceId, skippedChunks);
     }
 
     @Override

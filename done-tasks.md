@@ -21,13 +21,23 @@
   (`WARN [KB-SYNC] skipped embedding batch … skipped_chunks=… error_code=…`) and the sync continues,
   returning the count actually stored. **Blank/whitespace-only chunks are dropped** before embedding.
   No `SyncReport` arity change (REST contract untouched).
+- **No silent data loss (adversarial-review finding).** `reingest` did `deleteBySource` then
+  `upsertState` unconditionally, so a skipped batch would mark a partially/zero-stored document as
+  "done" → the missing chunks were never retried (silent permanent RAG gap). Fixed: `storeChunks`
+  returns `StoreResult(stored, attempted)`; the sync **commits the `content_hash` only when the
+  store is complete**, else leaves it uncommitted so the next idempotent run re-ingests the whole
+  document (self-heals). Partial ingestion is observable via `SyncObserverPort.batchSkipped` →
+  counter `voice_support.kb_sync_skipped` + `WARN [KB-SYNC] op=batch-skipped …`.
 - **Auto-sync re-enabled.** `kb_sync_after_deploy: true` restored in `group_vars/backend.yml` — a
   (re)deploy sync now always terminates (idempotent: unchanged sources skip by `content_hash`).
 - **Tests.** `PgVectorStoreAdapterTest`: bounded batching (70 chunks → add() sizes `[32,32,6]`),
-  failing batch skipped while the rest store (`stored=38`, no throw), blank chunks dropped. Full
-  backend suite **580/0**. Follow-up (only if a trickle-hang recurs on small batches): an *overall*
-  request timeout via a JDK-HttpClient request factory — deferred, not needed for the observed hang.
-- Branch `fix/BUG-022-kb-sync-store-hang`. Not merged (awaiting user).
+  failing batch skipped while the rest store (`stored=38`, `isComplete()==false`), blank chunks
+  dropped. `KnowledgeSyncServiceTest`: an incomplete store is not committed, is reported via
+  `batchSkipped`, and self-heals on the next sync. Full backend suite **581/0**. Follow-up (only if
+  a trickle-hang recurs on small batches): an *overall* request timeout via a JDK-HttpClient request
+  factory — deferred, not needed for the observed hang.
+- Adversarial review: passed after this remediation (was Blocked 80/100 on the silent-data-loss
+  finding). Branch `fix/BUG-022-kb-sync-store-hang`. Not merged (awaiting user).
 
 ## 2026-09-18 — TASK-OPS-013: pilot RAG corpus switched to English (Eir) + BUG-022 found
 

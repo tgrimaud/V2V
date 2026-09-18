@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.model.valueobject.StoreResult;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,9 +73,11 @@ class PgVectorStoreAdapterTest {
     void storeChunksSplitsIntoBoundedBatches() {
         PgVectorStoreAdapter batched = new PgVectorStoreAdapter(vectorStore, 32);
 
-        int stored = batched.storeChunks(document("241"), chunks(70));
+        StoreResult result = batched.storeChunks(document("241"), chunks(70));
 
-        assertEquals(70, stored);
+        assertEquals(70, result.stored());
+        assertEquals(70, result.attempted());
+        assertTrue(result.isComplete());
         assertEquals(List.of(32, 32, 6), vectorStore.addCallSizes);
     }
 
@@ -83,9 +87,12 @@ class PgVectorStoreAdapterTest {
         vectorStore.failOnCall = 1; // the second batch throws (simulates the read-timeout on a hung batch)
         PgVectorStoreAdapter batched = new PgVectorStoreAdapter(vectorStore, 32);
 
-        int stored = batched.storeChunks(document("241"), chunks(70));
+        StoreResult result = batched.storeChunks(document("241"), chunks(70));
 
-        assertEquals(38, stored); // 32 (batch 0) + 6 (batch 2); the failing 32 is skipped, no exception
+        assertEquals(38, result.stored()); // 32 (batch 0) + 6 (batch 2); the failing 32 is skipped, no exception
+        assertEquals(70, result.attempted());
+        assertEquals(32, result.skipped());
+        assertFalse(result.isComplete()); // incomplete -> caller must NOT commit the document
         assertEquals(38, vectorStore.added.size());
     }
 
@@ -97,9 +104,10 @@ class PgVectorStoreAdapterTest {
                 new TextChunker.Chunk("   ", "s"),
                 new TextChunker.Chunk("", "s"));
 
-        int stored = adapter.storeChunks(document("241"), withBlanks);
+        StoreResult result = adapter.storeChunks(document("241"), withBlanks);
 
-        assertEquals(1, stored);
+        assertEquals(1, result.stored());
+        assertEquals(1, result.attempted()); // blanks are not counted as attempted
         assertEquals(1, vectorStore.added.size());
     }
 

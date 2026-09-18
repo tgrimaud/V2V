@@ -243,4 +243,37 @@ class KnowledgeSyncServiceTest {
         assertEquals(1, observer.completions.size());
         assertEquals(0, observer.completions.get(0).totalChunks());
     }
+
+    @Test
+    void partially_stored_document_is_not_committed_and_self_heals_next_sync() {
+        // GIVEN a document whose store only partially succeeds (a sub-batch was skipped after an
+        // embedding timeout) — BUG-022: this must neither hang nor abort, and must NOT be committed
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+        vectorStore.partialOnSourceId = "a.md";
+        vectorStore.partialStored = 0; // worst case: all chunks skipped (would be a silent RAG gap)
+        KnowledgeSyncService service = serviceWith(connector, state, vectorStore);
+
+        // WHEN syncing
+        SyncReport report = service.syncAll();
+
+        // THEN the sync completes (no abort) but the incomplete document is NOT counted as ingested
+        assertEquals(1, report.processed());
+        assertEquals(0, report.ingested());
+        // AND it is NOT committed to the ledger, so it is retried instead of silently lost
+        assertTrue(state.listSourceIds(TYPE).isEmpty());
+        // AND the partial ingestion is observable (metric + structured log source)
+        assertEquals(1, observer.skips.size());
+        assertEquals("a.md", observer.skips.get(0).sourceId());
+
+        // WHEN the transient embedding failure clears and we sync again
+        vectorStore.partialOnSourceId = null;
+        SyncReport retry = service.syncAll();
+
+        // THEN the document self-heals: it is now fully ingested and committed to the ledger
+        assertEquals(1, retry.ingested());
+        assertEquals(List.of("a.md"), state.listSourceIds(TYPE));
+    }
 }

@@ -66,13 +66,23 @@ store phase hung, and why it was deterministic (same oversized article every run
    stored. One bad batch can no longer stall or abort the whole corpus sync.
 3. **Blank-chunk guard** — empty/whitespace-only chunks are dropped before embedding (a blank
    carries no signal and can hang the embedder).
-4. **Auto-sync re-enabled** — `kb_sync_after_deploy: true` restored in
+4. **No silent data loss (adversarial-review fix)** — `storeChunks` now returns a
+   `StoreResult(stored, attempted)`. `KnowledgeSyncService.reingest` **only commits the document's
+   `content_hash`** (`upsertState`) when the store is **complete** (`stored == attempted`). An
+   incomplete store (a sub-batch was skipped) is left **uncommitted** — since `deleteBySource` ran
+   first, the next idempotent sync **retries the whole document** and it self-heals, instead of
+   being marked done and silently dropping the missing chunks from the RAG forever. The partial
+   ingestion is observable: `SyncObserverPort.batchSkipped(...)` → counter
+   `voice_support.kb_sync_skipped` (tag `source_type`) + `WARN [KB-SYNC] op=batch-skipped …`.
+5. **Auto-sync re-enabled** — `kb_sync_after_deploy: true` restored in
    `deploy/ansible/group_vars/backend.yml`; a (re)deploy sync now always terminates (idempotent —
    unchanged sources skip by `content_hash`).
 
 **Tests:** `PgVectorStoreAdapterTest` — bounded batching (70 chunks → add() sizes `[32,32,6]`),
-a failing batch is skipped and the rest still store (`stored=38`, no exception), blank chunks
-dropped. Full backend suite green (580 tests, 0 failures).
+a failing batch is skipped and the rest still store (`stored=38`, `isComplete()==false`), blank
+chunks dropped. `KnowledgeSyncServiceTest.partially_stored_document_is_not_committed_and_self_heals_next_sync`
+— an incomplete store is not committed, is reported via `batchSkipped`, and is re-ingested on the
+next sync once the failure clears. Full backend suite green (581 tests, 0 failures).
 
 **Follow-up lever (only if a trickle-hang ever recurs on small batches):** give the embedding
 client an **overall** request timeout (e.g. a `JdkClientHttpRequestFactory` whose timeout covers

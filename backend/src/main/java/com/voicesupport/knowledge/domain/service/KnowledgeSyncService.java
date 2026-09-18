@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.domain.service;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.model.valueobject.StoreResult;
 import com.voicesupport.knowledge.domain.model.valueobject.SyncReport;
 import com.voicesupport.knowledge.domain.port.in.SyncKnowledgeUseCase;
 import com.voicesupport.knowledge.domain.port.out.KnowledgeSourceConnector;
@@ -67,8 +68,11 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
                 if (isUnchanged(document)) {
                     skipped++;
                 } else {
-                    totalChunks += reingest(document);
-                    ingested++;
+                    StoreResult result = reingest(document);
+                    totalChunks += result.stored();
+                    if (result.isComplete()) {
+                        ingested++;
+                    }
                 }
             }
             int deleted = removeStale(sourceType, seenIds);
@@ -92,16 +96,24 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
         return knownHash.isPresent() && knownHash.get().equals(document.contentHash());
     }
 
-    private int reingest(SourceDocument document) {
+    private StoreResult reingest(SourceDocument document) {
         vectorStorePort.deleteBySource(document.sourceType(), document.sourceId());
         List<TextChunker.Chunk> chunks = textChunker.chunk(document.content());
         long start = System.nanoTime();
-        int stored = vectorStorePort.storeChunks(document, chunks);
-        observer.batchStored(document.sourceType(), document.sourceId(), stored, elapsedMs(start));
-        statePort.upsertState(
-                document.sourceType(), document.sourceId(),
-                document.contentHash(), document.updatedAt(), stored);
-        return stored;
+        StoreResult result = vectorStorePort.storeChunks(document, chunks);
+        observer.batchStored(document.sourceType(), document.sourceId(), result.stored(), elapsedMs(start));
+        if (result.isComplete()) {
+            statePort.upsertState(
+                    document.sourceType(), document.sourceId(),
+                    document.contentHash(), document.updatedAt(), result.stored());
+        } else {
+            // BUG-022: a partial store (a sub-batch was skipped after an embedding timeout/error) is
+            // NOT committed. deleteBySource already ran, so leaving the content_hash uncommitted makes
+            // the next idempotent sync retry the whole document — instead of marking it done and
+            // silently dropping the missing chunks from the RAG forever.
+            observer.batchSkipped(document.sourceType(), document.sourceId(), result.skipped());
+        }
+        return result;
     }
 
     private static long elapsedMs(long startNanos) {
