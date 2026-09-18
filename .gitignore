@@ -28,6 +28,7 @@ backend/.env
 # Third-party operator content dumps fed into the CSV article connector at sync time.
 /articles.csv
 /articles-fr.csv
+/articles-en.csv
 *.kb.csv
 
 # Python
