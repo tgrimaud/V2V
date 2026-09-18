@@ -1,6 +1,6 @@
 # TASK-OPS-014 — Configure the English TTS voice (Gradium)
 
-**Type:** Ops / config task · **Status:** 🟡 Implemented — awaiting pilot deploy + voice verify
+**Type:** Ops / config task · **Status:** ✅ Done (2026-09-18) — deployed to t01+t02, voice id validated live
 **Branch:** `task/TASK-OPS-014-english-tts-voice` (off `feat/restart-from-scratch`)
 **Related:** TASK-OPS-013 (English KB), US-042 (per-language voice), ADR-0031
 
@@ -21,6 +21,8 @@ provider for both streaming and batch). The stakeholder provided the English Gra
 ## Acceptance
 
 - [x] `gradium_voice_id_en` set to the provided id.
-- [ ] Voice tier (t01+t02) redeployed; `GRADIUM_VOICE_ID_EN` present in the rendered `.env`.
-- [ ] An English turn synthesizes with the English voice (not the FR fallback; Gradium does not
-      reject the id à la `n=default`).
+- [x] Voice tier (t01+t02) redeployed at `0.9.0` (env re-render); `GRADIUM_VOICE_ID_EN=vimnD4UQG_36P43U`
+      present in the rendered `.env`; bridges healthy.
+- [x] Voice id validated live against Gradium TTS (`wss://api.gradium.ai/api/speech/tts`, English
+      text) from the bridge container: **38 audio frames (~130 KB base64), no error** — Gradium
+      accepts the id (not rejected à la `n=default`), so English turns synthesize with this voice.
