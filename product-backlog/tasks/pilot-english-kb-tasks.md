@@ -8,7 +8,7 @@ per-request (ADR-0031).
 
 ## TASK-OPS-013 — Pilot English KB corpus (Eir) + English FAQ markdown
 
-**Type:** Ops / content task · **Status:** 🟡 Implemented — awaiting user validation + pilot re-sync
+**Type:** Ops / content task · **Status:** ✅ Validated (user, 2026-09-18) — merged to `feat/restart-from-scratch`, pilot backend re-synced to the English corpus
 **Branch:** `task/TASK-OPS-013-pilot-english-kb` (off `feat/restart-from-scratch`)
 
 ### Context / decision
