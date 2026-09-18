@@ -1,103 +1,103 @@
 ---
 domain: commercial
-language: fr
+language: en
 ---
 
-# Base de connaissance — Offres Commerciales et Déménagement
+# Knowledge Base — Commercial Offers and Moving Home
 
-## Nouvelles souscriptions
+## New subscriptions
 
-### Je souhaite souscrire à une offre
+### I want to subscribe to a plan
 
-Pour souscrire :
-1. Rendez-vous sur www.telecom-exemple.fr/offres ou appelez le 3900.
-2. Testez votre éligibilité fibre/ADSL en entrant votre adresse.
-3. Choisissez votre offre (Essentiel, Confort ou Premium).
-4. Validez votre commande — un technicien vous contactera pour le raccordement fibre si nécessaire.
-5. Délai de mise en service : 7 à 15 jours ouvrés selon la technologie.
+To subscribe:
+1. Go to www.example-telecom.com/offers or call 3900.
+2. Test your fibre/ADSL eligibility by entering your address.
+3. Choose your plan (Essential, Comfort or Premium).
+4. Confirm your order — a technician will contact you for the fibre connection if needed.
+5. Activation time: 7 to 15 business days depending on the technology.
 
-### Documents nécessaires pour la souscription
+### Documents needed to subscribe
 
-- Une pièce d'identité (CNI, passeport ou titre de séjour).
-- Un RIB pour le prélèvement automatique.
-- Votre ancienne facture opérateur (pour la portabilité du numéro fixe).
-- Justificatif de domicile si différent de l'adresse d'installation.
+- A proof of identity (ID card, passport or residence permit).
+- Bank details (IBAN) for the direct debit.
+- Your previous operator invoice (for landline number portability).
+- Proof of address if different from the installation address.
 
-### La fibre est-elle disponible chez moi ?
+### Is fibre available at my home?
 
-Testez votre éligibilité sur www.telecom-exemple.fr/eligibilite :
-- Entrez votre adresse complète.
-- Le résultat indique si vous êtes éligible à la fibre FTTH, à la fibre mutualisée (FTTB) ou uniquement à l'ADSL/VDSL.
-- Si la fibre n'est pas encore disponible, vous pouvez vous inscrire pour être notifié dès qu'elle le sera.
+Test your eligibility at www.example-telecom.com/eligibility:
+- Enter your full address.
+- The result tells you whether you are eligible for FTTH fibre, shared fibre (FTTB) or only ADSL/VDSL.
+- If fibre is not available yet, you can register to be notified as soon as it is.
 
-## Déménagement
+## Moving home
 
-### Je déménage, que dois-je faire ?
+### I'm moving, what should I do?
 
-1. Signalez votre déménagement au moins 2 semaines à l'avance.
-2. Espace client > "Mon compte" > "Je déménage" ou appelez le 3900.
-3. Renseignez votre nouvelle adresse et la date souhaitée.
-4. Votre offre est transférée (même prix, mêmes options) si la technologie est identique.
-5. Si la fibre n'est pas disponible à votre nouvelle adresse, vous serez basculé sur ADSL sans frais supplémentaires (et re-basculé sur fibre dès disponibilité).
-6. Frais de déménagement : 49€ (gratuit pour les clients Premium).
+1. Report your move at least 2 weeks in advance.
+2. My Account > "My Account" > "I'm moving" or call 3900.
+3. Enter your new address and the desired date.
+4. Your plan is transferred (same price, same options) if the technology is the same.
+5. If fibre is not available at your new address, you will be switched to ADSL at no extra cost (and switched back to fibre as soon as it is available).
+6. Moving fee: €49 (free for Premium customers).
 
-### Je déménage dans une zone non couverte
+### I'm moving to an uncovered area
 
-Si votre nouvelle adresse n'est couverte par aucune offre Telecom-Exemple :
-1. Vous pouvez résilier sans frais, même en période d'engagement.
-2. Le retour des équipements reste obligatoire sous 30 jours.
-3. Votre solde de compte sera remboursé sous 10 jours ouvrés.
+If your new address is not covered by any Example Telecom plan:
+1. You can cancel at no cost, even during the contract period.
+2. Returning the equipment is still required within 30 days.
+3. Your account balance will be refunded within 10 business days.
 
-## Portabilité et numéros
+## Portability and numbers
 
-### Je veux garder mon numéro fixe
+### I want to keep my landline number
 
-La portabilité de votre numéro fixe est gratuite et automatique :
-1. Ne résiliez PAS votre ancien opérateur — nous nous en chargeons.
-2. Fournissez votre RIO fixe (obtenez-le en appelant le 3179 depuis votre ligne fixe).
-3. Le transfert prend 7 à 10 jours ouvrés.
-4. Pendant le transfert, votre ligne reste active chez l'ancien opérateur.
+Porting your landline number is free and automatic:
+1. Do NOT cancel your old operator — we take care of it.
+2. Provide your landline porting code (get it by calling 3179 from your landline).
+3. The transfer takes 7 to 10 business days.
+4. During the transfer, your line stays active with the old operator.
 
-### Je veux un nouveau numéro
+### I want a new number
 
-Si vous préférez un nouveau numéro :
-1. Indiquez-le lors de la souscription.
-2. Un numéro vous sera attribué lors de l'activation de la ligne.
-3. Vous pouvez ensuite configurer un renvoi d'appel de l'ancien numéro vers le nouveau (chez l'ancien opérateur, si disponible).
+If you prefer a new number:
+1. Say so when you subscribe.
+2. A number will be assigned to you when the line is activated.
+3. You can then set up call forwarding from the old number to the new one (with the old operator, if available).
 
-## Options et services additionnels
+## Options and add-on services
 
-### Quelles options TV sont disponibles ?
+### What TV options are available?
 
-| Pack | Chaînes | Prix |
+| Pack | Channels | Price |
 |------|---------|------|
-| Bouquet Sport | beIN Sports + Eurosport | 15€/mois |
-| Bouquet Cinéma | Canal+ + OCS | 25€/mois |
-| Bouquet Famille | Disney+ + Netflix | 20€/mois |
-| Bouquet International | 50 chaînes étrangères | 10€/mois |
+| Sport Pack | beIN Sports + Eurosport | €15/month |
+| Cinema Pack | Canal+ + OCS | €25/month |
+| Family Pack | Disney+ + Netflix | €20/month |
+| International Pack | 50 foreign channels | €10/month |
 
-Toutes les options sont sans engagement et résiliables à tout moment.
+All options are contract-free and can be cancelled at any time.
 
-### Répéteur Wi-Fi
+### Wi-Fi repeater
 
-- Inclus dans l'offre Premium (jusqu'à 2 répéteurs).
-- Disponible en option à 3€/mois pour les offres Essentiel et Confort.
-- Installation simple : branchez le répéteur, il se synchronise automatiquement avec la box.
-- Couvre jusqu'à 100m² supplémentaires par répéteur.
+- Included in the Premium plan (up to 2 repeaters).
+- Available as an option at €3/month for the Essential and Comfort plans.
+- Simple installation: plug in the repeater, it syncs automatically with the box.
+- Covers up to 100m² of extra range per repeater.
 
-### Ligne fixe — appels inclus
+### Landline — included calls
 
-Toutes les offres incluent les appels illimités vers les fixes en France métropolitaine et DOM.
-- Appels vers mobiles français : inclus dans les offres Confort et Premium.
-- Appels internationaux : voir les tarifs sur www.telecom-exemple.fr/tarifs-internationaux ou souscrire un pack international (5€/mois pour 2h vers 40 destinations).
+All plans include unlimited calls to landlines in Ireland.
+- Calls to Irish mobiles: included in the Comfort and Premium plans.
+- International calls: see the rates at www.example-telecom.com/international-rates or subscribe to an international pack (€5/month for 2h to 40 destinations).
 
-## Parrainage
+## Referrals
 
-### Comment parrainer un proche ?
+### How do I refer a friend?
 
-1. Espace client > "Parrainage" > Générer un code parrain.
-2. Communiquez ce code à votre filleul.
-3. Le filleul entre le code lors de sa souscription.
-4. Vous recevez 50€ de réduction sur votre prochaine facture.
-5. Votre filleul bénéficie de 30€ de remise sur ses frais de mise en service.
-6. Pas de limite au nombre de parrainages.
+1. My Account > "Referrals" > Generate a referral code.
+2. Share this code with your friend.
+3. Your friend enters the code when subscribing.
+4. You receive a €50 discount on your next invoice.
+5. Your friend gets a €30 discount on their activation fees.
+6. No limit on the number of referrals.

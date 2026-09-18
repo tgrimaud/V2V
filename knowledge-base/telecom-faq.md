@@ -1,110 +1,110 @@
 ---
 domain: support
-language: fr
+language: en
 ---
 
-# Base de connaissance — Support Telecom FAI
+# Knowledge Base — Telecom / ISP Support
 
-## Problèmes de connexion Internet
+## Internet connection problems
 
-### Ma box ne se connecte plus à Internet
+### My box no longer connects to the Internet
 
-1. Vérifiez que tous les câbles sont bien branchés (alimentation, câble Ethernet/fibre, câble téléphonique DSL).
-2. Redémarrez la box : débranchez l'alimentation, attendez 30 secondes, rebranchez.
-3. Vérifiez les voyants : le voyant "Internet" doit être vert fixe. S'il clignote ou est rouge, la connexion est en cours d'établissement ou en erreur.
-4. Si après 5 minutes le voyant reste rouge, effectuez un reset complet : appuyez sur le bouton Reset à l'arrière de la box avec un trombone pendant 10 secondes.
-5. Si le problème persiste, vérifiez s'il y a une panne réseau dans votre zone sur notre site status.telecom-exemple.fr.
+1. Check that all cables are properly plugged in (power, Ethernet/fibre cable, DSL phone cable).
+2. Restart the box: unplug the power, wait 30 seconds, plug it back in.
+3. Check the lights: the "Internet" light should be solid green. If it blinks or is red, the connection is being established or has failed.
+4. If after 5 minutes the light stays red, do a full reset: press the Reset button on the back of the box with a paperclip for 10 seconds.
+5. If the problem persists, check whether there is a network outage in your area on our site status.example-telecom.com.
 
-### Ma connexion est lente
+### My connection is slow
 
-1. Testez votre débit sur speedtest.telecom-exemple.fr.
-2. Si le débit est inférieur à 50% de votre offre, essayez en connexion filaire (Ethernet) pour éliminer un problème Wi-Fi.
-3. Redémarrez votre box.
-4. Éloignez la box des sources d'interférences (micro-ondes, téléphones sans fil, babyphones).
-5. Si vous êtes en fibre, vérifiez que le câble optique n'est pas plié ou endommagé.
-6. En ADSL, la distance au central téléphonique impacte le débit — c'est une limitation physique.
+1. Test your speed at speedtest.example-telecom.com.
+2. If the speed is below 50% of your plan, try a wired (Ethernet) connection to rule out a Wi-Fi problem.
+3. Restart your box.
+4. Keep the box away from sources of interference (microwaves, cordless phones, baby monitors).
+5. If you are on fibre, check that the optical cable is not bent or damaged.
+6. On ADSL, the distance to the telephone exchange affects speed — this is a physical limitation.
 
-### Coupures Internet fréquentes
+### Frequent Internet drops
 
-1. Notez les heures des coupures — si c'est toujours aux mêmes heures (20h-22h), c'est probablement de la congestion réseau.
-2. Vérifiez la température de la box — une surchauffe peut causer des redémarrages. Assurez une bonne ventilation.
-3. En ADSL, les coupures peuvent venir d'un problème de ligne. Testez en branchant la box directement sur la prise téléphonique (sans rallonge ni filtre).
-4. Mettez à jour le firmware de la box : Menu > Paramètres > Mise à jour.
+1. Note the times of the drops — if it is always at the same times (8pm-10pm), it is probably network congestion.
+2. Check the box temperature — overheating can cause restarts. Ensure good ventilation.
+3. On ADSL, drops can come from a line problem. Test by plugging the box directly into the phone socket (no extension or filter).
+4. Update the box firmware: Menu > Settings > Update.
 
-## Problèmes Wi-Fi
+## Wi-Fi problems
 
-### Mon Wi-Fi ne fonctionne pas
+### My Wi-Fi is not working
 
-1. Vérifiez que le Wi-Fi est activé sur la box (voyant Wi-Fi allumé). Si éteint, appuyez sur le bouton Wi-Fi de la box.
-2. Vérifiez que votre appareil n'est pas en mode avion.
-3. Oubliez le réseau Wi-Fi sur votre appareil et reconnectez-vous avec le mot de passe inscrit sous la box.
-4. Si vous avez changé le mot de passe Wi-Fi et l'avez oublié, connectez-vous à l'interface d'administration (192.168.1.1) via un câble Ethernet.
+1. Check that Wi-Fi is enabled on the box (Wi-Fi light on). If off, press the Wi-Fi button on the box.
+2. Check that your device is not in airplane mode.
+3. Forget the Wi-Fi network on your device and reconnect with the password printed under the box.
+4. If you changed the Wi-Fi password and forgot it, connect to the admin interface (192.168.1.1) via an Ethernet cable.
 
-### Le Wi-Fi ne couvre pas toute la maison
+### Wi-Fi does not cover the whole house
 
-1. Placez la box au centre de votre logement, en hauteur, loin des murs épais.
-2. Utilisez la bande 5 GHz pour les appareils proches (plus rapide) et la bande 2.4 GHz pour les appareils éloignés (meilleure portée).
-3. Si votre logement fait plus de 80m², envisagez un répéteur Wi-Fi ou un kit CPL Wi-Fi (disponible dans nos accessoires à partir de 49€).
-4. L'option Wi-Fi Mesh est disponible avec le pack "Maison connectée" à 5€/mois.
+1. Place the box in the centre of your home, up high, away from thick walls.
+2. Use the 5 GHz band for nearby devices (faster) and the 2.4 GHz band for distant devices (better range).
+3. If your home is larger than 80m², consider a Wi-Fi repeater or a Wi-Fi powerline kit (available in our accessories from €49).
+4. The Wi-Fi Mesh option is available with the "Connected Home" pack at €5/month.
 
-## Forfaits et facturation
+## Plans and billing
 
-### Comprendre ma facture
+### Understanding my invoice
 
-Votre facture mensuelle comprend :
-- L'abonnement fixe (Internet + TV + Téléphone) selon votre offre.
-- Les communications hors forfait (appels internationaux, numéros surtaxés).
-- Les options souscrites (Wi-Fi Mesh, décodeur TV supplémentaire, etc.).
-- Les éventuels frais ponctuels (frais d'activation, déplacement technicien).
+Your monthly invoice includes:
+- The fixed subscription (Internet + TV + Phone) depending on your plan.
+- Out-of-plan calls (international calls, premium-rate numbers).
+- The options you subscribed to (Wi-Fi Mesh, extra TV decoder, etc.).
+- Any one-off charges (activation fees, technician visit).
 
-La facture est disponible le 5 de chaque mois dans votre espace client.
+The invoice is available on the 5th of each month in My Account.
 
-### Changer d'offre
+### Changing plan
 
-1. Connectez-vous à votre espace client sur www.telecom-exemple.fr/mon-compte.
-2. Allez dans "Mon offre" > "Changer d'offre".
-3. Le changement est effectif sous 48h sans coupure de service.
-4. En cas de montée en gamme, la différence est facturée au prorata.
-5. En cas de descente en gamme, le changement prend effet au prochain cycle de facturation.
+1. Sign in to My Account at www.example-telecom.com/my-account.
+2. Go to "My Plan" > "Change plan".
+3. The change takes effect within 48h with no service interruption.
+4. For an upgrade, the difference is billed on a pro-rata basis.
+5. For a downgrade, the change takes effect at the next billing cycle.
 
-### Nos offres actuelles
+### Our current plans
 
-| Offre | Débit | Prix | Inclus |
+| Plan | Speed | Price | Included |
 |-------|-------|------|--------|
-| Essentiel | 300 Mbit/s | 29,99€/mois | Internet + Téléphone fixe illimité France |
-| Confort | 1 Gbit/s | 39,99€/mois | Internet + TV 100 chaînes + Téléphone illimité |
-| Premium | 8 Gbit/s | 49,99€/mois | Internet + TV 200 chaînes + Téléphone illimité + Wi-Fi Mesh inclus |
+| Essential | 300 Mbit/s | €29.99/month | Internet + unlimited landline (Ireland) |
+| Comfort | 1 Gbit/s | €39.99/month | Internet + TV 100 channels + unlimited landline |
+| Premium | 8 Gbit/s | €49.99/month | Internet + TV 200 channels + unlimited landline + Wi-Fi Mesh included |
 
-Engagement 12 mois. Frais d'activation 49€ offerts en ligne.
+12-month contract. €49 activation fee waived online.
 
-## Décodeur TV
+## TV decoder
 
-### Mon décodeur ne s'allume pas
+### My decoder does not turn on
 
-1. Vérifiez le branchement électrique du décodeur.
-2. Testez avec une autre prise électrique.
-3. Vérifiez le câble HDMI entre le décodeur et la TV.
-4. Si le voyant du décodeur est orange fixe, il est en veille — appuyez sur le bouton d'alimentation.
-5. Si aucun voyant ne s'allume, le décodeur est peut-être défectueux. Contactez-nous pour un échange.
+1. Check the decoder's power connection.
+2. Try another power socket.
+3. Check the HDMI cable between the decoder and the TV.
+4. If the decoder light is solid orange, it is in standby — press the power button.
+5. If no light comes on, the decoder may be faulty. Contact us for a replacement.
 
-### Pas d'image ou image saccadée
+### No picture or choppy picture
 
-1. Vérifiez que votre TV est sur la bonne source HDMI.
-2. Redémarrez le décodeur (débrancher/rebrancher).
-3. Une image saccadée peut indiquer un débit Internet insuffisant pour le flux TV. Branchez le décodeur en Ethernet plutôt qu'en Wi-Fi.
-4. Minimum requis : 10 Mbit/s pour la HD, 25 Mbit/s pour la 4K.
+1. Check that your TV is on the correct HDMI source.
+2. Restart the decoder (unplug/plug back in).
+3. A choppy picture can indicate insufficient Internet speed for the TV stream. Connect the decoder via Ethernet rather than Wi-Fi.
+4. Minimum required: 10 Mbit/s for HD, 25 Mbit/s for 4K.
 
-## Escalade vers un conseiller
+## Escalation to an advisor
 
-### Quand transférer à un humain
+### When to transfer to a human
 
-Transférez le client à un conseiller humain dans les cas suivants :
-- Demande de résiliation
-- Réclamation sur une facture
-- Problème technique non résolu après toutes les étapes de dépannage
-- Demande de déplacement de technicien
-- Le client exprime de la frustration ou de l'insatisfaction
-- Toute question sur les données personnelles (RGPD)
-- Problème de sécurité sur le compte (piratage, usurpation)
+Transfer the customer to a human advisor in the following cases:
+- Cancellation request
+- Complaint about an invoice
+- Technical problem unresolved after all troubleshooting steps
+- Request for a technician visit
+- The customer expresses frustration or dissatisfaction
+- Any question about personal data (GDPR)
+- Account security issue (hacking, identity theft)
 
-Phrase de transfert : "Je comprends votre situation. Je vais vous mettre en relation avec un conseiller spécialisé qui pourra vous aider davantage. Merci de patienter quelques instants."
+Transfer sentence: "I understand your situation. I'll connect you with a specialist advisor who can help you further. Please hold on for a moment."
