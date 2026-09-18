@@ -90,8 +90,10 @@ public class KnowledgeConfig {
     // Single adapter instance exposed as both the write port (VectorStorePort) and the
     // read port (VectorSearchPort); Spring injects it by interface type where required.
     @Bean
-    public PgVectorStoreAdapter pgVectorStoreAdapter(VectorStore vectorStore) {
-        return new PgVectorStoreAdapter(vectorStore);
+    public PgVectorStoreAdapter pgVectorStoreAdapter(
+            VectorStore vectorStore,
+            @Value("${voice-support.knowledge.store.batch-size:32}") int storeBatchSize) {
+        return new PgVectorStoreAdapter(vectorStore, storeBatchSize);
     }
 
     @Bean

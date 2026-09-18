@@ -143,6 +143,11 @@ voice-support:
   knowledge:
     chunk-size: 500
     chunk-overlap: 50
+    # BUG-022: max chunks embedded per vectorStore.add(...) during a sync. Bounding the batch keeps
+    # each embedding request short enough for the embedding client's read timeout to bound it, so a
+    # slow/hung batch fails fast and is skipped instead of stalling the whole corpus sync.
+    store:
+      batch-size: ${KB_STORE_BATCH_SIZE:32}
     markdown-path: ${KB_MARKDOWN_PATH:../knowledge-base}
     default-language: ${KB_DEFAULT_LANGUAGE:fr}
     # CSV article connector (TASK-BE-013, ADR-0030). articles.csv (document_id,title,content

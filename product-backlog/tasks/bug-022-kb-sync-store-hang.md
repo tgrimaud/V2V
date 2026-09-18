@@ -1,6 +1,6 @@
 # BUG-022 — KB sync hangs in the chunk-embedding store phase (English corpus)
 
-**Type:** Bug · **Severity:** High (blocks full KB sync + would abort deploys) · **Status:** 🔴 Open
+**Type:** Bug · **Severity:** High (blocks full KB sync + would abort deploys) · **Status:** 🟢 Fixed (2026-09-18, pending QA/merge)
 **Found:** 2026-09-18 during TASK-OPS-013 (switch pilot RAG corpus to English)
 **Area:** backend KB sync / embedding (Ollama sidecar) · **Related:** TASK-OPS-009, ADR-0048, ADR-0030, BUG-021
 
@@ -24,7 +24,7 @@ article), then **hangs indefinitely in the store phase** (chunk → embed → up
    redeploy would burn ~45 min then **abort the whole rollout** — a real deploy hazard.
 3. A hung sync **degrades live retrieval** (503s) until the backend is restarted.
 
-## Current mitigation (shipped in this branch)
+## Interim mitigation (superseded by the fix above — kept for history)
 
 - `deploy/ansible/group_vars/backend.yml`: `kb_sync_after_deploy: false` (auto-sync OFF until
   fixed). The EN corpus is **already ingested and persistent** in pgvector — a redeploy does not
@@ -40,24 +40,44 @@ article), then **hangs indefinitely in the store phase** (chunk → embed → up
   billing, FTTC→FTTH, cancellation; confidence 0.69–0.83). A small **tail** of articles may be
   un-ingested (the store hung near the end) — acceptable for the pilot, to be closed by the fix.
 
-## Root-cause hypotheses (to confirm)
+## Root cause (confirmed)
 
-- The chunk-embedding HTTP call to Ollama has **no effective read timeout** on the sync path (the
-  per-query retrieval timeout `voice-support.embedding.timeout-ms` ~5 s does not cover the batch
-  store embed), so a single stuck/half-open call blocks forever with the sidecar idle.
-- A **degenerate chunk** (empty/whitespace-only after `htmlToText`, or a single very long
-  unbroken token from a large HTML article) makes `nomic-embed-text` hang instead of error.
+`PgVectorStoreAdapter.storeChunks` batched **all chunks of a document into one
+`vectorStore.add(...)`** (TASK-BE-014, for one embedding + one multi-row insert per document). A
+large HTML article (e.g. article 241, ~135 KB → hundreds of ~500-char chunks) therefore produced
+**one huge embedding request**. The embedding client's timeout *is* configured
+(`voice-support.embedding.timeout-ms` ~5 s, `SimpleClientHttpRequestFactory.setReadTimeout`) and
+works fine for the per-query retrieval path — but a `SimpleClientHttpRequestFactory` read timeout
+is a **per-read-gap `SO_TIMEOUT`, not an overall request budget**. On a very large batch the
+sidecar trickles / stays busy just enough that no single read gap exceeds 5 s, so the timeout
+**never fires** and the call blocks indefinitely (sidecar near-idle, no `SyncReport`, live
+retrieval starved → 503). This is why parse (one small embed per article) succeeded while the
+store phase hung, and why it was deterministic (same oversized article every run).
 
-## Proposed fix (not yet implemented)
+## Fix (implemented)
 
-1. Add a bounded **read timeout** to the sync/store embedding call + **skip-on-timeout** that
-   records a miss (like WarmUpService) and continues, so one bad chunk cannot stall the whole
-   sync; surface skipped chunks in the `SyncReport`.
-2. Guard `TextChunker`/store against **degenerate chunks** (drop empty/whitespace-only; hard-cap
-   chunk char/token length so no chunk exceeds the embedding context).
-3. Regression: a sync over a fixture containing an oversized/degenerate article completes with a
-   `SyncReport` (skipped>0) instead of hanging.
-4. Re-enable `kb_sync_after_deploy: true` once the sync always terminates.
+1. **Bounded store batches** — `PgVectorStoreAdapter.storeChunks` now embeds chunks in batches of
+   `voice-support.knowledge.store.batch-size` (`KB_STORE_BATCH_SIZE`, default **32**) instead of
+   one call per document. Each request is small enough that the existing per-read timeout bounds
+   it, so a slow/hung batch **fails fast** instead of trickling forever.
+2. **Skip-on-failure** — a batch whose `vectorStore.add(...)` throws (read timeout, embed error) is
+   **skipped and logged** (`WARN [KB-SYNC] skipped embedding batch source_type=… source_id=…
+   skipped_chunks=… error_code=…`) and the sync continues; `storeChunks` returns the count actually
+   stored. One bad batch can no longer stall or abort the whole corpus sync.
+3. **Blank-chunk guard** — empty/whitespace-only chunks are dropped before embedding (a blank
+   carries no signal and can hang the embedder).
+4. **Auto-sync re-enabled** — `kb_sync_after_deploy: true` restored in
+   `deploy/ansible/group_vars/backend.yml`; a (re)deploy sync now always terminates (idempotent —
+   unchanged sources skip by `content_hash`).
+
+**Tests:** `PgVectorStoreAdapterTest` — bounded batching (70 chunks → add() sizes `[32,32,6]`),
+a failing batch is skipped and the rest still store (`stored=38`, no exception), blank chunks
+dropped. Full backend suite green (580 tests, 0 failures).
+
+**Follow-up lever (only if a trickle-hang ever recurs on small batches):** give the embedding
+client an **overall** request timeout (e.g. a `JdkClientHttpRequestFactory` whose timeout covers
+send+receive, not just a read gap). Not needed for the observed hang — bounding the batch already
+makes the per-read timeout effective — so deferred to keep the retrieval path unchanged.
 
 ## Repro
 
