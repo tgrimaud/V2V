@@ -11,6 +11,12 @@ public interface SyncObserverPort {
     // vector-store write, so per-batch embedding/insert latency is measurable as a distribution.
     void batchStored(String sourceType, String sourceId, int chunkCount, long elapsedMs);
 
+    // BUG-022: a document stored fewer chunks than it attempted (a sub-batch was skipped after an
+    // embedding timeout/error). The document is left UNCOMMITTED so the next idempotent run retries
+    // it; this makes the partial ingestion observable (metric + structured log) instead of a silent
+    // permanent RAG gap. skippedChunks is the number that failed to embed.
+    void batchSkipped(String sourceType, String sourceId, int skippedChunks);
+
     // A connector sync finished: full counts, total chunks written and wall-clock duration so
     // throughput (chunks/s) can be reported for the bulk-ingest latency evidence.
     void syncCompleted(String sourceType, SyncReport report, int totalChunks, long durationMs);

@@ -22,6 +22,7 @@ import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
 @SelectClasspathResource("features/conversation-grounding.feature")
 @SelectClasspathResource("features/conversation-memory.feature")
 @SelectClasspathResource("features/csv-knowledge-ingestion.feature")
+@SelectClasspathResource("features/kb-sync-resilience.feature")
 @SelectClasspathResource("features/knowledge-ingestion.feature")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.voicesupport.bdd.steps")
 public class RunKnowledgeBddTest {

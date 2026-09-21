@@ -1,6 +1,7 @@
 package com.voicesupport.knowledge.infrastructure.adapter.out.vectorstore;
 
 import com.voicesupport.knowledge.domain.model.valueobject.SourceDocument;
+import com.voicesupport.knowledge.domain.model.valueobject.StoreResult;
 import com.voicesupport.knowledge.domain.service.TextChunker;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -66,6 +68,62 @@ class PgVectorStoreAdapterTest {
         assertEquals("customer", vectorStore.added.get(0).getMetadata().get("audience"));
     }
 
+    @Test
+    @DisplayName("BUG-022: a document's chunks are stored in bounded batches, not one huge add() call")
+    void storeChunksSplitsIntoBoundedBatches() {
+        PgVectorStoreAdapter batched = new PgVectorStoreAdapter(vectorStore, 32);
+
+        StoreResult result = batched.storeChunks(document("241"), chunks(70));
+
+        assertEquals(70, result.stored());
+        assertEquals(70, result.attempted());
+        assertTrue(result.isComplete());
+        assertEquals(List.of(32, 32, 6), vectorStore.addCallSizes);
+    }
+
+    @Test
+    @DisplayName("BUG-022: a failing/hung embedding batch is skipped and the sync continues")
+    void storeChunksSkipsFailingBatchAndContinues() {
+        vectorStore.failOnCall = 1; // the second batch throws (simulates the read-timeout on a hung batch)
+        PgVectorStoreAdapter batched = new PgVectorStoreAdapter(vectorStore, 32);
+
+        StoreResult result = batched.storeChunks(document("241"), chunks(70));
+
+        assertEquals(38, result.stored()); // 32 (batch 0) + 6 (batch 2); the failing 32 is skipped, no exception
+        assertEquals(70, result.attempted());
+        assertEquals(32, result.skipped());
+        assertFalse(result.isComplete()); // incomplete -> caller must NOT commit the document
+        assertEquals(38, vectorStore.added.size());
+    }
+
+    @Test
+    @DisplayName("BUG-022: blank/whitespace-only chunks are never embedded")
+    void storeChunksDropsBlankChunks() {
+        List<TextChunker.Chunk> withBlanks = List.of(
+                new TextChunker.Chunk("real content", "s"),
+                new TextChunker.Chunk("   ", "s"),
+                new TextChunker.Chunk("", "s"));
+
+        StoreResult result = adapter.storeChunks(document("241"), withBlanks);
+
+        assertEquals(1, result.stored());
+        assertEquals(1, result.attempted()); // blanks are not counted as attempted
+        assertEquals(1, vectorStore.added.size());
+    }
+
+    private static SourceDocument document(String id) {
+        return SourceDocument.create(
+                "csv-article", id, "Title", null, "content", "support", "customer", "en", Instant.now());
+    }
+
+    private static List<TextChunker.Chunk> chunks(int count) {
+        List<TextChunker.Chunk> chunks = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            chunks.add(new TextChunker.Chunk("chunk " + i, "section"));
+        }
+        return chunks;
+    }
+
     private String requireFilter() {
         assertNotNull(vectorStore.lastRequest, "similaritySearch was not invoked");
         Filter.Expression expression = vectorStore.lastRequest.getFilterExpression();
@@ -75,12 +133,21 @@ class PgVectorStoreAdapterTest {
 
     // Minimal Spring AI VectorStore fake: captures the search request + added documents so the
     // audience filter and the stored audience metadata can be asserted without a real pgvector.
+    // Also records the size of each add() call and can fail a chosen call to exercise BUG-022.
     private static final class CapturingVectorStore implements VectorStore {
         private SearchRequest lastRequest;
         private final List<Document> added = new ArrayList<>();
+        private final List<Integer> addCallSizes = new ArrayList<>();
+        private int failOnCall = -1;
+        private int addCalls = 0;
 
         @Override
         public void add(List<Document> documents) {
+            int call = addCalls++;
+            if (call == failOnCall) {
+                throw new RuntimeException("embedding batch timed out");
+            }
+            addCallSizes.add(documents.size());
             added.addAll(documents);
         }
 

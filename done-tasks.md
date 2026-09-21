@@ -3,6 +3,71 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-18 — BUG-022: KB sync store-phase hang fixed (bounded embedding batches)
+
+**Summary:**
+
+- **Root cause.** `PgVectorStoreAdapter.storeChunks` embedded a whole document in **one**
+  `vectorStore.add(...)` (TASK-BE-014). A large HTML article (article 241 ≈ 135 KB → hundreds of
+  ~500-char chunks) produced **one huge embedding request**. The embedding client timeout
+  (`voice-support.embedding.timeout-ms` ~5 s) works for per-query retrieval but is a
+  `SimpleClientHttpRequestFactory` **per-read-gap `SO_TIMEOUT`, not an overall budget**: on a giant
+  batch the sidecar trickles just enough that no read gap hits 5 s, so it **never fires** and the
+  call blocks forever (sidecar near-idle, no `SyncReport`, live retrieval starved → 503). Explains
+  why parse (small per-article embed) succeeded while store hung, deterministically.
+- **Fix.** `storeChunks` now embeds in **bounded batches** (`voice-support.knowledge.store.batch-size`
+  / `KB_STORE_BATCH_SIZE`, default **32**) so each request is short enough for the existing read
+  timeout to bite; a batch that still fails/times out is **skipped + logged**
+  (`WARN [KB-SYNC] skipped embedding batch … skipped_chunks=… error_code=…`) and the sync continues,
+  returning the count actually stored. **Blank/whitespace-only chunks are dropped** before embedding.
+  No `SyncReport` arity change (REST contract untouched).
+- **No silent data loss (adversarial-review finding).** `reingest` did `deleteBySource` then
+  `upsertState` unconditionally, so a skipped batch would mark a partially/zero-stored document as
+  "done" → the missing chunks were never retried (silent permanent RAG gap). Fixed: `storeChunks`
+  returns `StoreResult(stored, attempted)`; the sync **commits the `content_hash` only when the
+  store is complete**, else leaves it uncommitted so the next idempotent run re-ingests the whole
+  document (self-heals). Partial ingestion is observable via `SyncObserverPort.batchSkipped` →
+  counter `voice_support.kb_sync_skipped` + `WARN [KB-SYNC] op=batch-skipped …`.
+- **Auto-sync re-enabled.** `kb_sync_after_deploy: true` restored in `group_vars/backend.yml` — a
+  (re)deploy sync now always terminates (idempotent: unchanged sources skip by `content_hash`).
+- **Tests.** `PgVectorStoreAdapterTest`: bounded batching (70 chunks → add() sizes `[32,32,6]`),
+  failing batch skipped while the rest store (`stored=38`, `isComplete()==false`), blank chunks
+  dropped. `KnowledgeSyncServiceTest`: an incomplete store is not committed, is reported via
+  `batchSkipped`, and self-heals on the next sync. Full backend suite **581/0**. Follow-up (only if
+  a trickle-hang recurs on small batches): an *overall* request timeout via a JDK-HttpClient request
+  factory — deferred, not needed for the observed hang.
+- Adversarial review: passed after this remediation (was Blocked 80/100 on the silent-data-loss
+  finding). Branch `fix/BUG-022-kb-sync-store-hang`. Not merged (awaiting user).
+
+## 2026-09-18 — TASK-OPS-013: pilot RAG corpus switched to English (Eir) + BUG-022 found
+
+**Summary:**
+
+- **TASK-OPS-013 — Pilot English KB (Eir).** The pilot RAG corpus was pinned to the French
+  translation (`articles-fr.csv`), so English Eir questions deflected to an advisor. The **original
+  English Eir corpus already existed in-repo** (`articles-sample.kb.csv`, 306 articles) — the source
+  `articles-fr.csv` was translated from. Renamed it to `articles-en.csv` and pointed the `csv-article`
+  connector at it (`kb_csv_filename: articles-en.csv`, `kb_csv_language: en`); no backend code change
+  (the backend is already bilingual-capable — `csv-article` EN + `csv-article-fr` FR connectors, and
+  each chunk already carries `language` metadata). Also **translated the 3 markdown FAQ** files FR→EN
+  (`billing`/`telecom`/`commercial`, domain routing preserved). Both CSV and markdown are **mounted
+  assets** (not baked into the image), so this shipped at image `0.9.1` via **deploy + KB re-sync**,
+  no rebuild/release. English-only single-corpus (bilingual + retrieval language filter stays the
+  target **TASK-BE-034**). `mvn test` 577/0. Merged `--no-ff` → mainline.
+- **Deploy + verify.** Backend redeployed on t03+t04 (assets recopied), KB re-synced **manually with
+  a warm-up gate** (BUG-021 cold-start 401 avoided). `vector_store` now holds **4872 `csv-article`/en
+  chunks + 44 markdown (EN content)**; FR `csv-article` fully replaced. **English grounding is live**
+  on both nodes — verified: slow-internet, view-bill, FTTC→FTTH (CSV article 775), cancellation
+  (confidence 0.69–0.83), all answered in English from English content, no advisor deflection.
+- **BUG-022 discovered (High, open).** The CSV sync **hangs deterministically in the chunk-embedding
+  store phase** after parse completes — the Ollama embedding call never returns and has no read
+  timeout, the sidecar goes idle, the sync never emits a `SyncReport`, and while hung it saturates the
+  embedding path (live `/converse` → 503 `ERR_UPSTREAM`). The store commits incrementally (bulk of the
+  corpus is in; a small tail may be missing). Mitigation shipped: `kb_sync_after_deploy: false` (so
+  future deploys don't hang/abort) + a manual gated (re)sync procedure. Root-cause hypotheses +
+  proposed fix (embedding read-timeout + skip-on-timeout, degenerate/oversized-chunk guard) in
+  `tasks/bug-022-kb-sync-store-hang.md`.
+
 ## 2026-09-18 — v0.9.1 release: Eir English persona prompt ("Bob") + pilot LLM fix
 
 **Summary:**

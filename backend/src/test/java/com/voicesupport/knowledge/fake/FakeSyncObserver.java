@@ -17,13 +17,22 @@ public class FakeSyncObserver implements SyncObserverPort {
     public record Failure(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode) {
     }
 
+    public record Skip(String sourceType, String sourceId, int skippedChunks) {
+    }
+
     public final List<Batch> batches = new ArrayList<>();
     public final List<Completion> completions = new ArrayList<>();
     public final List<Failure> failures = new ArrayList<>();
+    public final List<Skip> skips = new ArrayList<>();
 
     @Override
     public void batchStored(String sourceType, String sourceId, int chunkCount, long elapsedMs) {
         batches.add(new Batch(sourceType, sourceId, chunkCount, elapsedMs));
+    }
+
+    @Override
+    public void batchSkipped(String sourceType, String sourceId, int skippedChunks) {
+        skips.add(new Skip(sourceType, sourceId, skippedChunks));
     }
 
     @Override

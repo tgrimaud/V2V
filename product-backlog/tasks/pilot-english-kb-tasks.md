@@ -59,6 +59,20 @@ re-sync ~15-30 min on the pilot Ollama sidecar (idempotent afterwards).
 - [x] Pilot corpus = English (`articles-en.csv`, `kb_csv_language: en`); FR kept only as bilingual-
       target reference (TASK-BE-034).
 - [x] 3 markdown FAQ translated to English (domain routing preserved).
-- [x] No image rebuild (mounted assets); ships at `0.9.1` via deploy + re-sync.
-- [ ] User validation.
-- [ ] Pilot re-sync + verify a grounded English billing answer (not an advisor deflection).
+- [x] No image rebuild (mounted assets); shipped at `0.9.1` via deploy + re-sync.
+- [x] User validation (2026-09-18).
+- [x] Pilot re-synced + grounded English answers verified on **both** nodes (slow-internet,
+      billing, FTTC→FTTH, cancellation; confidence 0.69–0.83) — no advisor deflection.
+
+### Deploy outcome (2026-09-18)
+
+- Backend redeployed on t03+t04 at `0.9.1` (assets recopied: `articles-en.csv` + EN FAQ). Auto
+  KB sync was run **manually with a warm-up gate** (avoided the BUG-021 cold-start 401).
+- `vector_store` now holds **4872 `csv-article`/en chunks + 44 markdown (EN content)**; the FR
+  `csv-article` rows were fully replaced by English. EN grounding is **live**.
+- ⚠️ **BUG-022 discovered**: the CSV sync **hangs deterministically in the chunk-embedding store
+  phase** (Ollama idle, no timeout; saturates embedding → live 503s). The store commits
+  incrementally, so the bulk of the corpus is ingested (4872 chunks) but a small **tail** may be
+  missing, and the sync never returns a `SyncReport`. Mitigation shipped: `kb_sync_after_deploy:
+  false` (so future deploys don't hang/abort) + manual gated procedure. Full fix tracked in
+  **BUG-022** (`tasks/bug-022-kb-sync-store-hang.md`).

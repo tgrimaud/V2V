@@ -83,6 +83,17 @@ kb_csv_language: "en"
 # POST /api/knowledge/sync so a (re)deploy never leaves the RAG markdown-only or empty
 # (the image ships no KB; the sync loads the mounted assets into pgvector). Idempotent:
 # a second run skips unchanged sources by content_hash. Backend tier only.
+#
+# BUG-022 (FIXED): the store phase used to embed a whole document in ONE vectorStore.add(...),
+# so a large article (hundreds of chunks) produced one huge embedding call the client's
+# per-read timeout could not bound (it fires on a read gap, not overall) — a single slow/hung
+# batch stalled the entire sync forever, saturated the Ollama sidecar (live retrieval → 503
+# ERR_UPSTREAM) and, with serial:1/max_fail_percentage:0 + the 90x30s poll, aborted the whole
+# rollout. Fixed in PgVectorStoreAdapter: chunks are now embedded in bounded batches
+# (KB_STORE_BATCH_SIZE, default 32) so each request stays short enough for the read timeout to
+# bite, and a batch that still fails/times out is skipped + logged instead of hanging. Blank
+# chunks are dropped. Auto-sync is therefore RE-ENABLED: a (re)deploy always terminates
+# (idempotent — unchanged sources skip by content_hash, so re-deploys finish in seconds).
 kb_sync_after_deploy: true
 # The first CSV sync is slow: ~300 articles are embedded on the CPU Ollama sidecar AND
 # each is domain-classified by an embedding call at parse time (ADR-0030), so a full run
