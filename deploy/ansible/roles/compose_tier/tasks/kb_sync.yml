@@ -23,10 +23,15 @@
   run_once: true
   no_log: true
 
+# Use .splitlines() (not .split('\n')): inside this YAML folded scalar the literal
+# `\n` stays a two-char backslash-n sequence rather than a newline, so .split('\n')
+# never split the .env and yielded an EMPTY key -> the sync POST hit the api-key gate
+# with an empty header and failed 401 once CONVERSATION_API_KEY was set (BUG-023).
+# .splitlines() splits on real line breaks regardless of the escaping ambiguity.
 - name: "Extract CONVERSATION_API_KEY from the .env"
   ansible.builtin.set_fact:
     kb_sync_api_key: >-
-      {{ (kb_sync_env_slurp.content | b64decode).split('\n')
+      {{ (kb_sync_env_slurp.content | b64decode).splitlines()
          | select('match', '^CONVERSATION_API_KEY=')
          | map('regex_replace', '^CONVERSATION_API_KEY=', '')
          | first | default('') }}
