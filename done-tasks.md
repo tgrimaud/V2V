@@ -3,6 +3,36 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
+
+**Summary:**
+
+- **Deployed backend `0.9.2` to the eir-ai4cc-tst pilot** (BUG-022 + TASK-OPS-014 fixes) via
+  `ansible-playbook deploy.yml -e image_tag=0.9.2 --limit backend,localhost`. RECAP green,
+  **zero failures** on both backend nodes (`vla-t03` ok=30, `vla-t04` ok=26).
+- **BUG-023 (new, found + fixed during this deploy).** The post-deploy KB auto-sync failed with
+  **HTTP 401 `A valid x-api-key header is required`**. Root cause: `compose_tier/kb_sync.yml`
+  extracted the api-key with `.split('\n')` inside a YAML **folded scalar** (`>-`), where the
+  literal `\n` is a two-char backslash-n (not a newline) → the split never matched, the key came
+  out **empty**, and the sync POST hit the (now-closed) api-key gate with an empty header. Latent
+  while `CONVERSATION_API_KEY` was empty (gate open); exposed once a 64-char key was configured.
+  **Fix:** use `.splitlines()`. Verified on the pilot (`t03`): `.split('\n')` → `extracted_len=0`
+  / warm-up 401; `.splitlines()` → `extracted_len=64` / warm-up 200. Ansible-only (no image
+  rebuild / re-tag). Branch `fix/BUG-023-kb-sync-apikey-extraction`, ticket
+  `product-backlog/tasks/bug-023-kb-sync-apikey-extraction.md`.
+- **BUG-022 validated in production.** With the fix live, the re-sync **completed cleanly, no
+  hang**: `KB sync HTTP 200 processed=309 ingested=88 skipped=221 deleted=0` (306 CSV + 3
+  markdown seen; 88 docs re-embedded — the ones left *uncommitted* by the earlier hung/partial
+  state self-healed; 221 idempotently skipped by content_hash). Ollama served bounded `/api/embed`
+  batches throughout (5–27 s each, all 200) — no indefinite block. `kb_sync_skipped` = 0 (no batch
+  dropped). Second node (`t04`) sync was a fast no-op against the shared pgvector.
+- **Grounding verified live:** post-sync retrieval smoke check `POST /api/conversation/retrieve`
+  → `HTTP 200, evidence_count=5, verdict=PASS`.
+- **Ops note (deploy self-negative in `--check`).** A `--check` dry-run false-fails the Redis
+  `Ping Redis via the container CLI` step (the "bring up" task is skipped in check mode). Deploy
+  the real run; `--limit backend,localhost` keeps the guard play running while scoping Redis/voice
+  out (Redis already up on the live pilot).
+
 ## 2026-09-18 — BUG-022: KB sync store-phase hang fixed (bounded embedding batches)
 
 **Summary:**
