@@ -16,6 +16,7 @@ import com.voicesupport.conversation.domain.port.out.DeliveryDeduplicationPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
+import com.voicesupport.conversation.domain.service.EvidenceContextTrimmer;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
@@ -71,12 +72,26 @@ public class ConversationConfig {
         return new RetrievalConfidenceGuardrail(confidenceThreshold, clarifyThreshold);
     }
 
+    // Prefill-reduction context budget (TASK-BE-033 lever 2): caps the KB text fed to the LLM to
+    // shrink prompt prefill (a ~linear driver of first-token latency). Both budgets default to 0
+    // (disabled) so behaviour is unchanged until tuned per deployment; the LLM and the per-sentence
+    // OutputGuardrail see the SAME trimmed context, so DEC-002 stays consistent (grounding recall is
+    // the measured trade-off). max-chars-per-passage caps each chunk; max-context-chars caps the sum.
+    @Bean
+    public EvidenceContextTrimmer evidenceContextTrimmer(
+            @Value("${voice-support.conversation.retrieval.max-chars-per-passage:0}") int maxCharsPerPassage,
+            @Value("${voice-support.conversation.retrieval.max-context-chars:0}") int maxContextChars) {
+        return new EvidenceContextTrimmer(maxCharsPerPassage, maxContextChars);
+    }
+
     @Bean
     public GroundQueryUseCase groundQueryUseCase(
             InputGuardrail inputGuardrail,
             RetrievalConfidenceGuardrail retrievalConfidenceGuardrail,
-            KnowledgeRetrievalPort knowledgeRetrievalPort) {
-        return new RetrievalGroundingService(inputGuardrail, retrievalConfidenceGuardrail, knowledgeRetrievalPort);
+            KnowledgeRetrievalPort knowledgeRetrievalPort,
+            EvidenceContextTrimmer evidenceContextTrimmer) {
+        return new RetrievalGroundingService(
+                inputGuardrail, retrievalConfidenceGuardrail, knowledgeRetrievalPort, evidenceContextTrimmer);
     }
 
     @Bean

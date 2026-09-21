@@ -4,6 +4,7 @@ import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.GroundingResult;
 import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
+import com.voicesupport.conversation.domain.service.EvidenceContextTrimmer;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
 import com.voicesupport.conversation.fake.FakeKnowledgeRetrievalPort;
@@ -104,5 +105,29 @@ class RetrievalGroundingServiceTest {
         // THEN the general chunk grounds an answerable result
         assertTrue(result.answerable());
         assertEquals("general", result.evidence().get(0).domain());
+    }
+
+    @Test
+    @DisplayName("context trimmer caps evidence text AFTER the confidence check (TASK-BE-033 lever 2)")
+    void contextTrimmerCapsEvidenceTextAfterConfidence() {
+        // GIVEN a service configured with a per-passage char cap and a strong but long passage
+        RetrievalGroundingService trimming = new RetrievalGroundingService(
+                new InputGuardrail(), new RetrievalConfidenceGuardrail(0.5), retrievalPort,
+                new EvidenceContextTrimmer(40, 0));
+        retrievalPort.setEvidence(List.of(new RetrievedEvidence(
+                "La proration explique l'écart de facturation. "
+                        + "Détails complémentaires sur votre espace client.",
+                "billing-faq#1", "billing", 0.83)));
+
+        // WHEN grounding an in-domain question
+        GroundingResult result = trimming.ground(
+                "Pourquoi ma facture est plus élevée ?", "billing", 5, true, AnswerLanguage.FRENCH);
+
+        // THEN confidence is unaffected (still answerable) but the evidence text is trimmed on a boundary
+        assertTrue(result.answerable());
+        String text = result.evidence().get(0).text();
+        assertTrue(text.length() <= 40, "expected trimmed length <= 40, was " + text.length());
+        assertEquals("La proration explique l'écart de", text);
+        assertEquals(0.83, result.evidence().get(0).score());
     }
 }
