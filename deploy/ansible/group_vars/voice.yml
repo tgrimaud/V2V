@@ -51,7 +51,7 @@ voice_stt_prewarm: "0"
 # Gradium STT/TTS.
 voice_stt_mode: "streaming"
 voice_tts_mode: "streaming"
-gradium_voice_id_en: ""
+gradium_voice_id_en: "vimnD4UQG_36P43U"
 
 # ---- Genesys Audio Connector (TASK-INFRA-015, sprint-13) -------------------
 # Mounts the /genesys/audiohook AudioHook endpoint on the SAME routed :8090 as
