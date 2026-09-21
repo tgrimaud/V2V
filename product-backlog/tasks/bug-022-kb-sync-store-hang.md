@@ -89,6 +89,24 @@ client an **overall** request timeout (e.g. a `JdkClientHttpRequestFactory` whos
 send+receive, not just a read gap). Not needed for the observed hang — bounding the batch already
 makes the per-read timeout effective — so deferred to keep the retrieval path unchanged.
 
+## QA (functional + latency)
+
+- **Adversarial review:** 94/100, gate **Pass** (after remediating the silent-data-loss finding).
+- **Level 2 (contract/component):** `PgVectorStoreAdapterTest`, `KnowledgeSyncServiceTest`,
+  `LoggingSyncObserverAdapterTest` — deterministic, no Ollama/DB.
+- **Acceptance (Gherkin/Cucumber-Java):** `features/kb-sync-resilience.feature` (+
+  `KnowledgeSyncResilienceSteps`, wired in `RunKnowledgeBddTest`): (1) one article's failed
+  embedding does not abort the whole sync and the healthy article stays available; (2) a partially
+  embedded article is **not** marked available, is **reported for operators**, and **self-heals**
+  on the next sync. Both scenarios green.
+- **Suite:** full backend **583 tests, 0 failures** (`mvn clean test`); `git diff --check` clean.
+- **Latency:** KB sync is an **offline/admin batch**, not on the mouth-to-ear path — the ADR-0018
+  real-time slices (channel/EOT/STT/backend/RAG/LLM/TTS) are **unaffected** by this change. Per-doc
+  store latency stays observable via `voice_support.kb_sync_batch` (p50/p95/p99) and throughput via
+  `kb_sync_chunks` / `kb_sync` wall clock; new `voice_support.kb_sync_skipped` counts skipped chunks.
+- **Verdict:** **GO** for merge/QA acceptance. Live re-sync on the pilot to be run after merge
+  (idempotent; a forced re-sync should now terminate and re-ingest any tail left by the original hang).
+
 ## Repro
 
 `POST /api/conversation/warm-up` (200), then `POST /api/knowledge/sync` with the English
