@@ -155,6 +155,12 @@ voice-support:
     # A missing file degrades to an empty sync (no startup failure).
     csv-path: ${KB_CSV_PATH:../articles.csv}
     csv-language: ${KB_CSV_LANGUAGE:en}
+    # TASK-BE-034 / ADR-0048: the second (French) CSV corpus, ingested as a distinct source_type so a
+    # bilingual store serves FR + EN once the retrieval language filter is on. A missing file is a
+    # no-op sync. csv-fr-path defaults relative (dev); the deploy overrides it to the mounted asset.
+    csv-fr-path: ${KB_CSV_FR_PATH:../articles-fr.csv}
+    csv-fr-language: ${KB_CSV_FR_LANGUAGE:fr}
+    csv-fr-source-type: ${KB_CSV_FR_SOURCE_TYPE:csv-article-fr}
     classifier:
       # Ingestion-time domain classification (ADR-0030): cosine of the article embedding vs
       # per-domain anchors; below threshold the article stays "general". Both are tunable

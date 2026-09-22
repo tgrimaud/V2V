@@ -139,10 +139,15 @@ grep -q 'REDISCLI_AUTH=' roles/compose_tier/tasks/health.yml && ! grep -q 'redis
 grep -q "include_tasks: kb_assets.yml" roles/compose_tier/tasks/main.yml && ok "KB provisioning wired into the role" || bad "KB provisioning not wired"
 grep -q "tier == 'backend'" roles/compose_tier/tasks/main.yml && ok "KB provisioning gated to the backend tier" || bad "KB provisioning not gated to backend"
 grep -q "knowledge-base/" roles/compose_tier/tasks/kb_assets.yml && grep -q "kb_csv_filename" roles/compose_tier/tasks/kb_assets.yml \
-  && ok "KB task copies knowledge-base/ + the CSV corpus (kb_csv_filename)" || bad "KB task missing sources"
-# ADR-0048 / TASK-OPS-009: FR corpus default + post-deploy sync trigger + non-empty verify.
-grep -q 'kb_csv_filename: "articles-fr.csv"' group_vars/backend.yml && grep -q 'kb_csv_language: "fr"' group_vars/backend.yml \
-  && ok "Backend defaults to the French CSV corpus (ADR-0048)" || bad "FR CSV corpus default missing"
+  && grep -q "kb_csv_fr_filename" roles/compose_tier/tasks/kb_assets.yml \
+  && ok "KB task copies knowledge-base/ + the EN + FR CSV corpora" || bad "KB task missing sources"
+# TASK-BE-034 / ADR-0048 bilingual: EN primary corpus + FR secondary corpus + retrieval language
+# filter ON, so one store serves FR + EN without top-K mixing.
+grep -q 'kb_csv_filename: "articles-en.csv"' group_vars/backend.yml && grep -q 'kb_csv_language: "en"' group_vars/backend.yml \
+  && grep -q 'kb_csv_fr_filename: "articles-fr.csv"' group_vars/backend.yml \
+  && grep -q 'kb_retrieval_language_filter_enabled: true' group_vars/backend.yml \
+  && ok "Backend is bilingual: EN + FR corpora with the retrieval language filter ON (TASK-BE-034)" \
+  || bad "Bilingual KB config missing (EN+FR corpora + language filter)"
 grep -q 'KB_CSV_PATH=/app/kb-assets/{{ kb_csv_filename }}' roles/compose_tier/templates/backend.env.j2 \
   && grep -q 'KB_CSV_LANGUAGE={{ kb_csv_language }}' roles/compose_tier/templates/backend.env.j2 \
   && ok "backend.env.j2 wires KB_CSV_PATH + KB_CSV_LANGUAGE from vars" || bad "backend.env.j2 KB CSV wiring missing"
