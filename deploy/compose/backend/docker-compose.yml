@@ -46,6 +46,12 @@ services:
       # Only safe where Redis is actually reachable; leaving it true in memory mode
       # flips /actuator/health to DOWN (TASK-BE-021 review).
       REDIS_HEALTH_ENABLED: "${REDIS_HEALTH_ENABLED:-true}"
+      # --- RAG context budget (TASK-BE-033 lever 2): caps the KB text fed to the LLM to shrink
+      # prompt prefill (a ~linear driver of backend_first_token). Applied AFTER the confidence
+      # guardrail, so answerable/confidence is unchanged; LLM + per-sentence OutputGuardrail see the
+      # SAME trimmed context (DEC-002 consistent; grounding RECALL is the trade-off). 0 = off. ---
+      CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS: "${CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS:-0}"
+      CONVERSATION_RETRIEVAL_MAX_CHARS_PER_PASSAGE: "${CONVERSATION_RETRIEVAL_MAX_CHARS_PER_PASSAGE:-0}"
       # --- Knowledge base sources (mounted read-only, see volumes below) ---
       # The image ships only the jar, so the KB assets are provided at deploy time
       # under KB_HOST_PATH and synced into pgvector on first run (POST /api/knowledge/sync
