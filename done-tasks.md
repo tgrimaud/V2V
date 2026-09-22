@@ -3,6 +3,29 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-22 — BUG-024 (b) root-caused + fixed: intermittent LOW_CONFIDENCE on covered EN questions
+
+**Summary (branch `fix/BUG-024-nonanswer-courtesy-handoff`):**
+
+- **Investigated on the pilot** via text-in `POST /converse-stream` (real retrieval+guardrails).
+  Provider is now **OpenAI gpt-5** (temp forced 1.0). Findings:
+  - Retrieval + confidence are **deterministic** — repeating each covered question ×15 gave an
+    identical confidence every time (`conf_distinct_count=1`, all > the 0.5 floor). The ticket's
+    "oscillation on identical input" premise is **corrected**: it is not retrieval variance.
+  - The `grounded` flip is at the **OUTPUT stage**: all ~13% fallbacks logged
+    `[GUARDRAIL] verdict=low_confidence` (none `ungrounded`) → `OutputGuardrail.isNonAnswer`
+    discarded the whole answer because the LLM intermittently appended a hand-off marker
+    ("transfer you to an advisor"). gpt-5 @ temp 1.0 (can't be lowered — 400) amplifies it;
+    Mistral/Ollama run 0.2 to avoid exactly these non-deterministic refusals.
+- **Fix:** `GuardedSentenceEmitter` — a LOW_CONFIDENCE/hand-off sentence AFTER grounded content was
+  already voiced is a **trailing courtesy transfer**, not a refusal → keep the grounded answer and
+  drop the hand-off sentence (`truncatedAfterGrounded`). A refusal is still the first/only sentence
+  (nothing voiced → hand off). **UNGROUNDED (DEC-002 amount) always blocks** regardless of voiced
+  content — locked by a dedicated safety test. `mvn -o test` green (591/0).
+- **Symptom (a) dead-air deferred:** not reproducible on the text path (`zero_chunk_turns=0` across
+  105 turns); it is Genesys/TTS-audio-path specific (needs a voice-tier repro).
+- Branch not merged (user is validator); pilot QA retest (grounded-rate A/B) pending.
+
 ## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
 
 **Summary:**
