@@ -723,14 +723,13 @@ filter — the pattern this mirrors), ADR-0032 / OQ-008 (retrieval quality)
 **Related:** TASK-BE-013/014 (CSV connectors), TASK-BE-015/017 (answer language + FR corpus),
 TASK-OPS-009 (pilot single-corpus FR deploy — the interim approach this supersedes)
 **Classification:** V1 quality (RAG / bilingual) — runtime-affecting (needs observability note)
-**Status:** 🔧 Implemented (2026-09-22, branch `task/TASK-BE-034-retrieval-language-filter`) —
-code + tests done, **default OFF**; pending adversarial review + QA + user validation, then the
-bilingual pilot rollout (ship both corpora, enable, re-sync). Scheduled after a FR-billing pilot
-regression: the EN-only pilot (TASK-OPS-013) deflects FR turns to an advisor because a FR query
-scores below the EN-tuned thresholds against the EN corpus (`why did my bill increase` grounds;
-`pourquoi ma facture a augmenté` → clarify; `j'ai un problème avec ma facture` → low-confidence
-hand-off — same generic opener also deflects in EN). This ticket is the code lever; the pilot fix
-is the rollout below.
+**Status:** 🚀 Implemented + **rolled out to the pilot** (2026-09-22, branch
+`task/TASK-BE-034-retrieval-language-filter`) — code + tests done; **bilingual pilot rollout
+EXECUTED and validated** (both corpora loaded, filter ON on t03+t04, image `0.9.3-blf1`). Pending
+adversarial review + QA + user validation before merge. Scheduled after a FR-billing pilot
+regression: the EN-only pilot (TASK-OPS-013) deflected FR turns to an advisor because a FR query
+scored below the EN-tuned thresholds against the EN corpus. This ticket is the code lever; the
+executed rollout is logged below.
 **Priority:** Medium
 **Branch:** `task/TASK-BE-034-retrieval-language-filter`
 
@@ -770,13 +769,37 @@ is the rollout below.
   (89/1 — the 1 fail is the pre-existing stale "FR CSV default" check from before TASK-OPS-013, not
   this ticket); backend `.env`/`.env.example` key parity PASS.
 
-### Bilingual pilot rollout (deploy/product follow-up — not done here)
+### Bilingual pilot rollout (EXECUTED 2026-09-22)
 
-1. Ship BOTH corpora to the backend tier (`articles-en.csv` **and** `articles-fr.csv`); both CSV
-   connectors are already wired (`csv-article` en + `csv-article-fr` fr).
-2. Set `kb_retrieval_language_filter_enabled: true` (`KB_RETRIEVAL_LANGUAGE_FILTER_ENABLED=true`).
-3. Force a KB re-sync (`POST /api/knowledge/sync`) so every chunk carries `language` (en/fr/und).
-4. Verify: FR grounds on FR chunks, EN on EN chunks, no EN/FR top-K mixing.
+Steps (all done):
+1. ✅ Wired the FR corpus into the app + deploy: `application.yml` maps `csv-fr-path/language/source-type`
+   to `KB_CSV_FR_PATH` etc.; `backend.env.j2` + `docker-compose.yml` + `.env.example` pass
+   `KB_CSV_FR_PATH`; `group_vars/backend.yml` adds `kb_csv_fr_filename: articles-fr.csv` and flips
+   `kb_retrieval_language_filter_enabled: true`; `kb_assets.yml` copies `articles-fr.csv` when the
+   filter is on; `qa-validate-ansible.sh` updated to the bilingual contract (**90/0**).
+2. ✅ Built a filter-enabled image `ghcr.io/tgrimaud/voice-support-backend:0.9.3-blf1` (registry is
+   pull-only → compiled the jar natively, wrapped a linux/amd64 runtime image, `docker save | ssh
+   podman load` onto t03 + t04). Recreated **both** backend nodes with the filter ON *before* the
+   re-sync (store still EN-only ⇒ no EN/FR mixing window, EN kept grounding).
+3. ✅ Forced a shared-DB re-sync (`POST /api/knowledge/sync`, ~140 min on CPU Ollama). Final store:
+   `csv-article`=4996 (`language=en`), `csv-article-fr`=5128 (`language=fr`), `markdown`=44 (fr).
+   Note: the re-sync **saturates the co-located Ollama** — concurrent retrieval on the syncing node
+   returns `ERR_UPSTREAM` until it finishes (the other node serves normally; tolerable at pilot load).
+
+Validation (filter ON, Ollama idle):
+- **FR now retrieves FR content** (ground-truth pgvector: `j'ai un problème avec ma facture` top
+  match **0.7418** among `fr+und`, identical to all-languages ⇒ the filter drops nothing it needs;
+  was `<0.50` cross-lingual before). Specific FR questions ground **stably**: `pourquoi ma facture a
+  augmenté` **0.754** (3/3), `combien coûte le forfait fibre` **0.768** (3/3).
+- **EN unchanged**: `annual price increase` **0.853**, `why did my bill increase` **0.685** (top
+  chunk is the English `csv-article` "Annual Price Increase", passes the `en` scope). No filter
+  regression (verified by toggling the flag off/on).
+- **Residual — vague openers still intermittently deflect** (`j'ai un problème avec ma facture`,
+  `comment payer ma facture`): retrieval **succeeds** (`reason=fr` ~0.74) and the LLM generates an
+  answer, but the **output grounding gate** returns `low_confidence` → hand-off (telemetry:
+  `slice=retrieval success` → `slice=llm_wording success` → `[GUARDRAIL] verdict=low_confidence`).
+  This is the confidence/grounding stage (BUG-024 class), **not** retrieval or the language filter,
+  and is the target of the **vague-opener → clarify** follow-up (see BUG-025 below).
 
 ### Motivation
 
