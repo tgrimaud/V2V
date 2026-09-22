@@ -28,7 +28,7 @@ class PgVectorStoreAdapterTest {
     @Test
     @DisplayName("search always restricts to the customer audience, even with no domain")
     void searchAlwaysRestrictsToCustomerAudience() {
-        adapter.search("why did my bill increase", null, 5);
+        adapter.search("why did my bill increase", null, null, 5);
 
         String filter = requireFilter();
         assertTrue(filter.contains("audience"), filter);
@@ -38,12 +38,72 @@ class PgVectorStoreAdapterTest {
     @Test
     @DisplayName("search AND-combines the customer audience with the domain restriction")
     void searchCombinesAudienceAndDomain() {
-        adapter.search("why did my bill increase", "billing", 5);
+        adapter.search("why did my bill increase", "billing", null, 5);
 
         String filter = requireFilter();
         assertTrue(filter.contains("audience") && filter.contains("customer"), filter);
         assertTrue(filter.contains("billing"), filter);
         assertTrue(filter.contains("general"), filter);
+    }
+
+    @Test
+    @DisplayName("TASK-BE-034: with the language filter OFF, no language predicate is applied (backward-compatible)")
+    void languageFilterOffAppliesNoLanguagePredicate() {
+        adapter.search("why did my bill increase", "billing", "en", 5);
+
+        String filter = requireFilter();
+        assertTrue(filter.contains("audience") && filter.contains("customer"), filter);
+        assertFalse(filter.contains("language"), filter);
+    }
+
+    @Test
+    @DisplayName("TASK-BE-034: with the language filter ON, a French query scopes to fr OR the unspecified sentinel")
+    void languageFilterOnScopesToRequestLanguageOrUnspecified() {
+        PgVectorStoreAdapter scoped = new PgVectorStoreAdapter(vectorStore, 32, true);
+
+        scoped.search("pourquoi ma facture a augmenté", "billing", "fr", 5);
+
+        String filter = requireFilter();
+        // audience + domain preserved, AND-combined with the language predicate
+        assertTrue(filter.contains("audience") && filter.contains("customer"), filter);
+        assertTrue(filter.contains("billing") && filter.contains("general"), filter);
+        assertTrue(filter.contains("language"), filter);
+        assertTrue(filter.contains("fr"), filter);
+        assertTrue(filter.contains("und"), filter); // fail-open: unspecified chunks stay retrievable
+    }
+
+    @Test
+    @DisplayName("TASK-BE-034: with the language filter ON but no request language, no language predicate is applied")
+    void languageFilterOnButNoRequestLanguageAppliesNoPredicate() {
+        PgVectorStoreAdapter scoped = new PgVectorStoreAdapter(vectorStore, 32, true);
+
+        scoped.search("why did my bill increase", "billing", null, 5);
+
+        String filter = requireFilter();
+        assertFalse(filter.contains("language"), filter);
+    }
+
+    @Test
+    @DisplayName("TASK-BE-034: a document with no language is stored with the unspecified sentinel (fail-open)")
+    void storedChunkWithoutLanguageGetsUnspecifiedSentinel() {
+        SourceDocument noLanguage = SourceDocument.create(
+                "csv-article", "900", "Title", null, "content", "billing", "customer", null, Instant.now());
+
+        adapter.storeChunks(noLanguage, List.of(new TextChunker.Chunk("content", "s")));
+
+        assertEquals(1, vectorStore.added.size());
+        assertEquals("und", vectorStore.added.get(0).getMetadata().get("language"));
+    }
+
+    @Test
+    @DisplayName("TASK-BE-034: a document with a language keeps its own language tag")
+    void storedChunkKeepsItsLanguageTag() {
+        SourceDocument french = SourceDocument.create(
+                "csv-article-fr", "901", "Titre", null, "contenu", "billing", "customer", "fr", Instant.now());
+
+        adapter.storeChunks(french, List.of(new TextChunker.Chunk("contenu", "s")));
+
+        assertEquals("fr", vectorStore.added.get(0).getMetadata().get("language"));
     }
 
     @Test

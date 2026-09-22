@@ -177,7 +177,7 @@ class WarmUpServiceTest {
     }
 
     private KnowledgeRetrievalPort throwingRetrieval() {
-        return (query, domain, topK) -> {
+        return (query, domain, language, topK) -> {
             throw new IllegalStateException("vector store unavailable");
         };
     }

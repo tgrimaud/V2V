@@ -208,6 +208,16 @@ voice-support:
       # greeting-only recall flips. Deterministic, no vector-store change.
       query-normalization:
         enabled: ${KB_RETRIEVAL_QUERY_NORMALIZATION_ENABLED:false}
+      # Retrieval language filter (TASK-BE-034, ADR-0048). When enabled, the turn's answer language
+      # (fr/en) restricts pgvector results to that language plus the "und" unspecified sentinel
+      # (language == requestLanguage OR language == und), AND-combined with the audience + domain
+      # filters — so one store can serve FR + EN without EN/FR chunks mixing in the same top-K.
+      # DISABLED by default: single-corpus deployments keep today's cross-language behaviour.
+      # Activating it requires a full KB re-sync so every chunk carries a language value (the sentinel
+      # is written at ingestion; the jsonpath filter cannot match a missing metadata key). Fail-open on
+      # the language axis (untagged/unspecified chunks stay retrievable), unlike the fail-closed audience.
+      language-filter:
+        enabled: ${KB_RETRIEVAL_LANGUAGE_FILTER_ENABLED:false}
   conversation:
     # Post-retrieval guardrail (ADR-0014): answers grounded only on evidence whose
     # best similarity score reaches this threshold. Provisional value per ADR-0021;

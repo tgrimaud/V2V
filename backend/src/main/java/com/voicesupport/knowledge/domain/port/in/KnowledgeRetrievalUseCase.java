@@ -5,5 +5,5 @@ import java.util.List;
 
 public interface KnowledgeRetrievalUseCase {
 
-    List<KnowledgeChunk> retrieve(String query, String domain, int topK);
+    List<KnowledgeChunk> retrieve(String query, String domain, String language, int topK);
 }

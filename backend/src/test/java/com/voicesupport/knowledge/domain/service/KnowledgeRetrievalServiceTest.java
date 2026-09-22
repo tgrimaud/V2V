@@ -31,21 +31,32 @@ class KnowledgeRetrievalServiceTest {
         // GIVEN the store returns one chunk
         vectorSearch.setResults(List.of(new KnowledgeChunk("proration", "billing-faq#1", "billing", 0.8)));
 
-        // WHEN retrieving with an explicit domain and top-k
-        List<KnowledgeChunk> chunks = service.retrieve("why higher", "billing", 3);
+        // WHEN retrieving with an explicit domain, language and top-k
+        List<KnowledgeChunk> chunks = service.retrieve("why higher", "billing", "en", 3);
 
-        // THEN the port is called with the same arguments
+        // THEN the port is called with the same arguments (language threaded through — TASK-BE-034)
         assertEquals(1, chunks.size());
         assertEquals("why higher", vectorSearch.lastQuery);
         assertEquals("billing", vectorSearch.lastDomain);
+        assertEquals("en", vectorSearch.lastLanguage);
         assertEquals(3, vectorSearch.lastTopK);
+    }
+
+    @Test
+    @DisplayName("normalizes a blank language to no restriction (TASK-BE-034)")
+    void normalizesBlankLanguage() {
+        // WHEN retrieving with a blank language
+        service.retrieve("question", "support", "  ", 2);
+
+        // THEN the port receives a null language (no restriction)
+        assertEquals(null, vectorSearch.lastLanguage);
     }
 
     @Test
     @DisplayName("applies a default top-k when a non-positive value is requested")
     void appliesDefaultTopK() {
         // WHEN retrieving with topK = 0
-        service.retrieve("question", "support", 0);
+        service.retrieve("question", "support", null, 0);
 
         // THEN the default top-k is used
         assertEquals(4, vectorSearch.lastTopK);
@@ -55,7 +66,7 @@ class KnowledgeRetrievalServiceTest {
     @DisplayName("normalizes a blank domain to no restriction")
     void normalizesBlankDomain() {
         // WHEN retrieving with a blank domain
-        service.retrieve("question", "  ", 2);
+        service.retrieve("question", "  ", null, 2);
 
         // THEN the port receives a null domain (no restriction)
         assertEquals(null, vectorSearch.lastDomain);
@@ -65,7 +76,7 @@ class KnowledgeRetrievalServiceTest {
     @DisplayName("short-circuits a blank query without hitting the store")
     void shortCircuitsBlankQuery() {
         // WHEN retrieving with a blank query
-        List<KnowledgeChunk> chunks = service.retrieve("   ", "billing", 3);
+        List<KnowledgeChunk> chunks = service.retrieve("   ", "billing", null, 3);
 
         // THEN no search happens and the result is empty
         assertTrue(chunks.isEmpty());
@@ -86,7 +97,7 @@ class KnowledgeRetrievalServiceTest {
                 new KnowledgeChunk("restart the router to fix a slow connection", "ans", "support", 0.80)));
 
         // WHEN retrieving the top-2
-        List<KnowledgeChunk> chunks = mmrService.retrieve("why is my wifi slow", "support", 2);
+        List<KnowledgeChunk> chunks = mmrService.retrieve("why is my wifi slow", "support", null, 2);
 
         // THEN the store was over-fetched (2 * 3 = 6) and MMR kept the answer chunk over a redundant header
         assertEquals(6, vectorSearch.lastTopK);
@@ -109,7 +120,7 @@ class KnowledgeRetrievalServiceTest {
         vectorSearch.setResults(List.of(new KnowledgeChunk("x", "s#1", "support", 0.7)));
 
         // WHEN retrieving
-        service.retrieve("question", "support", 5);
+        service.retrieve("question", "support", null, 5);
 
         // THEN the store receives the requested top-k unchanged (no over-fetch)
         assertEquals(5, vectorSearch.lastTopK);
@@ -124,7 +135,7 @@ class KnowledgeRetrievalServiceTest {
                 vectorSearch, null, observer, 1, new QueryNormalizer());
 
         // WHEN retrieving a greeting-prefixed question
-        normalizing.retrieve("Bonjour, internet est très lent chez moi.", "support", 4);
+        normalizing.retrieve("Bonjour, internet est très lent chez moi.", "support", null, 4);
 
         // THEN the vector store receives the query without the leading greeting
         assertEquals("internet est très lent chez moi.", vectorSearch.lastQuery);
@@ -143,7 +154,7 @@ class KnowledgeRetrievalServiceTest {
                 vectorSearch, null, observer, 1, new QueryNormalizer());
 
         // WHEN retrieving a question with no leading greeting
-        normalizing.retrieve("Ma connexion internet est très lente.", "support", 4);
+        normalizing.retrieve("Ma connexion internet est très lente.", "support", null, 4);
 
         // THEN the query is passed through verbatim and no normalization event fires
         assertEquals("Ma connexion internet est très lente.", vectorSearch.lastQuery);
@@ -154,7 +165,7 @@ class KnowledgeRetrievalServiceTest {
     @DisplayName("with query normalization disabled (default service), the greeting is embedded as-is")
     void queryNormalizationDisabledKeepsGreeting() {
         // WHEN retrieving a greeting-prefixed question on the default (normalization-off) service
-        service.retrieve("Bonjour, internet est très lent chez moi.", "support", 4);
+        service.retrieve("Bonjour, internet est très lent chez moi.", "support", null, 4);
 
         // THEN the raw query (greeting included) reaches the store
         assertEquals("Bonjour, internet est très lent chez moi.", vectorSearch.lastQuery);

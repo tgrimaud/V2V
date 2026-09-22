@@ -45,6 +45,8 @@ class RetrievalGroundingServiceTest {
         assertTrue(result.answerable());
         assertEquals(1, result.evidence().size());
         assertEquals("billing-faq#1", result.evidence().get(0).sourceId());
+        // AND the turn's answer language is threaded to retrieval so a bilingual store can scope it (TASK-BE-034)
+        assertEquals("fr", retrievalPort.lastLanguage);
     }
 
     @Test

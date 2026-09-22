@@ -79,6 +79,14 @@ kb_host_path: "{{ compose_root }}/backend/kb-assets"
 kb_csv_filename: "articles-en.csv"
 kb_csv_language: "en"
 
+# Retrieval language filter (TASK-BE-034, ADR-0048). OFF on this single-corpus (EN) pilot: there is
+# nothing to mix, so the cross-language behaviour is unchanged. To go bilingual: ship BOTH corpora
+# (articles-en.csv + articles-fr.csv), set this true, and force a KB re-sync so every chunk carries a
+# language value (the store writes an "und" sentinel for untagged chunks; the pgvector jsonpath filter
+# cannot match a missing metadata key). Then a FR turn returns fr + und chunks only, and EN returns en
+# + und — no EN/FR top-K mixing. Fail-open on the language axis (untagged/unspecified stay retrievable).
+kb_retrieval_language_filter_enabled: false
+
 # Post-deploy KB sync (TASK-OPS-009). After the stack is healthy, trigger
 # POST /api/knowledge/sync so a (re)deploy never leaves the RAG markdown-only or empty
 # (the image ships no KB; the sync loads the mounted assets into pgvector). Idempotent:
