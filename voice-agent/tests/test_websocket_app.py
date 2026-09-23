@@ -50,10 +50,12 @@ from web_voice.websocket_app import (  # noqa: E402
     SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
     WS_TRY_AGAIN_LATER,
+    SUPPORTED_ANSWER_LANGUAGES,
     AiohttpWebsocketTransport,
     build_aiohttp_ws_transport,
     make_ws_handler,
     ws_async_max_sessions_config,
+    _resolve_session_language,
     _wire_disconnect_drain,
 )
 
@@ -320,6 +322,47 @@ class _EchoFactory:
         return session, None
 
 
+class _FakeQueryRequest:
+    """Minimal stand-in for `web.Request` exposing only `.query` (a dict supports `.get`)."""
+
+    def __init__(self, query: dict[str, str]) -> None:
+        self.query = query
+
+
+class ResolveSessionLanguageTest(unittest.TestCase):
+    """BUG-026: the `?language=` UI selection must lock the session's answer language."""
+
+    def test_supported_client_selection_wins_over_server_default(self) -> None:
+        # GIVEN the server default is French but the UI selects English
+        request = _FakeQueryRequest({"language": "en"})
+        # WHEN we resolve the session language
+        resolved = _resolve_session_language(request, "fr")
+        # THEN the supported client selection locks the session (US-042 forcedCode wins)
+        self.assertEqual(resolved, "en")
+
+    def test_client_selection_is_case_and_whitespace_insensitive(self) -> None:
+        request = _FakeQueryRequest({"language": "  FR  "})
+        self.assertEqual(_resolve_session_language(request, "en"), "fr")
+
+    def test_unset_client_selection_falls_back_to_server_default(self) -> None:
+        request = _FakeQueryRequest({})
+        self.assertEqual(_resolve_session_language(request, "en"), "en")
+
+    def test_unsupported_client_code_is_ignored_and_falls_back(self) -> None:
+        # GIVEN a junk/unknown code that must not force a wrong answer language backend-side
+        request = _FakeQueryRequest({"language": "xx"})
+        self.assertEqual(_resolve_session_language(request, "fr"), "fr")
+
+    def test_no_default_and_no_selection_keeps_auto_detection(self) -> None:
+        # GIVEN neither a server default nor a client selection
+        request = _FakeQueryRequest({"language": ""})
+        # THEN None is returned → backend keeps auto-detection (no forcedCode)
+        self.assertIsNone(_resolve_session_language(request, None))
+
+    def test_only_fr_and_en_are_supported(self) -> None:
+        self.assertEqual(SUPPORTED_ANSWER_LANGUAGES, frozenset({"fr", "en"}))
+
+
 class WsFullTurnTest(unittest.IsolatedAsyncioTestCase):
     """End-to-end over the REAL aiohttp /ws handler: a real transport + real pipeline session
     built by make_ws_handler, driven over a real socket. Proves the shipped default live path
@@ -399,7 +442,9 @@ class WsHandlerLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(SESSION_STARTED_EVENT, names)
         connected = [e for e in shared.events() if e.name == CLIENT_CONNECTED_EVENT]
         self.assertEqual(connected[0].attributes["declared_language"], "en")
-        self.assertEqual(connected[0].attributes["effective_language"], "fr")
+        # BUG-026: a supported UI selection now LOCKS the session language, winning over the
+        # server default_language="fr" (previously the client choice was dropped → "fr").
+        self.assertEqual(connected[0].attributes["effective_language"], "en")
         accepted = [
             m
             for m in shared.metrics()

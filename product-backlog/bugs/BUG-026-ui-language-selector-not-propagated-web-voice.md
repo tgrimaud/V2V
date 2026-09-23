@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-026
 - **Title:** UI language selector is not propagated on the web-voice WS path → the answer language auto-detects and oscillates per turn (no session language lock)
-- **Status:** New
+- **Status:** In Progress (primary fix implemented — pending pilot QA)
 - **Severity:** High
 - **Priority:** P2
 - **Detected by:** User validation (remote pilot test) + developer log analysis
@@ -117,26 +117,28 @@ Two layers:
 
 ## Acceptance Criteria For Fix
 
-- [ ] **Session language lock via the UI selector (primary requirement).** When the web-voice
+- [x] **Session language lock via the UI selector (primary requirement).** When the web-voice
       UI selects a language, that language is applied to **every turn of the session**
       (envelope carries the client's `?language=`, forwarded to the backend `language` field,
-      `forcedCode` wins). Verified end-to-end on the pilot: a full EN (then a full FR) session
-      answers only in the selected language across all turns.
-- [ ] Targeted wiring fix in `voice-agent/web_voice/websocket_app.py`: build the envelope from
+      `forcedCode` wins). Implemented in code; end-to-end pilot verification (full EN, then full
+      FR session) pending QA.
+- [x] Targeted wiring fix in `voice-agent/web_voice/websocket_app.py`: build the envelope from
       the client selection, falling back to the server default only when the client sent none
-      (e.g. `request.query.get("language") or default_language`). `declared_language` and
-      `effective_language` telemetry then agree when a language is selected.
-- [ ] Per-language STT/TTS provider selection (`session_factory.py`) receives the selected
-      language (follows from the envelope fix).
+      (`_resolve_session_language(request, default_language)`). `declared_language` and
+      `effective_language` telemetry now agree when a supported language is selected.
+- [x] Per-language STT/TTS provider selection (`session_factory.py`) receives the selected
+      language (follows from the envelope fix — the same `envelope.language` drives it).
 - [ ] **Auto-mode stability (secondary):** with no forced language, the answer language does
       not oscillate within a conversation on covered inputs — strengthen session stickiness so
       the established conversation language is kept unless the current turn detects the other
       language with a **margin** (not a lone marker/accent), and/or attenuate the single-accent
-      signal. (May be split into a follow-up if scope-heavy; the primary lock must ship.)
-- [ ] A regression test covers the failure: WS envelope carries the client language; backend
-      `LanguageDetector` honours `forcedCode` for the whole session; stickiness margin test.
-- [ ] Relevant OpenTelemetry present: `declared_language`/`effective_language` reflect the lock;
-      backend `[LANGUAGE]` shows a single stable language across a forced session.
+      signal. **Deferred to a follow-up** (see Developer Notes) — the primary lock ships here.
+- [x] A regression test covers the failure: WS envelope carries the client language
+      (`ResolveSessionLanguageTest` + updated lifecycle assertion in `test_websocket_app.py`);
+      backend `LanguageDetector` already honours `forcedCode` (existing `LanguageDetectorTest`).
+      Stickiness margin test to land with the deferred secondary.
+- [x] Relevant OpenTelemetry present: `declared_language`/`effective_language` reflect the lock
+      (the WS `client_connected`/`session_started` events read the now-locked `envelope.language`).
 - [ ] Adversarial code review is at least 90% satisfied.
 - [ ] QA retest passes (pilot web-voice session per language).
 - [ ] Docs/backlog updated (ADR-0031 note on the session lock; US-042 wiring).
@@ -147,13 +149,35 @@ Developer fills this during resolution:
 
 - root cause: web-voice WS envelope built from `default_language`, ignoring the client
   `?language=` (read for telemetry only); backend forced-language path itself is correct.
-- files to change (candidate): `voice-agent/web_voice/websocket_app.py` (envelope language
-  source), tests under `voice-agent/tests/` (WS envelope language), and — for the secondary
-  auto-mode stability — `backend/.../conversation/domain/service/LanguageDetector.java` +
-  `AnswerLanguage.detect` margin/accent weighting with `LanguageDetectorTest`.
-- tests added/updated: —
-- OpenTelemetry added/updated: —
-- residual risk: —
+- fix implemented (primary): `voice-agent/web_voice/websocket_app.py`
+  - added `SUPPORTED_ANSWER_LANGUAGES = frozenset({"fr", "en"})` and a pure helper
+    `_resolve_session_language(request, default_language)` — returns the client `?language=`
+    (case/whitespace-insensitive) when it is a supported code, else the server default (which
+    may be `None` = keep auto-detection). An unsupported/junk code is ignored so it can never
+    force a wrong language backend-side.
+  - `_serve_connection` now builds the per-connection envelope from that resolved language:
+    `ChannelEnvelope.for_web_turn(language=_resolve_session_language(request, default_language))`.
+    The envelope is created **once per WS connection** and reused for every turn, so the
+    selected language locks the **whole session** (US-042 `forcedCode` wins over detection +
+    stickiness). The web client already sends `?language=` on connect (`static/ws.js`).
+- tests added/updated (voice-agent, `tests/test_websocket_app.py`):
+  - new `ResolveSessionLanguageTest` (6 cases): supported client selection wins over server
+    default; case/whitespace-insensitive; unset → default; unsupported → default; no default +
+    no selection → `None` (auto); supported set is `{fr, en}`.
+  - updated the lifecycle test assertion: with server `default_language="fr"` and client
+    `?language=en`, `effective_language` is now `"en"` (was `"fr"` — the assertion previously
+    encoded the bug).
+  - full suite green: `./.venv/bin/python -m unittest discover tests` → 721 tests OK.
+- OpenTelemetry: no new spans/metrics needed; the existing WS `session_started` /
+  `client_connected` events now report the locked `effective_language` (equals
+  `declared_language` when a supported language is selected).
+- deferred (secondary, follow-up ticket to open): auto-mode stickiness margin in
+  `backend/.../conversation/domain/service/LanguageDetector.java` + `AnswerLanguage.detect`
+  (keep established conversation language unless the current turn detects the other language
+  with a margin; attenuate the lone-accent signal) with a `LanguageDetectorTest` margin case.
+- residual risk: in **auto** mode (no UI selection) the per-turn oscillation described in the
+  secondary root cause is not yet addressed. The primary requirement ("fix the session
+  language via the UI") is met.
 
 ## QA Retest
 

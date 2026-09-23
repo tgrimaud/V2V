@@ -78,6 +78,10 @@ DEFAULT_MAX_WS_SESSIONS_ASYNC = 8
 WS_TRY_AGAIN_LATER = 1013
 REASON_CAPACITY = "capacity"
 _WS_CLOSE_TIMEOUT = 0.5
+# BUG-026 / US-042: answer languages the UI selector may LOCK for a session. A `?language=`
+# value outside this set is ignored (falls back to the server default / auto-detection) so a
+# junk/unknown code can never force a wrong answer language backend-side.
+SUPPORTED_ANSWER_LANGUAGES = frozenset({"fr", "en"})
 
 
 class AiohttpWebsocketParams(TransportParams):
@@ -474,6 +478,21 @@ def make_ws_handler(
     return handler
 
 
+def _resolve_session_language(request: web.Request, default_language: str | None) -> str | None:
+    """BUG-026: resolve the session answer language from the UI selection.
+
+    The web client sends its selected language as the ``?language=`` query param. When it is a
+    supported code it is carried on the per-connection envelope so EVERY turn of the session
+    forces that language backend-side (US-042: ``forcedCode`` wins over auto-detection and
+    session stickiness). An unset/unsupported value falls back to the server ``default_language``
+    (which may itself be ``None`` = keep backend auto-detection).
+    """
+    selected = (request.query.get("language") or "").strip().lower()
+    if selected in SUPPORTED_ANSWER_LANGUAGES:
+        return selected
+    return default_language
+
+
 async def _serve_connection(
     websocket: web.WebSocketResponse,
     request: web.Request,
@@ -490,7 +509,10 @@ async def _serve_connection(
     """Own one WS voice session end to end (build → run → teardown → telemetry dump)."""
     telemetry = telemetry_factory()
     serializer = serializer_factory()
-    envelope = ChannelEnvelope.for_web_turn(language=default_language)
+    # BUG-026: the envelope is built ONCE per WS connection (= one session) and reused for
+    # every turn, so locking its language here locks the whole session's answer language.
+    session_language = _resolve_session_language(request, default_language)
+    envelope = ChannelEnvelope.for_web_turn(language=session_language)
     transport = build_aiohttp_ws_transport(
         websocket, sample_rate=sample_rate, serializer=serializer
     )
