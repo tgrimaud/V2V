@@ -120,6 +120,17 @@ public class ConversationGroundingSteps {
         assertRefused(GuardrailDecision.Verdict.CLARIFY);
     }
 
+    // BUG-025: the opener clarify must be the TARGETED billing wording (options offered), not the
+    // generic "could you rephrase" clarify — both FR and EN wordings name the bill and "incorrect".
+    @Then("the clarification offers specific billing options")
+    public void clarificationOffersBillingOptions() {
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, result.decision().verdict());
+        String message = result.decision().fallbackMessage();
+        boolean namesBill = message.contains("votre facture") || message.toLowerCase().contains("your bill");
+        assertTrue(namesBill && message.contains("incorrect"),
+                "expected targeted billing clarify wording, got: " + message);
+    }
+
     @Then("no knowledge retrieval is performed")
     public void noRetrieval() {
         assertEquals(0, retrievalPort.callCount, "expected no retrieval call");

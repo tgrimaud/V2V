@@ -12,6 +12,7 @@ public class FakeVectorSearchPort implements VectorSearchPort {
 
     public String lastQuery;
     public String lastDomain;
+    public String lastLanguage;
     public int lastTopK;
     public int callCount;
 
@@ -21,9 +22,10 @@ public class FakeVectorSearchPort implements VectorSearchPort {
     }
 
     @Override
-    public List<KnowledgeChunk> search(String query, String domain, int topK) {
+    public List<KnowledgeChunk> search(String query, String domain, String language, int topK) {
         this.lastQuery = query;
         this.lastDomain = domain;
+        this.lastLanguage = language;
         this.lastTopK = topK;
         this.callCount++;
         return results.stream().limit(topK).toList();

@@ -5,5 +5,5 @@ import java.util.List;
 
 public interface KnowledgeRetrievalPort {
 
-    List<RetrievedEvidence> retrieve(String query, String domain, int topK);
+    List<RetrievedEvidence> retrieve(String query, String domain, String language, int topK);
 }

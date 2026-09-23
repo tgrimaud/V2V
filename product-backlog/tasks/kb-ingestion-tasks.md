@@ -22,7 +22,7 @@ answer-engine core, per product decision (2026-07-18, sprint set 2026-07-21).
 | TASK-BE-027 | Retrieval-quality eval harness + baseline measurement (offline) — labeled FR/EN eval set with phrasing variants, run against `/api/conversation/retrieve`, compute recall@k / MRR / phrasing-stability **+ classify each miss (guardrail-block vs retrieval-eviction)**; the OQ-008 / ADR-0032 gate | V1 quality (RAG measurement) | TASK-BE-003, BUG-003 (fixed) | 🚧 Implemented (2026-08-13) — harness `scripts/retrieval_eval/` (13 metric tests green), **baseline recorded** (recall@8 0.90, stability 0.79; misses = 2 guardrail `OFF_TOPIC` blocks on EN + 1 FR retrieval eviction). Adversarial review 78→ fixed (F1/F2/F3). **✅ Merged into `feat/restart-from-scratch` (2026-08-13)**. EPIC-005 / ADR-0032 / OQ-008 |
 | TASK-BE-028 | Retrieval lever 2b — MMR (diversity) over the over-fetched candidates so near-duplicate header chunks stop evicting the answer chunk | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **MMR OFF by default** (`ab-mmr-2026-08-13.md`): λ=0.7 degrades recall@8 0.90→0.86 / stability 0.79→0.71, λ=0.9 neutral and does **not** fix the one eviction (`sup-fr-slow` = greeting-induced recall miss). Kept as tested env-toggleable dedup guard (λ≥0.9). Next lever = query greeting-normalization / hybrid, not diversity. 8 tests, 347 backend green. **Adversarial 93/100 (Pass) + QA functional & latency PASS** (`docs/qa/task-be-028-mmr-qa-report.md`) — ✅ merged into `feat/restart-from-scratch` (2026-08-13). EPIC-005 / ADR-0032 |
 | TASK-BE-029 | Retrieval query normalization — strip a leading greeting before embedding so phrasing variants (e.g. "Bonjour, …") retrieve the same evidence | V1 quality (RAG) | TASK-BE-027 | ⚠️ Implemented + **A/B-measured live (2026-08-13)** → **STRICTLY NEUTRAL, default OFF** (`ab-query-norm-2026-08-13.md`): greeting hypothesis **disproven** — stripping "Bonjour," leaves "internet est très lent chez moi." which still misses the answer, so `sup-fr-slow` is a **core-phrasing** recall miss, not a greeting one. 0 regression / 0 gain (recall@8 0.90, stability 0.79 on/off). Kept as tested env-toggle; real lever = phrasing-robust recall. 354 backend green. **✅ Merged into `feat/restart-from-scratch` (2026-08-13)**. EPIC-005 / ADR-0032 / OQ-008 |
-| TASK-BE-034 | Retrieval **language filter** — optional `language == requestLanguage OR language absent` predicate in `buildSearchFilter` (mirrors the domain predicate), threaded through `VectorSearchPort.search(...)` → retrieval adapter → grounding, so one pgvector store serves FR + EN cleanly | V1 quality (RAG / bilingual) | TASK-BE-013/014/015, TASK-BE-034's ADR-0048 | 📋 Planned (2026-08-27) — **TARGET counterpart to the ADR-0048 pilot single-corpus approach**; not implemented now. Enables loading both `csv-article` (EN) + `csv-article-fr` (FR) without EN/FR top-K mixing. EPIC-005 / ADR-0048 / ADR-0031 / ADR-0034 / OQ-008 |
+| TASK-BE-034 | Retrieval **language filter** — `language == requestLanguage OR language == und` predicate in `buildSearchFilter` (mirrors the domain predicate), threaded through `VectorSearchPort.search(...)` → retrieval adapter → grounding, so one pgvector store serves FR + EN cleanly | V1 quality (RAG / bilingual) | TASK-BE-013/014/015, ADR-0048 | 🔧 Implemented (2026-09-22, default OFF; pending review/QA + bilingual rollout) — enables loading both `csv-article` (EN) + `csv-article-fr` (FR) without EN/FR top-K mixing; fail-open via a stored `und` sentinel ⇒ enabling needs a re-sync. `mvn test` 589/0. EPIC-005 / ADR-0048 / ADR-0031 / ADR-0034 / OQ-008 |
 | TASK-BE-035 | ~~KB quality / **rebrand** follow-up — `articles-fr.csv` still references eir/eircom/AT&T~~ | V1 quality (KB content) | TASK-OPS-009 (FR corpus live on pilot) | ❌ **Cancelled / Won't do** (2026-08-27) — the Eir brand is intentional: the corpus originates from Eir and the product answers Eir customer problems, so no rebrand is needed. EPIC-005 / ADR-0048 |
 
 ---
@@ -723,10 +723,83 @@ filter — the pattern this mirrors), ADR-0032 / OQ-008 (retrieval quality)
 **Related:** TASK-BE-013/014 (CSV connectors), TASK-BE-015/017 (answer language + FR corpus),
 TASK-OPS-009 (pilot single-corpus FR deploy — the interim approach this supersedes)
 **Classification:** V1 quality (RAG / bilingual) — runtime-affecting (needs observability note)
-**Status:** 📋 Planned (2026-08-27) — ticket only, **do NOT implement now**. It is the target
-that lets the same pgvector store serve FR and EN cleanly once both corpora are loaded.
+**Status:** 🚀 Implemented + **rolled out to the pilot** (2026-09-22, branch
+`task/TASK-BE-034-retrieval-language-filter`) — code + tests done; **bilingual pilot rollout
+EXECUTED and validated** (both corpora loaded, filter ON on t03+t04, image `0.9.3-blf1`). Pending
+adversarial review + QA + user validation before merge. Scheduled after a FR-billing pilot
+regression: the EN-only pilot (TASK-OPS-013) deflected FR turns to an advisor because a FR query
+scored below the EN-tuned thresholds against the EN corpus. This ticket is the code lever; the
+executed rollout is logged below.
 **Priority:** Medium
-**Branch (when scheduled):** `task/TASK-BE-034-retrieval-language-filter`
+**Branch:** `task/TASK-BE-034-retrieval-language-filter`
+
+### Developer notes (2026-09-22)
+
+- **Threaded the answer language through the read path** as a 4th argument (ticket-sanctioned:
+  "add a language argument"): `VectorSearchPort.search(query, domain, language, topK)` →
+  `KnowledgeRetrievalUseCase.retrieve(...)` → `KnowledgeRetrievalService` (both MMR + plain paths,
+  blank → null passthrough) → conversation `KnowledgeRetrievalPort.retrieve(...)` →
+  `InProcKnowledgeRetrievalAdapter` → `RetrievalGroundingService.ground(...)` now passes
+  `language.code()` (fr/en, always resolved per ADR-0031). Warm-up passes `null` (no restriction).
+  All implementers + fakes (`FakeVectorSearchPort`, `FakeKnowledgeRetrievalPort/UseCase`) + call sites
+  updated.
+- **Filter predicate** in `PgVectorStoreAdapter.buildSearchFilter(domain, language)` mirrors the
+  domain leg: `audience==customer AND (domain==X OR general) AND (language==req OR language==und)`.
+  Off unless `voice-support.knowledge.retrieval.language-filter.enabled=true`
+  (`KB_RETRIEVAL_LANGUAGE_FILTER_ENABLED`, default false); a null/blank request language ⇒ no
+  language predicate (backward-compatible).
+- **Fail-open via a stored sentinel, not "key absent".** The Spring AI pgvector filter compiles to
+  `metadata::jsonb @@ '$.language == "fr"'::jsonpath`; in lax mode a **missing** key never matches a
+  comparison, so "language absent" is **not expressible** through `FilterExpressionBuilder`. Instead
+  every chunk is now written with a `language` value at ingestion — its own (`en`/`fr`) or the `und`
+  unspecified sentinel when the source has none (one-shot `/ingest` + any blank-language document) —
+  and the filter keeps `OR language==und`, so untagged content stays retrievable. Consequence
+  (same as the ADR-0034 audience filter): **activating the filter requires a full KB re-sync** so
+  every chunk carries a language. Documented in `application.yml` + group_vars.
+- **Audience + domain filters unchanged**; language is AND-combined as an orthogonal axis. The voice
+  `/converse*` cross-domain-by-design contract (BUG-007) is preserved (domain stays null there;
+  language is separate).
+- **OpenTelemetry:** the RETRIEVAL slice carries the resolved language as the non-PII `reason` tag on
+  `voice_support.slice` (+ `[TELEMETRY] reason=<fr|en|und|n/a>`), no new metric/label — QA can verify
+  per-language behaviour without extra cardinality.
+- **Tests:** `mvn -o clean test` **589/0** (ArchUnit green, domain still pure). New: PgVectorStoreAdapter
+  filter cases (off → no predicate; on FR → `fr OR und` with audience+domain preserved; on + no language
+  → no predicate; sentinel written when language absent; own tag kept), `KnowledgeRetrievalService`
+  language threading + blank→null, `RetrievalGroundingService` passes `fr`. Ansible QA unchanged
+  (89/1 — the 1 fail is the pre-existing stale "FR CSV default" check from before TASK-OPS-013, not
+  this ticket); backend `.env`/`.env.example` key parity PASS.
+
+### Bilingual pilot rollout (EXECUTED 2026-09-22)
+
+Steps (all done):
+1. ✅ Wired the FR corpus into the app + deploy: `application.yml` maps `csv-fr-path/language/source-type`
+   to `KB_CSV_FR_PATH` etc.; `backend.env.j2` + `docker-compose.yml` + `.env.example` pass
+   `KB_CSV_FR_PATH`; `group_vars/backend.yml` adds `kb_csv_fr_filename: articles-fr.csv` and flips
+   `kb_retrieval_language_filter_enabled: true`; `kb_assets.yml` copies `articles-fr.csv` when the
+   filter is on; `qa-validate-ansible.sh` updated to the bilingual contract (**90/0**).
+2. ✅ Built a filter-enabled image `ghcr.io/tgrimaud/voice-support-backend:0.9.3-blf1` (registry is
+   pull-only → compiled the jar natively, wrapped a linux/amd64 runtime image, `docker save | ssh
+   podman load` onto t03 + t04). Recreated **both** backend nodes with the filter ON *before* the
+   re-sync (store still EN-only ⇒ no EN/FR mixing window, EN kept grounding).
+3. ✅ Forced a shared-DB re-sync (`POST /api/knowledge/sync`, ~140 min on CPU Ollama). Final store:
+   `csv-article`=4996 (`language=en`), `csv-article-fr`=5128 (`language=fr`), `markdown`=44 (fr).
+   Note: the re-sync **saturates the co-located Ollama** — concurrent retrieval on the syncing node
+   returns `ERR_UPSTREAM` until it finishes (the other node serves normally; tolerable at pilot load).
+
+Validation (filter ON, Ollama idle):
+- **FR now retrieves FR content** (ground-truth pgvector: `j'ai un problème avec ma facture` top
+  match **0.7418** among `fr+und`, identical to all-languages ⇒ the filter drops nothing it needs;
+  was `<0.50` cross-lingual before). Specific FR questions ground **stably**: `pourquoi ma facture a
+  augmenté` **0.754** (3/3), `combien coûte le forfait fibre` **0.768** (3/3).
+- **EN unchanged**: `annual price increase` **0.853**, `why did my bill increase` **0.685** (top
+  chunk is the English `csv-article` "Annual Price Increase", passes the `en` scope). No filter
+  regression (verified by toggling the flag off/on).
+- **Residual — vague openers still intermittently deflect** (`j'ai un problème avec ma facture`,
+  `comment payer ma facture`): retrieval **succeeds** (`reason=fr` ~0.74) and the LLM generates an
+  answer, but the **output grounding gate** returns `low_confidence` → hand-off (telemetry:
+  `slice=retrieval success` → `slice=llm_wording success` → `[GUARDRAIL] verdict=low_confidence`).
+  This is the confidence/grounding stage (BUG-024 class), **not** retrieval or the language filter,
+  and is the target of the **vague-opener → clarify** follow-up (see BUG-025 below).
 
 ### Motivation
 

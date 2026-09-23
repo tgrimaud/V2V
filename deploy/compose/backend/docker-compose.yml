@@ -52,6 +52,11 @@ services:
       # or the scheduler). Paths point inside the mounted directory.
       KB_MARKDOWN_PATH: "${KB_MARKDOWN_PATH:-/app/kb-assets/knowledge-base}"
       KB_CSV_PATH: "${KB_CSV_PATH:-/app/kb-assets/articles.csv}"
+      # TASK-BE-034 (ADR-0048) bilingual: the FR corpus ingested as a distinct source_type.
+      KB_CSV_FR_PATH: "${KB_CSV_FR_PATH:-/app/kb-assets/articles-fr.csv}"
+      # TASK-BE-034 (ADR-0048): retrieval language filter, OFF by default (single-corpus keeps
+      # today's behaviour). Enable + re-sync only once both corpora are loaded.
+      KB_RETRIEVAL_LANGUAGE_FILTER_ENABLED: "${KB_RETRIEVAL_LANGUAGE_FILTER_ENABLED:-false}"
       # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
       OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
       # Valid localhost defaults (NOT empty): Spring Boot's OTLP tracing exporter is built

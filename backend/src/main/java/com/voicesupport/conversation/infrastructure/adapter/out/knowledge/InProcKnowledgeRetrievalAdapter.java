@@ -63,11 +63,11 @@ public class InProcKnowledgeRetrievalAdapter implements KnowledgeRetrievalPort {
     }
 
     @Override
-    public List<RetrievedEvidence> retrieve(String query, String domain, int topK) {
+    public List<RetrievedEvidence> retrieve(String query, String domain, String language, int topK) {
         long start = System.nanoTime();
         String outcome = OUTCOME_SUCCESS;
         try {
-            return bounded(query, domain, topK);
+            return bounded(query, domain, language, topK);
         } catch (TimeoutException e) {
             outcome = OUTCOME_TIMEOUT;
             throw new UpstreamUnavailableException(
@@ -76,17 +76,25 @@ public class InProcKnowledgeRetrievalAdapter implements KnowledgeRetrievalPort {
             outcome = OUTCOME_ERROR;
             throw e;
         } finally {
-            telemetry.recordLatency(Slices.RETRIEVAL, PROVIDER, outcome, Duration.ofNanos(System.nanoTime() - start));
+            // TASK-BE-034: carry the resolved retrieval language as the non-PII reason refinement on
+            // the RETRIEVAL slice, so QA can verify per-language behaviour without a new metric/label.
+            telemetry.recordLatency(Slices.RETRIEVAL, PROVIDER, outcome, languageReason(language),
+                    Duration.ofNanos(System.nanoTime() - start));
         }
     }
 
-    private List<RetrievedEvidence> bounded(String query, String domain, int topK) throws TimeoutException {
+    private static String languageReason(String language) {
+        return language == null || language.isBlank() ? "n/a" : language;
+    }
+
+    private List<RetrievedEvidence> bounded(String query, String domain, String language, int topK)
+            throws TimeoutException {
         if (searchTimeoutMs <= 0) {
-            return doRetrieve(query, domain, topK);
+            return doRetrieve(query, domain, language, topK);
         }
         Future<List<RetrievedEvidence>> future;
         try {
-            future = RETRIEVAL_EXECUTOR.submit(() -> doRetrieve(query, domain, topK));
+            future = RETRIEVAL_EXECUTOR.submit(() -> doRetrieve(query, domain, language, topK));
         } catch (RejectedExecutionException e) {
             throw new UpstreamUnavailableException("Knowledge retrieval concurrency limit reached", e);
         }
@@ -103,8 +111,8 @@ public class InProcKnowledgeRetrievalAdapter implements KnowledgeRetrievalPort {
         }
     }
 
-    private List<RetrievedEvidence> doRetrieve(String query, String domain, int topK) {
-        return knowledgeRetrieval.retrieve(query, domain, topK).stream()
+    private List<RetrievedEvidence> doRetrieve(String query, String domain, String language, int topK) {
+        return knowledgeRetrieval.retrieve(query, domain, language, topK).stream()
                 .map(InProcKnowledgeRetrievalAdapter::toEvidence)
                 .toList();
     }

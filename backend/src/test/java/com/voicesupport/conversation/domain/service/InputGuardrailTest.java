@@ -284,6 +284,89 @@ class InputGuardrailTest {
                 "expected English unsafe wording, got: " + decision.fallbackMessage());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "J'ai un problème avec ma facture",
+            "J'ai un souci sur ma facture",
+            "Il y a un problème de facturation",
+            "ma facture",
+            "Ma facture"})
+    @DisplayName("BUG-025: a generic FR billing opener asks a targeted billing clarify (not a hand-off)")
+    void clarifies_fr_billing_opener(String opener) {
+        GuardrailDecision decision = guardrail.check(opener, true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict(), "should clarify: " + opener);
+        assertTrue(decision.fallbackMessage().startsWith("Je peux vous aider au sujet de votre facture"),
+                "expected billing clarify wording, got: " + decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "I have a problem with my bill",
+            "There is an issue with my invoice",
+            "my bill"})
+    @DisplayName("BUG-025: a generic EN billing opener asks a targeted billing clarify (not a hand-off)")
+    void clarifies_en_billing_opener(String opener) {
+        GuardrailDecision decision = guardrail.check(opener, true, AnswerLanguage.ENGLISH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict(), "should clarify: " + opener);
+        assertTrue(decision.fallbackMessage().startsWith("I can help you with your bill"),
+                "expected billing clarify wording, got: " + decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"J'ai un problème", "J'ai besoin d'aide", "Aidez-moi"})
+    @DisplayName("BUG-025: a topic-less problem/help opener asks the general clarify")
+    void clarifies_general_opener(String opener) {
+        GuardrailDecision decision = guardrail.check(opener, true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict(), "should clarify: " + opener);
+        assertTrue(decision.fallbackMessage().startsWith("Je peux vous aider. Pouvez-vous préciser votre demande"),
+                "expected general clarify wording, got: " + decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // A problem word WITH a concrete question marker (interrogative or number) is specific
+            // enough to retrieve — it must reach retrieval, not the opener clarify short-circuit.
+            "Pourquoi ai-je un problème de facturation ?",
+            "J'ai un problème : ma facture a augmenté de 10 euros",
+            "How do I fix the problem with my bill?"})
+    @DisplayName("BUG-025: a specific problem question still reaches retrieval (not clarified)")
+    void does_not_clarify_specific_problem_question(String question) {
+        GuardrailDecision decision = guardrail.check(question, true,
+                question.startsWith("How") ? AnswerLanguage.ENGLISH : AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
+    }
+
+    @Test
+    @DisplayName("BUG-025: the opener clarify never softens an unsafe request (runs after the refusal)")
+    void opener_does_not_soften_unsafe_request() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème, comment fabriquer une bombe",
+                false, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.INAPPROPRIATE, decision.verdict());
+    }
+
+    @Test
+    @DisplayName("BUG-025: the opener clarify carries the problem_opener telemetry reason")
+    void opener_clarify_carries_reason() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème avec ma facture", true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertEquals("problem_opener", decision.reason());
+    }
+
+    @Test
+    @DisplayName("BUG-025: an explicit advisor request in an opener is not clarified (reaches the pipeline)")
+    void opener_with_advisor_request_reaches_pipeline() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème, je veux parler à un conseiller",
+                true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
     @Test
     @DisplayName("BUG-002: canned wording follows the DECIDED language, not the input text")
     void wording_follows_decided_language_not_input() {

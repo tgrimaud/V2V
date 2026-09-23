@@ -135,16 +135,26 @@ public class BackendTelemetry {
     // clarify vs low_confidence vs off_topic rates are measurable per channel (BUG-005). Records the
     // verdict only — never transcript or answer text — and carries the correlation id.
     public void recordGuardrailBlock(String verdict) {
+        recordGuardrailBlock(verdict, null);
+    }
+
+    // BUG-025: an optional low-cardinality reason sub-tag lets QA/Ops separate otherwise-identical
+    // verdicts (e.g. a problem-opener CLARIFY from a vague/mid-confidence CLARIFY). Reason only —
+    // never transcript or answer text — so no PII leaks into metrics/logs.
+    public void recordGuardrailBlock(String verdict, String reason) {
         String safeVerdict = verdict == null || verdict.isBlank()
                 ? "n/a" : verdict.toLowerCase(java.util.Locale.ROOT);
+        String safeReason = reason == null || reason.isBlank()
+                ? "n/a" : reason.toLowerCase(java.util.Locale.ROOT);
         String channel = normalizeChannel(CorrelationId.currentChannel());
         Counter.builder(GUARDRAIL_BLOCK)
                 .tag("verdict", safeVerdict)
+                .tag("reason", safeReason)
                 .tag("channel", channel)
                 .register(registry)
                 .increment();
-        log.info("[GUARDRAIL] verdict={} channel={} correlation_id={}",
-                safeVerdict, channel, CorrelationId.current());
+        log.info("[GUARDRAIL] verdict={} reason={} channel={} correlation_id={}",
+                safeVerdict, safeReason, channel, CorrelationId.current());
     }
 
     // Normalized channel envelope observability (TASK-BE-037, ADR-0009): counts inbound channel

@@ -37,7 +37,11 @@ public class RetrievalGroundingService implements GroundQueryUseCase {
         if (inputDecision.blocked()) {
             return GroundingResult.blocked(inputDecision);
         }
-        List<RetrievedEvidence> evidence = knowledgeRetrievalPort.retrieve(question, domain, topK);
+        // TASK-BE-034 (ADR-0048): scope retrieval to the turn's answer language (fr/en) so a
+        // bilingual store returns same-language + untagged chunks only. The filter is a no-op when
+        // disabled or on a single-corpus deployment; language is orthogonal to the domain axis.
+        List<RetrievedEvidence> evidence =
+                knowledgeRetrievalPort.retrieve(question, domain, language.code(), topK);
         GuardrailDecision confidenceDecision = confidenceGuardrail.check(evidence, language);
         if (confidenceDecision.blocked()) {
             return GroundingResult.blocked(confidenceDecision);

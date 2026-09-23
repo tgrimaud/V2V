@@ -30,3 +30,14 @@
     owner: root
     group: root
     mode: "0644"
+
+# TASK-BE-034 / ADR-0048 bilingual: also drop the FR corpus when the language filter is on, so a
+# re-sync loads both source_types (csv-article + csv-article-fr) into the shared store.
+- name: "Copy the French CSV article corpus ({{ kb_csv_fr_filename | default('articles-fr.csv') }})"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../{{ kb_csv_fr_filename }}"
+    dest: "{{ kb_host_path }}/{{ kb_csv_fr_filename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: kb_retrieval_language_filter_enabled | default(false) | bool

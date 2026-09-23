@@ -38,7 +38,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         var adapter = new InProcKnowledgeRetrievalAdapter(fake, telemetry, NO_BUDGET);
 
         // WHEN the conversation context retrieves through the seam
-        List<RetrievedEvidence> evidence = adapter.retrieve("why is my bill higher", "billing", 5);
+        List<RetrievedEvidence> evidence = adapter.retrieve("why is my bill higher", "billing", "en", 5);
 
         // THEN chunks are translated into the conversation domain model
         assertEquals(2, evidence.size());
@@ -60,7 +60,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         var adapter = new InProcKnowledgeRetrievalAdapter(fake, telemetry, NO_BUDGET);
 
         // WHEN retrieving with topK = 2
-        List<RetrievedEvidence> evidence = adapter.retrieve("q", "general", 2);
+        List<RetrievedEvidence> evidence = adapter.retrieve("q", "general", null, 2);
 
         // THEN only two evidence items are returned
         assertEquals(2, evidence.size());
@@ -72,7 +72,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         // GIVEN a retrieval that stalls well past the configured budget (a locked/slow pgvector query)
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         BackendTelemetry meteredTelemetry = new BackendTelemetry(registry);
-        KnowledgeRetrievalUseCase slow = (query, domain, topK) -> {
+        KnowledgeRetrievalUseCase slow = (query, domain, language, topK) -> {
             try {
                 Thread.sleep(5_000);
             } catch (InterruptedException e) {
@@ -84,7 +84,7 @@ class InProcKnowledgeRetrievalAdapterTest {
 
         // WHEN the seam retrieves
         long start = System.nanoTime();
-        assertThrows(UpstreamUnavailableException.class, () -> adapter.retrieve("q", null, 5));
+        assertThrows(UpstreamUnavailableException.class, () -> adapter.retrieve("q", null, null, 5));
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
         // THEN it fails fast (well under the stall), freeing the worker, and records a timeout outcome
@@ -105,7 +105,7 @@ class InProcKnowledgeRetrievalAdapterTest {
         var adapter = new InProcKnowledgeRetrievalAdapter(fake, meteredTelemetry, SHORT_BUDGET_MS);
 
         // WHEN retrieving
-        List<RetrievedEvidence> evidence = adapter.retrieve("q", "general", 5);
+        List<RetrievedEvidence> evidence = adapter.retrieve("q", "general", null, 5);
 
         // THEN it succeeds and records a success outcome, no timeout
         assertEquals(1, evidence.size());

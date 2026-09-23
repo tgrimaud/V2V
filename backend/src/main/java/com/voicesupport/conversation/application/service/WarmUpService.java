@@ -62,7 +62,7 @@ public class WarmUpService implements WarmUpUseCase {
     private List<RetrievedEvidence> warmEmbedding() {
         long start = System.nanoTime();
         try {
-            List<RetrievedEvidence> evidence = retrieval.retrieve(warmQuery, null, WARM_TOP_K);
+            List<RetrievedEvidence> evidence = retrieval.retrieve(warmQuery, null, null, WARM_TOP_K);
             telemetry.recordLatency(SLICE_EMBEDDING, PROVIDER, SUCCESS, elapsed(start));
             return evidence;
         } catch (RuntimeException e) {

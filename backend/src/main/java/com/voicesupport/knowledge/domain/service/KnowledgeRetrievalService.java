@@ -46,18 +46,19 @@ public class KnowledgeRetrievalService implements KnowledgeRetrievalUseCase {
     }
 
     @Override
-    public List<KnowledgeChunk> retrieve(String query, String domain, int topK) {
+    public List<KnowledgeChunk> retrieve(String query, String domain, String language, int topK) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
         int finalK = effectiveTopK(topK);
         String normalizedDomain = normalizeDomain(domain);
+        String normalizedLanguage = normalizeLanguage(language);
         String searchQuery = normalizeQuery(query, normalizedDomain);
         if (mmrReranker == null) {
-            return vectorSearchPort.search(searchQuery, normalizedDomain, finalK);
+            return vectorSearchPort.search(searchQuery, normalizedDomain, normalizedLanguage, finalK);
         }
         int fetchK = finalK * fetchMultiplier;
-        List<KnowledgeChunk> candidates = vectorSearchPort.search(searchQuery, normalizedDomain, fetchK);
+        List<KnowledgeChunk> candidates = vectorSearchPort.search(searchQuery, normalizedDomain, normalizedLanguage, fetchK);
         List<KnowledgeChunk> selected = mmrReranker.rerank(candidates, finalK);
         observer.mmrApplied(normalizedDomain, fetchK, candidates.size(), selected.size(), mmrReranker.lambda());
         return selected;
@@ -80,5 +81,9 @@ public class KnowledgeRetrievalService implements KnowledgeRetrievalUseCase {
 
     private String normalizeDomain(String domain) {
         return domain != null && !domain.isBlank() ? domain : null;
+    }
+
+    private String normalizeLanguage(String language) {
+        return language != null && !language.isBlank() ? language : null;
     }
 }

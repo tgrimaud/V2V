@@ -28,6 +28,12 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
     // is fail-closed (chunks without an audience value are excluded), so a full re-sync is required
     // to activate the boundary — see the audience re-sync note in CLAUDE.md.
     private static final String CUSTOMER_AUDIENCE = "customer";
+    // TASK-BE-034 (ADR-0048): fail-open sentinel written on every chunk that has no language, so the
+    // language filter can keep untagged content retrievable in every language via
+    // (language == requestLanguage OR language == unspecified). Mirrors the domain "general" leg —
+    // the pgvector jsonpath filter cannot express "metadata key absent", so a stored sentinel value
+    // is used instead. Activating the filter therefore requires a full re-sync (like audience).
+    private static final String LANGUAGE_UNSPECIFIED = "und";
     // BUG-022: cap chunks per embedding request. A whole document used to be embedded in one
     // vectorStore.add(...), so a large article (hundreds of chunks) produced one huge embedding
     // call the client's per-read timeout could not bound (it fires on a read gap, not overall) —
@@ -38,14 +44,22 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
 
     private final VectorStore vectorStore;
     private final int storeBatchSize;
+    // TASK-BE-034: off by default so a single-corpus deployment keeps today's cross-language
+    // behaviour; enabled per deployment once both corpora are loaded and re-synced.
+    private final boolean languageFilterEnabled;
 
     public PgVectorStoreAdapter(VectorStore vectorStore) {
         this(vectorStore, DEFAULT_STORE_BATCH_SIZE);
     }
 
     public PgVectorStoreAdapter(VectorStore vectorStore, int storeBatchSize) {
+        this(vectorStore, storeBatchSize, false);
+    }
+
+    public PgVectorStoreAdapter(VectorStore vectorStore, int storeBatchSize, boolean languageFilterEnabled) {
         this.vectorStore = vectorStore;
         this.storeBatchSize = storeBatchSize > 0 ? storeBatchSize : DEFAULT_STORE_BATCH_SIZE;
+        this.languageFilterEnabled = languageFilterEnabled;
     }
 
     // One-shot ingest path: stores content without source_type/source_id, so these chunks
@@ -58,6 +72,9 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         metadata.put("chunk_index", String.valueOf(chunkIndex));
         metadata.put("domain", domain != null ? domain : SHARED_DOMAIN);
         metadata.put("audience", CUSTOMER_AUDIENCE);
+        // TASK-BE-034: ad-hoc one-shot content has no language, so tag it unspecified to stay
+        // retrievable in every language once the language filter is enabled (fail-open).
+        metadata.put("language", LANGUAGE_UNSPECIFIED);
         vectorStore.add(List.of(new Document(content, metadata)));
     }
 
@@ -108,9 +125,11 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
         metadata.put("source_type", document.sourceType());
         metadata.put("source_id", document.sourceId());
         metadata.put("content_hash", document.contentHash());
+        // TASK-BE-034: always store a language (fail-open sentinel when the source has none) so the
+        // language filter's (== requestLanguage OR == unspecified) leg keeps untagged content reachable.
+        metadata.put("language", hasText(document.language()) ? document.language() : LANGUAGE_UNSPECIFIED);
         putIfPresent(metadata, "title", document.title());
         putIfPresent(metadata, "url", document.url());
-        putIfPresent(metadata, "language", document.language());
         if (document.updatedAt() != null) {
             metadata.put("updated_at", document.updatedAt().toString());
         }
@@ -128,22 +147,28 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
     }
 
     @Override
-    public List<KnowledgeChunk> search(String query, String domain, int topK) {
+    public List<KnowledgeChunk> search(String query, String domain, String language, int topK) {
         SearchRequest.Builder request = SearchRequest.builder()
                 .query(query).topK(topK)
-                .filterExpression(buildSearchFilter(domain));
+                .filterExpression(buildSearchFilter(domain, language));
         List<Document> documents = vectorStore.similaritySearch(request.build());
         return documents == null ? List.of() : documents.stream().map(this::toChunk).toList();
     }
 
     // ADR-0034: always restrict the customer answer engine to customer-facing chunks (fail-closed),
-    // AND-combined with the optional domain restriction. Internal/agent-desk content (BUG-005) is
-    // therefore never retrievable here regardless of the requested domain.
-    private Filter.Expression buildSearchFilter(String domain) {
+    // AND-combined with the optional domain and language restrictions. Internal/agent-desk content
+    // (BUG-005) is therefore never retrievable here regardless of the requested domain/language.
+    private Filter.Expression buildSearchFilter(String domain, String language) {
         FilterExpressionBuilder fb = new FilterExpressionBuilder();
-        FilterExpressionBuilder.Op customer = fb.eq("audience", CUSTOMER_AUDIENCE);
-        FilterExpressionBuilder.Op domainOp = domainOp(fb, domain);
-        return (domainOp == null ? customer : fb.and(customer, domainOp)).build();
+        FilterExpressionBuilder.Op filter = fb.eq("audience", CUSTOMER_AUDIENCE);
+        filter = and(fb, filter, domainOp(fb, domain));
+        filter = and(fb, filter, languageOp(fb, language));
+        return filter.build();
+    }
+
+    private FilterExpressionBuilder.Op and(
+            FilterExpressionBuilder fb, FilterExpressionBuilder.Op left, FilterExpressionBuilder.Op right) {
+        return right == null ? left : fb.and(left, right);
     }
 
     // Restrict to the requested domain plus the shared "general" domain. A null/blank domain means
@@ -156,6 +181,21 @@ public class PgVectorStoreAdapter implements VectorStorePort, VectorSearchPort {
             return fb.eq("domain", SHARED_DOMAIN);
         }
         return fb.or(fb.eq("domain", domain), fb.eq("domain", SHARED_DOMAIN));
+    }
+
+    // TASK-BE-034 (ADR-0048): restrict to the request language plus the unspecified sentinel, so a
+    // bilingual store no longer mixes FR and EN chunks in the same top-K while untagged content stays
+    // reachable (fail-open on the language axis, unlike the fail-closed audience axis). Off unless the
+    // filter is enabled; a null/blank request language means no language restriction (backward-compatible).
+    private FilterExpressionBuilder.Op languageOp(FilterExpressionBuilder fb, String language) {
+        if (!languageFilterEnabled || !hasText(language)) {
+            return null;
+        }
+        return fb.or(fb.eq("language", language), fb.eq("language", LANGUAGE_UNSPECIFIED));
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private KnowledgeChunk toChunk(Document document) {

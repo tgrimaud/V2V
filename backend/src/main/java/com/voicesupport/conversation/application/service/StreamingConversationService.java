@@ -104,7 +104,7 @@ public class StreamingConversationService implements ConverseStreamUseCase {
         // Guardrail-fallback turns skip the streaming LLM, so record the answer language here (no
         // provider) to keep per-turn language observability complete on the voice path (TASK-BE-015),
         // plus the blocked verdict so clarify/low-confidence rates are observable (ADR-0034).
-        telemetry.recordGuardrailBlock(decision.verdict().name());
+        telemetry.recordGuardrailBlock(decision.verdict().name(), decision.reason());
         telemetry.recordAnswerLanguage(null, language.code());
         String message = decision.fallbackMessage();
         onChunk.accept(message);

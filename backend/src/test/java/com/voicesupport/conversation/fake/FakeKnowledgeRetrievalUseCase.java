@@ -15,7 +15,7 @@ public class FakeKnowledgeRetrievalUseCase implements KnowledgeRetrievalUseCase 
     }
 
     @Override
-    public List<KnowledgeChunk> retrieve(String query, String domain, int topK) {
+    public List<KnowledgeChunk> retrieve(String query, String domain, String language, int topK) {
         return chunks.stream().limit(topK).toList();
     }
 }

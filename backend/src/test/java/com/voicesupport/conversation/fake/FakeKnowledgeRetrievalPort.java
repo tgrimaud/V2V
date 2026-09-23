@@ -12,6 +12,7 @@ public class FakeKnowledgeRetrievalPort implements KnowledgeRetrievalPort {
 
     public String lastQuery;
     public String lastDomain;
+    public String lastLanguage;
     public int lastTopK;
     public int callCount;
 
@@ -21,9 +22,10 @@ public class FakeKnowledgeRetrievalPort implements KnowledgeRetrievalPort {
     }
 
     @Override
-    public List<RetrievedEvidence> retrieve(String query, String domain, int topK) {
+    public List<RetrievedEvidence> retrieve(String query, String domain, String language, int topK) {
         this.lastQuery = query;
         this.lastDomain = domain;
+        this.lastLanguage = language;
         this.lastTopK = topK;
         this.callCount++;
         return List.copyOf(evidence);

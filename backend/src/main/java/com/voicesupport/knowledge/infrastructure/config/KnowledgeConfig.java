@@ -92,8 +92,10 @@ public class KnowledgeConfig {
     @Bean
     public PgVectorStoreAdapter pgVectorStoreAdapter(
             VectorStore vectorStore,
-            @Value("${voice-support.knowledge.store.batch-size:32}") int storeBatchSize) {
-        return new PgVectorStoreAdapter(vectorStore, storeBatchSize);
+            @Value("${voice-support.knowledge.store.batch-size:32}") int storeBatchSize,
+            @Value("${voice-support.knowledge.retrieval.language-filter.enabled:false}")
+            boolean languageFilterEnabled) {
+        return new PgVectorStoreAdapter(vectorStore, storeBatchSize, languageFilterEnabled);
     }
 
     @Bean

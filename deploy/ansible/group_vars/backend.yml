@@ -79,6 +79,19 @@ kb_host_path: "{{ compose_root }}/backend/kb-assets"
 kb_csv_filename: "articles-en.csv"
 kb_csv_language: "en"
 
+# TASK-BE-034 / ADR-0048 bilingual rollout: the second (French) CSV corpus, ingested as a distinct
+# source_type (csv-article-fr, language fr) so one store serves FR + EN. Ansible copies this repo-root
+# file next to the EN one and the container reads it via KB_CSV_FR_PATH=/app/kb-assets/{{ kb_csv_fr_filename }}.
+kb_csv_fr_filename: "articles-fr.csv"
+
+# Retrieval language filter (TASK-BE-034, ADR-0048). ON for the bilingual pilot: a turn's answer
+# language (fr/en) scopes retrieval to that language + the "und" unspecified sentinel, so a FR turn
+# returns fr + und chunks only and EN returns en + und — no EN/FR top-K mixing. Enabling it requires
+# BOTH corpora loaded (kb_csv_filename + kb_csv_fr_filename) and a KB re-sync so every chunk carries a
+# language value (the store writes "und" for untagged chunks; the pgvector jsonpath filter cannot match
+# a missing metadata key). Fail-open on the language axis (untagged/unspecified stay retrievable).
+kb_retrieval_language_filter_enabled: true
+
 # Post-deploy KB sync (TASK-OPS-009). After the stack is healthy, trigger
 # POST /api/knowledge/sync so a (re)deploy never leaves the RAG markdown-only or empty
 # (the image ships no KB; the sync loads the mounted assets into pgvector). Idempotent:
