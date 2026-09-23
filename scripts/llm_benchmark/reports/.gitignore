@@ -1,0 +1,6 @@
+# Working area for the TASK-BE-033 benchmark harness. Raw per-candidate reports stay local;
+# publish the final comparison-<date>.{json,md} under docs/qa/ as the versioned evidence.
+bench-*.json
+bench-*.md
+comparison-*.json
+comparison-*.md

@@ -13,6 +13,20 @@ deferred** until the benchmark spike **TASK-BE-033** produces the data. Scopes
 > produces TTFT/quality/cost/residency data (and this ADR benchmarks `gpt-4o-mini`, not `gpt-5`).
 > This ADR governs the *pilot* choice; ADR-0051 governs the *code default*.
 
+> **Execution status (2026-08-27, TASK-BE-033 closed):** harness + fixtures + merger implemented
+> under `scripts/llm_benchmark/`; all four candidates wired behind the port (OpenAI adapter +
+> `spring-ai-starter-model-openai` landed). The **EU/on-prem subset (candidates 1–3) was measured**
+> locally — evidence + caveats in `docs/qa/task-be-033-llm-provider-benchmark-evidence.md` (server
+> slices in `docs/qa/task-be-033-comparison-2026-08-27.json`). Findings (server
+> `backend_first_token` p50/p95 ms): `mistral-small` **844/3039** (grounded 1.0, 0 err) — best;
+> `mistral-large` 8789/24108 with **9/15 errors** (API-tier throttling) + 20× cost — **disqualified**;
+> `ollama llama3.1:8b` raw chat token p50 **338 ms** (beats Mistral-small) but `backend_first_token`
+> 2505/8823 is **inflated by single-instance embedding↔chat swap contention**, so its on-prem verdict
+> needs a dedicated-capacity re-measure. **Recommendation: keep `mistral-small` for the pilot;
+> `ollama` = sovereignty fallback to re-measure; OpenAI (candidate 4) unmeasured — no key, OQ-009
+> US-egress gate.** ADR stays **Proposed** pending user sign-off to flip to Accepted with this
+> recommendation.
+
 ## Context
 
 The ADR-0029 pilot latency gate (mouth-to-ear p95 ≤ 1.5 s / `time_to_first_audio`

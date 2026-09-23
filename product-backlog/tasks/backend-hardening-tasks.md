@@ -1439,9 +1439,9 @@ gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
 **Related decisions:** ADR-0045 (this benchmark, Proposed), ADR-0029 (latency gate + Direction A/B), ADR-0026 (LLM behind replaceable ports), ADR-0006/DEC-011 (provider config), ADR-0039 (provider egress), ADR-0012 (cascade control)
 **Depends on:** TASK-WEB-036 (top-k=5, sub-span finding) + TASK-WEB-035 (STT tail capped)
 **Classification:** V1 voice runtime / backend — latency optimisation **spike** (measurement → ADR decision)
-**Status:** 📋 Planned — spike that feeds the ADR-0045 decision (ADR-0045 + this ticket definition merged into sprint-12 `fec413d`, 2026-08-25; execution not started). Surfaced by WEB-036 (LLM first-token ~87% of `backend_first_token`) + WEB-035 re-score (backend first-token p95 ~1199 ms is the largest remaining reducible slice of the ADR-0029 gate).
+**Status:** ✅ Done (closed 2026-09-23) — spike executed: harness (`scripts/llm_benchmark/`) + EU/on-prem candidate measurements (evidence `docs/qa/task-be-033-llm-provider-benchmark-evidence.md`, comparison `docs/qa/task-be-033-comparison-2026-08-27.json`) delivered the ADR-0045 data. Recommendation: keep `mistral-small` for the pilot; `ollama` = sovereignty fallback to re-measure on dedicated capacity; OpenAI unmeasured (no key, OQ-009 US-egress gate). Independent of this benchmark, the code **default** provider was already flipped to OpenAI `gpt-5` via **ADR-0051 / TASK-BE-050**. Ticket branch `task/TASK-BE-033-llm-provider-benchmark` merged (artifacts landed to mainline) then deleted. (Surfaced by WEB-036: LLM first-token ~87% of `backend_first_token`; WEB-035 re-score: backend first-token p95 ~1199 ms was the largest reducible slice of the ADR-0029 gate.)
 **Priority:** High
-**Branch:** `task/TASK-BE-033-llm-provider-benchmark` (to create when work starts)
+**Branch:** `task/TASK-BE-033-llm-provider-benchmark` (artifacts landed to mainline 2026-09-23, branch deleted)
 
 ### Context
 
