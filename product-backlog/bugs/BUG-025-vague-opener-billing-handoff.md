@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-025
 - **Title:** A generic billing opener ("j'ai un problème avec ma facture" / "I have a problem with my bill") triggers a low-confidence advisor hand-off instead of a targeted clarification
-- **Status:** Implemented (dev done, unit tests pass) — pending adversarial review + QA retest + pilot deploy
+- **Status:** 🚀 Implemented + deployed to the pilot (2026-09-23, image `0.9.3-blf2`) — pending adversarial review + formal QA retest
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation
@@ -92,8 +92,25 @@ grounding gate deflects:
 - [x] Regression tests cover the above (`InputGuardrailTest`, `ProblemOpenerDetectorTest`).
 - [x] OpenTelemetry: reuses the existing `CLARIFY` guardrail verdict (no new slice needed).
 - [ ] Adversarial code review ≥ 90% satisfied.
-- [ ] QA retest passes on the pilot.
-- [ ] Deployed to the pilot (image swap, no KB re-sync required).
+- [ ] Formal QA retest passes on the pilot.
+- [x] Deployed to the pilot (image swap, no KB re-sync required).
+
+## Pilot Deploy + Validation (2026-09-23)
+
+- **Image:** `ghcr.io/tgrimaud/voice-support-backend:0.9.3-blf2` — the TASK-BE-034 bilingual
+  rollout (`0.9.3-blf1`) **plus** this BUG-025 fix. Built native JAR → amd64 runtime-only wrap
+  (`backend/Dockerfile.rt`) → `docker save | ssh | podman load` to t03 (`.105`) + t04 (`.106`).
+- **Swap:** `IMAGE_TAG=0.9.3-blf1 → 0.9.3-blf2` in each node's `.env`, then
+  `podman compose up -d --force-recreate --no-deps backend`. **No KB re-sync** (code-only). Both
+  containers reached `healthy`.
+- **Validation (per node + via backend VIP `.11:80`):**
+  - FR opener "j'ai un problème avec ma facture" → **billing clarify** ("Je peux vous aider au
+    sujet de votre facture. Pouvez-vous préciser… montant incorrect / augmentation / prélèvement /
+    ligne précise ?").
+  - EN opener "I have a problem with my bill" → **EN billing clarify** (same, in English).
+  - General "j'ai un problème" → **general clarify** (facture / abonnement / problème technique).
+  - Specific "pourquoi ma facture a augmenté ce mois-ci" → **grounded answer** (confidence
+    **0.7541**), NOT clarified — confirms specific questions still reach retrieval untouched.
 
 ## Developer Notes
 
@@ -113,9 +130,9 @@ grounding gate deflects:
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
-- **Result:** Pending
+- **Retested by:** Developer smoke (pilot t03/t04 + VIP) — formal QA pending
+- **Retest date:** 2026-09-23
+- **Result:** Smoke PASS (4/4 cases as designed); formal QA acceptance pending
 
 ## Closure
 
