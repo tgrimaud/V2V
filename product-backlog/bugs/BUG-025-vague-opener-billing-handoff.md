@@ -114,6 +114,11 @@ grounding gate deflects:
   - General "j'ai un problème" → **general clarify** (facture / abonnement / problème technique).
   - Specific "pourquoi ma facture a augmenté ce mois-ci" → **grounded answer** (confidence
     **0.7541**), NOT clarified — confirms specific questions still reach retrieval untouched.
+- **Post-review re-deploy `0.9.3-blf3` (2026-09-23):** carries the two non-blocking fixes. Re-validated
+  on t03/t04: opener still clarifies; **opener + explicit advisor request** ("j'ai un problème, je veux
+  parler à un conseiller") now **bypasses the clarify** and reaches the pipeline (grounded answer,
+  conf 0.75, offers a technician handoff); telemetry emits `[GUARDRAIL] verdict=clarify
+  reason=problem_opener`.
 
 ## Developer Notes
 
