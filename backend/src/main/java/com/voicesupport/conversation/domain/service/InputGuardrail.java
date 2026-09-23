@@ -82,6 +82,7 @@ public class InputGuardrail {
     // phrases (e.g. "vas y", "d accord") and single-token continuers (e.g. "ok", "alors").
     private final Set<String> vaguePhrases;
     private final Set<String> vagueTokens;
+    private final ProblemOpenerDetector problemOpenerDetector = new ProblemOpenerDetector();
 
     public InputGuardrail() {
         this(DEFAULT_VAGUE_MARKERS);
@@ -127,7 +128,14 @@ public class InputGuardrail {
         if (matchesAny(OFF_TOPIC_PATTERNS, trimmed)) {
             return GuardrailDecision.offTopic(GuardrailMessages.offTopic(language));
         }
-        return GuardrailDecision.pass();
+        // BUG-025: a safe, generic problem opener with no concrete question is redirected to a
+        // targeted clarify rather than retrieving a middling match the grounding gate deflects to a
+        // hand-off. Runs after the unsafe/off-topic refusals so it can never soften a block.
+        return problemOpenerDetector.detect(trimmed)
+                .map(topic -> GuardrailDecision.clarify(
+                        GuardrailMessages.problemOpenerClarify(language, topic == ProblemOpenerDetector.Topic.BILLING),
+                        "problem_opener"))
+                .orElseGet(GuardrailDecision::pass);
     }
 
     // A turn is vague when the whole utterance is a known continuer phrase, or when it is a short

@@ -1,0 +1,25 @@
+# Runtime-only image for a locally-prebuilt JAR (deploy convenience, NOT the CI path).
+# Java bytecode is arch-independent, so we compile the fat jar natively (fast) and wrap it in
+# an amd64 runtime here — avoids the multi-minute emulated Maven build under buildx on Apple
+# Silicon. Mirrors the runtime stage of backend/Dockerfile exactly. Build context = backend/.
+FROM eclipse-temurin:17-jre AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1001 app \
+    && useradd --system --uid 1001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+WORKDIR /app
+
+COPY --chown=app:app target/voice-support-backend-0.1.0-SNAPSHOT.jar /app/app.jar
+
+USER app
+EXPOSE 8080
+
+ENV JAVA_OPTS=""
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
