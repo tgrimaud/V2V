@@ -33,6 +33,13 @@ public class ProblemOpenerDetector {
     private static final Pattern BILLING_TOPIC = compile(
             "\\b(facture|facturation|factures|bill|bills|billing|invoice|invoices|"
             + "prelevement|prelevements|paiement|payment|montant|charge)\\b");
+    // An explicit human/advisor request must NOT be intercepted by the opener clarify: let it flow
+    // to the normal pipeline so the escalation path (ADR-0019) handles it, even if the turn also
+    // carries a generic problem word ("j'ai un problème, je veux un conseiller").
+    private static final Pattern ESCALATION_REQUEST = compile(
+            "\\b(conseiller|conseillere|un agent|une personne|un humain|quelqu un|"
+            + "advisor|a human|an agent|real person|someone)\\b|"
+            + "\\b(parler|joindre|contacter|speak|talk|transfer|escalate)\\b");
 
     // Returns the opener topic when the turn is a safe, generic problem/help opener with no concrete
     // question marker, or empty when the turn is specific or is not an opener at all.
@@ -42,6 +49,9 @@ public class ProblemOpenerDetector {
         }
         String normalized = normalize(question);
         if (normalized.isBlank() || SPECIFIC_MARKER.matcher(normalized).find()) {
+            return Optional.empty();
+        }
+        if (ESCALATION_REQUEST.matcher(normalized).find()) {
             return Optional.empty();
         }
         if (!isOpener(normalized)) {

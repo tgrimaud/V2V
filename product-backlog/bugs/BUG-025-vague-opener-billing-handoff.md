@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-025
 - **Title:** A generic billing opener ("j'ai un problème avec ma facture" / "I have a problem with my bill") triggers a low-confidence advisor hand-off instead of a targeted clarification
-- **Status:** 🚀 Implemented + deployed to the pilot (2026-09-23, image `0.9.3-blf2`) — pending adversarial review + formal QA retest
+- **Status:** ✅ Implemented + deployed to the pilot (2026-09-23) — adversarial review 91/100 (Pass) + QA acceptance done; ready to merge
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation
@@ -90,9 +90,12 @@ grounding gate deflects:
 - [x] A specific problem question (question marker / number) still reaches retrieval.
 - [x] The opener redirect never softens an unsafe/off-topic refusal.
 - [x] Regression tests cover the above (`InputGuardrailTest`, `ProblemOpenerDetectorTest`).
-- [x] OpenTelemetry: reuses the existing `CLARIFY` guardrail verdict (no new slice needed).
-- [ ] Adversarial code review ≥ 90% satisfied.
-- [ ] Formal QA retest passes on the pilot.
+- [x] OpenTelemetry: `CLARIFY` verdict + a `reason=problem_opener` sub-tag on
+      `voice_support.guardrail_block` so opener redirects are measurable separately.
+- [x] Adversarial code review ≥ 90% satisfied — **score 91/100, QA gate Pass** (2 non-blocking
+      findings applied: telemetry reason sub-tag + explicit-advisor-request bypass).
+- [x] Formal QA acceptance — Cucumber scenarios (`conversation-grounding.feature`) + pilot smoke
+      (t03/t04 + VIP). Backend suite **633/0**.
 - [x] Deployed to the pilot (image swap, no KB re-sync required).
 
 ## Pilot Deploy + Validation (2026-09-23)
@@ -122,10 +125,19 @@ grounding gate deflects:
   - `backend/.../conversation/domain/service/InputGuardrailTest.java` (+6 cases)
   - `backend/.../conversation/domain/service/ProblemOpenerDetectorTest.java` (new)
 - **Tests added/updated:** full backend suite **624/0**.
-- **OpenTelemetry:** none new — reuses the `CLARIFY` verdict already logged by the guardrail.
-- **Residual risk:** a bare "problème de connexion" (no question marker) now clarifies rather than
-  retrieving; acceptable (the general clarify lists a technical option), and strictly better than the
-  current intermittent hand-off. Scope of opener nouns/topics is env-tunable in a follow-up if needed.
+- **OpenTelemetry:** `reason=problem_opener` sub-tag added to `voice_support.guardrail_block`
+  (counter + `[GUARDRAIL]` log), threaded via `GuardrailDecision.reason()` → `AnswerService` /
+  `StreamingConversationService` → `BackendTelemetry.recordGuardrailBlock(verdict, reason)`.
+- **Post-review fixes (both non-blocking findings applied):**
+  1. Telemetry reason sub-tag (above) so opener clarifies are separable from vague/mid-confidence
+     clarifies in metrics/logs.
+  2. `ProblemOpenerDetector` now bypasses (returns empty) when the turn carries an explicit
+     human/advisor request ("je veux parler à un conseiller", "speak to a human"), so it reaches the
+     normal pipeline / escalation path (ADR-0019) instead of being clarified.
+- **Residual risk:** a bare "problème de connexion" (no question marker, no advisor request) still
+  clarifies rather than retrieving; acceptable (the general clarify lists a technical option), and
+  strictly better than the current intermittent hand-off. Opener nouns/topics remain env-tunable in
+  a follow-up if needed.
 - **Deploy:** code-only; a pilot image swap on top of `0.9.3-blf1` — **no KB re-sync** required.
 
 ## QA Retest

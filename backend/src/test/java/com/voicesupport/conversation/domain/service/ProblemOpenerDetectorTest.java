@@ -59,6 +59,18 @@ class ProblemOpenerDetectorTest {
         assertEquals(Optional.empty(), detector.detect(turn), "turn: " + turn);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // An explicit human/advisor request must NOT be intercepted, even with a problem word —
+            // it flows to the pipeline so the escalation path (ADR-0019) can handle it.
+            "J'ai un problème, je veux parler à un conseiller",
+            "I have a problem, I want to speak to a human",
+            "J'ai un souci, transférez-moi à un agent"})
+    @DisplayName("does not intercept an explicit human/advisor request")
+    void ignores_escalation_request(String turn) {
+        assertEquals(Optional.empty(), detector.detect(turn), "turn: " + turn);
+    }
+
     @Test
     @DisplayName("returns empty on null input")
     void handles_null() {

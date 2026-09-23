@@ -133,7 +133,8 @@ public class InputGuardrail {
         // hand-off. Runs after the unsafe/off-topic refusals so it can never soften a block.
         return problemOpenerDetector.detect(trimmed)
                 .map(topic -> GuardrailDecision.clarify(
-                        GuardrailMessages.problemOpenerClarify(language, topic == ProblemOpenerDetector.Topic.BILLING)))
+                        GuardrailMessages.problemOpenerClarify(language, topic == ProblemOpenerDetector.Topic.BILLING),
+                        "problem_opener"))
                 .orElseGet(GuardrailDecision::pass);
     }
 

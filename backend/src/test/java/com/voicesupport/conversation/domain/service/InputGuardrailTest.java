@@ -350,6 +350,24 @@ class InputGuardrailTest {
     }
 
     @Test
+    @DisplayName("BUG-025: the opener clarify carries the problem_opener telemetry reason")
+    void opener_clarify_carries_reason() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème avec ma facture", true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertEquals("problem_opener", decision.reason());
+    }
+
+    @Test
+    @DisplayName("BUG-025: an explicit advisor request in an opener is not clarified (reaches the pipeline)")
+    void opener_with_advisor_request_reaches_pipeline() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème, je veux parler à un conseiller",
+                true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict());
+    }
+
+    @Test
     @DisplayName("BUG-002: canned wording follows the DECIDED language, not the input text")
     void wording_follows_decided_language_not_input() {
         // GIVEN an ambiguous greeting whose own text does not carry a language ("Hello" is caught by

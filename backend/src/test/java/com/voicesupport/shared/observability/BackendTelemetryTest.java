@@ -83,6 +83,25 @@ class BackendTelemetryTest {
     }
 
     @Test
+    @DisplayName("BUG-025: tags the guardrail-block counter with a lower-cased reason sub-type")
+    void recordsGuardrailBlockReason() {
+        // GIVEN a known channel and a CLARIFY carrying the problem-opener reason
+        CorrelationId.setChannel("web_voice");
+
+        // WHEN the blocked verdict is recorded with its reason
+        telemetry.recordGuardrailBlock("CLARIFY", "problem_opener");
+
+        // THEN the counter carries the reason sub-tag (so opener clarifies are separable in metrics)
+        Counter counter = registry.find("voice_support.guardrail_block")
+                .tag("verdict", "clarify")
+                .tag("reason", "problem_opener")
+                .tag("channel", "web_voice")
+                .counter();
+        assertNotNull(counter);
+        assertEquals(1.0, counter.count());
+    }
+
+    @Test
     @DisplayName("records a success-tagged timer carrying the current channel and provider")
     void recordsSuccess() {
         // GIVEN a known channel for the current request
