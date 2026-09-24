@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted (2026-08-15)
+Accepted (2026-08-15). **Interim transport retired by [ADR-0053](ADR-0053-retire-interim-websocket-and-stdlib-server.md)**
+(TASK-WEB-048, 2026-09-24): the `SingleClientWebsocketServerTransport` on `:8091`
+(`web_voice/websocket_signaling.py`) is removed; the live WS path is the aiohttp-native
+single-port transport (ADR-0047). The transport-agnostic `SessionFactory` this ADR introduced
+and the AudioHook-shaped framing are unchanged and still used (WS + Genesys).
 
 > Refines **ADR-0033** (WebRTC as the single live web voice transport) and implements
 > Decision point 4 of **ADR-0042** (no TURN for the pilot; a WebSocket audio path is the

@@ -2,9 +2,9 @@
 
 A streaming call returns no HTTP response per turn, so its only latency/QA evidence is
 this end-of-call dump: the full span/event/metric snapshot serialized as one structured
-line on stderr, plus an additive OTLP export. WebRTC (`webrtc_signaling`) and the interim
-browser WebSocket path (`websocket_signaling`, TASK-WEB-028) share it so the evidence shape
-is identical across transports (US-036).
+line on stderr, plus an additive OTLP export. WebRTC (`webrtc_signaling`) and the live
+aiohttp WebSocket path (`websocket_app`, ADR-0047) share it so the evidence shape is
+identical across transports (US-036).
 """
 
 import json

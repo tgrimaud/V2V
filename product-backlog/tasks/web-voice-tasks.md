@@ -4214,3 +4214,113 @@ Scenario: Cloud-only items are out of reach locally
   is vault-rendered, so signing against the deployed endpoint needs that secret; behind the HAProxy
   edge the signed `@request-target`/`@authority` may be rewritten (`--request-target`/`--authority`
   overrides + the server's `GENESYS_AUDIOHOOK_AUTHORITY`).
+
+## TASK-WEB-048 - Retire the interim :8091 WebSocket transport + the `stdlib` server mode (single WS path)
+
+**Parent:** EPIC-006 (voice runtime)
+**Related decisions:** ADR-0053 (this retirement — completes ADR-0047), ADR-0047 (single async server on one port), ADR-0043 (interim transport + transport-agnostic session factory), ADR-0022 (original stdlib/"no FastAPI"), ADR-0046 (WebSocket primary)
+**Related bug:** BUG-026 (UI language-selector session lock — the concrete dual-maintenance divergence that motivates this)
+**Depends on:** ADR-0047 shipped (`v0.7.0`, aiohttp default on the pilot)
+**Classification:** V1 voice runtime — plumbing/refactor (transport removal only; pipeline, SessionFactory and backend/`/turn` contracts unchanged). Runtime-affecting surface = server wiring, so re-run the full voice test suite + confirm the aiohttp `/ws` telemetry is intact.
+**Status:** 🟡 Phase 1 done (interim `:8091` WS removed) — Phase 2 deferred (retire the `stdlib` server mode)
+**Priority:** Medium
+**Branch:** `task/TASK-WEB-048-retire-interim-ws-stdlib` (off `feat/restart-from-scratch`)
+
+> **Phasing note (discovered during implementation).** The `stdlib` `ThreadingHTTPServer` is **not**
+> just the interim WS host: it also serves the batch `/api/voice/*` REST contract and **shares
+> request helpers** (`_full_turn_response`, `_turn_success_body`, `_turn_stt_error`,
+> `_turn_tts_error`, `_envelope_from_query`, `_log_turn`) with the **kept** aiohttp app
+> (`web_voice/app.py`), and its batch behaviour is exercised by `tests/test_web_voice_ingress.py`,
+> `tests/test_web_voice_egress.py` and `features/steps/web_voice_steps.py`. So **Phase 1** removes the
+> interim `:8091` WS transport (the actual BUG-026 dual-maintenance source) and makes the live WS
+> path aiohttp-only; **Phase 2** (remove the `--server stdlib` mode + `WebVoiceHTTPServer`/
+> `build_handler`, migrating those batch-REST tests onto the aiohttp app) is deferred as a larger,
+> separate change and keeps this ticket open. See ADR-0053 (Status + Phasing).
+
+### Context
+
+ADR-0047 made the aiohttp single-port server the pilot default (`v0.7.0`) but left two transitional
+pieces in the tree: the interim single-client `SingleClientWebsocketServerTransport` on `:8091`
+(`web_voice/websocket_signaling.py`, ADR-0043) and the legacy `--server stdlib` `ThreadingHTTPServer`
+(`WebVoiceHTTPServer`/`build_handler`, ADR-0022). The interim WS is started **only** in
+`--server stdlib` mode; the pilot container runs the default `aiohttp` mode, so **neither runs on the
+pilot**. BUG-026 showed the concrete cost: the answer-language session lock had to be reasoned about
+in two WS transports, and the interim path structurally **cannot** honour it (its envelope is built
+before the client connects). The interim path is also the heavier one — it needs the `websockets`
+package, caps at one client, and opens a second port. See ADR-0053 for the full rationale.
+
+Pipecat is NOT removed: both paths are pipecat pipelines; only the transport differs. The kept path
+is the pipecat pipeline behind the aiohttp-native `AiohttpWebsocketTransport` (`websocket_app.py`).
+
+### Scope
+
+1. **Extract shared symbols** out of `websocket_signaling.py` (consumed by the kept aiohttp path)
+   into a neutral module: the telemetry event/metric name constants (`SESSION_STARTED_EVENT`,
+   `CLIENT_CONNECTED_EVENT`, `CLIENT_DISCONNECTED_EVENT`, `SESSION_REJECTED_EVENT`,
+   `ACTIVE_SESSIONS_METRIC`, `WS_MAX_SESSIONS_ENV_VAR`) and `ws_language_config`. Repoint
+   `web_voice/websocket_app.py` (line ~60 import) and `web_voice/server.py` (aiohttp `/ws` +
+   Genesys handlers import `ws_language_config`). Values/names preserved (no behaviour change).
+2. **Remove the interim WS transport**: delete `web_voice/websocket_signaling.py`
+   (`WebSocketSignalingService`, `ws_host_config`, `ws_port_config`, `ws_max_sessions_config`) and
+   `web_voice/websocket_support.py` (`SingleClientWebsocketServerTransport` probe). Remove
+   `_build_ws_signaling` and the `ws_signaling`/`ws_loop` teardown branch in `server.py:main`.
+3. **Remove the `stdlib` server mode**: delete the `--server stdlib` branch + `WebVoiceHTTPServer` /
+   `build_handler`, drop the `--server` choice (aiohttp becomes sole/implicit) and the `VOICE_SERVER`
+   env. Keep `--websocket off` as the only WS on/off gate; drop the `probe_websocket_support` gate.
+4. **Tests / behave**: remove `tests/test_websocket_signaling.py`; re-point or retire the behave
+   capacity feature (`features/steps/websocket_capacity_steps.py` + its `.feature`) onto the aiohttp
+   `/ws` ceiling — already unit-covered by
+   `test_websocket_app.py::test_over_capacity_connection_is_refused_with_ws_1013`. Keep the QA
+   capacity contract satisfied.
+5. **Deploy cleanup**: drop the `:8091` publish, `VOICE_WS_PORT`, and any `firewall_extra_ports:[8091]`
+   from `deploy/` compose/Ansible (flagged by the ADR-0047 spike README); Dockerfile `ENTRYPOINT`
+   unchanged (already aiohttp default). Only remove `websockets` from `requirements.txt` if nothing
+   else (incl. pipecat) needs it transitively — verify with `pip show`/import probe first.
+6. **Docs sweep**: update any reference to `VOICE_WS_PORT`, `:8091`, `--server stdlib`, or the
+   "interim path" (CLAUDE.md/AGENTS.md notes, README, architecture docs) to the single-path reality;
+   mark ADR-0043's interim transport and ADR-0022's stdlib clause as retired by ADR-0053; update the
+   ADR README row for ADR-0047 and add the ADR-0053 row.
+
+### Out Of Scope
+
+- Any change to the aiohttp `/ws` behaviour, the pipecat pipeline, the SessionFactory (ADR-0043) or
+  the backend/`/turn` contracts.
+- The BUG-026 language-lock fix (already shipped on `fix/BUG-026-...`).
+- WebRTC signaling (it already runs under aiohttp and is unaffected).
+
+### Acceptance
+
+**Phase 1 (interim `:8091` WS removal) — done:**
+
+- [x] `web_voice/websocket_signaling.py` and `web_voice/websocket_support.py` are gone; no non-test
+      module imports them; shared symbols live in a neutral module (`web_voice/ws_common.py`) and are
+      imported by the aiohttp path with identical names/values.
+- [x] The interim WS wiring (`_build_ws_signaling`, the `main` stdlib WS branch) is removed; the live
+      WS path is aiohttp-only; `--websocket off` still disables `/ws`.
+- [x] No `:8091` / `VOICE_WS_PORT` / `firewall_extra_ports:[8091]` in `deploy/` (already clean +
+      asserted-absent by `deploy/ansible/qa-validate-ansible.sh`); Dockerfile unchanged.
+- [x] Full voice suite green (`unittest` 694 tests OK — −27 interim tests removed; `behave`
+      15 features / 43 scenarios / 194 steps, 0 failed). The aiohttp `/ws` capacity ceiling stays
+      covered by `test_websocket_app.py::test_over_capacity_connection_is_refused_with_ws_1013`; the
+      transport-agnostic `websocket_control_signals` feature is kept.
+- [x] aiohttp `/ws` telemetry (`session_started`/`client_connected`/`active_sessions`) unchanged in
+      shape and names after the symbol extraction.
+- [x] Docs/ADR updated (ADR-0053 Accepted-Phase-1, README row, ticket); no code imports the interim
+      path (only historical docstring mentions remain, updated where live).
+- [ ] Adversarial code review ≥ 90%; QA confirms a pilot-shaped aiohttp run (web `/ws` + Genesys) is
+      unaffected.
+
+**Phase 2 (retire the `--server stdlib` mode) — deferred (keeps this ticket open):**
+
+- [ ] Remove `--server` / `VOICE_SERVER` / `WebVoiceHTTPServer` / `build_handler`; aiohttp becomes
+      the sole server.
+- [ ] Migrate the batch `/api/voice/*` coverage (`tests/test_web_voice_ingress.py`,
+      `tests/test_web_voice_egress.py`, `features/steps/web_voice_steps.py`) onto the aiohttp app,
+      keeping the shared request helpers.
+- [ ] Docs/ADR flip ADR-0053 Phase 2 to done; `--server`/stdlib references removed from docs.
+
+### Notes
+
+- The `websockets` package may stay if pipecat needs it transitively — do not force-remove it.
+- This is the "removable" follow-through ADR-0047 anticipated (its README row: the `voice_ws`
+  ACL/backend + `firewall_extra_ports:[8091]` become removable once one port is proven live).

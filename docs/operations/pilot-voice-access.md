@@ -53,7 +53,8 @@ Notes:
 - `ws.js` connects **same-origin** to **`/ws`** — `wss://<host>/ws` over HTTPS (behind
   the VIP) or `ws://<host>:8090/ws` over plain HTTP (local dev): one routed port carries
   the page, the REST API and the socket (ADR-0047). `?wsport=<n>` forces a direct
-  `host:port/ws` for dev against a specific bridge (e.g. the legacy stdlib `:8091`).
+  `host:port/ws` for dev against a specific bridge's aiohttp port (the interim `:8091`
+  WS listener was retired — ADR-0053/TASK-WEB-048).
 - Other endpoints on the same server: `POST /api/voice/stt`, `POST /api/voice/tts`,
   and `GET /api/voice/openapi.yaml`.
 

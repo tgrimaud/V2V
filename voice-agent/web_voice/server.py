@@ -447,50 +447,6 @@ def _build_signaling(args, ingress, egress, backend) -> tuple[Any, Any]:
     return signaling, loop
 
 
-def _build_ws_signaling(args, ingress, egress, backend, loop) -> tuple[Any, Any]:
-    """Build the interim browser WebSocket signaling (TASK-WEB-028), or (None, None).
-
-    Reuses the WebRTC background loop when present; otherwise starts its own so the WS
-    path works even with `--webrtc off`. `--websocket off` disables it; `auto` (default)
-    enables it only when the websockets transport is importable; `on` requires it. The
-    session is transport-agnostic — the same `SessionFactory` as WebRTC is used, only the
-    transport differs (ADR-0043, TASK-WEB-027). Returns (ws_signaling, owned_loop) so
-    main() stops the loop only when this builder created it.
-    """
-    if getattr(args, "websocket", "auto") == "off":
-        return None, None
-    from .websocket_support import probe_websocket_support
-
-    if not probe_websocket_support().available:
-        if args.websocket == "on":
-            raise SystemExit('WebSocket requested but unavailable: pip install "websockets>=13,<17"')
-        return None, None
-    from .async_loop import BackgroundEventLoop
-    from .websocket_signaling import (
-        WebSocketSignalingService,
-        ws_host_config,
-        ws_language_config,
-        ws_max_sessions_config,
-        ws_port_config,
-    )
-
-    owned_loop = None
-    if loop is None:
-        loop = BackgroundEventLoop()
-        loop.start()
-        owned_loop = loop
-    ws_signaling = WebSocketSignalingService(
-        factory=_build_ws_session_factory(args, ingress, egress, backend),
-        loop=loop,
-        host=ws_host_config(),
-        port=ws_port_config(),
-        default_language=ws_language_config(),
-        max_sessions=ws_max_sessions_config(),
-    )
-    ws_signaling.start()
-    return ws_signaling, owned_loop
-
-
 def _build_ws_session_factory(
     args, ingress, egress, backend, transport_label="websocket", control_signal_source_factory=None
 ):
@@ -547,7 +503,7 @@ def _build_genesys_handler(args, ingress, egress, backend):
         genesys_max_sessions_config,
     )
     from .genesys_timing import genesys_log_telemetry
-    from .websocket_signaling import ws_language_config
+    from .ws_common import ws_language_config
 
     control_factory = genesys_control_source_factory(genesys_control_mode_config())
     # Pass the REAL exporter (stderr + OTLP, same path the session handler uses) so the
@@ -591,7 +547,7 @@ def _build_ws_handler(args, ingress, egress, backend):
     if getattr(args, "websocket", "auto") == "off":
         return None
     from .websocket_app import make_ws_handler, ws_async_max_sessions_config
-    from .websocket_signaling import ws_language_config
+    from .ws_common import ws_language_config
 
     return make_ws_handler(
         _build_ws_session_factory(args, ingress, egress, backend),
@@ -682,19 +638,18 @@ def main() -> int:
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
-    # ADR-0047: on the aiohttp path the live WS rides the SAME port (`/ws`) via an
-    # aiohttp-native transport, so the interim single-client `:8091` listener is NOT
-    # started; the stdlib path keeps that listener unchanged.
+    # ADR-0047: the live WS rides the SAME routed port (`/ws`) via the aiohttp-native
+    # transport. The interim single-client `:8091` listener + the legacy stdlib WS were
+    # retired (ADR-0053 / TASK-WEB-048): the live WS path is aiohttp-only now; the legacy
+    # stdlib server keeps serving HTTP + WebRTC batch only (no live WS).
     genesys_handler = None
     if args.server == "aiohttp":
         ws_handler = _build_ws_handler(args, ingress, egress, backend)
         genesys_handler = _build_genesys_handler(args, ingress, egress, backend)
-        ws_signaling, ws_loop = None, None
         ws_status = f"on:{args.port}/ws" if ws_handler else "off"
     else:
         ws_handler = None
-        ws_signaling, ws_loop = _build_ws_signaling(args, ingress, egress, backend, loop)
-        ws_status = f"on:{ws_signaling.port}" if ws_signaling else "off"
+        ws_status = "off"
     genesys_status = f"on:{args.port}/genesys/audiohook" if genesys_handler else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
@@ -706,14 +661,10 @@ def main() -> int:
     try:
         _serve(args, processor, signaling, ws_handler, genesys_handler)
     finally:
-        if ws_signaling is not None:
-            ws_signaling.close()
         if signaling is not None:
             signaling.close()
         if loop is not None:
             loop.stop()
-        if ws_loop is not None:
-            ws_loop.stop()
         # Stop the batch pipecat processor's background loop if it started one (TASK-WEB-024).
         close = getattr(processor, "close", None)
         if callable(close):
@@ -733,7 +684,8 @@ def _serve(
     `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target: static, REST,
     the live WebSocket audio path and — when `genesys_handler` is supplied — the Genesys
     Audio Connector `wss` endpoint all ride one port.
-    `stdlib` is the historical `ThreadingHTTPServer` (HTTP only; WS stays on `:8091`).
+    `stdlib` is the historical `ThreadingHTTPServer` (HTTP + WebRTC batch only; the live
+    WS path is aiohttp-only since the interim `:8091` listener was retired — ADR-0053).
     """
     if args.server == "aiohttp":
         from aiohttp import web
@@ -768,7 +720,8 @@ def _parse_args() -> argparse.Namespace:
         choices=("stdlib", "aiohttp"),
         default=os.environ.get("VOICE_SERVER", "aiohttp"),
         help="HTTP server: 'aiohttp' (default, single async HTTP+WS server on one port, "
-        "TASK-WEB-038/ADR-0047) or 'stdlib' (legacy ThreadingHTTPServer + interim :8091 WS)",
+        "TASK-WEB-038/ADR-0047) or 'stdlib' (legacy ThreadingHTTPServer, HTTP + WebRTC "
+        "batch only; the live WS path is aiohttp-only since ADR-0053/TASK-WEB-048)",
     )
     parser.add_argument("--provider", choices=PROVIDER_NAMES, default=GRADIUM)
     parser.add_argument(
@@ -793,10 +746,10 @@ def _parse_args() -> argparse.Namespace:
         "--websocket",
         choices=("auto", "on", "off"),
         default=os.environ.get("VOICE_WEBSOCKET", "auto"),
-        help="live browser WebSocket voice path (TASK-WEB-028/038): 'auto' (on if "
-        "installed), 'on' (require), 'off'. On the default aiohttp server the WS rides "
-        "the SAME port at /ws (ceiling VOICE_MAX_WS_SESSIONS); on the legacy stdlib "
-        "server it uses a separate listener on VOICE_WS_PORT (default 8091)",
+        help="live browser WebSocket voice path (TASK-WEB-038): 'auto'/'on' enable it, "
+        "'off' disables it. It rides the SAME routed port at /ws on the aiohttp server "
+        "(ceiling VOICE_MAX_WS_SESSIONS). No effect on the legacy stdlib server, which "
+        "serves HTTP + WebRTC batch only (interim :8091 WS retired — ADR-0053)",
     )
     parser.add_argument(
         "--genesys",
