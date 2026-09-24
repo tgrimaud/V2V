@@ -1,12 +1,12 @@
 """aiohttp-native WebSocket voice transport + `GET /ws` handler (TASK-WEB-038, ADR-0047).
 
-Slice 2 of the single-port unification. The interim path (`websocket_signaling.py`) runs
-pipecat's `SingleClientWebsocketServerTransport`, which owns a `websockets` server on its
-own port (`:8091`) and is capped at one client per listener. That transport **cannot share
-aiohttp's listener**, so this module provides an aiohttp-native pipecat transport that
+The single, live WebSocket voice path. It provides an aiohttp-native pipecat transport that
 consumes an **already-upgraded** `aiohttp.web.WebSocketResponse` — the same shape as
 pipecat's `FastAPIWebsocketTransport`, but built directly on `BaseInput/OutputTransport`
-so it pulls **no FastAPI/starlette** (ADR-0022).
+so it pulls **no FastAPI/starlette** (ADR-0022). It rides the same routed port as the UI +
+REST (single-port unification), lifting the one-client cap of the former interim
+`SingleClientWebsocketServerTransport` on `:8091`, which was retired by ADR-0053/TASK-WEB-048
+(the live WS path is aiohttp-only now).
 
 Each `GET /ws` connection is its own handler coroutine → its own transport → its own
 `StreamingVoiceSession` (built by the unchanged `SessionFactory`, ADR-0043) awaited inline
@@ -57,7 +57,7 @@ from .envelope import ChannelEnvelope
 from .session_factory import SessionFactory
 from .session_telemetry import log_telemetry
 from .websocket_framing import WebSocketAudioSerializer
-from .websocket_signaling import (
+from .ws_common import (
     ACTIVE_SESSIONS_METRIC,
     CLIENT_CONNECTED_EVENT,
     CLIENT_DISCONNECTED_EVENT,

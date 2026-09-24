@@ -4222,9 +4222,20 @@ Scenario: Cloud-only items are out of reach locally
 **Related bug:** BUG-026 (UI language-selector session lock — the concrete dual-maintenance divergence that motivates this)
 **Depends on:** ADR-0047 shipped (`v0.7.0`, aiohttp default on the pilot)
 **Classification:** V1 voice runtime — plumbing/refactor (transport removal only; pipeline, SessionFactory and backend/`/turn` contracts unchanged). Runtime-affecting surface = server wiring, so re-run the full voice test suite + confirm the aiohttp `/ws` telemetry is intact.
-**Status:** 📋 Planned
+**Status:** 🟡 Phase 1 done (interim `:8091` WS removed) — Phase 2 deferred (retire the `stdlib` server mode)
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-048-retire-interim-ws-stdlib` (off `feat/restart-from-scratch`)
+
+> **Phasing note (discovered during implementation).** The `stdlib` `ThreadingHTTPServer` is **not**
+> just the interim WS host: it also serves the batch `/api/voice/*` REST contract and **shares
+> request helpers** (`_full_turn_response`, `_turn_success_body`, `_turn_stt_error`,
+> `_turn_tts_error`, `_envelope_from_query`, `_log_turn`) with the **kept** aiohttp app
+> (`web_voice/app.py`), and its batch behaviour is exercised by `tests/test_web_voice_ingress.py`,
+> `tests/test_web_voice_egress.py` and `features/steps/web_voice_steps.py`. So **Phase 1** removes the
+> interim `:8091` WS transport (the actual BUG-026 dual-maintenance source) and makes the live WS
+> path aiohttp-only; **Phase 2** (remove the `--server stdlib` mode + `WebVoiceHTTPServer`/
+> `build_handler`, migrating those batch-REST tests onto the aiohttp app) is deferred as a larger,
+> separate change and keeps this ticket open. See ADR-0053 (Status + Phasing).
 
 ### Context
 
@@ -4279,21 +4290,34 @@ is the pipecat pipeline behind the aiohttp-native `AiohttpWebsocketTransport` (`
 
 ### Acceptance
 
-- [ ] `web_voice/websocket_signaling.py` and `web_voice/websocket_support.py` are gone; no non-test
-      module imports them; shared symbols live in a neutral module and are imported by the aiohttp
-      path with identical names/values.
-- [ ] `--server` / `VOICE_SERVER` / the `stdlib` `ThreadingHTTPServer` are removed; the server starts
-      only the aiohttp single-port app; `--websocket off` still disables `/ws`.
-- [ ] No `:8091` / `VOICE_WS_PORT` / `firewall_extra_ports:[8091]` remain in `deploy/` (grep clean);
-      Dockerfile unchanged.
-- [ ] Full voice suite green (`./.venv/bin/python -m unittest discover tests` + `./.venv/bin/behave`),
-      with the aiohttp `/ws` capacity ceiling covered and the interim-specific tests removed/re-pointed.
-- [ ] aiohttp `/ws` telemetry (`session_started`/`client_connected`/`active_sessions`) unchanged in
+**Phase 1 (interim `:8091` WS removal) — done:**
+
+- [x] `web_voice/websocket_signaling.py` and `web_voice/websocket_support.py` are gone; no non-test
+      module imports them; shared symbols live in a neutral module (`web_voice/ws_common.py`) and are
+      imported by the aiohttp path with identical names/values.
+- [x] The interim WS wiring (`_build_ws_signaling`, the `main` stdlib WS branch) is removed; the live
+      WS path is aiohttp-only; `--websocket off` still disables `/ws`.
+- [x] No `:8091` / `VOICE_WS_PORT` / `firewall_extra_ports:[8091]` in `deploy/` (already clean +
+      asserted-absent by `deploy/ansible/qa-validate-ansible.sh`); Dockerfile unchanged.
+- [x] Full voice suite green (`unittest` 694 tests OK — −27 interim tests removed; `behave`
+      15 features / 43 scenarios / 194 steps, 0 failed). The aiohttp `/ws` capacity ceiling stays
+      covered by `test_websocket_app.py::test_over_capacity_connection_is_refused_with_ws_1013`; the
+      transport-agnostic `websocket_control_signals` feature is kept.
+- [x] aiohttp `/ws` telemetry (`session_started`/`client_connected`/`active_sessions`) unchanged in
       shape and names after the symbol extraction.
-- [ ] Docs/ADR updated (ADR-0053 accepted, ADR-0047/0043/0022 rows reflect the retirement); no dangling
-      references to the interim path.
+- [x] Docs/ADR updated (ADR-0053 Accepted-Phase-1, README row, ticket); no code imports the interim
+      path (only historical docstring mentions remain, updated where live).
 - [ ] Adversarial code review ≥ 90%; QA confirms a pilot-shaped aiohttp run (web `/ws` + Genesys) is
       unaffected.
+
+**Phase 2 (retire the `--server stdlib` mode) — deferred (keeps this ticket open):**
+
+- [ ] Remove `--server` / `VOICE_SERVER` / `WebVoiceHTTPServer` / `build_handler`; aiohttp becomes
+      the sole server.
+- [ ] Migrate the batch `/api/voice/*` coverage (`tests/test_web_voice_ingress.py`,
+      `tests/test_web_voice_egress.py`, `features/steps/web_voice_steps.py`) onto the aiohttp app,
+      keeping the shared request helpers.
+- [ ] Docs/ADR flip ADR-0053 Phase 2 to done; `--server`/stdlib references removed from docs.
 
 ### Notes
 

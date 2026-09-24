@@ -2,7 +2,17 @@
 
 ## Status
 
-Proposed (2026-09-24). **Completes** [ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md)
+Accepted (2026-09-24). **Phase 1 implemented** via **TASK-WEB-048**: the interim single-client
+`:8091` WebSocket transport is removed and the live WS path is aiohttp-only. **Phase 2 deferred**
+(retire the `--server stdlib` mode itself): during implementation the `stdlib`
+`ThreadingHTTPServer` was found to also host the batch `/api/voice/*` REST contract and to **share
+request helpers** (`_full_turn_response`, `_turn_success_body`, `_turn_stt_error`,
+`_turn_tts_error`, `_envelope_from_query`, `_log_turn`) with the kept aiohttp app, plus its
+batch-REST behaviour is exercised by `tests/test_web_voice_ingress.py`,
+`tests/test_web_voice_egress.py` and `features/steps/web_voice_steps.py`. Removing the mode
+therefore requires migrating those batch-REST tests onto the aiohttp app — a larger, separate
+change tracked as a Phase-2 follow-up (TASK-WEB-048 stays open for it). **Completes**
+[ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md)
 (single async HTTP+WebSocket server on one port — shipped as the pilot default in `v0.7.0`) by
 retiring the transitional pieces ADR-0047 left in place: the interim single-client
 `SingleClientWebsocketServerTransport` on `:8091` (introduced by
@@ -79,6 +89,23 @@ Retire both transitional components and make the aiohttp single-port server the 
 The change is **transport/plumbing only**: the pipecat pipeline, the `SessionFactory`
 (ADR-0043), the backend conversation contract, and the batch `/api/voice/turn` contract are all
 unchanged.
+
+### Phasing (as implemented)
+
+- **Phase 1 (done, TASK-WEB-048).** Extract the shared symbols (the five WS telemetry
+  event/metric name constants + `WS_MAX_SESSIONS_ENV_VAR` + `ws_language_config`) into a neutral
+  `web_voice/ws_common.py`; repoint `websocket_app.py` and `server.py`. Delete
+  `web_voice/websocket_signaling.py` + `web_voice/websocket_support.py`, the `_build_ws_signaling`
+  wiring, the interim unit tests (`test_websocket_signaling.py`, `test_websocket_support.py`) and
+  the three interim behave features/steps (`websocket_capacity`, `websocket_transport`,
+  `websocket_voice_client`). The aiohttp `/ws` ceiling stays covered by
+  `test_websocket_app.py::test_over_capacity_connection_is_refused_with_ws_1013`; the
+  transport-agnostic `websocket_control_signals` feature is kept. Deploy was already clean
+  (`:8091`/`VOICE_WS_PORT`/`firewall_extra_ports` already removed and asserted-absent by
+  `deploy/ansible/qa-validate-ansible.sh`). The `stdlib` mode now serves HTTP + WebRTC batch only.
+- **Phase 2 (deferred).** Remove the `--server stdlib` mode + `WebVoiceHTTPServer`/`build_handler`
+  and migrate the batch-REST tests/behave onto the aiohttp app (see Status). Keeps the batch
+  `/api/voice/*` coverage while dropping the redundant second HTTP server.
 
 ## Consequences
 
