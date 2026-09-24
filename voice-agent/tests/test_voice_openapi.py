@@ -6,9 +6,7 @@ drift from the server's actual routes; and the server serves it at
 """
 
 import sys
-import threading
 import unittest
-from http.client import HTTPConnection
 from pathlib import Path
 
 import yaml
@@ -22,8 +20,6 @@ from web_voice.server import (  # noqa: E402
     TTS_ROUTE,
     TURN_ROUTE,
     WEBRTC_OFFER_ROUTE,
-    WebVoiceHTTPServer,
-    build_handler,
 )
 
 
@@ -73,30 +69,10 @@ class VoiceOpenApiSpecTest(unittest.TestCase):
         self.assertEqual(documented, actual)
 
 
-class VoiceOpenApiServeTest(unittest.TestCase):
-    def _serve(self) -> int:
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor=None))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        return server.server_address[1]
-
-    def test_server_serves_the_spec_as_yaml(self) -> None:
-        # GIVEN the running server
-        port = self._serve()
-        conn = HTTPConnection("127.0.0.1", port, timeout=10)
-        # WHEN the spec route is fetched
-        conn.request("GET", OPENAPI_ROUTE)
-        response = conn.getresponse()
-        payload = response.read()
-        content_type = response.getheader("Content-Type")
-        conn.close()
-        # THEN it is served as YAML and parses back to the same OpenAPI document
-        self.assertEqual(response.status, 200)
-        self.assertIn("application/yaml", content_type)
-        served = yaml.safe_load(payload.decode("utf-8"))
-        self.assertEqual(served["info"]["title"], _load_spec()["info"]["title"])
-        self.assertIn(STT_ROUTE, served["paths"])
+# Serving the spec over HTTP (`GET /api/voice/openapi.yaml`) is covered by the aiohttp
+# parity suite (`tests/test_web_voice_app.py::test_openapi_is_served_as_yaml`) and the
+# Behave OpenAPI scenario. The stdlib `WebVoiceHTTPServer` serve test was retired with
+# the stdlib server itself (ADR-0053 / TASK-WEB-048 Phase 2).
 
 
 if __name__ == "__main__":

@@ -2,16 +2,19 @@
 
 ## Status
 
-Accepted (2026-09-24). **Phase 1 implemented** via **TASK-WEB-048**: the interim single-client
-`:8091` WebSocket transport is removed and the live WS path is aiohttp-only. **Phase 2 deferred**
-(retire the `--server stdlib` mode itself): during implementation the `stdlib`
-`ThreadingHTTPServer` was found to also host the batch `/api/voice/*` REST contract and to **share
-request helpers** (`_full_turn_response`, `_turn_success_body`, `_turn_stt_error`,
-`_turn_tts_error`, `_envelope_from_query`, `_log_turn`) with the kept aiohttp app, plus its
-batch-REST behaviour is exercised by `tests/test_web_voice_ingress.py`,
-`tests/test_web_voice_egress.py` and `features/steps/web_voice_steps.py`. Removing the mode
-therefore requires migrating those batch-REST tests onto the aiohttp app — a larger, separate
-change tracked as a Phase-2 follow-up (TASK-WEB-048 stays open for it). **Completes**
+Accepted (2026-09-24). **Fully implemented** via **TASK-WEB-048** (Phase 1 + Phase 2).
+**Phase 1**: the interim single-client `:8091` WebSocket transport is removed and the live WS
+path is aiohttp-only. **Phase 2**: the `--server stdlib` mode and its legacy `ThreadingHTTPServer`
+(`WebVoiceHTTPServer` + `build_handler`) are removed and the `--server` flag is dropped — aiohttp
+is now the sole HTTP+WS server. During Phase 1 the `stdlib` `ThreadingHTTPServer` was found to
+also host the batch `/api/voice/*` REST contract and to **share request helpers**
+(`_full_turn_response`, `_turn_success_body`, `_turn_stt_error`, `_turn_tts_error`,
+`_envelope_from_query`, `_log_turn`) with the kept aiohttp app, plus its batch-REST behaviour was
+exercised by `tests/test_web_voice_ingress.py`, `tests/test_web_voice_egress.py` and
+`features/steps/web_voice_steps.py`; Phase 2 kept the shared helpers on `server.py` (still imported
+by the aiohttp `app.py`), removed only the server class + handler, and migrated the batch-REST
+coverage onto the aiohttp app (`tests/test_web_voice_app.py`, which already held the HTTP-surface
+parity suite) and the Behave OpenAPI scenario onto an aiohttp `AppRunner`. **Completes**
 [ADR-0047](ADR-0047-single-async-http-websocket-server-one-port.md)
 (single async HTTP+WebSocket server on one port — shipped as the pilot default in `v0.7.0`) by
 retiring the transitional pieces ADR-0047 left in place: the interim single-client
@@ -103,9 +106,21 @@ unchanged.
   transport-agnostic `websocket_control_signals` feature is kept. Deploy was already clean
   (`:8091`/`VOICE_WS_PORT`/`firewall_extra_ports` already removed and asserted-absent by
   `deploy/ansible/qa-validate-ansible.sh`). The `stdlib` mode now serves HTTP + WebRTC batch only.
-- **Phase 2 (deferred).** Remove the `--server stdlib` mode + `WebVoiceHTTPServer`/`build_handler`
-  and migrate the batch-REST tests/behave onto the aiohttp app (see Status). Keeps the batch
-  `/api/voice/*` coverage while dropping the redundant second HTTP server.
+- **Phase 2 (done, TASK-WEB-048).** Remove the `--server stdlib` mode + `WebVoiceHTTPServer` +
+  `build_handler` from `server.py` and drop the `--server` CLI/`VOICE_SERVER` selector (aiohttp is
+  implicit/sole; `--websocket off` stays the only WS gate). The shared request helpers + route
+  constants + caps stay on `server.py` (still imported by `app.py`). The stdlib-server test classes
+  (`WebVoiceServerTest`, `WebVoiceTtsServerTest`, `VoiceOpenApiServeTest`, `VoiceTurnEndpointTest`,
+  `WebRtcOfferBackpressureTest`, `ServerSelectorTest`) are retired; their genuinely-extra assertions
+  (empty-text/provider-failure TTS 502, 502 client-safe shape + `message`/no-`error_reason`,
+  cross-runtime error-shape parity, server-log keeps the raw reason) are migrated into the aiohttp
+  parity suite `tests/test_web_voice_app.py`. The direct `VoiceTurnProcessor`/ingress/egress/OpenAPI-
+  spec unit tests are kept unchanged. The Behave "server is running" step now runs the aiohttp app on
+  a background `AppRunner`. Net effect: the redundant second HTTP server is gone while all batch
+  `/api/voice/*` coverage is preserved. Minor accepted behaviour delta: an unknown **POST** to
+  `/api/voice/*` returns aiohttp's 405 (path matches the static catch-all's GET-only resource)
+  instead of the stdlib handler's 404-JSON — this is the behaviour the pilot already shipped on
+  aiohttp since `v0.7.0` (no regression).
 
 ## Consequences
 

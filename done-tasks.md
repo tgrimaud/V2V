@@ -1956,3 +1956,35 @@ reproduces 200 post-settle), so it is a cold-start race, not a broken playbook. 
 rollout with `-e kb_sync_after_deploy=false`, then triggered the KB sync out-of-band as a detached
 `kbsync-090.service` on the first backend node (shared pgvector → one sync covers both backends).
 Follow-up hardening tracked in **BUG-021** (gated readiness pre-check before the async sync).
+
+## 2026-09-24 — TASK-WEB-048 Retire the interim :8091 WebSocket transport + the stdlib server mode (ADR-0053)
+
+**Phase 1 (merged `95f6aea`):** removed the interim single-client `SingleClientWebsocketServerTransport`
+on `:8091` (`websocket_signaling.py` + `websocket_support.py`, the `websockets`-package/1-client/second-port
+path that never ran on the pilot). Shared telemetry constants + `ws_language_config` extracted to a neutral
+`web_voice/ws_common.py`; the aiohttp-native `/ws` transport (ADR-0047) is the single live WS path. Ends the
+dual-transport maintenance that caused BUG-026's language-lock divergence. Net −1228 lines. Gates: dev 699,
+behave 43, adversarial 95/100, QA + deploy contract 90/90.
+
+**Phase 2 (branch `task/TASK-WEB-048-phase2-retire-stdlib`):** removed the `--server stdlib` mode +
+`WebVoiceHTTPServer` + `build_handler` from `web_voice/server.py` and dropped the `--server`/`VOICE_SERVER`
+selector — aiohttp is now the **sole** HTTP+WS server. The shared request helpers (`_full_turn_response`,
+`_turn_success_body`, `_turn_stt_error`, `_turn_tts_error`, `_envelope_from_query`, `_first`, `_log_turn`),
+route constants and caps stay on `server.py` (still imported by the kept `app.py`). The five stdlib-server
+test classes (`WebVoiceServerTest`, `WebVoiceTtsServerTest`, `VoiceOpenApiServeTest`, `VoiceTurnEndpointTest`,
+`WebRtcOfferBackpressureTest`) + `ServerSelectorTest` were retired; their genuinely-extra assertions
+(empty-text/provider-failure TTS 502, 502 client-safe shape + `message`/no-`error_reason`, cross-runtime
+error-shape parity, server-log keeps the raw provider reason) were migrated into the aiohttp parity suite
+`tests/test_web_voice_app.py`. The direct `VoiceTurnProcessor`/ingress/egress/OpenAPI-spec unit tests are
+kept. The Behave "server is running" step now runs the aiohttp app on a background `AppRunner`
+(`features/environment.py` teardown updated). WebRTC is unaffected — it already runs under aiohttp on the
+same routed port.
+
+**Accepted minor delta:** an unknown **POST** to `/api/voice/*` now returns aiohttp's 405 (the path matches
+the static catch-all's GET-only resource) instead of the stdlib handler's 404-JSON — the behaviour the pilot
+already ships on aiohttp since `v0.7.0` (no regression).
+
+**Tests:** `unittest` **677 OK** (−22 net vs Phase 1's 699: −27 stdlib HTTP tests, +5 migrated); `behave`
+**15 features / 43 scenarios / 194 steps, 0 failed**; server/app smoke-import OK; `--server` gone from the
+CLI. Docs/ADR updated: ADR-0053 Status + Phasing → fully implemented, README row, ticket, `pilot-voice-access`.
+Pending user validation of Phase 2.

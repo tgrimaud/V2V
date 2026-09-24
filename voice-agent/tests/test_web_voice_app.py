@@ -8,7 +8,6 @@ tts happy + error paths), the chunked→411 guard, 404, and the WebRTC offer rou
 
 import base64
 import json
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -168,6 +167,10 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["outcome"], "failed")
         self.assertTrue(body["error_code"])
         self.assertTrue(body["correlation_id"])
+        # Client-safe shape (RF-013): a generic message, never the raw provider reason
+        # and never the internal `error_reason` field.
+        self.assertTrue(body["message"])
+        self.assertNotIn("error_reason", body)
         self.assertNotIn("provider unavailable", json.dumps(body))
 
     async def test_turn_audio_matches_across_runtimes(self) -> None:
@@ -176,6 +179,33 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         r1 = await (await stdlib.post(TURN_ROUTE, data=b"\x03\x04" * 200)).json()
         r2 = await (await pipecat.post(TURN_ROUTE, data=b"\x03\x04" * 200)).json()
         self.assertEqual(r1["audio_base64"], r2["audio_base64"])
+
+    async def test_both_runtimes_return_identical_client_safe_error_shape(self) -> None:
+        # Migrated from the retired stdlib VoiceTurnEndpointTest (TASK-WEB-048 Phase 2):
+        # the client-safe error contract must be identical across runtimes modulo the id.
+        stdlib = await self._client(runtime=STDLIB, fail_stt=True)
+        pipecat = await self._client(runtime=PIPECAT, fail_stt=True)
+        b1 = await (await stdlib.post(TURN_ROUTE, data=b"\x01\x02" * 100)).json()
+        b2 = await (await pipecat.post(TURN_ROUTE, data=b"\x01\x02" * 100)).json()
+        b1.pop("correlation_id")
+        b2.pop("correlation_id")
+        self.assertEqual(b1, b2)
+
+    async def test_turn_502_keeps_full_reason_in_server_log(self) -> None:
+        # Migrated from the retired stdlib test: the raw provider reason must be absent
+        # from the client body but present in the structured server-side turn log (RF-013).
+        import io
+
+        client = await self._client(fail_stt=True)
+        captured = io.StringIO()
+        original_stderr = sys.stderr
+        sys.stderr = captured
+        try:
+            payload = await (await client.post(TURN_ROUTE, data=b"\x01\x02" * 100)).text()
+        finally:
+            sys.stderr = original_stderr
+        self.assertNotIn("provider unavailable", payload)
+        self.assertIn("provider unavailable", captured.getvalue())
 
     # --- /api/voice/stt + /tts ----------------------------------------------
 
@@ -197,6 +227,38 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(resp.headers["Content-Type"], "audio/wav")
         self.assertEqual((await resp.read())[:4], b"RIFF")
+
+    async def test_tts_empty_text_is_unavailable_json_502(self) -> None:
+        # Migrated from the retired stdlib WebVoiceTtsServerTest (TASK-WEB-048 Phase 2):
+        # whitespace/empty text invents no audio; it fails closed with a sanitized JSON 502.
+        client = await self._client()
+        resp = await client.post(f"{TTS_ROUTE}?text=")
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(resp.headers["Content-Type"], "application/json")
+        self.assertEqual((await resp.json())["outcome"], "unavailable")
+
+    async def test_tts_provider_failure_is_client_safe_502(self) -> None:
+        # Migrated from the retired stdlib test: a raising TTS provider yields a client-safe
+        # 502 (stable code + correlation id + generic message, no raw reason leak — RF-013).
+        class _RaisingTts:
+            name = "boom-tts"
+            audio_format = "pcm_16000"
+
+            def synthesize(self, text: str) -> bytes:
+                raise RuntimeError("Gradium TTS credits exhausted")
+
+        processor = build_turn_processor(PIPECAT, _ingress(), WebVoiceEgress(_RaisingTts()))
+        client = TestClient(TestServer(make_app(processor)))
+        await client.start_server()
+        self.addAsyncCleanup(client.close)
+        resp = await client.post(f"{TTS_ROUTE}?text=Bonjour&correlation_id=c9")
+        self.assertEqual(resp.status, 502)
+        body = await resp.json()
+        self.assertEqual(body["error_code"], "tts_error")
+        self.assertEqual(body["correlation_id"], "c9")
+        self.assertTrue(body["message"])
+        self.assertNotIn("error_reason", body)
+        self.assertNotIn("credits exhausted", json.dumps(body))
 
     # --- /api/voice/webrtc/offer --------------------------------------------
 
@@ -230,34 +292,6 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         payload = await resp.read()
         self.assertEqual(json.loads(payload)["error"], "webrtc_negotiation_failed")
         self.assertNotIn(b"boom", payload)
-
-
-class ServerSelectorTest(unittest.TestCase):
-    """The --server selector: aiohttp (single port, ADR-0047) by default, stdlib on request."""
-
-    def _parse(self, argv, env=None):
-        from web_voice.server import _parse_args
-
-        with mock.patch.object(sys, "argv", ["prog", *argv]), mock.patch.dict(
-            os.environ, env or {}, clear=False
-        ):
-            return _parse_args()
-
-    def test_defaults_to_aiohttp_single_port(self) -> None:
-        # Slice 3 flip (TASK-WEB-038): the single async HTTP+WS server is the default.
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("VOICE_SERVER", None)
-            self.assertEqual(self._parse([]).server, "aiohttp")
-
-    def test_flag_selects_stdlib(self) -> None:
-        self.assertEqual(self._parse(["--server", "stdlib"]).server, "stdlib")
-
-    def test_env_selects_stdlib(self) -> None:
-        self.assertEqual(self._parse([], {"VOICE_SERVER": "stdlib"}).server, "stdlib")
-
-    def test_rejects_unknown_server(self) -> None:
-        with self.assertRaises(SystemExit):
-            self._parse(["--server", "bogus"])
 
 
 if __name__ == "__main__":

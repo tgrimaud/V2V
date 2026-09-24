@@ -1,15 +1,21 @@
-"""Minimal web voice runtime server (TASK-WEB-001, TASK-WEB-005).
+"""Web voice runtime server (TASK-WEB-001, TASK-WEB-005, ADR-0047/ADR-0053).
 
-Serves the mic-capture page and exposes the voice endpoints:
+Serves the mic-capture page and exposes the voice endpoints on ONE aiohttp async
+server (single routed port):
 - `POST /api/voice/stt`  PCM16 mono 16 kHz audio in -> transcript JSON out.
 - `POST /api/voice/tts`  `?text=` in -> WAV audio out.
 - `POST /api/voice/turn` PCM16 audio in -> full STT -> backend answer -> TTS loop ->
   JSON out: transcript + answer text + answer audio as base64 WAV (Decision #9).
+- `GET  /ws`             live browser WebSocket audio path (TASK-WEB-038).
+- `GET  /genesys/audiohook` Genesys Audio Connector endpoint (TASK-WEB-041, default off).
 
-The runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
+The voice runtime is selected at startup (`--runtime {stdlib,pipecat}`, env `VOICE_RUNTIME`):
 the server drives a `VoiceTurnProcessor` seam, so the stdlib and Pipecat runtimes
 coexist and produce identical output. The STT/TTS provider is selected with
 `--provider`, defaulting to Gradium with a fixture fallback for offline development.
+
+The legacy `--server stdlib` `ThreadingHTTPServer` and the interim `:8091` WebSocket
+listener were retired by ADR-0053 / TASK-WEB-048: aiohttp is now the sole HTTP+WS server.
 """
 
 import argparse
@@ -17,17 +23,14 @@ import base64
 import json
 import logging
 import os
-import socketserver
 import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conversation_backend import BACKEND_NAMES, STUB, build_backend  # noqa: E402
-from stt_validation.models import SttOutcome  # noqa: E402
 from stt_validation.provider_factory import (  # noqa: E402
     GRADIUM,
     PROVIDER_NAMES,
@@ -41,12 +44,12 @@ from tts_synthesis.provider_factory import (  # noqa: E402
     supports_streaming as tts_supports_streaming,
 )
 from voice_common.otel_export import export_recorder  # noqa: E402
-from voice_common.telemetry import TelemetryRecorder, Timer  # noqa: E402
+from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 
 from .egress import VoiceResponse, WebVoiceEgress, pcm_to_wav  # noqa: E402
 from .egress import _sample_rate_from_format  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
-from .error_response import SessionCapacityError, client_error_body  # noqa: E402
+from .error_response import client_error_body  # noqa: E402
 from .ingress import WebVoiceIngress  # noqa: E402
 from .runtime import (  # noqa: E402
     DEFAULT_RUNTIME,
@@ -70,223 +73,6 @@ WEBRTC_ENV_VAR = "VOICE_WEBRTC"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # guard against oversized uploads (~13 min PCM16 16k)
 MAX_TTS_TEXT_CHARS = 5000  # guard against oversized synthesis requests
 _STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
-
-
-class WebVoiceHTTPServer(ThreadingHTTPServer):
-    """Threading HTTP server that skips the reverse-DNS FQDN lookup on bind.
-
-    `HTTPServer.server_bind()` calls `socket.getfqdn()`, which can block for tens
-    of seconds when reverse DNS is slow or misconfigured. A local ingress server
-    does not need the FQDN, so we replicate the bind without that call.
-    """
-
-    daemon_threads = True
-
-    def server_bind(self) -> None:
-        socketserver.TCPServer.server_bind(self)
-        host, port = self.server_address[:2]
-        self.server_name = host
-        self.server_port = port
-
-
-def build_handler(
-    processor: VoiceTurnProcessor, signaling: Any = None
-) -> type[BaseHTTPRequestHandler]:
-    class WebVoiceHandler(BaseHTTPRequestHandler):
-        # Answer in HTTP/1.1 (the BaseHTTPRequestHandler default is HTTP/1.0). Behind the
-        # HAProxy TLS edge (alpn h2,http/1.1) a browser negotiates HTTP/2; HAProxy cannot
-        # mux an HTTP/1.0 backend response onto an h2 client and returns "Empty reply"
-        # (BUG-012). Every bodied response here sets Content-Length and the only bodiless
-        # response is 204, so HTTP/1.1 keep-alive has definite framing on all paths.
-        protocol_version = "HTTP/1.1"
-
-        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-            path = urlparse(self.path).path
-            if path == "/favicon.ico":
-                self.send_response(204)
-                self.end_headers()
-                return
-            if path == OPENAPI_ROUTE:
-                self._serve_openapi()
-                return
-            filename = "index.html" if path in ("/", "") else path.lstrip("/")
-            self._serve_static(filename)
-
-        def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-            path = urlparse(self.path).path
-            if path in (STT_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE) and self._is_chunked():
-                # Bodies are sized and capped via Content-Length; a chunked body has none, so
-                # _read_body would read it as empty (length 0) and it would look like an empty
-                # turn. Ask the client to send a Content-Length instead of failing silently (411).
-                self._send_json(411, {"error": "length_required"})
-                return
-            if path == STT_ROUTE:
-                self._handle_stt()
-            elif path == TTS_ROUTE:
-                self._handle_tts()
-            elif path == TURN_ROUTE:
-                self._handle_turn()
-            elif path == WEBRTC_OFFER_ROUTE:
-                self._handle_webrtc_offer()
-            else:
-                self._send_json(404, {"error": "not_found"})
-
-        def _handle_webrtc_offer(self) -> None:
-            if signaling is None:
-                self._send_json(503, {"error": "webrtc_unavailable"})
-                return
-            body = self._read_body()
-            if body is None:
-                self._send_json(413, {"error": "audio_too_large"})
-                return
-            try:
-                offer = json.loads(body or b"{}")
-                answer = signaling.handle_offer(offer)
-            except SessionCapacityError as exc:
-                # Backpressure (TASK-WEB-024): the concurrency ceiling is reached. 503 +
-                # Retry-After tells the client to retry later instead of failing hard; the
-                # refusal is already recorded in the signaling telemetry (no detail leaked).
-                self._send_json(
-                    503,
-                    {"error": "capacity", "active": exc.active, "max": exc.cap},
-                    extra_headers={"Retry-After": "5"},
-                )
-                return
-            except Exception:  # noqa: BLE001 - never leak SDP/session detail to the client
-                self._send_json(502, {"error": "webrtc_negotiation_failed"})
-                return
-            self._send_json(200, answer)
-
-        def _handle_stt(self) -> None:
-            receive = Timer()
-            audio = self._read_body()
-            received_ms = receive.elapsed_ms()
-            if audio is None:
-                self._send_json(413, {"error": "audio_too_large"})
-                return
-            envelope = _envelope_from_query(urlparse(self.path).query)
-            telemetry = TelemetryRecorder()
-            result = processor.transcribe_turn(audio, envelope, telemetry, received_ms=received_ms)
-            _log_turn(telemetry)
-            if result.outcome is SttOutcome.SUCCESS:
-                self._send_json(200, result.to_dict())
-                return
-            # Client-safe body: stable code + correlation id, never the raw provider
-            # reason (RF-013). Full reason stays in the telemetry logged above.
-            self._send_json(
-                502,
-                client_error_body(result.error_code, result.correlation_id, result.outcome.value),
-            )
-
-        def _handle_tts(self) -> None:
-            query = urlparse(self.path).query
-            text = _first(parse_qs(query), "text") or ""
-            if len(text) > MAX_TTS_TEXT_CHARS:
-                self._send_json(413, {"error": "text_too_large"})
-                return
-            envelope = _envelope_from_query(query)
-            telemetry = TelemetryRecorder()
-            response = processor.synthesize_turn(text, envelope, telemetry)
-            if response.wav is None:
-                _log_turn(telemetry)
-                result = response.result
-                self._send_json(
-                    502,
-                    client_error_body(result.error_code, result.correlation_id, result.outcome.value),
-                )
-                return
-            send = Timer()
-            self._send_wav(response.wav)
-            processor.record_egress(response, envelope, telemetry, sent_ms=send.elapsed_ms())
-            _log_turn(telemetry)
-
-        def _handle_turn(self) -> None:
-            receive = Timer()
-            audio = self._read_body()
-            received_ms = receive.elapsed_ms()
-            if audio is None:
-                self._send_json(413, {"error": "audio_too_large"})
-                return
-            envelope = _envelope_from_query(urlparse(self.path).query)
-            telemetry = TelemetryRecorder()
-            result = processor.run_turn(audio, envelope, telemetry, received_ms=received_ms)
-            transcript = result.transcript_result
-            if transcript is None or transcript.outcome is not SttOutcome.SUCCESS:
-                _log_turn(telemetry)
-                self._send_json(502, _turn_stt_error(transcript, envelope))
-                return
-            response = result.tts_response
-            if response is None or response.wav is None:
-                _log_turn(telemetry)
-                self._send_json(502, _turn_tts_error(response, envelope))
-                return
-            # Send EVERY synthesized sentence, not just the last (BUG-015). With backend
-            # streaming on (default), the answer arrives as one TextFrame per sentence, so
-            # `tts_response` holds only the last synthesis while `result.audio` is the whole
-            # answer accumulated by the capture sink; build one WAV from the accumulated PCM.
-            full = _full_turn_response(result)
-            send = Timer()
-            self._send_json(200, _turn_success_body(transcript, result.answer_result, full.wav))
-            processor.record_egress(full, envelope, telemetry, sent_ms=send.elapsed_ms())
-            _log_turn(telemetry)
-
-        def _is_chunked(self) -> bool:
-            return "chunked" in (self.headers.get("Transfer-Encoding", "") or "").lower()
-
-        def _read_body(self) -> bytes | None:
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            if length > MAX_AUDIO_BYTES:
-                return None
-            return self.rfile.read(length) if length else b""
-
-        def _serve_openapi(self) -> None:
-            # Serve the hand-written OpenAPI spec (TASK-WEB-016). Committed alongside the
-            # code and mirrors docs/architecture/voice-runtime-http-contract.md.
-            if not OPENAPI_PATH.is_file():
-                self._send_json(404, {"error": "not_found"})
-                return
-            body = OPENAPI_PATH.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/yaml; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _serve_static(self, filename: str) -> None:
-            target = (STATIC_DIR / filename).resolve()
-            if STATIC_DIR not in target.parents or not target.is_file():
-                self._send_json(404, {"error": "not_found"})
-                return
-            body = target.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", _STATIC_TYPES.get(target.suffix, "application/octet-stream"))
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _send_json(
-            self, status: int, payload: dict, extra_headers: dict[str, str] | None = None
-        ) -> None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            for name, value in (extra_headers or {}).items():
-                self.send_header(name, value)
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _send_wav(self, wav: bytes) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "audio/wav")
-            self.send_header("Content-Length", str(len(wav)))
-            self.end_headers()
-            self.wfile.write(wav)
-
-        def log_message(self, *_args) -> None:  # silence default per-request stderr noise
-            return
-
-    return WebVoiceHandler
 
 
 def _turn_stt_error(transcript, envelope) -> dict[str, Any]:
@@ -452,13 +238,13 @@ def _build_ws_session_factory(
 ):
     """Build the transport-agnostic `SessionFactory` shared by the WS + Genesys transports.
 
-    The interim `SingleClientWebsocketServerTransport` (`:8091`), the aiohttp-native
-    `/ws` transport (single port, ADR-0047) and the Genesys Audio Connector adapter
-    (TASK-WEB-041) differ only in the transport they pass to `build_session`; the session
-    core is identical (ADR-0043, TASK-WEB-027). `transport_label` is stamped on the
-    channel-egress span so a per-slice report can split `websocket` from `genesys`.
-    `control_signal_source_factory` is the per-path native-event seam (TASK-WEB-029/042):
-    None keeps the in-house detectors authoritative; the Genesys path may inject its own.
+    The aiohttp-native `/ws` transport (single port, ADR-0047) and the Genesys Audio
+    Connector adapter (TASK-WEB-041) differ only in the transport they pass to
+    `build_session`; the session core is identical (ADR-0043, TASK-WEB-027).
+    `transport_label` is stamped on the channel-egress span so a per-slice report can split
+    `websocket` from `genesys`. `control_signal_source_factory` is the per-path native-event
+    seam (TASK-WEB-029/042): None keeps the in-house detectors authoritative; the Genesys
+    path may inject its own.
     """
     from .session_factory import SessionFactory
 
@@ -539,10 +325,9 @@ def _build_genesys_handler(args, ingress, egress, backend):
 def _build_ws_handler(args, ingress, egress, backend):
     """Build the aiohttp-native `/ws` handler for the single-port path, or None.
 
-    Unlike the interim `:8091` listener this needs **no `websockets` package** — it rides
-    aiohttp's own `WebSocketResponse` — so availability is gated only by `--websocket`
-    (`off` disables it; `auto`/`on` enable it). Concurrency is lifted from the interim
-    one-call cap to `VOICE_MAX_WS_SESSIONS` (ADR-0047).
+    It rides aiohttp's own `WebSocketResponse` (no `websockets` package) so availability is
+    gated only by `--websocket` (`off` disables it; `auto`/`on` enable it). Concurrency is
+    `VOICE_MAX_WS_SESSIONS` (ADR-0047).
     """
     if getattr(args, "websocket", "auto") == "off":
         return None
@@ -638,22 +423,16 @@ def main() -> int:
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
-    # ADR-0047: the live WS rides the SAME routed port (`/ws`) via the aiohttp-native
-    # transport. The interim single-client `:8091` listener + the legacy stdlib WS were
-    # retired (ADR-0053 / TASK-WEB-048): the live WS path is aiohttp-only now; the legacy
-    # stdlib server keeps serving HTTP + WebRTC batch only (no live WS).
-    genesys_handler = None
-    if args.server == "aiohttp":
-        ws_handler = _build_ws_handler(args, ingress, egress, backend)
-        genesys_handler = _build_genesys_handler(args, ingress, egress, backend)
-        ws_status = f"on:{args.port}/ws" if ws_handler else "off"
-    else:
-        ws_handler = None
-        ws_status = "off"
+    # ADR-0047/ADR-0053: the single aiohttp server rides one routed port. The live WS is
+    # `/ws` on that same port (aiohttp-native transport); the interim `:8091` listener and
+    # the legacy `--server stdlib` ThreadingHTTPServer were retired (TASK-WEB-048).
+    ws_handler = _build_ws_handler(args, ingress, egress, backend)
+    genesys_handler = _build_genesys_handler(args, ingress, egress, backend)
+    ws_status = f"on:{args.port}/ws" if ws_handler else "off"
     genesys_status = f"on:{args.port}/genesys/audiohook" if genesys_handler else "off"
     print(
         f"Web voice server on http://{args.host}:{args.port} "
-        f"(server={args.server}, provider={args.provider}, runtime={args.runtime}, "
+        f"(provider={args.provider}, runtime={args.runtime}, "
         f"backend={backend.name}, webrtc={'on' if signaling else 'off'}, websocket={ws_status}, "
         f"genesys={genesys_status}, stt_mode={args.stt_mode}, tts_mode={args.tts_mode})",
         file=sys.stderr,
@@ -679,50 +458,33 @@ def _serve(
     ws_handler: Any = None,
     genesys_handler: Any = None,
 ) -> None:
-    """Run the selected HTTP server (blocking until shutdown).
+    """Run the single-port aiohttp server (blocking until shutdown).
 
-    `aiohttp` (TASK-WEB-038 / ADR-0047) is the single-async-server target: static, REST,
-    the live WebSocket audio path and — when `genesys_handler` is supplied — the Genesys
-    Audio Connector `wss` endpoint all ride one port.
-    `stdlib` is the historical `ThreadingHTTPServer` (HTTP + WebRTC batch only; the live
-    WS path is aiohttp-only since the interim `:8091` listener was retired — ADR-0053).
+    aiohttp (TASK-WEB-038 / ADR-0047) is the sole voice runtime server: static, REST, the
+    live WebSocket audio path and — when `genesys_handler` is supplied — the Genesys Audio
+    Connector `wss` endpoint all ride one port. The legacy stdlib `ThreadingHTTPServer` was
+    retired by ADR-0053 / TASK-WEB-048.
     """
-    if args.server == "aiohttp":
-        from aiohttp import web
+    from aiohttp import web
 
-        from .app import make_app
+    from .app import make_app
 
-        # access_log=None: the stdlib handler silenced per-request logging (log_message
-        # no-op); aiohttp's default access format logs "%r" (the request line WITH the
-        # query string, which carries conversation_id/correlation_id/session_id/language).
-        # Keep those opaque IDs out of the access log — telemetry already records them.
-        web.run_app(
-            make_app(processor, signaling, ws_handler=ws_handler, genesys_handler=genesys_handler),
-            host=args.host,
-            port=args.port,
-            print=None,
-            access_log=None,
-        )
-        return
-    server = WebVoiceHTTPServer((args.host, args.port), build_handler(processor, signaling))
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        server.shutdown()
+    # access_log=None: aiohttp's default access format logs "%r" (the request line WITH the
+    # query string, which carries conversation_id/correlation_id/session_id/language). Keep
+    # those opaque IDs out of the access log — telemetry already records them.
+    web.run_app(
+        make_app(processor, signaling, ws_handler=ws_handler, genesys_handler=genesys_handler),
+        host=args.host,
+        port=args.port,
+        print=None,
+        access_log=None,
+    )
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the web voice runtime server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8090)
-    parser.add_argument(
-        "--server",
-        choices=("stdlib", "aiohttp"),
-        default=os.environ.get("VOICE_SERVER", "aiohttp"),
-        help="HTTP server: 'aiohttp' (default, single async HTTP+WS server on one port, "
-        "TASK-WEB-038/ADR-0047) or 'stdlib' (legacy ThreadingHTTPServer, HTTP + WebRTC "
-        "batch only; the live WS path is aiohttp-only since ADR-0053/TASK-WEB-048)",
-    )
     parser.add_argument("--provider", choices=PROVIDER_NAMES, default=GRADIUM)
     parser.add_argument(
         "--runtime",
@@ -748,8 +510,7 @@ def _parse_args() -> argparse.Namespace:
         default=os.environ.get("VOICE_WEBSOCKET", "auto"),
         help="live browser WebSocket voice path (TASK-WEB-038): 'auto'/'on' enable it, "
         "'off' disables it. It rides the SAME routed port at /ws on the aiohttp server "
-        "(ceiling VOICE_MAX_WS_SESSIONS). No effect on the legacy stdlib server, which "
-        "serves HTTP + WebRTC batch only (interim :8091 WS retired — ADR-0053)",
+        "(ceiling VOICE_MAX_WS_SESSIONS)",
     )
     parser.add_argument(
         "--genesys",

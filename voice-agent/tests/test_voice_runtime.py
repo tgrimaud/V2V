@@ -1,11 +1,15 @@
-"""Tests for the voice runtime seam + /api/voice/turn endpoint (TASK-WEB-005, ST-6)."""
+"""Tests for the voice runtime seam (TASK-WEB-005, ST-6).
 
-import base64
-import json
+The `/api/voice/turn` HTTP-surface behaviour (base64 WAV body, chunked→411, degraded,
+STT-fail 502 client-safe shape, cross-runtime parity, server-log) and the WebRTC offer
+backpressure (503 + Retry-After, 502 no-leak) are covered by the aiohttp parity suite
+`tests/test_web_voice_app.py`. The stdlib `WebVoiceHTTPServer` endpoint tests were retired
+with the stdlib server itself (ADR-0053 / TASK-WEB-048 Phase 2). This module keeps the
+transport-agnostic `VoiceTurnProcessor` seam tests (no HTTP server).
+"""
+
 import sys
-import threading
 import unittest
-from http.client import HTTPConnection
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -26,13 +30,6 @@ from web_voice.runtime import (  # noqa: E402
     PipecatTurnProcessor,
     StdlibTurnProcessor,
     build_turn_processor,
-)
-from web_voice.error_response import SessionCapacityError  # noqa: E402
-from web_voice.server import (  # noqa: E402
-    TURN_ROUTE,
-    WEBRTC_OFFER_ROUTE,
-    WebVoiceHTTPServer,
-    build_handler,
 )
 
 
@@ -175,168 +172,6 @@ class TurnProcessorParityTest(unittest.TestCase):
         self.assertIs(result.answer_result.outcome, AnswerOutcome.SUCCESS)
 
 
-class VoiceTurnEndpointTest(unittest.TestCase):
-    def _serve(self, runtime: str, ingress: WebVoiceIngress | None = None, backend=None) -> int:
-        processor = build_turn_processor(runtime, ingress or _ingress(), _egress(), backend)
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        return server.server_address[1]
-
-    def _post_turn(self, port: int, body: bytes):
-        conn = HTTPConnection("127.0.0.1", port, timeout=10)
-        conn.request("POST", TURN_ROUTE, body=body)
-        response = conn.getresponse()
-        payload = response.read()
-        content_type = response.getheader("Content-Type")
-        conn.close()
-        return response.status, content_type, payload
-
-    @staticmethod
-    def _decode_turn_wav(payload: bytes) -> bytes:
-        """Decode the base64 WAV from a `/turn` success JSON body (Decision #9)."""
-        return base64.b64decode(json.loads(payload)["audio_base64"])
-
-    def test_turn_endpoint_returns_wav_on_pipecat_runtime(self) -> None:
-        # GIVEN the server on the pipecat runtime
-        port = self._serve(PIPECAT)
-        # WHEN a phrase is posted to the full-pipeline endpoint
-        status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-        # THEN a JSON body carrying a playable base64 WAV is returned
-        self.assertEqual(status, 200)
-        self.assertEqual(content_type, "application/json")
-        wav = self._decode_turn_wav(payload)
-        self.assertEqual(wav[:4], b"RIFF")
-        self.assertEqual(wav[8:12], b"WAVE")
-
-    def test_turn_endpoint_returns_identical_wav_across_runtimes(self) -> None:
-        # GIVEN the server on each runtime
-        stdlib_port = self._serve(STDLIB)
-        pipecat_port = self._serve(PIPECAT)
-        # WHEN the same phrase is posted to each
-        _s1, _c1, stdlib_payload = self._post_turn(stdlib_port, b"\x03\x04" * 200)
-        _s2, _c2, pipecat_payload = self._post_turn(pipecat_port, b"\x03\x04" * 200)
-        # THEN both runtimes produce byte-identical audio
-        self.assertEqual(self._decode_turn_wav(stdlib_payload), self._decode_turn_wav(pipecat_payload))
-
-    def test_turn_endpoint_exposes_transcript_and_answer_in_json_body(self) -> None:
-        # GIVEN the server on the pipecat runtime (stub STT transcribes "bonjour")
-        port = self._serve(PIPECAT)
-        # WHEN the JSON reply body is read
-        status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-        data = json.loads(payload)
-        # THEN the transcript, spoken answer and provider are exposed to the client
-        self.assertEqual(status, 200)
-        self.assertEqual(content_type, "application/json")
-        self.assertEqual(data["transcript"], "bonjour")
-        self.assertTrue(data["answer"])
-        self.assertNotEqual(data["answer"], data["transcript"])  # the reply is the answer, not an echo
-        self.assertEqual(data["provider"], "stub-backend")
-        self.assertTrue(data["correlation_id"])
-
-    def test_turn_endpoint_rejects_a_chunked_body_with_411(self) -> None:
-        # GIVEN the server on the pipecat runtime
-        port = self._serve(PIPECAT)
-        conn = HTTPConnection("127.0.0.1", port, timeout=10)
-
-        # WHEN a body is streamed with no Content-Length (http.client uses Transfer-Encoding:
-        # chunked for a generator body) — which _read_body would otherwise read as an empty turn
-        def _chunks():
-            yield b"\x01\x02" * 50
-
-        conn.request("POST", TURN_ROUTE, body=_chunks())
-        response = conn.getresponse()
-        payload = response.read()
-        conn.close()
-        # THEN the server asks for a Content-Length (411) instead of silently treating it as empty
-        self.assertEqual(response.status, 411)
-        self.assertIn(b"length_required", payload)
-
-    def test_turn_endpoint_speaks_a_degraded_wav_when_the_backend_fails(self) -> None:
-        # GIVEN both runtimes wired to an unavailable backend (STT still succeeds)
-        for runtime in (STDLIB, PIPECAT):
-            with self.subTest(runtime=runtime):
-                port = self._serve(runtime, backend=_UnavailableBackend())
-                conn = HTTPConnection("127.0.0.1", port, timeout=10)
-                conn.request("POST", TURN_ROUTE, body=b"\x01\x02" * 200)
-                response = conn.getresponse()
-                payload = response.read()
-                conn.close()
-                data = json.loads(payload)
-                wav = base64.b64decode(data["audio_base64"])
-                # THEN the turn still returns a spoken WAV (never a 502) flagged degraded
-                self.assertEqual(response.status, 200)
-                self.assertEqual(wav[:4], b"RIFF")
-                self.assertEqual(data["outcome"], "degraded")
-                self.assertEqual(data["degraded_reason"], "backend_unavailable")
-                self.assertEqual(data["answer"], DEGRADED_FALLBACK_TEXT)
-
-    def test_turn_endpoint_fails_closed_with_json_when_stt_fails(self) -> None:
-        # GIVEN both runtimes wired to an STT provider that fails
-        for runtime in (STDLIB, PIPECAT):
-            with self.subTest(runtime=runtime):
-                port = self._serve(runtime, _failing_ingress())
-                # WHEN a phrase is posted to the full-pipeline endpoint
-                status, content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-                # THEN the turn fails closed: a 502 JSON error, never a WAV
-                self.assertEqual(status, 502)
-                self.assertEqual(content_type, "application/json")
-                self.assertNotEqual(payload[:4], b"RIFF")
-                # AND the failed outcome is carried with a correlation id (observable)
-                body = json.loads(payload)
-                self.assertEqual(body["outcome"], "failed")
-                self.assertTrue(body["correlation_id"])
-
-    def test_turn_502_body_is_client_safe_on_both_runtimes(self) -> None:
-        # GIVEN both runtimes wired to an STT provider that raises a distinctive message
-        # (_FailingStt raises RuntimeError("provider unavailable"))
-        for runtime in (STDLIB, PIPECAT):
-            with self.subTest(runtime=runtime):
-                port = self._serve(runtime, _failing_ingress())
-                # WHEN a phrase is posted and a 502 is returned
-                status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-                self.assertEqual(status, 502)
-                body = json.loads(payload)
-                # THEN the body carries a stable error_code, correlation id and a
-                # generic message — and NEVER the raw provider exception text (RF-013)
-                self.assertTrue(body["error_code"])
-                self.assertTrue(body["correlation_id"])
-                self.assertTrue(body["message"])
-                self.assertNotIn("error_reason", body)
-                self.assertNotIn("provider unavailable", payload.decode("utf-8"))
-
-    def test_both_runtimes_return_the_identical_client_safe_error_shape(self) -> None:
-        # GIVEN both runtimes failing at the STT slice
-        stdlib_body = self._error_body(self._serve(STDLIB, _failing_ingress()))
-        pipecat_body = self._error_body(self._serve(PIPECAT, _failing_ingress()))
-        # THEN the client-safe error contract is identical modulo the correlation id
-        for body in (stdlib_body, pipecat_body):
-            body.pop("correlation_id")
-        self.assertEqual(stdlib_body, pipecat_body)
-
-    def test_turn_502_keeps_the_full_reason_in_the_server_log(self) -> None:
-        # GIVEN a failing STT and a captured server stderr (structured turn log)
-        import io
-
-        port = self._serve(STDLIB, _failing_ingress())
-        captured = io.StringIO()
-        original_stderr = sys.stderr
-        sys.stderr = captured
-        try:
-            # WHEN a turn fails (the handler logs the turn before sending the 502)
-            _status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-        finally:
-            sys.stderr = original_stderr
-        # THEN the raw reason is absent from the client body but present server-side
-        self.assertNotIn("provider unavailable", payload.decode("utf-8"))
-        self.assertIn("provider unavailable", captured.getvalue())
-
-    def _error_body(self, port: int) -> dict:
-        _status, _content_type, payload = self._post_turn(port, b"\x01\x02" * 200)
-        return json.loads(payload)
-
-
 class PipecatBatchLoopReuseTest(unittest.TestCase):
     """TASK-WEB-024: the batch pipecat path reuses one background loop across turns
     instead of creating and tearing down an event loop per HTTP turn (asyncio.run)."""
@@ -375,58 +210,6 @@ class PipecatBatchLoopReuseTest(unittest.TestCase):
             self.assertIs(result.transcript_result.outcome, SttOutcome.SUCCESS)
         finally:
             loop.stop()
-
-
-class WebRtcOfferBackpressureTest(unittest.TestCase):
-    """TASK-WEB-024: the offer endpoint answers 503 (+ Retry-After) when the signaling
-    layer refuses on the concurrency cap, and stays 502 for any other negotiation error."""
-
-    def _serve(self, signaling) -> int:
-        # The offer route does not use the turn processor, so a placeholder is enough.
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(object(), signaling))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        return server.server_address[1]
-
-    def _post_offer(self, port: int):
-        conn = HTTPConnection("127.0.0.1", port, timeout=10)
-        conn.request("POST", WEBRTC_OFFER_ROUTE, body=b"{}")
-        response = conn.getresponse()
-        payload = response.read()
-        retry_after = response.getheader("Retry-After")
-        conn.close()
-        return response.status, retry_after, payload
-
-    def test_capacity_rejection_returns_503_with_retry_after(self) -> None:
-        class _FullSignaling:
-            def handle_offer(self, offer, **kwargs):
-                raise SessionCapacityError(8, 8)
-
-        # GIVEN a signaling layer at capacity
-        port = self._serve(_FullSignaling())
-        # WHEN a WebRTC offer is posted
-        status, retry_after, payload = self._post_offer(port)
-        # THEN the client gets a clean 503 + Retry-After with the active/max counts
-        self.assertEqual(status, 503)
-        self.assertEqual(retry_after, "5")
-        body = json.loads(payload)
-        self.assertEqual(body["error"], "capacity")
-        self.assertEqual(body["active"], 8)
-        self.assertEqual(body["max"], 8)
-
-    def test_other_negotiation_error_stays_502_and_leaks_no_detail(self) -> None:
-        class _BoomSignaling:
-            def handle_offer(self, offer, **kwargs):
-                raise RuntimeError("raw sdp negotiation boom")
-
-        # GIVEN a signaling layer that fails for a non-capacity reason
-        port = self._serve(_BoomSignaling())
-        status, _retry_after, payload = self._post_offer(port)
-        # THEN it is a generic 502 that never echoes the raw exception text
-        self.assertEqual(status, 502)
-        self.assertEqual(json.loads(payload)["error"], "webrtc_negotiation_failed")
-        self.assertNotIn("boom", payload.decode("utf-8"))
 
 
 if __name__ == "__main__":

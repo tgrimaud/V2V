@@ -1,10 +1,6 @@
-import json
 import sys
-import threading
 import unittest
-from http.client import HTTPConnection
 from pathlib import Path
-from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -14,14 +10,7 @@ from web_voice import (  # noqa: E402
     CHANNEL_EGRESS_SPAN,
     ChannelEnvelope,
     WebVoiceEgress,
-    WebVoiceIngress,
     pcm_to_wav,
-)
-from web_voice.runtime import StdlibTurnProcessor  # noqa: E402
-from web_voice.server import (  # noqa: E402
-    TTS_ROUTE,
-    WebVoiceHTTPServer,
-    build_handler,
 )
 
 
@@ -104,67 +93,10 @@ class WebVoiceEgressTest(unittest.TestCase):
         self.assertEqual(response.result.error_code, "tts_error")
 
 
-class WebVoiceTtsServerTest(unittest.TestCase):
-    def _serve(self, tts_provider=None) -> int:
-        ingress = WebVoiceIngress(_StubStt())
-        egress = WebVoiceEgress(tts_provider or FixtureTtsProvider())
-        processor = StdlibTurnProcessor(ingress, egress)
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        return server.server_address[1]
-
-    def _post(self, port: int, query: dict) -> tuple[int, str, bytes]:
-        conn = HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request("POST", f"{TTS_ROUTE}?{urlencode(query)}")
-        response = conn.getresponse()
-        body = response.read()
-        content_type = response.getheader("Content-Type", "")
-        conn.close()
-        return response.status, content_type, body
-
-    def test_post_text_returns_playable_wav(self) -> None:
-        port = self._serve()
-
-        status, content_type, body = self._post(port, {"text": "Bonjour", "correlation_id": "c1"})
-
-        self.assertEqual(status, 200)
-        self.assertEqual(content_type, "audio/wav")
-        self.assertEqual(body[:4], b"RIFF")
-
-    def test_post_empty_text_returns_sanitized_json_error(self) -> None:
-        port = self._serve()
-
-        status, content_type, body = self._post(port, {"text": ""})
-
-        self.assertEqual(status, 502)
-        self.assertIn("application/json", content_type)
-        self.assertEqual(json.loads(body.decode("utf-8"))["outcome"], "unavailable")
-
-    def test_post_provider_failure_returns_a_client_safe_body(self) -> None:
-        # GIVEN a TTS provider that raises a distinctive exception message
-        port = self._serve(_RaisingProvider(RuntimeError("Gradium TTS credits exhausted")))
-
-        status, content_type, body = self._post(port, {"text": "Bonjour", "correlation_id": "c9"})
-
-        # THEN the 502 body is client-safe: stable code + correlation id + generic
-        # message, and never the raw provider exception text (RF-013)
-        self.assertEqual(status, 502)
-        self.assertIn("application/json", content_type)
-        payload = json.loads(body.decode("utf-8"))
-        self.assertEqual(payload["error_code"], "tts_error")
-        self.assertEqual(payload["correlation_id"], "c9")
-        self.assertTrue(payload["message"])
-        self.assertNotIn("error_reason", payload)
-        self.assertNotIn(b"credits exhausted", body)
-
-
-class _StubStt:
-    name = "stub-stt"
-
-    def transcribe(self, audio_path: Path) -> str:
-        return "bonjour"
+# The HTTP-surface TTS behaviour (playable WAV, empty-text 502, provider-failure client-safe
+# body) is covered by the aiohttp parity suite (`tests/test_web_voice_app.py`). The stdlib
+# `WebVoiceHTTPServer` TTS server tests were retired with the stdlib server itself
+# (ADR-0053 / TASK-WEB-048 Phase 2).
 
 
 if __name__ == "__main__":

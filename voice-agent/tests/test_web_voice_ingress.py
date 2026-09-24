@@ -1,17 +1,12 @@
 import array
-import json
 import sys
-import threading
 import unittest
-import urllib.request
-from http.client import HTTPConnection
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from stt_validation import SttOutcome, TelemetryRecorder  # noqa: E402
-from tts_synthesis import FixtureTtsProvider  # noqa: E402
-from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
+from web_voice import ChannelEnvelope, WebVoiceIngress  # noqa: E402
 from web_voice.end_of_turn import END_OF_TURN_SPAN, SIGNAL_SILENCE_WINDOW  # noqa: E402
 from web_voice.envelope import WEB_VOICE_CHANNEL  # noqa: E402
 
@@ -23,13 +18,7 @@ def _speech_then_silence(speech_ms: float, silence_ms: float, sample_rate: int =
     if sys.byteorder == "big":
         data.byteswap()
     return data.tobytes()
-from web_voice.runtime import StdlibTurnProcessor  # noqa: E402
-from web_voice.server import (  # noqa: E402
-    STT_ROUTE,
-    WebVoiceHTTPServer,
-    _envelope_from_query,
-    build_handler,
-)
+from web_voice.server import _envelope_from_query  # noqa: E402
 
 SECRET_PATH = "/private/customer/invoice-4213.pcm"
 
@@ -187,92 +176,9 @@ class EnvelopeFromQueryTest(unittest.TestCase):
         self.assertTrue(envelope.correlation_id)
 
 
-class WebVoiceServerTest(unittest.TestCase):
-    def _serve(self, ingress: WebVoiceIngress) -> tuple[WebVoiceHTTPServer, int]:
-        egress = WebVoiceEgress(FixtureTtsProvider())
-        processor = StdlibTurnProcessor(ingress, egress)
-        server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor))
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        return server, server.server_address[1]
-
-    def _post(self, port: int, body: bytes, path: str = STT_ROUTE):
-        conn = HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request("POST", path, body=body, headers={"Content-Type": "audio/pcm"})
-        response = conn.getresponse()
-        payload = response.read().decode("utf-8")
-        conn.close()
-        return response.status, payload
-
-    def test_post_success_returns_transcript_json(self) -> None:
-        _, port = self._serve(WebVoiceIngress(_StubProvider(transcript="bonjour")))
-
-        status, payload = self._post(port, b"\x01\x02\x03\x04")
-
-        self.assertEqual(status, 200)
-        self.assertEqual(json.loads(payload)["transcript"], "bonjour")
-
-    def test_post_failure_maps_to_http_502(self) -> None:
-        _, port = self._serve(WebVoiceIngress(_StubProvider(error=ValueError("bad audio"))))
-
-        status, payload = self._post(port, b"\x01")
-
-        self.assertEqual(status, 502)
-        self.assertEqual(json.loads(payload)["outcome"], "failed")
-
-    def test_post_failure_returns_a_client_safe_body(self) -> None:
-        # GIVEN an STT provider raising a distinctive exception message
-        _, port = self._serve(WebVoiceIngress(_StubProvider(error=ValueError("bad audio"))))
-
-        status, payload = self._post(port, b"\x01")
-
-        # THEN the 502 body carries a stable code + correlation id + generic message,
-        # and never echoes the raw provider exception text (RF-013)
-        self.assertEqual(status, 502)
-        body = json.loads(payload)
-        self.assertTrue(body["error_code"])
-        self.assertTrue(body["correlation_id"])
-        self.assertTrue(body["message"])
-        self.assertNotIn("error_reason", body)
-        self.assertNotIn("bad audio", payload)
-
-    def test_unknown_route_returns_404(self) -> None:
-        _, port = self._serve(WebVoiceIngress(_StubProvider()))
-
-        status, _payload = self._post(port, b"\x01", path="/api/voice/unknown")
-
-        self.assertEqual(status, 404)
-
-    def test_index_page_is_served(self) -> None:
-        _, port = self._serve(WebVoiceIngress(_StubProvider()))
-
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
-            body = resp.read().decode("utf-8")
-
-        self.assertIn("Web Voice Chat", body)
-
-    def test_responses_use_http_1_1(self) -> None:
-        # GIVEN the bridge behind an HAProxy TLS edge that offers `alpn h2,http/1.1`
-        _, port = self._serve(WebVoiceIngress(_StubProvider(transcript="bonjour")))
-
-        # WHEN a client reads a served response
-        conn = HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request("GET", "/")
-        response = conn.getresponse()
-        response.read()
-        conn.close()
-
-        # THEN it is HTTP/1.1, not the BaseHTTPRequestHandler default HTTP/1.0 — otherwise
-        # HAProxy cannot mux the backend response onto an HTTP/2 client (BUG-012).
-        self.assertEqual(response.version, 11)
-
-    def test_favicon_returns_no_content(self) -> None:
-        _, port = self._serve(WebVoiceIngress(_StubProvider()))
-
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/favicon.ico", timeout=5) as resp:
-            self.assertEqual(resp.status, 204)
+# The HTTP-surface behaviour of the STT/index/favicon/HTTP-1.1 routes is covered by the
+# aiohttp parity suite (`tests/test_web_voice_app.py`). The stdlib `WebVoiceHTTPServer`
+# server tests were retired with the stdlib server itself (ADR-0053 / TASK-WEB-048 Phase 2).
 
 
 if __name__ == "__main__":
