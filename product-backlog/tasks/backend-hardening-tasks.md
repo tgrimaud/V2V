@@ -1443,6 +1443,30 @@ gated, OQ-003/004), so it must be closed **before** amounts flow into evidence.
 **Priority:** High
 **Branch:** `task/TASK-BE-033-llm-provider-benchmark` (artifacts landed to mainline 2026-09-23, branch deleted)
 
+### Lever 2 addendum — prefill-reduction context budget (merged 2026-09-28)
+
+A second, independent latency lever under the same BE-033 "lever B" umbrella: an **env-tunable
+context budget** (`EvidenceContextTrimmer`, pure domain) that caps the KB text handed to the LLM so
+the prompt **prefill** (a ~linear driver of `backend_first_token`) shrinks once top-k is already
+minimal. Applied in `RetrievalGroundingService` **after** the confidence guardrail, so
+`answerable`/confidence is unchanged, and the LLM prompt + the per-sentence `OutputGuardrail` see the
+**same** trimmed context (DEC-002 stays consistent; grounding **recall** is the measured trade-off).
+Knobs `CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS` / `_MAX_CHARS_PER_PASSAGE`, both **default 0 = off**
+(behaviour unchanged until tuned per env). Truncation prefers a sentence, then a word boundary, never
+mid-word; passage order + metadata preserved.
+
+- **Pilot A/B (text-in `/converse-stream`, real retrieval+guardrails, OpenAI provider, warm):** capping
+  the ~2318-char context to ~1200 (**-47%**) cut backend first-token **p50 ~9-21%** (~120-310 ms;
+  n=50 1360→1237 ms) with **no grounding regression** (grounded 0.90→0.96 @ n=50). The **p95 stayed
+  provider/network-bound** — this lever helps the **median**, not the tail (tail = provider benchmark above).
+- **Delivery:** branch `task/TASK-BE-033-prefill-trim` rebased onto mainline, backend `mvn -o clean test`
+  **642/0/0** (7 new tests: 6 `EvidenceContextTrimmerTest` + 1 `RetrievalGroundingServiceTest`), adversarial
+  review **95/100 (Pass)**, deploy knobs wired at **0 (off)** on the pilot, merged `--no-ff` (2026-09-28).
+- **Observability:** observable via the existing `[PROMPT] context_chars` log + `backend_first_token`
+  metric (a trimmed context lowers `context_chars`); no new span required for this pre-LLM transform.
+- **Recommendation:** keep default-off; run a broader retrieval-quality QA pass before enabling a
+  production default.
+
 ### Context
 
 ADR-0029 is still FAIL. After WEB-035 (STT tail capped ~4042→1224 ms p95) and WEB-036 (top-k 8→5,

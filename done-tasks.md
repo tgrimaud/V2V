@@ -3,6 +3,31 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — TASK-BE-033 lever 2 (prefill-reduction context budget) merged into mainline
+
+**Summary:**
+
+- **Finalized the WIP branch `task/TASK-BE-033-prefill-trim`** (lever 2 of the BE-033 "lever B"
+  latency umbrella — the provider benchmark, lever 1, was already closed 2026-09-23). Rebased onto
+  `feat/restart-from-scratch` (was 16 behind; only `done-tasks.md` conflicted → union-resolved),
+  backend `mvn -o clean test` **642/0/0** (7 new tests), adversarial review **95/100 (Pass)**, merged `--no-ff`.
+- **What it adds:** `EvidenceContextTrimmer` (pure domain) caps the KB text fed to the LLM to shrink
+  prompt prefill (~linear driver of `backend_first_token`). Applied in `RetrievalGroundingService`
+  **after** the confidence guardrail (answerable/confidence unchanged); LLM + per-sentence `OutputGuardrail`
+  see the **same** trimmed context (DEC-002 consistent; grounding recall is the trade-off). Knobs
+  `CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS` / `_MAX_CHARS_PER_PASSAGE`, both **default 0 = off**.
+- **Shipped default-off** (pilot deploy knobs = 0), so zero behaviour change until tuned. Pilot A/B
+  (recorded 2026-09-22): -47% context → backend first-token p50 -9..21% with no grounding regression;
+  p95 stays provider-bound (median lever, not tail).
+- **Observability:** existing `[PROMPT] context_chars` + `backend_first_token` reflect the trim; no new span.
+
+### Files changed
+- `backend/.../domain/service/EvidenceContextTrimmer.java` (new, pure domain) + `EvidenceContextTrimmerTest.java` (6 tests)
+- `backend/.../application/service/RetrievalGroundingService.java` (trim after confidence) + test (+1)
+- `backend/.../infrastructure/config/ConversationConfig.java` (`@Bean` + `@Value` knobs), `application.yml`
+- `deploy/{ansible/group_vars/backend.yml, ansible/roles/compose_tier/templates/backend.env.j2, compose/backend/.env.example, compose/backend/docker-compose.yml}` — knobs wired at 0 (off)
+- `product-backlog/tasks/backend-hardening-tasks.md` — lever-2 addendum
+
 ## 2026-09-28 — BUG-024 (symptom b) merged into mainline
 
 **Summary:**
