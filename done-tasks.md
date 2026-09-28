@@ -3,6 +3,31 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — TASK-BE-033 lever 2 (prefill-reduction context budget) merged into mainline
+
+**Summary:**
+
+- **Finalized the WIP branch `task/TASK-BE-033-prefill-trim`** (lever 2 of the BE-033 "lever B"
+  latency umbrella — the provider benchmark, lever 1, was already closed 2026-09-23). Rebased onto
+  `feat/restart-from-scratch` (was 16 behind; only `done-tasks.md` conflicted → union-resolved),
+  backend `mvn -o clean test` **642/0/0** (7 new tests), adversarial review **95/100 (Pass)**, merged `--no-ff`.
+- **What it adds:** `EvidenceContextTrimmer` (pure domain) caps the KB text fed to the LLM to shrink
+  prompt prefill (~linear driver of `backend_first_token`). Applied in `RetrievalGroundingService`
+  **after** the confidence guardrail (answerable/confidence unchanged); LLM + per-sentence `OutputGuardrail`
+  see the **same** trimmed context (DEC-002 consistent; grounding recall is the trade-off). Knobs
+  `CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS` / `_MAX_CHARS_PER_PASSAGE`, both **default 0 = off**.
+- **Shipped default-off** (pilot deploy knobs = 0), so zero behaviour change until tuned. Pilot A/B
+  (recorded 2026-09-22): -47% context → backend first-token p50 -9..21% with no grounding regression;
+  p95 stays provider-bound (median lever, not tail).
+- **Observability:** existing `[PROMPT] context_chars` + `backend_first_token` reflect the trim; no new span.
+
+### Files changed
+- `backend/.../domain/service/EvidenceContextTrimmer.java` (new, pure domain) + `EvidenceContextTrimmerTest.java` (6 tests)
+- `backend/.../application/service/RetrievalGroundingService.java` (trim after confidence) + test (+1)
+- `backend/.../infrastructure/config/ConversationConfig.java` (`@Bean` + `@Value` knobs), `application.yml`
+- `deploy/{ansible/group_vars/backend.yml, ansible/roles/compose_tier/templates/backend.env.j2, compose/backend/.env.example, compose/backend/docker-compose.yml}` — knobs wired at 0 (off)
+- `product-backlog/tasks/backend-hardening-tasks.md` — lever-2 addendum
+
 ## 2026-09-28 — BUG-024 (symptom b) merged into mainline
 
 **Summary:**
@@ -115,6 +140,35 @@
 - **Symptom (a) dead-air deferred:** not reproducible on the text path (`zero_chunk_turns=0` across
   105 turns); it is Genesys/TTS-audio-path specific (needs a voice-tier repro).
 - Branch not merged (user is validator); pilot QA retest (grounded-rate A/B) pending.
+
+## 2026-09-22 — TASK-BE-033 lever 2 (prefill-reduction context budget) implemented, deployed to pilot t03 + A/B measured
+
+**Summary:**
+
+- Implemented **lever 2** of TASK-BE-033 (branch `task/TASK-BE-033-prefill-trim`): an env-tunable
+  **context budget** that caps the KB text fed to the LLM to shrink prompt prefill (a ~linear driver
+  of `backend_first_token`). `EvidenceContextTrimmer` (pure domain) applied in `RetrievalGroundingService`
+  **after** the confidence guardrail, so answerable/confidence is unchanged and the LLM prompt + the
+  per-sentence `OutputGuardrail` see the SAME trimmed context (DEC-002 consistent; grounding RECALL is
+  the trade-off). Knobs `CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS` / `_MAX_CHARS_PER_PASSAGE`, both
+  default 0 = off. `mvn -o test` green (590/0), ArchUnit OK.
+- **Deploy path completed + gap fixed.** The pilot backend gets its env from an explicit compose
+  `environment:` block (not the whole `.env`), so the new knobs were **not reaching the container**
+  until added there. Wired the two knobs into `deploy/compose/backend/docker-compose.yml`,
+  `backend.env.j2`, `backend/.env.example` and `group_vars/backend.yml` (default 0). ansible QA
+  89/1 (the 1 remaining fail — "FR CSV corpus default" — pre-exists, unrelated); compose QA 25/0.
+- **Built + shipped the image without CI/registry push** (the vault registry token is pull-only):
+  `docker buildx --platform linux/amd64` → `docker save | ssh podman load` onto pilot **t03**
+  (`sha-cfa7b15`); A/B confined to t03 (t04 stayed 0.9.2 for the VIP), then **t03 fully reverted to
+  0.9.2** (compose + `.env` restored, knob absent, healthy).
+- **A/B result (text-in `/converse-stream`, real retrieval+guardrails, provider = OpenAI, warm):**
+  capping the ~2318-char context to ~1200 (**-47 %**) reduced the backend first-token **p50 by
+  ~9-21 %** (~120-310 ms across runs: n=30 1464→1150; n=50 1360→1237 ms) **with no grounding
+  regression** on the EN billing/support set (grounded 0.90→0.96 at n=50). The **p95 stayed
+  provider/network-bound** (OpenAI cold spikes 4.8-11 s) — this lever helps the **median**, not the
+  tail; the tail lever remains the provider/hosting benchmark (TASK-BE-033 core) + connection keep-alive.
+- Verdict: a modest but real, safe win. Kept **default-off**; recommend a broader retrieval-quality
+  QA pass before enabling a production default. Branch not merged (user is validator).
 
 ## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
 

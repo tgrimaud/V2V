@@ -259,6 +259,16 @@ voice-support:
       # margin above the pre-BUG-003 value of 4; raise back via the env var if a BUG-003-style
       # eviction reappears. Confirm on a broader retrieval-quality QA pass before pilot.
       top-k: ${CONVERSATION_RETRIEVAL_TOP_K:5}
+      # Prefill-reduction context budget (TASK-BE-033 lever 2). Caps the KB text handed to the LLM
+      # so the prompt prefill (a ~linear driver of backend_first_token) shrinks, once top-k is
+      # already minimal. Applied AFTER the confidence guardrail, so answerable/confidence is
+      # unaffected; the LLM and the per-sentence OutputGuardrail see the SAME trimmed context, so
+      # DEC-002 stays consistent (grounding RECALL is the measured trade-off — re-measure grounded
+      # rate + backend_first_token when tuning). Truncation prefers a sentence, then a word boundary.
+      # 0 = disabled (default, behaviour unchanged). max-chars-per-passage caps each chunk;
+      # max-context-chars caps the sum across chunks (drops lower-ranked chunks once exhausted).
+      max-chars-per-passage: ${CONVERSATION_RETRIEVAL_MAX_CHARS_PER_PASSAGE:0}
+      max-context-chars: ${CONVERSATION_RETRIEVAL_MAX_CONTEXT_CHARS:0}
     # ADR-0021 shared secret for the write/read API. When set, requests must carry a
     # matching x-api-key header on every protected path: POST /api/conversation/converse[-stream]
     # (inline gate), POST /api/conversation/answer, POST /api/conversation/retrieve and all

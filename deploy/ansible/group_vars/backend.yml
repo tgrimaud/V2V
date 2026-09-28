@@ -64,6 +64,15 @@ redis_timeout: "2s"
 conversation_memory_ttl_seconds: 3600
 redis_health_enabled: true
 
+# RAG context budget (TASK-BE-033 lever 2): caps the KB text fed to the LLM to shrink prompt
+# prefill (a ~linear driver of backend_first_token). 0 = off (default). Measured on the pilot
+# (2026-09-22, OpenAI provider, n=50): capping the ~2318-char context to ~1200 (-47%) cut the
+# text-in backend first-token p50 ~9-21% (~120-310 ms) with no grounding regression on the EN
+# billing/support set; the p95 tail stays provider/network-bound (keep the provider benchmark as
+# the tail lever). Tune per env and re-measure grounded rate + first-token before raising off zero.
+conversation_retrieval_max_context_chars: 0
+conversation_retrieval_max_chars_per_passage: 0
+
 # Knowledge base assets mounted read-only into the container.
 kb_host_path: "{{ compose_root }}/backend/kb-assets"
 

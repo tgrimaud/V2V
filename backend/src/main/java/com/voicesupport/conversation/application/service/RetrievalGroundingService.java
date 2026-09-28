@@ -6,6 +6,7 @@ import com.voicesupport.conversation.domain.model.valueobject.GuardrailDecision;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
+import com.voicesupport.conversation.domain.service.EvidenceContextTrimmer;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
 
@@ -20,14 +21,28 @@ public class RetrievalGroundingService implements GroundQueryUseCase {
     private final InputGuardrail inputGuardrail;
     private final RetrievalConfidenceGuardrail confidenceGuardrail;
     private final KnowledgeRetrievalPort knowledgeRetrievalPort;
+    // Prefill-reduction context budget (TASK-BE-033 lever 2). Applied AFTER the confidence guardrail
+    // (which scores the raw retrieval), so answerable/confidence is unaffected; only the text handed
+    // to the LLM + OutputGuardrail is capped. Disabled by default => behaviour unchanged.
+    private final EvidenceContextTrimmer contextTrimmer;
 
+    // Backward-compatible constructor: no context trimming (used by tests/fixtures).
     public RetrievalGroundingService(
             InputGuardrail inputGuardrail,
             RetrievalConfidenceGuardrail confidenceGuardrail,
             KnowledgeRetrievalPort knowledgeRetrievalPort) {
+        this(inputGuardrail, confidenceGuardrail, knowledgeRetrievalPort, EvidenceContextTrimmer.disabled());
+    }
+
+    public RetrievalGroundingService(
+            InputGuardrail inputGuardrail,
+            RetrievalConfidenceGuardrail confidenceGuardrail,
+            KnowledgeRetrievalPort knowledgeRetrievalPort,
+            EvidenceContextTrimmer contextTrimmer) {
         this.inputGuardrail = inputGuardrail;
         this.confidenceGuardrail = confidenceGuardrail;
         this.knowledgeRetrievalPort = knowledgeRetrievalPort;
+        this.contextTrimmer = contextTrimmer;
     }
 
     @Override
@@ -46,6 +61,6 @@ public class RetrievalGroundingService implements GroundQueryUseCase {
         if (confidenceDecision.blocked()) {
             return GroundingResult.blocked(confidenceDecision);
         }
-        return GroundingResult.answerable(evidence);
+        return GroundingResult.answerable(contextTrimmer.trim(evidence));
     }
 }
