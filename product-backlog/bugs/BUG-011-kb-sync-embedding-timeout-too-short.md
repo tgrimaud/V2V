@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-011
 - **Title:** Ollama embedding client read-timeout (5 s) is sized for single-query retrieval but KB sync embeds a large batch → `SocketTimeoutException: Read timed out` → sync returns 503
-- **Status:** Ready for adversarial review
+- **Status:** ✅ Fixed & merged — fix `e05b759` (raise Ollama embedding read-timeout for KB sync batches) landed via the Sprint 11 closure (`6bf8de2`) into `feat/restart-from-scratch`; shipped in releases (v0.5.2 → v0.9.2) and validated in practice by the pilot KB re-sync (see BUG-023 / 2026-09-21 done-tasks). Header was stale ("Ready for adversarial review"); corrected 2026-09-28 (verified by content).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (first pilot deploy — first RAG sync)

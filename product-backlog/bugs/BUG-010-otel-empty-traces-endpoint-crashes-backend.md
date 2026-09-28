@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-010
 - **Title:** Empty `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` makes Spring Boot 3.4 fail context startup (`Invalid endpoint, must start with http:// or https://`)
-- **Status:** Ready for adversarial review
+- **Status:** ✅ Fixed & merged — fix `2c5ec73` (backend crash-loop on empty OTLP traces endpoint) landed via the Sprint 11 closure (`6bf8de2`) into `feat/restart-from-scratch`; shipped in releases (v0.5.2 → v0.9.2) and running on the pilot (backend t03+t04). Header was stale ("Ready for adversarial review"); corrected 2026-09-28 (verified by content).
 - **Severity:** Critical
 - **Priority:** P0
 - **Detected by:** User validation (first pilot deploy)

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-009
 - **Title:** `compose_tier` "Re-enable the voice bridge in the load balancer" task templates `delegate_to: "{{ item }}"` on every tier → redis/backend deploy aborts with `'item' is undefined`
-- **Status:** Ready for adversarial review
+- **Status:** ✅ Fixed & merged — fix `d6d5c3e` (+ global-review auto-fix `35d95d1`) landed via the Sprint 11 closure (`6bf8de2`) into `feat/restart-from-scratch`; shipped in releases (v0.5.2 → v0.9.2) and exercised by live pilot deploys. Header was stale ("Ready for adversarial review"); corrected 2026-09-28 (verified by content).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (first pilot deploy)

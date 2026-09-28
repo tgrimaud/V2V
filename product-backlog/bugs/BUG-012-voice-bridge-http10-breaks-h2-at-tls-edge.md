@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-012
 - **Title:** Bridge `BaseHTTPRequestHandler` keeps the Python default `HTTP/1.0`; HAProxy cannot mux the 1.0 backend response onto an h2 client → "Empty reply from server" over HTTPS (browser negotiates h2)
-- **Status:** Ready for adversarial review
+- **Status:** ✅ Fixed & merged — fix `ece35f3` (voice bridge serves HTTP/1.1 → fixes HTTP/2 at the TLS edge; + TASK-WEB-038 review findings `f049eb5`) landed via the Sprint 11 closure (`6bf8de2`) into `feat/restart-from-scratch`; shipped in releases (v0.5.2 → v0.9.2) and running on the pilot voice tier (t01/t02). Header was stale ("Ready for adversarial review"); corrected 2026-09-28 (verified by content).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot edge smoke test)
