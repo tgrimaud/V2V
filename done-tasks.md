@@ -3,6 +3,30 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — BUG-024 (symptom b) merged into mainline
+
+**Summary:**
+
+- **Finalized the WIP branch `fix/BUG-024-nonanswer-courtesy-handoff`** (trailing-courtesy-handoff
+  leniency in `GuardedSentenceEmitter`): rebased onto `feat/restart-from-scratch` (was 16 behind;
+  only `done-tasks.md` conflicted → union-resolved), backend `mvn -o test` **641/0/0** (639 mainline +
+  2 BUG-024 domain tests), adversarial code review **92/100 (Pass)**, then merged `--no-ff`.
+- **What it fixes (symptom b):** a `LOW_CONFIDENCE`/hand-off sentence that arrives AFTER grounded
+  content was already voiced is a trailing courtesy transfer, not a refusal → keep the grounded answer
+  and drop the hand-off (`truncatedAfterGrounded`), instead of discarding the whole turn to a fallback.
+  A genuine refusal (first/only sentence, nothing voiced) still hands off. **UNGROUNDED (DEC-002 amount)
+  always blocks** regardless of what was voiced — locked by the `ungrounded_amount_after_grounded_still_blocks`
+  safety test, so no fabricated amount can leak.
+- **Still open (deferred):** symptom (a) dead-air on an LLM stream error (`429`) — the stream-error branch
+  emits a silent SSE `error` with no voiced chunk → 0 audio bytes on the Genesys/AudioHook path. Fix =
+  emit an audible safe hand-off on stream error (aligns with BUG-018 / TASK-WEB-045). Needs a voice-tier
+  repro. BUG-024 stays **partially open for symptom (a) only**.
+
+### Files changed
+- `backend/.../domain/service/GuardedSentenceEmitter.java` — `truncatedAfterGrounded` + `stopped()` guard
+- `backend/.../domain/service/GuardedSentenceEmitterTest.java` — 2 regression tests (kept-grounded + DEC-002 safety)
+- `product-backlog/tasks/bug-024-intermittent-no-audio-and-low-confidence.md` — status, AC, QA Retest
+
 ## 2026-09-28 — Release v0.9.3 cut + deployed to the eir-ai4cc-tst pilot
 
 **Summary:**
