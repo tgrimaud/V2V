@@ -19,12 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conversation_backend import (  # noqa: E402
     DEGRADED_FALLBACK_TEXT,
-    AnswerOutcome,
     AnswerRequest,
     AnswerResult,
 )
 from tts_synthesis import FixtureTtsProvider  # noqa: E402
-from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress  # noqa: E402
+from web_voice import WebVoiceEgress, WebVoiceIngress  # noqa: E402
 from web_voice.app import make_app  # noqa: E402
 from web_voice.error_response import SessionCapacityError  # noqa: E402
 from web_voice.runtime import PIPECAT, STDLIB, build_turn_processor  # noqa: E402
