@@ -1,9 +1,15 @@
 # Remaining Work Recap — objective of each open/in-flight ticket
 
-> **Snapshot: 2026-09-28.** Plain-language purpose ("the why") of each ticket that is
-> still open, in-flight, or on an unmerged branch, so the goal is understood at a glance.
-> This is a point-in-time summary — the authoritative status always lives in the ticket
-> file and `backlog-index.md`. Regenerate/refresh when the picture changes materially.
+> **Snapshot: 2026-09-28 (refreshed after the WIP close-out).** Plain-language purpose
+> ("the why") of each ticket that is still open, in-flight, or on an unmerged branch, so the
+> goal is understood at a glance. This is a point-in-time summary — the authoritative status
+> always lives in the ticket file and `backlog-index.md`. Regenerate/refresh when the picture
+> changes materially.
+>
+> **Closed since the first snapshot (all merged into `feat/restart-from-scratch`):**
+> BUG-024 symptom (b) (`6adb781`, review 92/100), TASK-BE-033 lever-2 prefill-trim (`0232e34`,
+> review 95/100, shipped default-off). TASK-BE-024 / TASK-BE-025 were already merged + shipped
+> since v0.5.0 (recap was stale — no action needed). Mainline backend `mvn clean test` = **642/0/0**.
 
 ## Bugs to finish
 
@@ -17,16 +23,16 @@
 | **BUG-018** | Never leave the UI stuck on "Thinking" when a turn fails server-side. | 2/3 done; remaining = TASK-OPS-010 drain + server-side `turn_error` terminal signal |
 | **BUG-019** | Don't claim a billing discrepancy was "explained" when the cause was not actually determined. | Ready for review |
 | **BUG-020** | Return a controlled error/message when an invoice can't be fetched, instead of a 500 crash. | Fix on branch — finalize |
-| **BUG-024** | Keep the useful grounded answer even when a courtesy/hand-off sentence trails it (don't drop it). | WIP branch — finalize |
+| **BUG-024** | Keep the useful grounded answer even when a courtesy/hand-off sentence trails it (don't drop it). | ✅ Symptom (b) merged (`6adb781`). ⏳ Symptom (a) dead-air (audible hand-off on LLM stream error) still deferred — needs a voice-tier repro. |
 
 ## Tasks in flight (WIP)
 
 | Ticket | Objective (the why) | State |
 |---|---|---|
 | **TASK-BE-058** | In auto mode (no UI selection), keep the conversation language stable — only switch when the current turn detects the other language with a real margin (not a lone accent). Prevents fr/en oscillation. (Secondary of BUG-026.) | Not implemented (follow-up ticket) |
-| **TASK-BE-033 (prefill-trim)** | Trim the context sent to the LLM (token budget) to speed up first-sentence generation (latency lever 2). | Branch — finalize + A/B |
-| **TASK-BE-024** | Harden conversation-memory persistence/read (consistency, limits, error cases). | Implemented — finalize |
-| **TASK-BE-025** | Put controlled timeouts on outbound calls (LLM, embedding, BSS) so a turn never blocks indefinitely. | Implemented — finalize |
+| ~~TASK-BE-033 (prefill-trim)~~ | Trim the context sent to the LLM (token budget) to speed up first-sentence generation (latency lever 2). | ✅ Merged (`0232e34`, default-off) |
+| ~~TASK-BE-024~~ | Harden conversation-memory persistence/read (consistency, limits, error cases). | ✅ Already merged + shipped since v0.5.0 |
+| ~~TASK-BE-025~~ | Put controlled timeouts on outbound calls (LLM, embedding, BSS) so a turn never blocks indefinitely. | ✅ Already merged + shipped since v0.5.0 |
 
 ## Genesys (real-time telephony)
 
