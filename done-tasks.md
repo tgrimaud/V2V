@@ -3,6 +3,32 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — Release v0.9.3 cut + deployed to the eir-ai4cc-tst pilot
+
+**Summary:**
+
+- **Tagged + released `v0.9.3`** (annotated tag, pushed). CI (`images.yml`, gated on `tests.yml`)
+  built + pushed both private GHCR images `ghcr.io/tgrimaud/voice-support-{backend,voice}:0.9.3`
+  (verified `sha-2136172` == release commit). Content since `v0.9.2`: BUG-021 (KB-sync cold-start
+  readiness gate), BUG-023 (KB-sync api-key `.splitlines()`), BUG-025 (vague billing opener →
+  clarify), **BUG-026** (web-voice WS session language lock), TASK-BE-034 (bilingual retrieval
+  language filter), TASK-WEB-048 (retire interim `:8091` WS transport + `--server stdlib` mode,
+  ADR-0053). Pre-flight gates green: backend `mvn test` **639/0/0**, voice-agent **683** unittest
+  + behave **15/43/194**.
+- **Deployed `0.9.3` to the pilot** via `ansible-playbook deploy.yml -e image_tag=0.9.3` (vault via
+  `.vault_pass`, key `~/.ssh/id_itsf`). Final RECAP **0 failed / 0 unreachable** on all nodes —
+  backend t03+t04, voice t01+t02, redis (vlb-t02). Verified live: backend `0.9.3` `/actuator/health`
+  UP on t03/t04; voice bridge `0.9.3` healthy + HTTP 200 on t01/t02.
+- **KB sync skipped on purpose** (`-e kb_sync_after_deploy=false`) on the second run. The first run
+  stalled on t03's post-deploy KB sync: EN corpus skipped fast (processed=306, ingested=0,
+  skipped=306, ~15 min of embed-at-parse) but the FR corpus (`csv-article-fr`) crawled (~35 s/article,
+  Ollama sidecar 100% CPU) and would blow the 45-min async window. Direct Postgres check proved the
+  shared `vector_store` **already** holds EN (4996) + FR (5128) + markdown (44) chunks, so the sync was
+  a data no-op for this code-only release — skipping it let t04 + voice deploy cleanly. The stray
+  async job on t03 is harmless (ends skipped or is killed; data unchanged).
+- **Remaining manual verification:** an end-to-end voice smoke on the pilot web UI, especially the
+  BUG-026 fix (select EN, hold an EN conversation → every turn answers in EN; then FR).
+
 ## 2026-09-28 — BUG-026 merged (web-voice UI language lock) + BUG-025 / TASK-BE-034 status reconciliation
 
 **Summary:**
