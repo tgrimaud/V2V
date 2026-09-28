@@ -25,6 +25,23 @@
   (verified by content, not by header): **BUG-025** (vague billing opener → clarify) was already
   merged (`77f5297`, review 91/100, QA GO, pilot 0.9.3-blf2) and **TASK-BE-034** (retrieval
   language filter / bilingual store) was already merged (`4245bb4`, filter ON on pilot t03+t04).
+- **Bug triage — BUG-009/010/011/012/013** (`9e9e57d`). All five deployment-era fixes read
+  "Ready for adversarial review" but were already merged via the **Sprint-11 closure `6bf8de2`**
+  and shipped v0.5.2→v0.9.2 (live pilot): BUG-009 `d6d5c3e` (ansible abort on non-voice tiers),
+  BUG-010 `2c5ec73` (backend crash-loop on empty OTLP traces endpoint), BUG-011 `e05b759`
+  (Ollama embedding read-timeout for KB sync), BUG-012 `ece35f3` (bridge HTTP/1.1 at TLS edge),
+  BUG-013 `c9d25a4` (`VOICE_BACKEND_URL` = server base). Reconciled the 5 ticket headers + the 5
+  `backlog-index.md` rows (verified by git ancestry + release tags, not by header).
+- **New artifact:** `product-backlog/remaining-work-recap.md` — a dated, plain-language "objective
+  of each open/in-flight ticket" snapshot (bugs to finish, WIP tasks, Genesys, latency, infra,
+  open questions) for fast onboarding onto the remaining backlog.
+
+### Files changed
+- `voice-agent/web_voice/websocket_app.py` — session language lock (`_resolve_session_language`, `SUPPORTED_ANSWER_LANGUAGES`)
+- `voice-agent/tests/test_websocket_app.py` — `ResolveSessionLanguageTest` (6 cases) + lifecycle assertion
+- `product-backlog/bugs/BUG-0{09,10,11,12,13,25,26}-*.md`, `product-backlog/tasks/kb-ingestion-tasks.md`, `product-backlog/backlog-index.md` — status reconciliation
+- `product-backlog/tasks/task-be-058-answer-language-stickiness-margin.md` — deferred follow-up ticket
+- `product-backlog/remaining-work-recap.md` — remaining-work objective snapshot (new)
 
 ## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
 
