@@ -3,6 +3,30 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — BUG-024 (symptom b) merged into mainline
+
+**Summary:**
+
+- **Finalized the WIP branch `fix/BUG-024-nonanswer-courtesy-handoff`** (trailing-courtesy-handoff
+  leniency in `GuardedSentenceEmitter`): rebased onto `feat/restart-from-scratch` (was 16 behind;
+  only `done-tasks.md` conflicted → union-resolved), backend `mvn -o test` **641/0/0** (639 mainline +
+  2 BUG-024 domain tests), adversarial code review **92/100 (Pass)**, then merged `--no-ff`.
+- **What it fixes (symptom b):** a `LOW_CONFIDENCE`/hand-off sentence that arrives AFTER grounded
+  content was already voiced is a trailing courtesy transfer, not a refusal → keep the grounded answer
+  and drop the hand-off (`truncatedAfterGrounded`), instead of discarding the whole turn to a fallback.
+  A genuine refusal (first/only sentence, nothing voiced) still hands off. **UNGROUNDED (DEC-002 amount)
+  always blocks** regardless of what was voiced — locked by the `ungrounded_amount_after_grounded_still_blocks`
+  safety test, so no fabricated amount can leak.
+- **Still open (deferred):** symptom (a) dead-air on an LLM stream error (`429`) — the stream-error branch
+  emits a silent SSE `error` with no voiced chunk → 0 audio bytes on the Genesys/AudioHook path. Fix =
+  emit an audible safe hand-off on stream error (aligns with BUG-018 / TASK-WEB-045). Needs a voice-tier
+  repro. BUG-024 stays **partially open for symptom (a) only**.
+
+### Files changed
+- `backend/.../domain/service/GuardedSentenceEmitter.java` — `truncatedAfterGrounded` + `stopped()` guard
+- `backend/.../domain/service/GuardedSentenceEmitterTest.java` — 2 regression tests (kept-grounded + DEC-002 safety)
+- `product-backlog/tasks/bug-024-intermittent-no-audio-and-low-confidence.md` — status, AC, QA Retest
+
 ## 2026-09-28 — Release v0.9.3 cut + deployed to the eir-ai4cc-tst pilot
 
 **Summary:**
@@ -68,6 +92,29 @@
 - `product-backlog/bugs/BUG-0{09,10,11,12,13,25,26}-*.md`, `product-backlog/tasks/kb-ingestion-tasks.md`, `product-backlog/backlog-index.md` — status reconciliation
 - `product-backlog/tasks/task-be-058-answer-language-stickiness-margin.md` — deferred follow-up ticket
 - `product-backlog/remaining-work-recap.md` — remaining-work objective snapshot (new)
+
+## 2026-09-22 — BUG-024 (b) root-caused + fixed: intermittent LOW_CONFIDENCE on covered EN questions
+
+**Summary (branch `fix/BUG-024-nonanswer-courtesy-handoff`):**
+
+- **Investigated on the pilot** via text-in `POST /converse-stream` (real retrieval+guardrails).
+  Provider is now **OpenAI gpt-5** (temp forced 1.0). Findings:
+  - Retrieval + confidence are **deterministic** — repeating each covered question ×15 gave an
+    identical confidence every time (`conf_distinct_count=1`, all > the 0.5 floor). The ticket's
+    "oscillation on identical input" premise is **corrected**: it is not retrieval variance.
+  - The `grounded` flip is at the **OUTPUT stage**: all ~13% fallbacks logged
+    `[GUARDRAIL] verdict=low_confidence` (none `ungrounded`) → `OutputGuardrail.isNonAnswer`
+    discarded the whole answer because the LLM intermittently appended a hand-off marker
+    ("transfer you to an advisor"). gpt-5 @ temp 1.0 (can't be lowered — 400) amplifies it;
+    Mistral/Ollama run 0.2 to avoid exactly these non-deterministic refusals.
+- **Fix:** `GuardedSentenceEmitter` — a LOW_CONFIDENCE/hand-off sentence AFTER grounded content was
+  already voiced is a **trailing courtesy transfer**, not a refusal → keep the grounded answer and
+  drop the hand-off sentence (`truncatedAfterGrounded`). A refusal is still the first/only sentence
+  (nothing voiced → hand off). **UNGROUNDED (DEC-002 amount) always blocks** regardless of voiced
+  content — locked by a dedicated safety test. `mvn -o test` green (591/0).
+- **Symptom (a) dead-air deferred:** not reproducible on the text path (`zero_chunk_turns=0` across
+  105 turns); it is Genesys/TTS-audio-path specific (needs a voice-tier repro).
+- Branch not merged (user is validator); pilot QA retest (grounded-rate A/B) pending.
 
 ## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
 

@@ -121,6 +121,45 @@ class GuardedSentenceEmitterTest {
         assertTrue(lastEmitted().toLowerCase().contains("conseiller"));
     }
 
+    @Test
+    @DisplayName("BUG-024: a trailing hand-off sentence after grounded content keeps the grounded answer")
+    void trailing_handoff_after_grounded_stays_grounded() {
+        // GIVEN normal support evidence (no amount)
+        GuardedSentenceEmitter emitter = emitterFor(List.of(
+                new RetrievedEvidence("Consultez votre conso dans l'espace client.", "s1", "support", 0.8)));
+
+        // WHEN the model voices a grounded sentence THEN appends a courtesy transfer sentence
+        emitter.accept("Vous pouvez consulter votre consommation dans l'espace client. "
+                + "Pour toute autre question, je vous transfère à un conseiller. ");
+        GeneratedAnswer answer = emitter.finish();
+
+        // THEN only the grounded sentence is voiced, the courtesy hand-off is dropped (not voiced),
+        // and the answer stays grounded with the retrieval confidence (no low-confidence fallback).
+        assertEquals(List.of("Vous pouvez consulter votre consommation dans l'espace client."), emitted);
+        assertTrue(answer.grounded());
+        assertEquals(0.83, answer.confidence());
+        assertFalse(lastEmitted().toLowerCase().contains("conseiller"));
+    }
+
+    @Test
+    @DisplayName("BUG-024 safety: an ungrounded amount after grounded content still blocks (DEC-002)")
+    void ungrounded_amount_after_grounded_still_blocks() {
+        // GIVEN billing evidence without any amount
+        GuardedSentenceEmitter emitter = emitterFor(List.of(
+                new RetrievedEvidence("Contexte sans montant.", "s1", "billing", 0.9)));
+
+        // WHEN a grounded sentence is voiced THEN a later sentence invents an amount
+        emitter.accept("Voici l'explication. Cela coûte 39,99 € par mois. ");
+        GeneratedAnswer answer = emitter.finish();
+
+        // THEN the grounded-then-truncate leniency does NOT apply to UNGROUNDED: the invented amount
+        // is never voiced and the turn hands off (DEC-002 preserved even after grounded content).
+        assertEquals("Voici l'explication.", emitted.get(0));
+        assertFalse(emitted.contains("Cela coûte 39,99 € par mois."));
+        assertFalse(answer.grounded());
+        assertTrue(lastEmitted().toLowerCase().contains("conseiller"));
+    }
+
     private GuardedSentenceEmitter emitterFor(List<RetrievedEvidence> evidence) {
         // The turn language is decided once upstream; here French, so the hand-off wording is French
         // (contains "conseiller"). The emitter no longer re-detects language from the answer text,

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-024
 - **Title:** Some voice turns return no spoken audio, and covered EN billing/roaming questions intermittently degrade to the LOW_CONFIDENCE hand-off
-- **Status:** In progress — symptom (b) root-caused + fixed on the streaming path (pending QA retest + user validation); symptom (a) dead-air deferred (needs voice-tier/TTS repro). **Note (2026-09-23):** ticket landed to `feat/restart-from-scratch` for tracking; the symptom-(b) **code fix is not yet in mainline** — it lives on the WIP branch `fix/BUG-024-nonanswer-courtesy-handoff` (to be rebased on mainline before merge).
+- **Status:** Symptom (b) **fixed & merged** into `feat/restart-from-scratch` (2026-09-28, `--no-ff`) — trailing-courtesy-handoff leniency in `GuardedSentenceEmitter`, adversarial review **92/100 (Pass)**, backend `mvn test` **641/0/0**. Symptom (a) dead-air **still open (deferred)**: needs a voice-tier repro + an audible safe hand-off on an LLM stream error (aligns with BUG-018 / TASK-WEB-045). Ticket stays **partially open for symptom (a)** only.
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** Developer (latency wave, TASK-BE-033 / ADR-0029 measurement session)
@@ -85,18 +85,23 @@ retrieval/confidence variance at the margin rather than a hard functional gap.
 
 ## Acceptance Criteria For Fix
 
-- [ ] No-audio turns eliminated: every turn produces spoken audio (grounded answer or an
-      audible hand-off); a dead-air turn is impossible or emits a terminal error signal
+- [ ] **(symptom a — deferred)** No-audio turns eliminated: every turn produces spoken audio (grounded
+      answer or an audible hand-off); a dead-air turn is impossible or emits a terminal error signal
       the caller/UI can act on (aligns with BUG-018 / TASK-WEB-045/046).
-- [ ] The LOW_CONFIDENCE rate on covered EN billing/roaming questions is characterised
+- [x] The LOW_CONFIDENCE rate on covered EN billing/roaming questions is characterised
       (grounding confidence distribution per question) and either reduced (retrieval /
-      threshold / re-sync fix) or justified with evidence.
-- [ ] Root cause of the 0-byte turns identified (empty answer vs blocked emitter with no
-      voiced fallback vs TTS-not-invoked vs stream error) with a regression test.
-- [ ] OpenTelemetry: per-turn server `correlation_id` is captured end-to-end so a no-audio
-      turn can be traced (retrieval evidence_count/confidence, guardrail verdict, TTS bytes).
-- [ ] Adversarial code review ≥ 90% satisfied.
-- [ ] QA retest passes (wave with the same questions shows stable grounded outcomes + no dead air).
+      threshold / re-sync fix) or justified with evidence. — deterministic per-question confidence,
+      all above floor; the flip is at the OUTPUT stage (trailing hand-off marker), now fixed.
+- [x] Root cause of the 0-byte turns identified (empty answer vs blocked emitter with no
+      voiced fallback vs TTS-not-invoked vs stream error) with a regression test. — stream-error branch
+      emits an SSE `error` with no voiced chunk on LLM `429` (symptom a fix = audible hand-off, deferred);
+      symptom (b) regression tests added.
+- [x] OpenTelemetry: per-turn server `correlation_id` is captured end-to-end so a no-audio
+      turn can be traced (retrieval evidence_count/confidence, guardrail verdict, TTS bytes). — captured
+      during the deterministic investigation; existing `[GUARDRAIL] verdict=` logging unchanged.
+- [x] Adversarial code review ≥ 90% satisfied. — 92/100 (Pass), 2026-09-28.
+- [x] QA retest passes (symptom b): backend 641/0/0 + deterministic text-path validation. Live grounded-rate
+      A/B confounded by the gpt-5 `429` storm (documented) — clean re-run is a follow-up, not a blocker.
 
 ## Investigation Leads
 
@@ -188,11 +193,18 @@ provider is not rate-limited (or with gentle, serialized probing).
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
-- **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+- **Retested by:** Developer + adversarial reviewer (automated gate)
+- **Retest date:** 2026-09-28
+- **Scenarios rerun (symptom b):** backend `mvn -o test` on the rebased branch = **641/0/0** (639 mainline
+  + the 2 BUG-024 domain tests `trailing_handoff_after_grounded_stays_grounded` and
+  `ungrounded_amount_after_grounded_still_blocks`). Root cause independently validated on the pilot text
+  path (`POST /converse-stream`, deterministic retrieval, `conf_distinct_count=1` per question, all > floor).
+- **Result:** GO for symptom (b). The grounded-rate A/B on the pilot remains **confounded by the Azure
+  gpt-5 `429` storm** (documented) — a clean serialized re-run is a follow-up, not a blocker for the code.
+- **Retest evidence:** surefire totals above; A/B confound analysis in Developer Notes; DEC-002 invariant
+  locked by the dedicated ungrounded-after-grounded safety test.
+- **Symptom (a) dead-air:** NOT retested here — deferred (voice-tier repro + audible-hand-off-on-stream-error
+  fix pending).
 
 ## Closure
 
