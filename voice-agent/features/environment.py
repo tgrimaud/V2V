@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -10,12 +11,22 @@ def before_scenario(context, scenario):  # noqa: ARG001 - behave hook signature
     context.manifest = None
     context.report = None
     context.failure_result = None
-    context.http_server = None
+    context.server_loop = None
+    context.server_runner = None
 
 
 def after_scenario(context, scenario):  # noqa: ARG001 - behave hook signature
-    server = getattr(context, "http_server", None)
-    if server is not None:
-        server.shutdown()
-        server.server_close()
-        context.http_server = None
+    # Tear down the aiohttp test server started by "the web voice runtime server is running"
+    # (ADR-0053 / TASK-WEB-048 Phase 2 replaced the retired stdlib ThreadingHTTPServer).
+    loop = getattr(context, "server_loop", None)
+    runner = getattr(context, "server_runner", None)
+    if loop is not None:
+        if runner is not None:
+            future = asyncio.run_coroutine_threadsafe(runner.cleanup(), loop)
+            try:
+                future.result(timeout=5)
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                pass
+        loop.call_soon_threadsafe(loop.stop)
+        context.server_loop = None
+        context.server_runner = None

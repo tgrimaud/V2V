@@ -4222,9 +4222,9 @@ Scenario: Cloud-only items are out of reach locally
 **Related bug:** BUG-026 (UI language-selector session lock — the concrete dual-maintenance divergence that motivates this)
 **Depends on:** ADR-0047 shipped (`v0.7.0`, aiohttp default on the pilot)
 **Classification:** V1 voice runtime — plumbing/refactor (transport removal only; pipeline, SessionFactory and backend/`/turn` contracts unchanged). Runtime-affecting surface = server wiring, so re-run the full voice test suite + confirm the aiohttp `/ws` telemetry is intact.
-**Status:** 🟡 Phase 1 done (interim `:8091` WS removed) — Phase 2 deferred (retire the `stdlib` server mode)
+**Status:** ✅ Done — Phase 1 (interim `:8091` WS removed, merged `95f6aea`) + Phase 2 (`stdlib` server mode removed) both implemented; pending user validation of Phase 2
 **Priority:** Medium
-**Branch:** `task/TASK-WEB-048-retire-interim-ws-stdlib` (off `feat/restart-from-scratch`)
+**Branch:** `task/TASK-WEB-048-retire-interim-ws-stdlib` (Phase 1, merged) → `task/TASK-WEB-048-phase2-retire-stdlib` (Phase 2, off `feat/restart-from-scratch`)
 
 > **Phasing note (discovered during implementation).** The `stdlib` `ThreadingHTTPServer` is **not**
 > just the interim WS host: it also serves the batch `/api/voice/*` REST contract and **shares
@@ -4233,9 +4233,10 @@ Scenario: Cloud-only items are out of reach locally
 > (`web_voice/app.py`), and its batch behaviour is exercised by `tests/test_web_voice_ingress.py`,
 > `tests/test_web_voice_egress.py` and `features/steps/web_voice_steps.py`. So **Phase 1** removes the
 > interim `:8091` WS transport (the actual BUG-026 dual-maintenance source) and makes the live WS
-> path aiohttp-only; **Phase 2** (remove the `--server stdlib` mode + `WebVoiceHTTPServer`/
-> `build_handler`, migrating those batch-REST tests onto the aiohttp app) is deferred as a larger,
-> separate change and keeps this ticket open. See ADR-0053 (Status + Phasing).
+> path aiohttp-only; **Phase 2** (done) removed the `--server stdlib` mode + `WebVoiceHTTPServer`/
+> `build_handler`, keeping the shared request helpers on `server.py` and migrating the batch-REST
+> coverage onto the aiohttp app (`tests/test_web_voice_app.py`) + a Behave `AppRunner`. See ADR-0053
+> (Status + Phasing).
 
 ### Context
 
@@ -4307,17 +4308,28 @@ is the pipecat pipeline behind the aiohttp-native `AiohttpWebsocketTransport` (`
       shape and names after the symbol extraction.
 - [x] Docs/ADR updated (ADR-0053 Accepted-Phase-1, README row, ticket); no code imports the interim
       path (only historical docstring mentions remain, updated where live).
-- [ ] Adversarial code review ≥ 90%; QA confirms a pilot-shaped aiohttp run (web `/ws` + Genesys) is
-      unaffected.
+- [x] Adversarial code review ≥ 90% (95/100); QA confirmed a pilot-shaped aiohttp run unaffected
+      (non-regression 677+, deploy contract 90/90); Phase 1 merged into `feat/restart-from-scratch`
+      (`95f6aea`).
 
-**Phase 2 (retire the `--server stdlib` mode) — deferred (keeps this ticket open):**
+**Phase 2 (retire the `--server stdlib` mode) — done:**
 
-- [ ] Remove `--server` / `VOICE_SERVER` / `WebVoiceHTTPServer` / `build_handler`; aiohttp becomes
-      the sole server.
-- [ ] Migrate the batch `/api/voice/*` coverage (`tests/test_web_voice_ingress.py`,
-      `tests/test_web_voice_egress.py`, `features/steps/web_voice_steps.py`) onto the aiohttp app,
-      keeping the shared request helpers.
-- [ ] Docs/ADR flip ADR-0053 Phase 2 to done; `--server`/stdlib references removed from docs.
+- [x] Removed `--server` / `VOICE_SERVER` / `WebVoiceHTTPServer` / `build_handler` from `server.py`;
+      aiohttp is the sole HTTP+WS server. Shared request helpers + route constants + caps stay on
+      `server.py` (still imported by `app.py`). `--websocket off` remains the only WS gate.
+- [x] Migrated the batch `/api/voice/*` coverage onto the aiohttp app: the stdlib-server test classes
+      (`WebVoiceServerTest`, `WebVoiceTtsServerTest`, `VoiceOpenApiServeTest`, `VoiceTurnEndpointTest`,
+      `WebRtcOfferBackpressureTest`, `ServerSelectorTest`) are retired and their genuinely-extra
+      assertions (empty-text/provider-failure TTS 502, 502 client-safe shape + `message`/no
+      `error_reason`, cross-runtime error-shape parity, server-log keeps the raw reason) migrated into
+      `tests/test_web_voice_app.py`. Direct `VoiceTurnProcessor`/ingress/egress/OpenAPI-spec unit
+      tests kept. The Behave "server is running" step now runs the aiohttp app on a background
+      `AppRunner`. Suite green: `unittest` 677 OK, `behave` 15/43/194.
+- [x] Docs/ADR flipped: ADR-0053 Status + Phasing → Phase 2 done; README row → fully implemented;
+      `--server`/stdlib references removed from live docs. Accepted minor delta: unknown **POST** to
+      `/api/voice/*` now returns aiohttp 405 (static catch-all is GET-only) vs the stdlib 404-JSON —
+      the behaviour the pilot already ships since `v0.7.0` (no regression).
+- [ ] Adversarial code review ≥ 90% + QA sign-off for Phase 2 (pending).
 
 ### Notes
 

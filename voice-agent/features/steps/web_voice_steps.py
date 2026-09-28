@@ -1,8 +1,10 @@
+import asyncio
 import threading
 from http.client import HTTPConnection
 from pathlib import Path
 
 import yaml
+from aiohttp import web
 from behave import given, then, when
 from openapi_spec_validator import validate as validate_openapi
 
@@ -17,6 +19,7 @@ from stt_validation.pipeline_timing import (
 )
 from tts_synthesis import FixtureTtsProvider
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
+from web_voice.app import make_app
 from web_voice.runtime import PipecatTurnProcessor, StdlibTurnProcessor
 from web_voice.server import (
     OPENAPI_ROUTE,
@@ -24,8 +27,6 @@ from web_voice.server import (
     TTS_ROUTE,
     TURN_ROUTE,
     WEBRTC_OFFER_ROUTE,
-    WebVoiceHTTPServer,
-    build_handler,
 )
 
 SECRET_PATH = "/private/customer/invoice-9931.pcm"
@@ -222,10 +223,25 @@ def step_identical_wav(context):
 
 @given("the web voice runtime server is running")
 def step_server_running(context):
-    server = WebVoiceHTTPServer(("127.0.0.1", 0), build_handler(processor=None))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    context.http_server = server  # torn down by after_scenario
-    context.server_port = server.server_address[1]
+    # ADR-0053 / TASK-WEB-048 Phase 2: the single aiohttp server replaced the retired stdlib
+    # ThreadingHTTPServer. Run it on a background event loop so the sync Behave step can drive
+    # a plain HTTP client against a real ephemeral port. Torn down by after_scenario.
+    context.server_loop = asyncio.new_event_loop()
+    context.server_runner = web.AppRunner(make_app(processor=None))
+    ready = threading.Event()
+
+    def _run():
+        asyncio.set_event_loop(context.server_loop)
+        context.server_loop.run_until_complete(context.server_runner.setup())
+        site = web.TCPSite(context.server_runner, "127.0.0.1", 0)
+        context.server_loop.run_until_complete(site.start())
+        context.server_port = context.server_runner.addresses[0][1]
+        ready.set()
+        context.server_loop.run_forever()
+
+    context.server_thread = threading.Thread(target=_run, daemon=True)
+    context.server_thread.start()
+    assert ready.wait(timeout=10), "aiohttp test server did not start"
 
 
 @when("a tooling client fetches the OpenAPI description")
