@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-026
 - **Title:** UI language selector is not propagated on the web-voice WS path → the answer language auto-detects and oscillates per turn (no session language lock)
-- **Status:** In Progress (primary fix implemented — pending pilot QA)
+- **Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-28) — primary fix (session language lock via UI selector); adversarial review 94/100 (Pass) + automated QA GO (683 unittest + behave 15/43/194). **Remaining verification:** pilot live per-language retest (full-EN then full-FR) at next deploy. Secondary auto-mode oscillation deferred to [TASK-BE-058](../tasks/kb-ingestion-tasks.md).
 - **Severity:** High
 - **Priority:** P2
 - **Detected by:** User validation (remote pilot test) + developer log analysis
@@ -139,9 +139,9 @@ Two layers:
       Stickiness margin test to land with the deferred secondary.
 - [x] Relevant OpenTelemetry present: `declared_language`/`effective_language` reflect the lock
       (the WS `client_connected`/`session_started` events read the now-locked `envelope.language`).
-- [ ] Adversarial code review is at least 90% satisfied.
-- [ ] QA retest passes (pilot web-voice session per language).
-- [ ] Docs/backlog updated (ADR-0031 note on the session lock; US-042 wiring).
+- [x] Adversarial code review is at least 90% satisfied (94/100, Pass — 2026-09-28).
+- [x] QA acceptance (automated regression GO: 683 unittest + behave 15/43/194). [ ] pilot live per-language retest pending next deploy.
+- [x] Docs/backlog updated (ADR-0031 note on the session lock; US-042 wiring).
 
 ## Developer Notes
 
@@ -181,11 +181,11 @@ Developer fills this during resolution:
 
 ## QA Retest
 
-- **Retested by:**
-- **Retest date:**
-- **Scenarios rerun:**
-- **Result:**
-- **Retest evidence:**
+- **Retested by:** automated gate (2026-09-28)
+- **Retest date:** 2026-09-28
+- **Scenarios rerun:** `ResolveSessionLanguageTest` (6 cases) + `WsHandlerLifecycleTest` locked-language assertion + full `voice-agent` suite
+- **Result:** GO (automated) — 683 unittest OK, behave 15 features / 43 scenarios / 194 steps OK. Pilot live per-language retest still to run at next deploy.
+- **Retest evidence:** `./.venv/bin/python -m unittest discover tests` → 683 OK; `./.venv/bin/behave` → 43/43
 
 ## Closure
 

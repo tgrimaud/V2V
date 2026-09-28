@@ -3,6 +3,29 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-28 — BUG-026 merged (web-voice UI language lock) + BUG-025 / TASK-BE-034 status reconciliation
+
+**Summary:**
+
+- **BUG-026 — web-voice WS session language lock (primary fix).** The web-voice WS handler
+  built the turn envelope from the **server** `default_language` and only read the client's
+  `?language=` for telemetry, so the UI selector never reached the backend → per-turn
+  auto-detection oscillated fr/en within a session. Fix (`voice-agent/web_voice/websocket_app.py`):
+  `SUPPORTED_ANSWER_LANGUAGES = {fr, en}` + pure helper `_resolve_session_language(request,
+  default_language)` (case/whitespace-insensitive; unsupported/junk code → fallback, never
+  forces a wrong language); `_serve_connection` builds the per-connection envelope from the
+  resolved language, so the selection **locks the whole session** (US-042 `forcedCode` wins over
+  detection + stickiness). End-to-end real (client `ws.js` already sends `/ws?language=`).
+  Telemetry now truthful: `client_connected`/`session_started` report the locked
+  `effective_language`. Tests: new `ResolveSessionLanguageTest` (6 cases) + updated lifecycle
+  assertion. Adversarial review **94/100 (Pass)**; automated QA GO (**683** unittest + **behave
+  15/43/194**). Merged `--no-ff` into `feat/restart-from-scratch`. Pilot live per-language
+  retest pending next deploy. Secondary auto-mode oscillation deferred to **TASK-BE-058**.
+- **Backlog reconciliation.** Corrected two stale ticket headers to match merged reality
+  (verified by content, not by header): **BUG-025** (vague billing opener → clarify) was already
+  merged (`77f5297`, review 91/100, QA GO, pilot 0.9.3-blf2) and **TASK-BE-034** (retrieval
+  language filter / bilingual store) was already merged (`4245bb4`, filter ON on pilot t03+t04).
+
 ## 2026-09-21 — BUG-023 fixed + backend 0.9.2 deployed to pilot + KB re-sync validated
 
 **Summary:**
