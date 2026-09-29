@@ -584,3 +584,49 @@ ordering bug plus a missing per-line period.
 **Adversarial review 93/100 (Pass, 2026-09-29)** — no blocking finding; full review at
 `docs/qa/task-be-059-adversarial-review.md`. Residual (accepted): fixtures class > 200 lines (pure
 data); `chargePeriod` + line period stored but not yet surfaced in customer wording.
+
+---
+
+## TASK-BE-060 — Cause attribution for multi-service invoices (new/removed service, one-off fees)
+
+**Type:** Technical task (billing comparison + confidence)
+**Status:** 📋 Proposed (follow-up surfaced by TASK-BE-059 on real eir B2C mock data)
+**Priority:** High
+**Depends on:** TASK-BE-042 (comparison), TASK-BE-043 (confidence gate), TASK-BE-059 (real mock data)
+**Relates to:** OQ-002 (residual ratio), ADR-0052
+
+### Context
+
+Replaying the deterministic billing chain over the real eir B2C mock samples (TASK-BE-059) shows V1
+explains the **single-service** delta cleanly (account `99224964`: "+55.47 € … option change +16.98,
+pro-rata +8.50, one-off +29.99"), but **fails closed** on the two **multi-service** accounts:
+
+- `99226126` (Fibre → Fibre+TV) → `NOT_ENOUGH_DATA` / `residual_too_high`
+- `99226337` (Fibre+TV → +Mobile) → `NOT_ENOUGH_DATA` / `residual_too_high`
+
+Root cause: the comparison keys deltas by line label/code, so **a whole service section appearing or
+disappearing** (new eir TV / new Mobile) and **one-off charges being removed** (FTTH installation,
+broadband activation) do not map onto a `BillingCauseType`; the unexplained residual exceeds the 5%
+gate → safe escalation (correct fail-closed behaviour, but a poor customer answer for a common case).
+
+### Scope
+
+- Map structural changes to typed causes: **NEW_SERVICE / SERVICE_REMOVED** (a section present on one
+  side only) and **ONE_OFF removal/appearance** aggregated at group level.
+- Compose a customer-facing line for those causes ("un nouveau service … / des frais ponctuels du mois
+  dernier qui disparaissent").
+- Re-examine the 5% `max-residual-ratio` gate for multi-service invoices (OQ-002): a fully attributed
+  structural change should be EXPLAINABLE, not escalated.
+
+### Acceptance
+
+- `99226126` and `99226337` Aug→Sep deltas are **EXPLAINABLE** (or PARTIAL with a bounded residual),
+  not escalated, with grounded per-cause amounts summing to the total delta.
+- The single-service case (`99224964`) stays EXPLAINED.
+- New non-regression tests use the TASK-BE-059 eir B2C fixtures.
+- Fail-closed preserved for genuinely unexplained residuals.
+
+### Out Of Scope
+
+- Live BSS / real PDF parsing (still fixtures).
+- Routing billing from `/converse` (separate follow-up).
