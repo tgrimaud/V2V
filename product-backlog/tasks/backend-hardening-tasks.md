@@ -1008,7 +1008,14 @@ Delivered on `task/TASK-BE-022-auth-log-hardening`:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** 🚧 Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — pending adversarial review + QA + merge.
+**Status:** 🚧 Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — **adversarial review 93/100 (Pass, 2026-09-29, in-session)**; pending pilot QA + merge.
+No blocking findings. Residual (accepted): (1) no automated assertion that `/actuator/metrics`
+returns 404 by default — it's a Spring exposure-config default (`include: health,info`), heavy to
+cover without `@SpringBootTest`; verify in pilot QA (`curl /actuator/metrics` → 404,
+`/actuator/health` → 200). (2) The **docs** closure is conditional on `CONVERSATION_API_KEY` being
+set on the deployment (ops action); the **metrics** closure is unconditional (default fenced).
+OTLP export (TASK-OPS-007) is unaffected — only the `/actuator/metrics` web endpoint is fenced,
+metrics are still collected + exported.
 Mechanism (decided 2026-08-15) implemented: (1) Actuator exposure defaults to `health,info`
 (`MANAGEMENT_ENDPOINTS_EXPOSURE` env, closed by default → `/actuator/metrics` not anonymously
 readable off-box; `/actuator/health` stays exposed for probes); (2) `/v3/api-docs**` (+ `.yaml`)
