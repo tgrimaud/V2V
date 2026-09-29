@@ -1568,6 +1568,7 @@ timeout the residual socket teardown relies on the container recreate + the brow
 Pilot QA runbook: `docs/qa/task-ops-010-bridge-drain-qa.md` (baseline S0/S1/S5 run 2026-09-29 —
 `/drain` not in the deployed image `0.9.3` yet; S2–S6 blocked until an OPS-010 image is built +
 `vault_voice_drain_token` set + tier redeployed).
+Full review (findings table, coverage, evidence): `docs/qa/task-ops-010-adversarial-review.md`.
 **Priority:** High
 **Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (created off `feat/restart-from-scratch`)
 **QA (pilot):** `docs/qa/task-ops-010-bridge-drain-qa.md` — regression green + local live smoke proven. Pilot baseline run 2026-09-29 (S0/S1/S5): running image `0.9.3` predates OPS-010, so `POST /drain` → 405 (route not mounted) and no token set. S2/S3/S4/S6 blocked until an OPS-010 image is built + `vault_voice_drain_token` set + tier redeployed.
