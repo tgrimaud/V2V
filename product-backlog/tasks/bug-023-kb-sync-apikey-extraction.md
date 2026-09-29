@@ -1,6 +1,6 @@
 # BUG-023 — KB post-deploy sync extracts an empty api-key → 401 (auto-sync blocked)
 
-**Type:** Bug · **Severity:** High (blocks post-deploy KB auto-sync / deploy gate) · **Status:** 🟢 Fixed (2026-09-21, pending merge)
+**Type:** Bug · **Severity:** High (blocks post-deploy KB auto-sync / deploy gate) · **Status:** ✅ Fixed & merged — shipped in **v0.9.3** (status reconciled by git ancestry 2026-09-29). Fixed 2026-09-21.
 **Found:** 2026-09-21 while deploying backend `0.9.2` (BUG-022 fix) + triggering the pilot re-sync
 **Area:** deploy tooling (Ansible `compose_tier/kb_sync.yml`) · **Related:** TASK-OPS-009, ADR-0048, BUG-022
 

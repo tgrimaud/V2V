@@ -1019,7 +1019,7 @@ Docker CE would fight the platform's standard runtime and its Postgres podman po
 **Related decisions:** ADR-0041 (Liquibase schema management + bootstrap boundary), ADR-0038 (§ schema init superseded), ADR-0039 (pgvector/embeddings)
 **Depends on:** TASK-INFRA-008 (podman runtime), TASK-OPS-008 (Postgres on `.102`), TASK-BE-003 (pgvector store), TASK-BE-021 (JPA ledger)
 **Classification:** V1 pilot deployment + backend persistence
-**Status:** In progress (branch `feat/sprint-11-remote-deployment`)
+**Status:** ✅ Merged into `feat/restart-from-scratch`, shipped since **v0.6.0** (status reconciled by git ancestry 2026-09-29 — Liquibase-owned schema is the live pilot mechanism per CLAUDE.md / ADR-0041). Originally on branch `feat/sprint-11-remote-deployment`.
 **Priority:** High (blocks first-deploy Step 4 → Steps 6)
 **Branch:** `feat/sprint-11-remote-deployment`
 **Surfaced by:** First-deploy Step 4 review (2026-08-14) — the schema was created implicitly by
@@ -1290,8 +1290,9 @@ ADR-0038 (pilot deploy), ADR-0031 (answer language), ADR-0034 (audience filter)
 (retrieval language filter — target)
 **Depends on:** TASK-OPS-002
 **Classification:** V1 pilot deployment (release correctness + KB content)
-**Status:** 🔧 Implemented on `task/TASK-OPS-009-kb-sync-fr-default` (2026-08-27, off
-`feat/sprint-12-external-voice-websocket`): durable Ansible change (FR corpus default +
+**Status:** ✅ Merged into `feat/restart-from-scratch`, shipped since **v0.8.0** (status reconciled by
+git ancestry 2026-09-29; KB sync runs in the live deploy). Originally on `task/TASK-OPS-009-kb-sync-fr-default`
+(2026-08-27, off `feat/sprint-12-external-voice-websocket`): durable Ansible change (FR corpus default +
 **async** post-deploy sync + `SyncReport.processed` gate) landed; `qa-validate-ansible.sh`
 **76/76** (added 7 checks), YAML + playbook syntax-check clean. The immediate pilot load
 (Part B step 1) was performed operationally out-of-band (see done-tasks 2026-08-27).

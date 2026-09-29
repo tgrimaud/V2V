@@ -382,7 +382,7 @@ runtime (STT/TTS/turn/barge-in).
 ## TASK-BE-047 — Real Eir read-only adapter behind `BssBillingPort`
 
 **Type:** Backend integration — **runtime-affecting** (default `source=mock`, no runtime change yet)
-**Status:** 🚧 In progress — `task/TASK-BE-047-eir-bss-adapter` (off `feat/sprint-14-billing-identity`).
+**Status:** ✅ Merged + shipped since **v0.9.0** via the Sprint-14 closure (`5650e15`; live-validated on EIR test account 5) — status reconciled by git ancestry 2026-09-29. Originally `task/TASK-BE-047-eir-bss-adapter` (off `feat/sprint-14-billing-identity`).
 First slice implemented: the **enquiry-based structured path** behind `BssBillingPort`, config-selected
 (`source=mock` default → `eir`), independent per-service clients, mapped to the billing domain, unit-tested
 without network (577 backend tests green). **Blocked for validation** on a real test account + sample

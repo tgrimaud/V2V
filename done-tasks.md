@@ -27,6 +27,15 @@
   - **No `docs/` drift** from the merged work: the BE-033 knobs live only in `deploy/` (already updated),
     no `docs/` env-var reference enumerates them; `release-process.md` pins no version (version = git tag).
   - Refreshed `remaining-work-recap.md` (latency table + snapshot note) to the reconciled 2026-09-29 state.
+  - **Deep `backlog-index.md` + ticket-detail sweep** (headers go stale after sprint-closure fast-forward
+    merges). Reconciled **13 more shipped-but-stale statuses** — index rows: TASK-OPS-006 (v0.8.0),
+    TASK-INFRA-009 (v0.6.0), TASK-WEB-028/030 (v0.6.0), TASK-WEB-037/038 (v0.7.0), TASK-OPS-009 (v0.8.0),
+    TASK-BE-034 (v0.9.3); ticket-detail headers: TASK-INFRA-009 + TASK-OPS-009 (deployment-tasks.md),
+    TASK-BE-032 + TASK-WEB-033/034 (sprint-11 "merge-ready" → v0.6.0), TASK-WEB-007/009/015/021 (Sprint 6/10
+    "In progress" → shipped), TASK-WEB-048 (v0.9.3), BUG-023 (v0.9.3), TASK-BE-047 (v0.9.0 via Sprint-14).
+    Verified `TASK-INFRA-005` is **correctly** still Deferred (its only mainline commit is the ticket-doc
+    merge). After the sweep the index has **no stale merge statuses**: the only remaining `In progress`/
+    `pending` markers are genuine open sub-gates (TASK-INFRA-012 + TASK-WEB-021 live caveats, BUG-018 2/3).
 
 ## 2026-09-29 — Bug triage: BUG-005/006/008/016/019/020 reconciled (all already merged + shipped)
 

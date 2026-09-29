@@ -831,7 +831,7 @@ Scenario: Both runtimes return the same client-safe error contract
 **Depends on:** TASK-WEB-005 (Pipecat pipeline + `VoiceTurnProcessor` seam)
 **Source finding:** RF-012 (`asyncio.run` per turn → single long-lived async loop)
 **Classification:** V1 core (latency enabler)
-**Status:** In progress — Sprint 6 (`sprints/sprint-6-streaming.md`). **Implemented**
+**Status:** ✅ Merged into `feat/restart-from-scratch` (shipped; status reconciled by git ancestry 2026-09-29). Originally Sprint 6 (`sprints/sprint-6-streaming.md`). **Implemented**
 (pending the spoken-answer QA gate). `pipecat-ai[webrtc]` installed (aiortc 1.15.0, av
 17.1.0, opencv 4.13.0.92 on Py3.14). Delivered: `SmallWebRTCTransport` wired via a
 persistent single loop (`web_voice/async_loop.py`, closes RF-012); signaling route
@@ -1008,7 +1008,7 @@ Scenario: The bot does not interrupt itself
 (per-step latency before any SLO claim), ADR-0010 (industrialization gates)
 **Depends on:** TASK-WEB-007, TASK-STT-012, TASK-STT-010, TASK-WEB-004, TASK-WEB-008
 **Classification:** V1 pilot gate
-**Status:** In progress — Sprint 6 (`sprints/sprint-6-streaming.md`). Delivered:
+**Status:** ✅ Merged into `feat/restart-from-scratch` (shipped; status reconciled by git ancestry 2026-09-29). Originally Sprint 6 (`sprints/sprint-6-streaming.md`). Delivered:
 `time_to_first_audio` composite + `scripts/streaming_latency_report.py` + E2E
 `streaming_loop.feature` (297 unit tests, 10 Behave features green); docs
 (voice-journey-timing, HTTP contract WebRTC surface, ADR-0018 evidence) + QA report
@@ -1434,7 +1434,7 @@ speech-to-speech), TASK-WEB-011 (TTS pre-warm — the precedent for lever 2)
 **Depends on:** TASK-WEB-014 (mouth-to-ear measurement — **optimize against a real
 instrumented baseline, not blind**)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** In progress (Sprint 10, 2026-07-29) — **lever 3 delivered** (env-tunable
+**Status:** ✅ Merged into `feat/restart-from-scratch` (shipped; status reconciled by git ancestry 2026-09-29; originally Sprint 10, 2026-07-29) — **lever 3 delivered** (env-tunable
 end-of-turn hold `VOICE_END_OF_TURN_SILENCE_MS`, clamped to a 250 ms safe floor,
 default 500 ms; unit tests + docs; unittest **423** green, behave **33** green).
 Adversarial review **93/100 — QA gate Pass** (mechanism), no blocking finding; the two
@@ -2189,7 +2189,7 @@ Scenario: The streamed path preserves conversation memory and safe failure
 ADR-0029 (pilot latency criterion)
 **Depends on:** TASK-WEB-014 (live baseline), TASK-BE-017 (backend LLM/embedding warm-up path)
 **Classification:** V1 pilot gate (perceived latency)
-**Status:** In progress (Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
+**Status:** ✅ Merged into `feat/restart-from-scratch` (shipped; status reconciled by git ancestry 2026-09-29). Originally Sprint 10, branch `task/TASK-WEB-021-connect-time-warmup` off
 `feat/sprint-10-pilot-latency`). Split from TASK-WEB-015 (lever 2) per user decision 2026-07-29.
 Runtime implemented 2026-07-29: **STT session pre-warm** (`SessionWarmer`, extracted from
 `TtsSessionWarmer` so both share one provider-agnostic warmer; `StreamingSttProcessor` pre-opens a
@@ -3312,7 +3312,7 @@ Scenario: Backend first-token is reduced with grounding and guardrails intact
 **Related decisions:** STT-013 spike (delta semantics live-validated), ADR-0028 (observability)
 **Depends on:** —
 **Classification:** V1 voice runtime — observability / robustness
-**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — ✅ merged + shipped since **v0.6.0** (status reconciled by git ancestry 2026-09-29). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
 **Priority:** Low-Medium
 **Surfaced by:** 2026-08-15 global adversarial review, decision #8.
 
@@ -3353,7 +3353,7 @@ corrupt a legitimate delta with repeated words).
 **Related decisions:** TASK-WEB-006 (client-safe error body), TASK-WEB-016 (OpenAPI), ADR-0021 (degraded)
 **Depends on:** —
 **Classification:** V1 voice runtime — HTTP contract / robustness
-**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — merge-ready (awaiting user's explicit merge). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
+**Status:** ✅ Implemented + adversarial review 93/100 (Pass) + functional QA GO (2026-08-15) on `feat/sprint-11-remote-deployment` — ✅ merged + shipped since **v0.6.0** (status reconciled by git ancestry 2026-09-29). QA report: `docs/qa/global-review-decisions-7-9-qa-report.md`
 **Priority:** Medium
 **Surfaced by:** 2026-08-15 global adversarial review, decision #9.
 
@@ -4222,7 +4222,7 @@ Scenario: Cloud-only items are out of reach locally
 **Related bug:** BUG-026 (UI language-selector session lock — the concrete dual-maintenance divergence that motivates this)
 **Depends on:** ADR-0047 shipped (`v0.7.0`, aiohttp default on the pilot)
 **Classification:** V1 voice runtime — plumbing/refactor (transport removal only; pipeline, SessionFactory and backend/`/turn` contracts unchanged). Runtime-affecting surface = server wiring, so re-run the full voice test suite + confirm the aiohttp `/ws` telemetry is intact.
-**Status:** ✅ Done — Phase 1 (interim `:8091` WS removed, merged `95f6aea`) + Phase 2 (`stdlib` server mode removed) both implemented; pending user validation of Phase 2
+**Status:** ✅ Done — Phase 1 (interim `:8091` WS removed, merged `95f6aea`) + Phase 2 (`stdlib` server mode removed) both implemented + shipped in **v0.9.3** (status reconciled by git ancestry 2026-09-29)
 **Priority:** Medium
 **Branch:** `task/TASK-WEB-048-retire-interim-ws-stdlib` (Phase 1, merged) → `task/TASK-WEB-048-phase2-retire-stdlib` (Phase 2, off `feat/restart-from-scratch`)
 
