@@ -1,6 +1,5 @@
 package com.voicesupport.conversation.application.service;
 
-import com.voicesupport.conversation.domain.model.valueobject.BillingExplanationRequest;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.RoutableTurn;
 import com.voicesupport.conversation.domain.port.in.AnswerBillingQuestionUseCase;
@@ -9,6 +8,8 @@ import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.out.BillingIntentPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
 
 // Routes a /converse turn between the deterministic billing chain and the RAG pipeline (TASK-BE-061,
 // ADR-0055). Billing is taken only when the channel supplied an account reference AND the turn is a
@@ -19,33 +20,20 @@ public class ConversationRoutingService implements ConversationRoutingUseCase {
     private static final Logger log = LoggerFactory.getLogger(ConversationRoutingService.class);
 
     private final ConverseUseCase converse;
-    private final AnswerBillingQuestionUseCase billing;
-    private final BillingIntentPort billingIntent;
+    private final BillingRoutingService billingRouter;
 
     public ConversationRoutingService(
             ConverseUseCase converse, AnswerBillingQuestionUseCase billing, BillingIntentPort billingIntent) {
         this.converse = converse;
-        this.billing = billing;
-        this.billingIntent = billingIntent;
+        this.billingRouter = new BillingRoutingService(billing, billingIntent);
     }
 
     @Override
     public GeneratedAnswer answer(RoutableTurn turn) {
-        boolean toBilling = routesToBilling(turn);
-        log.info("[ROUTE] route={} account_ref_present={}", toBilling ? "billing" : "rag",
+        Optional<GeneratedAnswer> billing = billingRouter.billingAnswer(turn);
+        log.info("[ROUTE] route={} account_ref_present={}", billing.isPresent() ? "billing" : "rag",
                 turn.hasAccountReference());
-        if (toBilling) {
-            return billing.answer(toBillingRequest(turn));
-        }
-        return converse.converse(turn.transcript(), turn.conversationKey(), turn.forcedLanguage());
-    }
-
-    private boolean routesToBilling(RoutableTurn turn) {
-        return turn.hasAccountReference() && billingIntent.isBillingQuestion(turn.transcript());
-    }
-
-    private static BillingExplanationRequest toBillingRequest(RoutableTurn turn) {
-        return new BillingExplanationRequest(turn.transcript(), turn.accountReference(), null,
-                turn.forcedLanguage(), turn.channel(), turn.conversationKey(), turn.correlationId());
+        return billing.orElseGet(
+                () -> converse.converse(turn.transcript(), turn.conversationKey(), turn.forcedLanguage()));
     }
 }

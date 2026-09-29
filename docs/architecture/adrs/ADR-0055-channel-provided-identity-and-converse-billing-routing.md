@@ -57,9 +57,18 @@ Vocal collection of the account number is **explicitly out of scope** for this d
 ever needed it becomes a *fallback* behind the same identity seam (a later ticket), never the
 primary path.
 
-### D2 — `/converse` routes RAG ↔ billing on (identity present ∧ billing intent)
+### D2 — the conversation endpoints route RAG ↔ billing on (identity present ∧ billing intent)
 
-`/converse` gains a routing seam. A turn is routed to the deterministic billing chain **iff**:
+> **Amended (BUG-027, 2026-09-29):** routing applies to **both** conversation endpoints —
+> the blocking `POST /api/conversation/converse` **and** the streaming
+> `POST /api/conversation/converse-stream` (SSE). The streaming path is the **real voice
+> path** (`VOICE_BACKEND_STREAM` on by default), so shipping the routing on `/converse`
+> only meant the voice UI never reached the billing chain. Both paths now share one
+> routing decision (`BillingRoutingService`); on a billing turn the streaming session emits
+> the pre-computed grounded billing text as a `chunk` + `done` (the billing chain returns a
+> full vetted answer, not a token stream — ADR-0052 D1a), otherwise it streams RAG tokens.
+
+A turn is routed to the deterministic billing chain **iff**:
 
 - the channel supplied an account reference (`account_id` non-blank), **and**
 - the transcript is a billing question, per the existing deterministic `BillingIntentDetector`
@@ -70,16 +79,21 @@ question → RAG generic** (fail-safe: we never guess whose invoice to open). Id
 comparable-invoice selection, the confidence gate and DEC-002 grounding are all unchanged — this
 ADR only *reaches* the ADR-0052 chain from `/converse`; it adds no new billing logic.
 
-Routing lives in a new **application** service `ConversationRoutingService`
-(`ConversationRoutingUseCase` in-port), which `ConverseController` now depends on instead of
-`ConverseUseCase` directly. It composes:
+The routing **decision** is a single application service `BillingRoutingService`
+(`Optional<GeneratedAnswer> billingAnswer(RoutableTurn)` — returns the billing answer on a hit,
+empty on a miss). It composes `AnswerBillingQuestionUseCase` (the ADR-0052 billing chain) and a
+new conversation **out-port** `BillingIntentPort`. Both endpoints share it (single source of
+truth for the predicate + billing-request mapping):
 
-- `ConverseUseCase` (RAG),
-- `AnswerBillingQuestionUseCase` (the ADR-0052 billing chain), and
-- a new conversation **out-port** `BillingIntentPort`.
+- the blocking path wraps it in `ConversationRoutingService` (`ConversationRoutingUseCase`
+  in-port), which `ConverseController` depends on instead of `ConverseUseCase`; a miss falls back
+  to `ConverseUseCase` (RAG);
+- the streaming path (`ConverseStreamSession`) calls `billingAnswer` first; a hit is emitted as a
+  `chunk` + `done`, a miss streams RAG tokens via `ConverseStreamUseCase`.
 
 The turn is passed as a `RoutableTurn` value object (`transcript`, `conversationKey`,
-`forcedLanguage`, `accountReference`, `channel`, `correlationId`).
+`forcedLanguage`, `accountReference`, `channel`, `correlationId`), which also owns the
+`toBillingExplanationRequest()` mapping so both paths build an identical billing request.
 
 ### D3 — Cross-context intent seam (no type leakage)
 

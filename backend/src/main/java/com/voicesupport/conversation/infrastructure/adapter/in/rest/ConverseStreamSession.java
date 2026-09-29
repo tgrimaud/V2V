@@ -1,10 +1,12 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.application.service.BillingRoutingService;
 import com.voicesupport.conversation.domain.model.TokenStream;
 import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffCommand;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
+import com.voicesupport.conversation.domain.model.valueobject.RoutableTurn;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
@@ -22,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Optional;
 
 // Runs one /converse-stream turn on a worker thread (ADR-0013). It re-establishes the request
 // correlation id + channel in this thread's MDC (thread-pool threads don't inherit it), consumes
@@ -43,6 +46,7 @@ class ConverseStreamSession {
     private final IdempotentDeliveryGuard idempotentDeliveryGuard;
     private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
+    private final BillingRoutingService billingTurnRouter;
     private final ConverseRequest request;
     private final ChannelEnvelope envelope;
     private final String correlationId;
@@ -56,6 +60,7 @@ class ConverseStreamSession {
             IdempotentDeliveryGuard idempotentDeliveryGuard,
             PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
+            BillingRoutingService billingTurnRouter,
             ConverseRequest request,
             String correlationId) {
         this.emitter = emitter;
@@ -63,6 +68,7 @@ class ConverseStreamSession {
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
         this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
+        this.billingTurnRouter = billingTurnRouter;
         this.request = request;
         this.envelope = request.toEnvelope();
         this.correlationId = correlationId;
@@ -107,14 +113,44 @@ class ConverseStreamSession {
     private void processTurn() {
         reserved = true;
         telemetry.recordChannelDelivery(envelope.replyMode().code(), false);
-        // Memory keys on the envelope's conversation key (external_session_id, falling back to
-        // conversation_id) so a Genesys streaming call stays one coherent conversation.
+        RoutableTurn turn = toRoutableTurn();
+        // BUG-027 / ADR-0055: the streaming path (the real voice path) routes exactly like /converse.
+        // A channel-provided account + a billing question runs the deterministic billing chain and
+        // streams its pre-computed grounded text; otherwise RAG tokens stream as before.
+        Optional<GeneratedAnswer> billing = billingTurnRouter.billingAnswer(turn);
+        log.info("[ROUTE] route={} account_ref_present={} stream=true",
+                billing.isPresent() ? "billing" : "rag", turn.hasAccountReference());
+        if (billing.isPresent()) {
+            answerFromBilling(billing.get());
+            return;
+        }
+        streamFromRag();
+    }
+
+    // Memory keys on the envelope's conversation key (external_session_id, falling back to
+    // conversation_id) so a Genesys streaming call stays one coherent conversation.
+    private void streamFromRag() {
         TokenStream tokenStream = converseStreamUseCase.converseStream(
                 request.transcript(), envelope.conversationKey(), request.language());
-        GeneratedAnswer answer = tokenStream.consume(this::onChunk);
+        finalizeTurn(tokenStream.consume(this::onChunk));
+    }
+
+    // The billing chain returns a full, already-vetted grounded answer (ADR-0052 D1a), not a token
+    // stream. Emit it as one chunk (so the voice runtime synthesizes it) then the terminal done.
+    private void answerFromBilling(GeneratedAnswer answer) {
+        onChunk(answer.text());
+        finalizeTurn(answer);
+    }
+
+    private void finalizeTurn(GeneratedAnswer answer) {
         EscalationHandoffReference reference = prepareHandoffIfEscalated(answer);
         send("done", StreamDoneEvent.from(answer, reference));
         logTurn(answer);
+    }
+
+    private RoutableTurn toRoutableTurn() {
+        return new RoutableTurn(request.transcript(), envelope.conversationKey(), request.language(),
+                request.accountId(), envelope.channel(), request.correlationId());
     }
 
     // On an escalation turn, stores the audited hand-off and carries only the by-reference token on

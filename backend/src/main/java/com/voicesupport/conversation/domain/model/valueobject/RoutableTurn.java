@@ -11,4 +11,11 @@ public record RoutableTurn(String transcript, String conversationKey, String for
     public boolean hasAccountReference() {
         return accountReference != null && !accountReference.isBlank();
     }
+
+    // Maps this turn to the billing chain's request (no invoice_id: the customer never quotes one).
+    // Centralized here so the blocking and streaming routers build an identical request.
+    public BillingExplanationRequest toBillingExplanationRequest() {
+        return new BillingExplanationRequest(
+                transcript, accountReference, null, forcedLanguage, channel, conversationKey, correlationId);
+    }
 }

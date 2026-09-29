@@ -3,6 +3,34 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — BUG-027 — `/converse-stream` did not route to billing (voice UI ignored invoice data)
+
+**Summary:**
+
+- Follow-up defect of TASK-BE-061: routing was wired on the blocking `/converse` only, but the
+  voice UI uses the **streaming** `/converse-stream` (`VOICE_BACKEND_STREAM` on by default), which
+  stayed pure RAG. So selecting account `99224964` and asking "ma facture est plus élevée" got a
+  generic RAG answer — the billing chain was never reached on the real voice path. Found on the
+  local run; backend logs showed `[CONVERSE-STREAM] … grounded=true confidence≈0.73` with **no
+  `[ROUTE]` line**, vs `/converse` which logged `[ROUTE] route=billing … slice=billing explained`.
+- **Fix.** Extracted the routing **decision** into a single application service
+  `BillingRoutingService` (`Optional<GeneratedAnswer> billingAnswer(RoutableTurn)`), reused by
+  `ConversationRoutingService` (blocking) and `ConverseStreamSession` (streaming) — one source of
+  truth for the predicate + billing-request mapping (`RoutableTurn.toBillingExplanationRequest()`).
+  On a billing turn the streaming session emits the pre-computed grounded billing text as a
+  `chunk` + `done` (the chain returns a full vetted answer, not a token stream — ADR-0052 D1a);
+  else it streams RAG. `[ROUTE] … stream=true` logged; reference never in clear.
+- **Tests.** Backend **661** + ArchUnit green: `ConverseStreamControllerBillingRoutingTest`
+  (billing route streams grounded text + RAG bypassed; no-account keeps RAG), `BillingRoutingServiceTest`
+  (decision unit), 7 streaming `@WebMvcTest` configs given a disabled router bean.
+- **Secondary recall fix.** Live retest exposed a second gap: `[ROUTE] route=rag account_ref_present=true`
+  for "pourquoi je **paye** plus…" — routing fired but `BillingIntentDetector` missed the phrasing (no FR
+  payment/price verb in the default keywords). Extended `BillingConfig` default
+  `voice-support.billing.intent.keywords` with `paye,paie,payer,paiement,prix,coute,cher` (+ regression
+  test); keywords stay env-tunable.
+- **Docs.** ADR-0055 amended (routing applies to both endpoints); BUG-027 ticket + backlog-index row;
+  adversarial review 92/100 (Pass) at `docs/qa/bug-027-adversarial-review.md`.
+
 ## 2026-09-29 — TASK-BE-061 — Channel-provided identity + RAG↔billing routing on `/converse` (ADR-0055)
 
 **Summary:**

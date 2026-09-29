@@ -168,7 +168,8 @@ public class BillingConfig {
     public BillingIntentDetector billingIntentDetector(
             @Value("${voice-support.billing.intent.keywords:"
                     + "facture,factures,facturation,montant,prelevement,tarif,augmente,augmentation,"
-                    + "remise,invoice,bill,billing,charge,charged,amount,price,increase,discount}")
+                    + "remise,paye,paie,payer,paiement,prix,coute,cher,"
+                    + "invoice,bill,billing,charge,charged,amount,price,increase,discount}")
             String keywordsCsv) {
         List<String> keywords = Arrays.stream(keywordsCsv.split(","))
                 .map(String::trim).filter(keyword -> !keyword.isBlank()).toList();

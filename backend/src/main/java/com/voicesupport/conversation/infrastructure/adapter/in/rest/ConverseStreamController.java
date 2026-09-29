@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.application.service.BillingRoutingService;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
@@ -43,6 +44,7 @@ public class ConverseStreamController {
     private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ExecutorService streamExecutor;
+    private final BillingRoutingService billingTurnRouter;
     private final ApiKeyGuard apiKeyGuard;
 
     public ConverseStreamController(
@@ -51,12 +53,14 @@ public class ConverseStreamController {
             PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             ExecutorService sseStreamExecutor,
+            BillingRoutingService billingTurnRouter,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
         this.converseStreamUseCase = converseStreamUseCase;
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
         this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
         this.streamExecutor = sseStreamExecutor;
+        this.billingTurnRouter = billingTurnRouter;
         this.apiKeyGuard = new ApiKeyGuard(apiKey);
     }
 
@@ -86,7 +90,7 @@ public class ConverseStreamController {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         ConverseStreamSession session = new ConverseStreamSession(
                 emitter, converseStreamUseCase, idempotentDeliveryGuard, prepareEscalationHandoffUseCase,
-                telemetry, request, correlationId);
+                telemetry, billingTurnRouter, request, correlationId);
         try {
             streamExecutor.execute(session::run);
         } catch (RejectedExecutionException e) {
