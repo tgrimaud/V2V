@@ -630,3 +630,54 @@ gate → safe escalation (correct fail-closed behaviour, but a poor customer ans
 
 - Live BSS / real PDF parsing (still fixtures).
 - Routing billing from `/converse` (separate follow-up).
+
+---
+
+## TASK-BE-061 — Route billing intent from the main conversation (/converse): collect account reference, then explain
+
+**Type:** Technical task (conversation routing + voice slot-filling) — **likely warrants promotion to a US + a routing ADR**
+**Status:** 📋 Proposed (closes the "routing billing from /converse is a follow-up" note in `BillingExplainRequest`)
+**Priority:** High
+**Depends on:** TASK-BE-045 (billing chain), ADR-0052 (billing seam), ADR-0050 (identity), US-042 (language)
+**Relates to:** ADR-0027 (retrieval seam), BR-002-1 (identity), OQ-001 (identity source)
+
+### Context
+
+Today the customer-facing loop (web/voice) calls `POST /api/conversation/converse` → **RAG only**. The
+deterministic billing chain lives behind a **separate** endpoint `POST /api/conversation/billing-explain`
+that the voice runtime never calls, and it needs a customer `reference` (account number) that the main
+loop never collects. So a real "I don't understand, my bill is higher than last month" spoken in the app
+gets a **generic KB answer**, never a real invoice comparison, and no account number is ever requested.
+
+This ticket wires the missing bridge in the conversation turn:
+
+1. **Detect billing intent** on the incoming turn (reuse `BillingIntentDetector`, ADR-0052 D2a).
+2. If billing intent **and** no verified identity yet → **ask for the account reference** ("pouvez-vous
+   me communiquer votre numéro de compte / référence client ?") and capture the spoken answer
+   (voice slot-filling; a short conversation-scoped identity state).
+3. Once a `reference` is captured → route the turn through the billing chain
+   (`BillingExplanationPort`/`AnswerBillingQuestionUseCase`) instead of RAG; otherwise fall through to RAG.
+4. Keep everything **fail-closed** (identity unverified → safe hand-off) and DEC-002 intact (LLM only
+   rephrases the grounded billing text).
+
+### Open design points (need an ADR)
+
+- Where routing lives: the answer engine (backend) branching RAG vs billing, vs the voice runtime.
+- How the reference is collected and held across turns (stateless `/converse` today → needs a minimal
+  conversation identity slot; privacy: the reference is personal data, never logged in clear — ADR-0052).
+- Interaction with the end-of-call/farewell + language stickiness flows.
+- Verbal reference capture robustness (digits over STT) and a max-retries → escalation policy.
+
+### Acceptance
+
+- Spoken "ma facture a augmenté" in the app triggers a spoken request for the account number, then a
+  grounded comparison answer (or safe hand-off) — end-to-end, no separate endpoint call by the user.
+- No account number provided / not verifiable → bounded retries then safe escalation (fail-closed).
+- Non-billing turns are unaffected (RAG path unchanged); regression tests lock both branches.
+- OpenTelemetry: intent-detected, reference-requested, reference-captured, routed-to-billing outcomes.
+- ADR created for the routing + identity-slot decision.
+
+### Out Of Scope
+
+- Improving multi-service cause attribution (TASK-BE-060).
+- Live BSS / real PDF parsing (still fixtures).
