@@ -109,7 +109,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        # TASK-BE-023 (ops-surface hardening): expose only health,info by DEFAULT so `/actuator/metrics`
+        # is NOT anonymously readable once the backend answers off-box (Sprint 11 backend VIP). The
+        # localhost pilot / QA reopens metrics by setting MANAGEMENT_ENDPOINTS_EXPOSURE=health,info,metrics
+        # (same env-driven-posture precedent as REDIS_HEALTH_ENABLED). `/actuator/health` stays exposed
+        # for the container/orchestrator + HAProxy liveness probes regardless.
+        include: ${MANAGEMENT_ENDPOINTS_EXPOSURE:health,info}
   endpoint:
     health:
       probes:

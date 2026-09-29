@@ -46,6 +46,9 @@ services:
       # Only safe where Redis is actually reachable; leaving it true in memory mode
       # flips /actuator/health to DOWN (TASK-BE-021 review).
       REDIS_HEALTH_ENABLED: "${REDIS_HEALTH_ENABLED:-true}"
+      # TASK-BE-023 (ops-surface hardening): Actuator exposure. Default health,info keeps
+      # /actuator/metrics closed to anonymous callers off-box; /actuator/health stays exposed.
+      MANAGEMENT_ENDPOINTS_EXPOSURE: "${MANAGEMENT_ENDPOINTS_EXPOSURE:-health,info}"
       # --- RAG context budget (TASK-BE-033 lever 2): caps the KB text fed to the LLM to shrink
       # prompt prefill (a ~linear driver of backend_first_token). Applied AFTER the confidence
       # guardrail, so answerable/confidence is unchanged; LLM + per-sentence OutputGuardrail see the

@@ -65,7 +65,7 @@
 |---|---|---|
 | **TASK-OPS-010** | Drain active sessions cleanly before recreating a container on deploy (don't cut a live call). Unblocks BUG-018's last third. | Planned (P1) |
 | **TASK-INFRA-005** | Keep a WebRTC session routed to the same bridge (signaling stickiness at the LB) — negotiation breaks otherwise with 2 bridges. | Deferred — validate live |
-| **TASK-BE-023** | Close unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/metrics`) before external exposure. | Ready/Scheduled |
+| **TASK-BE-023** | Close unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/metrics`) before external exposure. | Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — Actuator default `health,info`; docs gated behind `x-api-key`; `mvn test` 650 green. Pending review + QA + merge |
 | **TASK-BE-030** | If Redis (shared memory) fails, fall back to local memory and stay in service instead of dropping out of rotation. | Planned |
 | **TASK-BE-026** | Retry idempotent reads + circuit-break (resilience4j) when an upstream is down. | Deferred |
 | **TASK-BE-031** | Reduce personal data sent to cloud providers (STT/TTS/LLM) — engineering piece of the OQ-009 compliance work. | Planned |

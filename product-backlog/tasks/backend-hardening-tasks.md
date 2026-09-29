@@ -1008,10 +1008,16 @@ Delivered on `task/TASK-BE-022-auth-log-hardening`:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** ✅ Ready / Scheduled (mechanism decided 2026-08-15, global-review decision #5).
-The trigger condition is now **met**: since Sprint 11 the backend answers off-box on the
+**Status:** 🚧 Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — pending adversarial review + QA + merge.
+Mechanism (decided 2026-08-15) implemented: (1) Actuator exposure defaults to `health,info`
+(`MANAGEMENT_ENDPOINTS_EXPOSURE` env, closed by default → `/actuator/metrics` not anonymously
+readable off-box; `/actuator/health` stays exposed for probes); (2) `/v3/api-docs**` (+ `.yaml`)
+and `/swagger-ui**` added to the existing `ApiKeyAuthInterceptor` path list → gated behind
+`x-api-key` when a key is configured, open on the localhost pilot / QA (no key). `mvn test` 650
+green (+8), ArchUnit OK. Not yet merged (user is final validator).
+The trigger condition was **met**: since Sprint 11 the backend answers off-box on the
 backend VIP `.11:80` (VM↔VM on `192.168.0.0/24`), so `/v3/api-docs`, `/swagger-ui**` and
-`/actuator/metrics` are anonymously reachable on the internal subnet. Do **before** broadening
+`/actuator/metrics` were anonymously reachable on the internal subnet. Done **before** broadening
 exposure (external channels / Genesys); **not** P1 — exposure is internal-subnet only (no public
 route reaches the backend; the `.10:443` edge routes to the voice bridges, not the backend).
 **Priority:** Medium
