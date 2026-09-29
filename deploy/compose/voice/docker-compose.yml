@@ -24,6 +24,13 @@ services:
       # Max concurrent live WS sessions per bridge; a connection past it is refused with WS
       # close 1013 (backpressure) and the active-session gauge is exported. Code default 8.
       VOICE_MAX_WS_SESSIONS: "${VOICE_MAX_WS_SESSIONS:-8}"
+      # --- Graceful session drain (TASK-OPS-010) ---
+      # VOICE_DRAIN_TOKEN gates the POST /drain control endpoint (empty = disabled → 503). The
+      # Ansible voice deploy calls /drain inside THIS container's namespace before recreate to
+      # wait for 0 active calls (immune to the host loopback quirk, TASK-INFRA-011). The token is
+      # read from the container env so it never lands on the host `ps` argv.
+      VOICE_DRAIN_TOKEN: "${VOICE_DRAIN_TOKEN:-}"
+      VOICE_DRAIN_TIMEOUT_MS: "${VOICE_DRAIN_TIMEOUT_MS:-90000}"
       # --- Conversation backend (reach the backend VIP .11) ---
       VOICE_BACKEND: "${VOICE_BACKEND:-http}"
       VOICE_BACKEND_URL: "${VOICE_BACKEND_URL}"

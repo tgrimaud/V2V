@@ -46,6 +46,11 @@ from tts_synthesis.provider_factory import (  # noqa: E402
 from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 
+from .drain import (  # noqa: E402
+    DrainController,
+    drain_timeout_ms_config,
+    drain_token_config,
+)
 from .egress import VoiceResponse, WebVoiceEgress, pcm_to_wav  # noqa: E402
 from .egress import _sample_rate_from_format  # noqa: E402
 from .envelope import ChannelEnvelope  # noqa: E402
@@ -261,7 +266,7 @@ def _build_ws_session_factory(
     )
 
 
-def _build_genesys_handler(args, ingress, egress, backend):
+def _build_genesys_handler(args, ingress, egress, backend, drain_controller=None):
     """Build the aiohttp `/genesys/audiohook` handler for the single-port path, or None.
 
     Rides aiohttp's own `WebSocketResponse` (no extra package), reusing the shared
@@ -319,10 +324,11 @@ def _build_genesys_handler(args, ingress, egress, backend):
         cap_drain_grace_s=genesys_cap_drain_grace_s_config(),
         allowed_origins=genesys_allowed_origins_config(),
         authenticator=authenticator,
+        drain_controller=drain_controller,
     )
 
 
-def _build_ws_handler(args, ingress, egress, backend):
+def _build_ws_handler(args, ingress, egress, backend, drain_controller=None):
     """Build the aiohttp-native `/ws` handler for the single-port path, or None.
 
     It rides aiohttp's own `WebSocketResponse` (no `websockets` package) so availability is
@@ -338,6 +344,7 @@ def _build_ws_handler(args, ingress, egress, backend):
         _build_ws_session_factory(args, ingress, egress, backend),
         default_language=ws_language_config(),
         max_sessions=ws_async_max_sessions_config(),
+        drain_controller=drain_controller,
     )
 
 
@@ -423,11 +430,16 @@ def main() -> int:
     backend = build_backend(args.backend)
     processor = build_turn_processor(args.runtime, ingress, egress, backend)
     signaling, loop = _build_signaling(args, ingress, egress, backend)
+    # Graceful session drain (TASK-OPS-010): one controller shared by the WS + Genesys
+    # handlers (they register their active-session counters) and the POST /drain endpoint.
+    drain_controller = DrainController(
+        token=drain_token_config(), default_timeout_ms=drain_timeout_ms_config()
+    )
     # ADR-0047/ADR-0053: the single aiohttp server rides one routed port. The live WS is
     # `/ws` on that same port (aiohttp-native transport); the interim `:8091` listener and
     # the legacy `--server stdlib` ThreadingHTTPServer were retired (TASK-WEB-048).
-    ws_handler = _build_ws_handler(args, ingress, egress, backend)
-    genesys_handler = _build_genesys_handler(args, ingress, egress, backend)
+    ws_handler = _build_ws_handler(args, ingress, egress, backend, drain_controller)
+    genesys_handler = _build_genesys_handler(args, ingress, egress, backend, drain_controller)
     ws_status = f"on:{args.port}/ws" if ws_handler else "off"
     genesys_status = f"on:{args.port}/genesys/audiohook" if genesys_handler else "off"
     print(
@@ -438,7 +450,7 @@ def main() -> int:
         file=sys.stderr,
     )
     try:
-        _serve(args, processor, signaling, ws_handler, genesys_handler)
+        _serve(args, processor, signaling, ws_handler, genesys_handler, drain_controller)
     finally:
         if signaling is not None:
             signaling.close()
@@ -457,6 +469,7 @@ def _serve(
     signaling: Any,
     ws_handler: Any = None,
     genesys_handler: Any = None,
+    drain_controller: Any = None,
 ) -> None:
     """Run the single-port aiohttp server (blocking until shutdown).
 
@@ -473,7 +486,13 @@ def _serve(
     # query string, which carries conversation_id/correlation_id/session_id/language). Keep
     # those opaque IDs out of the access log — telemetry already records them.
     web.run_app(
-        make_app(processor, signaling, ws_handler=ws_handler, genesys_handler=genesys_handler),
+        make_app(
+            processor,
+            signaling,
+            ws_handler=ws_handler,
+            genesys_handler=genesys_handler,
+            drain_controller=drain_controller,
+        ),
         host=args.host,
         port=args.port,
         print=None,

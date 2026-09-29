@@ -23,6 +23,13 @@ vault_redis_password: "CHANGE_ME"
 vault_genesys_audiohook_api_key: "CHANGE_ME"
 vault_genesys_audiohook_secret: "CHANGE_ME"   # base64
 
+# Graceful bridge drain token (TASK-OPS-010). Gates the voice bridge's POST /drain control
+# endpoint so a deploy can wait for 0 active calls before recreate. OPTIONAL: leave empty to
+# keep /drain disabled (the deploy degrades to the LB drain + grace window); set any strong
+# random string (e.g. `openssl rand -hex 24`) to enable the exact drain. voice.yml renders it
+# with `| default('')`, so an empty/absent value is safe.
+vault_voice_drain_token: ""
+
 # WebRTC TURN relay credential (open input #12). Only needed once a TURN relay is
 # provisioned and voice_turn / voice_turn_username are set in group_vars/voice.yml.
 # Leave empty for the web pilot's STUN / host-candidate-only default (VOICE_TURN unset);

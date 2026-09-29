@@ -204,6 +204,8 @@ Server port `8080`, health `/actuator/health` and `/api/health` (both ungated).
 | `VOICE_BACKEND` | `http` | default `stub` |
 | `VOICE_BACKEND_URL` | `http://192.168.0.11` (backend VIP server base; the bridge appends `/api/conversation/converse`) | required for `http` backend |
 | `VOICE_BACKEND_API_KEY` | from secrets | matches backend `CONVERSATION_API_KEY` |
+| `VOICE_DRAIN_TOKEN` | from secrets (`vault_voice_drain_token`, optional) | TASK-OPS-010: gates `POST /drain`; empty ⇒ disabled (deploy degrades to LB drain + grace) |
+| `VOICE_DRAIN_TIMEOUT_MS` | `90000` | TASK-OPS-010: default bridge-drain wait budget (deploy also passes `?timeout_ms=`) |
 | `GRADIUM_API_KEY` | from secrets | STT/TTS (cloud) |
 | `VOICE_STUN` | STUN URLs (confirm) | Comma-separated; NAT discovery for Prodpriv clients |
 | `VOICE_TURN` | TURN URLs (confirm) | Comma-separated; relayed media when host candidates are unreachable |

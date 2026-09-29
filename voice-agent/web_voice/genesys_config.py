@@ -48,6 +48,8 @@ SESSION_REJECTED_EVENT = "voice.genesys.session_rejected"
 SESSION_CAP_EVENT = "voice.genesys.session_cap"
 SESSION_CAP_FORCED_EVENT = "voice.genesys.session_cap_forced"
 REASON_CAPACITY = "capacity"
+# The bridge is draining ahead of a recreate/failover (TASK-OPS-010).
+REASON_DRAINING = "draining"
 REASON_CAP_REACHED = "cap_reached"
 REASON_CAP_DRAIN_TIMEOUT = "cap_drain_timeout"
 
@@ -154,15 +156,16 @@ async def reject(
     max_sessions: int,
     telemetry_factory: Callable[[], TelemetryRecorder],
     log: Callable[[TelemetryRecorder], None],
+    reason: str = REASON_CAPACITY,
 ) -> None:
-    """Refuse an over-capacity connection with WS 1013 and record the refusal evidence."""
+    """Refuse a connection with WS 1013 and record the refusal evidence (capacity or drain)."""
     telemetry = telemetry_factory()
     cid = ChannelEnvelope.for_genesys_turn().correlation_id
     telemetry.record(
         SESSION_REJECTED_EVENT,
         correlation_id=cid,
         channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        reason=REASON_CAPACITY,
+        reason=reason,
         active_sessions=active.count,
         max_sessions=max_sessions,
     )
@@ -171,7 +174,7 @@ async def reject(
         1.0,
         correlation_id=cid,
         channel=GENESYS_AUDIO_CONNECTOR_CHANNEL,
-        reason=REASON_CAPACITY,
+        reason=reason,
         max_sessions=max_sessions,
     )
     emit_gauge(telemetry, cid, active.count, max_sessions, "rejected")

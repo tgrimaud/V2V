@@ -259,6 +259,32 @@ audio starts on the first synthesized chunk; a barge-in (customer speaks while t
 bot speaks) cancels playback via an `InterruptionFrame` (TASK-WEB-008). On call end
 or drop a trailing partial utterance is drained before teardown.
 
+## `POST /drain` — graceful session drain (deploy-time, TASK-OPS-010)
+
+An **operational control endpoint**, not part of the Voice2Voice API. It makes the bridge
+refuse NEW live sessions (WS close 1013 — the LB peer keeps serving, so browsers retry) and
+block until 0 active calls (WebSocket + Genesys) or a bounded timeout, so a rolling deploy /
+failover can wait for in-flight calls to wind down before recreate instead of hard-cutting
+them (one BUG-018 cause). Distinct from the per-turn TTS `drain()` (TASK-WEB-008 / ADR-0025)
+that finalizes a trailing utterance inside one live session.
+
+- **Auth:** token-gated. `VOICE_DRAIN_TOKEN` must be sent as the `X-Drain-Token` header; when
+  the token is unset the endpoint is disabled and returns **503 `drain_not_configured`**, so
+  the edge-facing `:8090` never exposes an unauthenticated "stop taking calls" trigger. A
+  wrong token returns **403 `forbidden`**.
+- **Query:** `?timeout_ms=` overrides the wait budget (default `VOICE_DRAIN_TIMEOUT_MS`, else
+  90000 ms).
+- **200:** `{ "status": "drained"|"timeout", "drained": bool, "active_at_start": N,
+  "remaining": N, "elapsed_ms": …, "timeout_ms": … }` — `drained` when 0 active calls were
+  reached within the timeout, else `timeout` (calls still running; the deploy degrades to the
+  grace window).
+- **Availability:** the route is mounted only when the drain controller is wired (always the
+  case for the real server). The Ansible voice deploy calls it **inside the container
+  namespace** (`docker exec … python`) before recreate, immune to the TASK-INFRA-011 host
+  loopback quirk; see `docs/operations/release-process.md`.
+- **Telemetry:** `voice.drain.requested` / `voice.drain.completed` events + a
+  `voice.drain.remaining_sessions` metric carry the outcome.
+
 ## Telemetry
 
 Every batch call emits OpenTelemetry-style spans on a per-request

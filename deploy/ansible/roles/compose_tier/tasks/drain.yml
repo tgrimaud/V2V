@@ -1,13 +1,12 @@
 ---
-# Best-effort voice session draining (TASK-OPS-002, wired in TASK-INFRA-007). See
-# group_vars/voice.yml and docs/operations/release-process.md for the ceiling and
-# the remaining path to an exact drain (bridge /drain endpoint).
+# Graceful voice session draining before recreate (TASK-OPS-002 grace + TASK-INFRA-007 LB
+# hook + TASK-OPS-010 exact bridge drain). Three layers, each fail-safe: a failing layer
+# degrades to the next, it never aborts the roll (serial:1 + max_fail_percentage:0 would
+# otherwise stop the whole voice deploy). See group_vars/voice.yml + release-process.md.
 
-# The admin socket lives on the LB nodes, so the drain is delegated to each of them
-# (either may hold the VIP via Keepalived). Uses shell because socat needs the pipe.
-# Non-fatal by design: a drain hook is a safety improvement, not a deploy gate. If an
-# LB node is unreachable or socat fails, we degrade to grace-only instead of aborting
-# the voice deploy (serial:1 + max_fail_percentage:0 would otherwise stop the roll).
+# Layer 1 (TASK-INFRA-007): stop NEW calls at the LB so this node stops receiving traffic
+# while it recreates. The admin socket lives on the LB nodes, so this is delegated to each
+# of them (either may hold the VIP via Keepalived). Opt-in + non-fatal by design.
 - name: "Stop new calls: mark {{ voice_lb_server_name }} 'drain' on each LB node"
   ansible.builtin.shell:
     cmd: "{{ voice_lb_drain_cmd }}"
@@ -21,12 +20,13 @@
   failed_when: false
   register: voice_drain_result
 
-- name: "Warn when the LB drain hook did not run cleanly (grace only)"
+- name: "Warn when the LB drain hook did not run cleanly (relying on the bridge drain / grace)"
   ansible.builtin.debug:
     msg: >-
       LB drain not applied (hook disabled, or a node was unreachable / socat failed):
-      new calls are NOT stopped during recreate. Relying on serial:1 rolling + a
-      {{ voice_drain_grace_seconds }}s grace window only.
+      new calls are NOT stopped at the LB during recreate. The bridge /drain below also
+      refuses new calls; failing that, relying on serial:1 + a {{ voice_drain_grace_seconds }}s
+      grace window only.
   when: >-
     voice_lb_drain_cmd | length == 0
     or voice_lb_socket_hosts | length == 0
@@ -35,6 +35,42 @@
     or (voice_drain_result.results | default([])
         | selectattr('unreachable', 'defined') | selectattr('unreachable') | list | length > 0)
 
-- name: "Grace window for in-flight calls to wind down"
+# Layer 2 (TASK-OPS-010): the EXACT drain. Ask the bridge itself to stop accepting new
+# sessions and block until 0 active calls (or a bounded timeout). Called INSIDE the
+# container namespace via `docker exec` (the slim image ships python, not curl/wget), so it
+# is immune to the host loopback/firewall/port-forwarder quirk that made a host-side probe
+# unreliable on this tier (TASK-INFRA-011). The token is read from the container's OWN env
+# (rendered from vault) so it never appears on the host `ps` argv. Fail-safe: any failure /
+# timeout falls through to the grace window below (failed_when: false).
+- name: "Drain in-flight calls on the bridge (exact wait, POST /drain — TASK-OPS-010)"
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ health_container_name }} python -c "import os,urllib.request;
+      req=urllib.request.Request('http://localhost:{{ voice_port }}/drain?timeout_ms={{ (voice_drain_timeout_seconds | int) * 1000 }}',
+      method='POST', headers={'X-Drain-Token': os.environ.get('VOICE_DRAIN_TOKEN','')});
+      print(urllib.request.urlopen(req, timeout={{ (voice_drain_timeout_seconds | int) + 5 }}).read().decode())"
+  register: bridge_drain
+  changed_when: true
+  failed_when: false
+  when:
+    - voice_drain_token | length > 0
+    - health_container_name | default('') | length > 0
+
+- name: "Report the bridge drain outcome"
+  ansible.builtin.debug:
+    msg: "Bridge /drain: {{ bridge_drain.stdout | default('(skipped — no token / container)') }}"
+  when: bridge_drain is defined
+
+# Layer 3 (TASK-OPS-002): grace window. Runs ONLY when the exact drain did not confirm it
+# reached 0 active calls (token unset, container unknown, command failed, or it timed out
+# with calls still running) — so a confirmed clean drain skips the redundant wait, and every
+# degraded path still gets the original safety pause.
+- name: "Grace window for in-flight calls to wind down (fallback)"
   ansible.builtin.pause:
     seconds: "{{ voice_drain_grace_seconds | int }}"
+  when: >-
+    voice_drain_token | length == 0
+    or health_container_name | default('') | length == 0
+    or bridge_drain is not defined
+    or (bridge_drain.rc | default(1)) != 0
+    or ('"status": "drained"' not in (bridge_drain.stdout | default('')))

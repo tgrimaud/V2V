@@ -13,6 +13,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from web_voice.app import DRAIN_ROUTE  # noqa: E402
 from web_voice.server import (  # noqa: E402
     OPENAPI_PATH,
     OPENAPI_ROUTE,
@@ -64,7 +65,7 @@ class VoiceOpenApiSpecTest(unittest.TestCase):
         # GIVEN the paths documented in the spec
         documented = set(self.spec["paths"].keys())
         # AND the routes the server actually exposes (the single source of truth in code)
-        actual = {STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE, OPENAPI_ROUTE}
+        actual = {STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE, OPENAPI_ROUTE, DRAIN_ROUTE}
         # THEN they match exactly — a new/removed route must update the spec (drift guard)
         self.assertEqual(documented, actual)
 

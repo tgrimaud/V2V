@@ -16,6 +16,7 @@ stdlib server got the same isolation for free via one thread per request.
 from __future__ import annotations
 
 import functools
+import hmac
 import json
 from typing import Any, Callable
 
@@ -24,6 +25,11 @@ from aiohttp import web
 from stt_validation.models import SttOutcome
 from voice_common.telemetry import TelemetryRecorder, Timer
 
+from .drain import (
+    DRAIN_COMPLETED_EVENT,
+    DRAIN_REMAINING_METRIC,
+    DRAIN_REQUESTED_EVENT,
+)
 from .error_response import SessionCapacityError, client_error_body
 from .server import (
     MAX_AUDIO_BYTES,
@@ -53,6 +59,10 @@ WS_ROUTE = "/ws"
 # Genesys Audio Connector AudioHook upgrade route (TASK-WEB-041), mounted only when a
 # genesys_handler is supplied so the base HTTP surface stays unchanged otherwise.
 GENESYS_ROUTE = "/genesys/audiohook"
+# Graceful session-drain control route (TASK-OPS-010), mounted only when a drain_controller
+# is supplied. Token-gated: an unconfigured token disables it (503) so the routed :8090 never
+# exposes an unauthenticated "stop taking calls" trigger at the edge.
+DRAIN_ROUTE = "/drain"
 
 
 def _json_response(status: int, payload: dict, extra_headers: dict[str, str] | None = None) -> web.Response:
@@ -96,11 +106,63 @@ async def _run_blocking(func: Callable, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
 
 
+def _drain_timeout_ms(query_string: str, default_ms: int) -> int:
+    """Resolve the drain wait budget: `?timeout_ms=` override, else the configured default."""
+    raw = _first(parse_qs(query_string), "timeout_ms")
+    if raw is None:
+        return default_ms
+    try:
+        value = int(raw)
+    except ValueError:
+        return default_ms
+    return value if value > 0 else default_ms
+
+
+def _drain_token_matches(provided: str | None, expected: str) -> bool:
+    """Constant-time compare of the drain token (avoid a timing side-channel on the header)."""
+    return provided is not None and hmac.compare_digest(provided, expected)
+
+
+async def _drain_and_report(controller: Any, timeout_ms: int):
+    """Run the bounded drain, emitting the OTel drain-outcome evidence; returns the outcome."""
+    telemetry = TelemetryRecorder()
+    started = controller.active_sessions()
+    telemetry.record(
+        DRAIN_REQUESTED_EVENT, correlation_id="drain", active_sessions=started, timeout_ms=timeout_ms
+    )
+    outcome = await controller.wait_drained(timeout_ms)
+    telemetry.record(
+        DRAIN_COMPLETED_EVENT,
+        correlation_id="drain",
+        outcome=outcome.status,
+        started_active=outcome.started_active,
+        remaining=outcome.remaining,
+        elapsed_ms=round(outcome.elapsed_ms, 1),
+    )
+    telemetry.metric(
+        DRAIN_REMAINING_METRIC, float(outcome.remaining), correlation_id="drain", outcome=outcome.status
+    )
+    _log_turn(telemetry)
+    return outcome
+
+
+def _drain_body(outcome: Any, timeout_ms: int) -> dict:
+    return {
+        "status": outcome.status,
+        "drained": outcome.drained,
+        "active_at_start": outcome.started_active,
+        "remaining": outcome.remaining,
+        "elapsed_ms": round(outcome.elapsed_ms, 1),
+        "timeout_ms": timeout_ms,
+    }
+
+
 def make_app(
     processor: Any,
     signaling: Any = None,
     ws_handler: Any = None,
     genesys_handler: Any = None,
+    drain_controller: Any = None,
 ) -> web.Application:
     """Build the aiohttp application wiring the voice HTTP surface to `processor`.
 
@@ -236,6 +298,18 @@ def make_app(
             return _json_response(502, {"error": "webrtc_negotiation_failed"})
         return _json_response(200, answer)
 
+    async def handle_drain(request: web.Request) -> web.StreamResponse:
+        # Fail-closed token gate: no token configured => the drain trigger is disabled, so the
+        # edge-facing :8090 never exposes an unauthenticated "stop taking calls" control.
+        token = drain_controller.token
+        if token is None:
+            return _json_response(503, {"error": "drain_not_configured"})
+        if not _drain_token_matches(request.headers.get("X-Drain-Token"), token):
+            return _json_response(403, {"error": "forbidden"})
+        timeout_ms = _drain_timeout_ms(request.query_string, drain_controller.default_timeout_ms)
+        outcome = await _drain_and_report(drain_controller, timeout_ms)
+        return _json_response(200, _drain_body(outcome, timeout_ms))
+
     routes = [
         web.get("/", handle_root),
         web.get("/favicon.ico", handle_favicon),
@@ -250,6 +324,8 @@ def make_app(
         routes.append(web.get(WS_ROUTE, ws_handler))
     if genesys_handler is not None:
         routes.append(web.get(GENESYS_ROUTE, genesys_handler))
+    if drain_controller is not None:
+        routes.append(web.post(DRAIN_ROUTE, handle_drain))
     # Static catch-all LAST so it never shadows the explicit routes above.
     routes.append(web.get("/{tail:.*}", handle_static))
     app.add_routes(routes)

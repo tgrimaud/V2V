@@ -47,6 +47,7 @@ from web_voice.websocket_app import (  # noqa: E402
     CLIENT_DISCONNECTED_EVENT,
     DEFAULT_MAX_WS_SESSIONS_ASYNC,
     REASON_CAPACITY,
+    REASON_DRAINING,
     SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
     WS_TRY_AGAIN_LATER,
@@ -499,6 +500,41 @@ class WsHandlerLifecycleTest(unittest.IsolatedAsyncioTestCase):
         factory.sessions[0].release()
         await first.close()
         await second.close()
+
+    async def test_connection_is_refused_while_bridge_is_draining(self) -> None:
+        # GIVEN a handler wired to a drain controller that is already draining (TASK-OPS-010)
+        from web_voice.drain import DrainController
+
+        logged: list[TelemetryRecorder] = []
+        factory = _FakeFactory()
+        controller = DrainController()
+        handler = make_ws_handler(
+            factory, max_sessions=8, log=logged.append, drain_controller=controller
+        )
+        client = await self._serve(handler)
+        controller.begin_drain()
+        # WHEN a new caller connects during the drain
+        websocket = await client.ws_connect("/ws")
+        message = await asyncio.wait_for(websocket.receive(), timeout=10)
+        # THEN it is refused with the same WS 1013 as an over-capacity one (LB peer serves it)
+        self.assertIn(message.type, (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED))
+        self.assertEqual(websocket.close_code, WS_TRY_AGAIN_LATER)
+        # AND no session was built, and the refusal is stamped reason="draining"
+        self.assertEqual(len(factory.sessions), 0)
+        event = next(
+            e for rec in logged for e in rec.events() if e.name == SESSION_REJECTED_EVENT
+        )
+        self.assertEqual(event.attributes["reason"], REASON_DRAINING)
+
+    async def test_handler_registers_its_active_counter_with_the_controller(self) -> None:
+        # GIVEN a drain controller passed to the handler
+        from web_voice.drain import DrainController
+
+        controller = DrainController()
+        make_ws_handler(_FakeFactory(), drain_controller=controller)
+        # THEN the WS active-session counter is registered so POST /drain can wait on it
+        self.assertEqual(controller.active_sessions(), 0)
+        self.assertEqual(len(controller._counters), 1)
 
     async def test_disconnect_drains_the_session_so_run_returns(self) -> None:
         # GIVEN a real transport wired to a fake session via the handler's drain wiring

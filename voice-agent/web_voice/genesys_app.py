@@ -47,6 +47,7 @@ from .genesys_config import (
     DEFAULT_CAP_DRAIN_GRACE_S,
     DEFAULT_MAX_GENESYS_SESSIONS,
     DEFAULT_MAX_SESSION_S,
+    REASON_DRAINING,
     emit_gauge,
     genesys_codec_config,
     genesys_conversation_id,
@@ -84,6 +85,7 @@ def make_genesys_handler(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
     log: Callable[[TelemetryRecorder], None] = genesys_log_telemetry,
+    drain_controller: Any = None,
 ) -> Callable[[web.Request], Awaitable[web.StreamResponse]]:
     """Build the `GET /genesys/audiohook` handler: one session per connection, N concurrent.
 
@@ -91,10 +93,16 @@ def make_genesys_handler(
     AudioHook connection auth (API key + HMAC signature) is verified BEFORE the WS upgrade;
     a failure returns the HTTP status the outcome maps to (401/503) and never builds a
     session (TASK-INFRA-012). Pass an unconfigured authenticator to refuse every connection.
+
+    `drain_controller` (TASK-OPS-010, optional) registers this path's active-session counter
+    so a graceful deploy drain also waits for in-flight Genesys calls, and refuses NEW
+    AudioHook connections (WS 1013) while draining ahead of a recreate.
     """
     active = _ActiveSessions()
     ceiling = max_sessions if max_sessions > 0 else DEFAULT_MAX_GENESYS_SESSIONS
     codec = wire_codec or genesys_codec_config()
+    if drain_controller is not None:
+        drain_controller.register_counter(lambda: active.count)
 
     async def handler(request: web.Request) -> web.StreamResponse:
         result = authenticator.authenticate(request)
@@ -106,6 +114,9 @@ def make_genesys_handler(
             request.headers.get("Origin", ""), allowed_origins
         ):
             await websocket.close(code=WS_POLICY_VIOLATION)
+            return websocket
+        if drain_controller is not None and drain_controller.is_draining():
+            await reject(websocket, active, ceiling, telemetry_factory, log, reason=REASON_DRAINING)
             return websocket
         if active.count >= ceiling:
             await reject(websocket, active, ceiling, telemetry_factory, log)
