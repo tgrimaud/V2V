@@ -4346,7 +4346,14 @@ is the pipecat pipeline behind the aiohttp-native `AiohttpWebsocketTransport` (`
 **Related:** BUG-018 (stuck-in-thinking incident — runtime half of P1 fix #2), TASK-WEB-046 (browser watchdog + client `turn_error` handler — already merged), TASK-WEB-045 (wall-clock deadline)
 **Depends on:** TASK-WEB-046 (client already handles `{"type":"turn_error"}`)
 **Classification:** V1 voice runtime (`web_voice` WS transport) — reliability
-**Status:** 🚧 Implemented on branch `task/TASK-WEB-049-turn-error-terminal-signal` (2026-09-29) — pending adversarial review + QA + merge.
+**Status:** 🚧 Implemented on branch `task/TASK-WEB-049-turn-error-terminal-signal` (2026-09-29) — **adversarial review 94/100 (Pass, 2026-09-29, in-session)**; pending pilot QA + merge.
+No blocking findings. Residual (accepted): (1) ordering — after `turn_error`, if `_safe_stop`
+still emits an `EndFrame`→`call_end`, the client shows "Call ended" after the retry message; both
+are terminal (never stuck). (2) WS-scoped only — WebRTC (dev/lab, ADR-0042) and the Genesys
+AudioHook error protocol are not re-signalled here (cross-transport `ControlSignalType`
+unification stays a follow-up in TASK-WEB-046's deferred block). (3) The `except` branch fires
+only on a pipeline/session-level crash (normal backend errors degrade to a spoken fallback in
+`StreamedAnswerRunner`) — a targeted defensive signal, not dead code.
 **Priority:** High
 **Branch:** `task/TASK-WEB-049-turn-error-terminal-signal` (created off `feat/restart-from-scratch`)
 **Surfaced by:** BUG-018 — TASK-WEB-046 shipped the browser watchdog + a defensive client `turn_error` handler, but **deferred the server half**: nothing on the runtime emits a `turn_error` control frame, so a WS turn that fails at the pipeline/session level leaves the UI in "Thinking" until the client watchdog times out (~20 s) instead of ending the turn immediately.
