@@ -92,10 +92,19 @@ function selectedLanguage() {
   return languageEl && languageEl.value ? languageEl.value : "fr";
 }
 
+// TASK-BE-061 / ADR-0055: the channel-provided account id ("" = no account). Carried on the WS
+// connect query so a billing question routes to the billing chain from the first turn.
+const accountEl = document.getElementById("account");
+function accountQuery() {
+  const account = accountEl && accountEl.value ? accountEl.value : "";
+  return account ? `&account_id=${encodeURIComponent(account)}` : "";
+}
+
 function wsUrl() {
   const params = new URLSearchParams(window.location.search);
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
   const lang = encodeURIComponent(selectedLanguage());
+  const account = accountQuery();
   const override = params.get("wsport");
   // Single routed port (ADR-0047 / TASK-WEB-038): the live socket rides the SAME origin as
   // the page at `/ws` — one port carries the page, the REST API and the socket. Behind the
@@ -104,14 +113,15 @@ function wsUrl() {
   // host:port the page came from. `?wsport=<n>` forces a direct host:port/ws for dev against
   // a specific bridge (bypassing the VIP), e.g. `?wsport=8090` straight at one node.
   if (override) {
-    return `${scheme}://${window.location.hostname || "127.0.0.1"}:${override}/ws?language=${lang}`;
+    return `${scheme}://${window.location.hostname || "127.0.0.1"}:${override}/ws?language=${lang}${account}`;
   }
-  return `${scheme}://${window.location.host}/ws?language=${lang}`;
+  return `${scheme}://${window.location.host}/ws?language=${lang}${account}`;
 }
 
 async function connect() {
   connectBtn.disabled = true;
   if (languageEl) languageEl.disabled = true;
+  if (accountEl) accountEl.disabled = true;
   closedByUser = false;
   setStatus("Requesting microphone…");
   try {
@@ -277,6 +287,7 @@ function onSocketClose(event) {
   disconnectBtn.disabled = true;
   connectBtn.disabled = false;
   if (languageEl) languageEl.disabled = false;
+  if (accountEl) accountEl.disabled = false;
   if (closedByUser) {
     setStatus("Disconnected");
   } else if (event.code === 1013) {
@@ -328,6 +339,7 @@ async function teardown() {
   disconnectBtn.disabled = true;
   connectBtn.disabled = false;
   if (languageEl) languageEl.disabled = false;
+  if (accountEl) accountEl.disabled = false;
 }
 
 function rms(samples) {

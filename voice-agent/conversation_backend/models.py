@@ -35,6 +35,10 @@ class AnswerRequest:
     # US-042: optional UI-selected answer language ("fr"/"en"). Forwarded to the backend
     # so it forces the answer language instead of auto-detecting; None keeps detection.
     language: str | None = None
+    # TASK-BE-061 / ADR-0055: optional channel-provided customer account reference. When set,
+    # a billing question routes to the deterministic billing chain on the backend; None = RAG.
+    # A customer identifier (personal data): never surfaced in telemetry, only its presence.
+    account_reference: str | None = None
 
     @classmethod
     def from_envelope(cls, transcript: str, envelope: ConversationEnvelope) -> "AnswerRequest":
@@ -44,17 +48,20 @@ class AnswerRequest:
             conversation_id=envelope.conversation_id,
             channel=envelope.channel,
             language=getattr(envelope, "language", None),
+            account_reference=getattr(envelope, "account_reference", None),
         )
 
     def to_dict(self) -> dict[str, Any]:
         # The transcript can carry personal data; expose only its length for
         # telemetry/QA, never the raw text. Language is a non-sensitive selector.
+        # The account reference is a customer identifier: expose only its presence.
         return {
             "channel": self.channel,
             "conversation_id": self.conversation_id,
             "correlation_id": self.correlation_id,
             "transcript_chars": len(self.transcript),
             "language": self.language,
+            "account_ref_present": bool(self.account_reference),
         }
 
 

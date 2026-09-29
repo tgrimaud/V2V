@@ -191,7 +191,10 @@ class WebRtcSignalingService:
             await connection.initialize(sdp=body["sdp"], type=body["type"])
             # US-042: the UI-selected language rides on the offer body and is carried by the
             # session envelope -> forces the backend answer language and selects the voice.
-            envelope = ChannelEnvelope.for_web_turn(language=body.get("language"))
+            # TASK-BE-061 / ADR-0055: the UI-selected account id rides on the same offer body so a
+            # billing question routes to the billing chain from the first turn (blank -> RAG).
+            account = (body.get("account_id") or "").strip() or None
+            envelope = ChannelEnvelope.for_web_turn(language=body.get("language"), account_reference=account)
             telemetry = self._telemetry_factory()
             transport = self._build_transport(connection)
             session, farewell = self._factory.build_session(transport, envelope, telemetry)

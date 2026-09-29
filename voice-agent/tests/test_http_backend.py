@@ -100,6 +100,37 @@ class HttpBackendMappingTest(unittest.TestCase):
         self.assertEqual(sent["conversation_id"], "conv-1")
         self.assertEqual(sent["correlation_id"], "corr-1")
 
+    def test_sends_account_id_when_a_channel_reference_is_present(self) -> None:
+        # GIVEN a turn carrying a channel-provided account reference (TASK-BE-061 / ADR-0055)
+        transport = _CapturingTransport(HttpResponse(200, json.dumps({"text": "ok"})))
+        adapter = HttpBackendAdapter(ENDPOINT, transport=transport)
+        request = AnswerRequest(
+            transcript="ma facture a augmente",
+            correlation_id="corr-1",
+            conversation_id="conv-1",
+            channel="web_voice",
+            account_reference="99224964",
+        )
+
+        # WHEN the turn is answered
+        adapter.answer(request)
+
+        # THEN the account id rides the request body so the backend can route to billing
+        sent = json.loads(transport.calls[0]["body"])
+        self.assertEqual(sent["account_id"], "99224964")
+
+    def test_omits_account_id_when_no_channel_reference(self) -> None:
+        # GIVEN a turn with no account reference ("no account" UI choice)
+        transport = _CapturingTransport(HttpResponse(200, json.dumps({"text": "ok"})))
+        adapter = HttpBackendAdapter(ENDPOINT, transport=transport)
+
+        # WHEN the turn is answered
+        adapter.answer(_request("bonjour"))
+
+        # THEN no account_id is sent (backend keeps the RAG path)
+        sent = json.loads(transport.calls[0]["body"])
+        self.assertNotIn("account_id", sent)
+
     def test_empty_transcript_raises_without_calling_the_endpoint(self) -> None:
         # GIVEN a transport that would fail if called
         transport = _CapturingTransport(error=AssertionError("must not call the endpoint"))

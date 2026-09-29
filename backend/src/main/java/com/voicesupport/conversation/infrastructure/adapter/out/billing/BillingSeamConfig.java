@@ -1,10 +1,15 @@
 package com.voicesupport.conversation.infrastructure.adapter.out.billing;
 
+import com.voicesupport.billing.domain.port.in.DetectBillingIntentUseCase;
 import com.voicesupport.billing.domain.port.in.ExplainBillingUseCase;
 import com.voicesupport.conversation.application.service.BillingAnswerService;
+import com.voicesupport.conversation.application.service.ConversationRoutingService;
 import com.voicesupport.conversation.domain.port.in.AnswerBillingQuestionUseCase;
+import com.voicesupport.conversation.domain.port.in.ConversationRoutingUseCase;
+import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.BillingExplanationPort;
+import com.voicesupport.conversation.domain.port.out.BillingIntentPort;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
 import com.voicesupport.shared.observability.BackendTelemetry;
@@ -31,5 +36,20 @@ public class BillingSeamConfig {
             LanguageDetector languageDetector) {
         return new BillingAnswerService(
                 billingExplanationPort, answerGeneratorPort, outputGuardrail, languageDetector);
+    }
+
+    // Conversation-owned intent seam onto the billing published API (TASK-BE-061, ADR-0055).
+    @Bean
+    public BillingIntentPort billingIntentPort(DetectBillingIntentUseCase detectBillingIntentUseCase) {
+        return new InProcBillingIntentAdapter(detectBillingIntentUseCase);
+    }
+
+    // Routes a /converse turn to the billing chain (channel-provided identity + billing intent) or RAG.
+    @Bean
+    public ConversationRoutingUseCase conversationRoutingUseCase(
+            ConverseUseCase converseUseCase,
+            AnswerBillingQuestionUseCase answerBillingQuestionUseCase,
+            BillingIntentPort billingIntentPort) {
+        return new ConversationRoutingService(converseUseCase, answerBillingQuestionUseCase, billingIntentPort);
     }
 }

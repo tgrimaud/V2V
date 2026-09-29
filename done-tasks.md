@@ -3,6 +3,31 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — TASK-BE-061 — Channel-provided identity + RAG↔billing routing on `/converse` (ADR-0055)
+
+**Summary:**
+
+- Reshaped from "verbally collect the account number then explain" to **channel-provided identity as
+  the primary path** (target: Genesys ANI / authenticated header/param; pilot: a UI account listbox that
+  simulates it). Vocal collection dropped to an out-of-scope fallback. Decision recorded as **ADR-0055**.
+- **Backend routing.** New application `ConversationRoutingService` (`ConversationRoutingUseCase`);
+  `ConverseController` depends on it instead of `ConverseUseCase`. `/converse` routes to the ADR-0052
+  billing chain (`AnswerBillingQuestionUseCase`) **iff** an account reference is present **and**
+  `BillingIntentDetector` flags a billing question; otherwise RAG. "No account" + billing → RAG generic
+  (fail-safe — never guess whose invoice). Billing-intent stays one source of truth, exposed via a
+  published `DetectBillingIntentUseCase` (billing `port/in`) and consumed through the conversation
+  out-port `BillingIntentPort` + `InProcBillingIntentAdapter` (no type leakage; ArchUnit green).
+- **Wire (`account_id`).** `ConverseRequest` gains `account_id` (snake_case). Python: `ChannelEnvelope`
+  gains `account_reference` (session-locked once per connection like the BUG-026 language lock);
+  `AnswerRequest` carries it; `HttpBackendAdapter` sends `account_id` in the `/converse` body only when
+  present. UI: an account `<select>` (3 eir B2C accounts + "Sans compte") on `ws/webrtc/index.html`,
+  sent via `?account_id=` (WS/batch) / offer body (WebRTC).
+- **Privacy.** Reference is personal data — never logged in clear. Only `route`/`account_ref_present`
+  ride logs (`[ROUTE] route={billing|rag} account_ref_present={}`) and telemetry.
+- **Tests.** Backend 656 green + ArchUnit (`ConversationRoutingServiceTest` billing/RAG/no-account/lang;
+  4 `@WebMvcTest` configs updated). Python 688 + behave 15/43/194 (`test_http_backend` account_id
+  present/absent, `test_websocket_app` `_resolve_account_reference`).
+
 ## 2026-09-29 — TASK-BE-059 — eir B2C invoice model validation + realistic mock (branch)
 
 **Summary:**

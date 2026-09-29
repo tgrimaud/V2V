@@ -25,6 +25,12 @@ class ChannelEnvelope:
     # US-042: optional UI-selected language ("fr"/"en") carried through the turn so the
     # backend can force the answer language. None keeps backend auto-detection.
     language: str | None = None
+    # TASK-BE-061 / ADR-0055: optional channel-provided customer account reference. Simulates
+    # the target where the channel (Genesys ANI, an authenticated header/param) supplies identity
+    # up front; when set, a billing question routes to the deterministic billing chain on the
+    # backend. None = no identity context (always RAG). It is a customer identifier (personal
+    # data): never logged in clear — only its presence rides telemetry.
+    account_reference: str | None = None
 
     @classmethod
     def for_web_turn(
@@ -33,6 +39,7 @@ class ChannelEnvelope:
         external_session_id: str | None = None,
         correlation_id: str | None = None,
         language: str | None = None,
+        account_reference: str | None = None,
     ) -> "ChannelEnvelope":
         return cls(
             channel=WEB_VOICE_CHANNEL,
@@ -41,6 +48,7 @@ class ChannelEnvelope:
             message_id=str(uuid4()),
             correlation_id=correlation_id or str(uuid4()),
             language=language or None,
+            account_reference=account_reference or None,
         )
 
     @classmethod
@@ -77,4 +85,8 @@ class ChannelEnvelope:
         }
         if self.language:
             attributes["language"] = self.language
+        # Never expose the account reference value (personal data) — only its presence, so a
+        # billing route is observable without leaking a customer identifier.
+        if self.account_reference:
+            attributes["account_ref_present"] = "true"
         return attributes

@@ -7,6 +7,8 @@ import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.web.rest.GlobalExceptionHandler;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
+import com.voicesupport.conversation.application.service.ConversationRoutingService;
+import com.voicesupport.conversation.domain.port.in.ConversationRoutingUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
@@ -49,6 +51,14 @@ class ConverseDegradedTest {
             return (transcript, conversationId) -> {
                 throw new UpstreamUnavailableException("call failed " + LEAK_MARKER);
             };
+        }
+
+        // No account_id in the degraded request -> the router delegates to the failing RAG use case.
+        @Bean
+        ConversationRoutingUseCase conversationRoutingUseCase(ConverseUseCase converseUseCase) {
+            return new ConversationRoutingService(converseUseCase,
+                    request -> { throw new AssertionError("billing route not expected"); },
+                    transcript -> false);
         }
 
         @Bean

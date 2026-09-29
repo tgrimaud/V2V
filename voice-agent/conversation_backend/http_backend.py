@@ -194,6 +194,10 @@ class HttpBackendAdapter:
         # auto-detecting otherwise (a null/blank field is ignored by the backend anyway).
         if request.language:
             body["language"] = request.language
+        # TASK-BE-061 / ADR-0055: only send the channel-provided account id when present, so a
+        # billing question routes to the deterministic billing chain; absent keeps the RAG path.
+        if request.account_reference:
+            body["account_id"] = request.account_reference
         return json.dumps(body).encode("utf-8")
 
     def _map_response(self, request: AnswerRequest, response: HttpResponse) -> AnswerResult:

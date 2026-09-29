@@ -1,5 +1,7 @@
 package com.voicesupport.billing.domain.service;
 
+import com.voicesupport.billing.domain.port.in.DetectBillingIntentUseCase;
+
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
@@ -11,7 +13,7 @@ import java.util.regex.Pattern;
 // without a runtime LLM classifier. The keyword set is injected (env-tunable) so it can be tuned per
 // deployment without a code change. Word-boundary matching avoids the `contains()` false positives
 // hit before (e.g. "ip" inside "équipement").
-public class BillingIntentDetector {
+public class BillingIntentDetector implements DetectBillingIntentUseCase {
 
     private final List<Pattern> keywordPatterns;
 
@@ -23,6 +25,7 @@ public class BillingIntentDetector {
                 .toList();
     }
 
+    @Override
     public boolean isBillingExplanationRequest(String transcript) {
         if (transcript == null || transcript.isBlank()) {
             return false;

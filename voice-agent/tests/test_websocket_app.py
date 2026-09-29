@@ -55,6 +55,7 @@ from web_voice.websocket_app import (  # noqa: E402
     build_aiohttp_ws_transport,
     make_ws_handler,
     ws_async_max_sessions_config,
+    _resolve_account_reference,
     _resolve_session_language,
     _wire_disconnect_drain,
 )
@@ -361,6 +362,23 @@ class ResolveSessionLanguageTest(unittest.TestCase):
 
     def test_only_fr_and_en_are_supported(self) -> None:
         self.assertEqual(SUPPORTED_ANSWER_LANGUAGES, frozenset({"fr", "en"}))
+
+
+class ResolveAccountReferenceTest(unittest.TestCase):
+    """TASK-BE-061 / ADR-0055: the `?account_id=` UI selection is carried as session identity."""
+
+    def test_selected_account_is_carried(self) -> None:
+        request = _FakeQueryRequest({"account_id": "99224964"})
+        self.assertEqual(_resolve_account_reference(request), "99224964")
+
+    def test_whitespace_is_trimmed(self) -> None:
+        request = _FakeQueryRequest({"account_id": "  99226126  "})
+        self.assertEqual(_resolve_account_reference(request), "99226126")
+
+    def test_no_account_choice_yields_none(self) -> None:
+        # GIVEN the "no account" UI choice (empty value) -> no identity context (RAG path)
+        self.assertIsNone(_resolve_account_reference(_FakeQueryRequest({"account_id": ""})))
+        self.assertIsNone(_resolve_account_reference(_FakeQueryRequest({})))
 
 
 class WsFullTurnTest(unittest.IsolatedAsyncioTestCase):

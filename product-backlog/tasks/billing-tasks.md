@@ -633,13 +633,13 @@ gate → safe escalation (correct fail-closed behaviour, but a poor customer ans
 
 ---
 
-## TASK-BE-061 — Route billing intent from the main conversation (/converse): collect account reference, then explain
+## TASK-BE-061 — Channel-provided customer identity + RAG↔billing routing on `/converse`
 
-**Type:** Technical task (conversation routing + voice slot-filling) — **likely warrants promotion to a US + a routing ADR**
-**Status:** 📋 Proposed (closes the "routing billing from /converse is a follow-up" note in `BillingExplainRequest`)
+**Type:** Technical task (conversation routing + channel identity) — routing ADR created (ADR-0055)
+**Status:** ✅ Done (2026-09-29) — reshaped to channel-provided identity as the **primary** path (vocal collection dropped to a fallback / out of scope)
 **Priority:** High
 **Depends on:** TASK-BE-045 (billing chain), ADR-0052 (billing seam), ADR-0050 (identity), US-042 (language)
-**Relates to:** ADR-0027 (retrieval seam), BR-002-1 (identity), OQ-001 (identity source)
+**Relates to:** ADR-0055 (routing decision), BR-002-1 (identity), OQ-001 (identity source), BUG-026 (session-locked envelope)
 
 ### Context
 
@@ -647,37 +647,52 @@ Today the customer-facing loop (web/voice) calls `POST /api/conversation/convers
 deterministic billing chain lives behind a **separate** endpoint `POST /api/conversation/billing-explain`
 that the voice runtime never calls, and it needs a customer `reference` (account number) that the main
 loop never collects. So a real "I don't understand, my bill is higher than last month" spoken in the app
-gets a **generic KB answer**, never a real invoice comparison, and no account number is ever requested.
+got a **generic KB answer**, never a real invoice comparison.
 
-This ticket wires the missing bridge in the conversation turn:
+**Reshape (2026-09-29).** Rather than asking the customer to dictate the account number vocally, we align
+with the **target** architecture where identity is asserted by the **channel up front** (Genesys ANI / an
+authenticated header or query param — ADR-0050 channel-provided reference). The reference is carried as
+ambient session identity into `/converse`; vocal collection of the number is **out of scope** (a fallback
+for later, never the primary path). See ADR-0055.
 
-1. **Detect billing intent** on the incoming turn (reuse `BillingIntentDetector`, ADR-0052 D2a).
-2. If billing intent **and** no verified identity yet → **ask for the account reference** ("pouvez-vous
-   me communiquer votre numéro de compte / référence client ?") and capture the spoken answer
-   (voice slot-filling; a short conversation-scoped identity state).
-3. Once a `reference` is captured → route the turn through the billing chain
-   (`BillingExplanationPort`/`AnswerBillingQuestionUseCase`) instead of RAG; otherwise fall through to RAG.
-4. Keep everything **fail-closed** (identity unverified → safe hand-off) and DEC-002 intact (LLM only
-   rephrases the grounded billing text).
+### What was built
 
-### Open design points (need an ADR)
+1. **Channel identity up front.** The pilot web UI (`ws.html`/`webrtc.html`/`index.html`) gains an account
+   **listbox** — the 3 eir B2C sample accounts (`99224964`, `99226126`, `99226337`) + a **"Sans compte"**
+   default. The choice is sent once per connection (`?account_id=` on WS/batch, `account_id` in the WebRTC
+   offer body), threaded through `ChannelEnvelope.account_reference` (session-locked, like the BUG-026
+   language lock) → `AnswerRequest` → `/converse` body `account_id`. This **simulates** the target
+   header/param with zero conversation-engine change when the real channel is wired.
+2. **Routing on `/converse`.** New application `ConversationRoutingService` (`ConversationRoutingUseCase`);
+   `ConverseController` depends on it instead of `ConverseUseCase`. Routes to the billing chain
+   (`AnswerBillingQuestionUseCase`) **iff** an account reference is present **and** `BillingIntentDetector`
+   flags a billing question (ADR-0052 D2a); otherwise RAG. **"No account" + billing question → RAG generic**
+   (fail-safe — never guess whose invoice to open).
+3. **Cross-context seam (no type leakage).** Billing-intent stays a single source of truth exposed via a
+   published `DetectBillingIntentUseCase` (billing `port/in`) and consumed through the conversation out-port
+   `BillingIntentPort` via `InProcBillingIntentAdapter` (mirrors the ADR-0052 `BillingExplanationPort` seam).
+4. **Fail-closed + DEC-002 unchanged** (the ADR-0052 chain is only *reached*, not modified).
 
-- Where routing lives: the answer engine (backend) branching RAG vs billing, vs the voice runtime.
-- How the reference is collected and held across turns (stateless `/converse` today → needs a minimal
-  conversation identity slot; privacy: the reference is personal data, never logged in clear — ADR-0052).
-- Interaction with the end-of-call/farewell + language stickiness flows.
-- Verbal reference capture robustness (digits over STT) and a max-retries → escalation policy.
+### Acceptance (met)
 
-### Acceptance
-
-- Spoken "ma facture a augmenté" in the app triggers a spoken request for the account number, then a
-  grounded comparison answer (or safe hand-off) — end-to-end, no separate endpoint call by the user.
-- No account number provided / not verifiable → bounded retries then safe escalation (fail-closed).
-- Non-billing turns are unaffected (RAG path unchanged); regression tests lock both branches.
-- OpenTelemetry: intent-detected, reference-requested, reference-captured, routed-to-billing outcomes.
-- ADR created for the routing + identity-slot decision.
+- With an account selected and a billing turn, `/converse` returns a grounded comparison (or a fail-closed
+  safe hand-off) — no separate endpoint call by the user. ✅
+- "Sans compte" (no `account_id`), or a non-billing turn, keeps the RAG path unchanged. ✅
+- Regression tests lock both branches (`ConversationRoutingServiceTest`: billing vs RAG vs no-account vs
+  language forwarding); Python threading tests (`test_http_backend`, `test_websocket_app`). ✅
+- OpenTelemetry / logs: `[ROUTE] route={billing|rag} account_ref_present={}` (never the value);
+  `account_ref_present` on the Python envelope telemetry. Reference (personal data) never logged in clear. ✅
+- ADR created (ADR-0055). ✅
 
 ### Out Of Scope
 
+- **Vocal collection** of the account number (slot-filling, digit-over-STT robustness, max-retries) — a
+  fallback for a later ticket; the channel supplies identity in the primary path.
 - Improving multi-service cause attribution (TASK-BE-060).
 - Live BSS / real PDF parsing (still fixtures).
+- Strong customer authentication (OQ-001) — pilot accepts a channel-provided reference at a low bar.
+
+**Adversarial review 93/100 (Pass, 2026-09-29)** — no blocking finding; full review at
+`docs/qa/task-be-061-adversarial-review.md`. Residual (accepted): pilot low-bar identity trust
+(OQ-001); session-locked identity (reconnect to switch account); route-split metric is a
+non-blocking follow-up.

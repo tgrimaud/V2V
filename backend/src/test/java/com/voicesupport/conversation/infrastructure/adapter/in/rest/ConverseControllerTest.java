@@ -3,6 +3,8 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
+import com.voicesupport.conversation.application.service.ConversationRoutingService;
+import com.voicesupport.conversation.domain.port.in.ConversationRoutingUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
@@ -41,6 +43,14 @@ class ConverseControllerTest {
         @Bean
         ConverseUseCase converseUseCase() {
             return (transcript, conversationId) -> GeneratedAnswer.grounded("La proration explique l'écart.", 0.83);
+        }
+
+        // No account_id in these requests -> the router always delegates to the RAG use case above.
+        @Bean
+        ConversationRoutingUseCase conversationRoutingUseCase(ConverseUseCase converseUseCase) {
+            return new ConversationRoutingService(converseUseCase,
+                    request -> { throw new AssertionError("billing route not expected"); },
+                    transcript -> false);
         }
 
         @Bean
