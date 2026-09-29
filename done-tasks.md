@@ -3,6 +3,33 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — TASK-WEB-049: server-side `turn_error` terminal signal (BUG-018 runtime half)
+
+**Summary:**
+
+- Implemented the deferred server half of **TASK-WEB-046** (BUG-018 fix #2): the WS
+  `web_voice/websocket_app.py::_serve_connection` failure branch (an exception out of
+  `session.run()`) now force-emits a `{"type":"turn_error"}` control frame to the browser
+  **before** teardown, so the UI leaves "Thinking" immediately instead of waiting ~20 s for the
+  TASK-WEB-046 client watchdog. The browser client already honoured `turn_error` (shipped by
+  TASK-WEB-046) — this is the runtime half only.
+- **Best-effort + fail-safe:** direct JSON send on the raw socket (robust to a half-broken
+  pipeline, bypasses the possibly-torn-down output transport); a closed/dead socket is a no-op
+  and the client watchdog stays the net. Never raises out of the handler.
+- **Vocabulary + observability:** added `ControlType.TURN_ERROR` (`websocket_framing.py`) and a
+  `voice.ws.turn_error_signal` event (`ws_common.py`, `correlation_id` + `outcome=error`) so a
+  force-emitted terminal signal is visible in telemetry (BUG-018 AC).
+- **Scope:** WS path only (primary V1 transport, ADR-0046). WebRTC (dev/lab, ADR-0042) and the
+  Genesys AudioHook error protocol are out of scope (cross-transport `ControlSignalType`
+  unification stays a follow-up).
+- **Tests:** +2 `test_websocket_app.py` (failed `run()` → `turn_error` frame + event over a real
+  aiohttp socket; normal turn → no signal). Full voice-agent suite **685 OK**, `behave`
+  **15 features / 43 scenarios / 194 steps** green. Docs: `voice-runtime-http-contract.md`
+  (terminal error control frame), ticket `TASK-WEB-049`, `BUG-018`, `backlog-index`,
+  `remaining-work-recap`.
+- **Branch:** `task/TASK-WEB-049-turn-error-terminal-signal` (off `feat/restart-from-scratch`).
+  Pending adversarial review + QA + merge (user is final validator).
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

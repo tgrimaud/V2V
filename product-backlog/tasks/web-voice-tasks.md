@@ -4336,3 +4336,78 @@ is the pipecat pipeline behind the aiohttp-native `AiohttpWebsocketTransport` (`
 - The `websockets` package may stay if pipecat needs it transitively — do not force-remove it.
 - This is the "removable" follow-through ADR-0047 anticipated (its README row: the `voice_ws`
   ACL/backend + `firewall_extra_ports:[8091]` become removable once one port is proven live).
+
+---
+
+## TASK-WEB-049 - Server-side `turn_error` terminal control signal on WS turn failure
+
+**Parent:** EPIC-006 (Voice2Voice journey foundation) / EPIC-010 (observability, latency & pilot validation)
+**Related decisions:** ADR-0043 (WebSocket transport + control-signal vocabulary), ADR-0046 (aiohttp `/ws` is the primary V1 live transport), ADR-0025 (native barge-in / interruption), ADR-0021 (degraded-mode fallback)
+**Related:** BUG-018 (stuck-in-thinking incident — runtime half of P1 fix #2), TASK-WEB-046 (browser watchdog + client `turn_error` handler — already merged), TASK-WEB-045 (wall-clock deadline)
+**Depends on:** TASK-WEB-046 (client already handles `{"type":"turn_error"}`)
+**Classification:** V1 voice runtime (`web_voice` WS transport) — reliability
+**Status:** 🚧 Implemented on branch `task/TASK-WEB-049-turn-error-terminal-signal` (2026-09-29) — pending adversarial review + QA + merge.
+**Priority:** High
+**Branch:** `task/TASK-WEB-049-turn-error-terminal-signal` (created off `feat/restart-from-scratch`)
+**Surfaced by:** BUG-018 — TASK-WEB-046 shipped the browser watchdog + a defensive client `turn_error` handler, but **deferred the server half**: nothing on the runtime emits a `turn_error` control frame, so a WS turn that fails at the pipeline/session level leaves the UI in "Thinking" until the client watchdog times out (~20 s) instead of ending the turn immediately.
+
+### Context
+
+`web_voice/websocket_app.py::_serve_connection` awaits `session.run()`. A failed turn is caught
+by `except Exception` and only **logged** (`"ws session run failed"`), then the `finally` frees
+the capacity slot and best-effort stops the session. No terminal control signal is pushed to the
+browser on that branch. The client (`web_voice/static/ws.js`) already **honours**
+`{"type":"turn_error"}` (clears the thinking-watchdog, stops playback, shows a retry message) —
+it was wired defensively by TASK-WEB-046 — but the server never sends it. The normal per-turn
+degrade path (backend error/empty/deadline) is handled *inside* `StreamedAnswerRunner`, which
+always speaks a safe fallback (audio → the client leaves "Thinking"); the gap is the
+**pipeline/session-level failure** where `run()` raises and no audio and no signal reach the UI.
+
+### Objective
+
+On a WS turn/session failure (the `except Exception` teardown path), emit an explicit
+`turn_error` terminal control frame to the browser **before** teardown, so the UI leaves
+"Thinking" immediately instead of waiting for the client watchdog. Keep the watchdog as the
+safety net for the case where the socket is already dead (no frame can arrive).
+
+### Scope
+
+- **Runtime (`web_voice`):** add `turn_error` to the control-frame vocabulary
+  (`websocket_framing.ControlType`) and send it from `_serve_connection`'s failure branch
+  (best-effort direct JSON control send, robust to a half-broken pipeline). Guard against a
+  closed socket; never raise out of the handler.
+- **OpenTelemetry:** record a `voice.ws.turn_error_signal` event (correlation id + outcome) so a
+  force-emitted terminal signal is observable, per the BUG-018 AC.
+- **Tests:** unit-cover that a failing `session.run()` emits the `turn_error` frame and the event,
+  and that a normal turn does not.
+
+### Out Of Scope
+
+- WebRTC signaling path (dev/lab only, ADR-0042) and the Genesys AudioHook mapping — Genesys owns
+  its own call lifecycle/error protocol; a cross-transport `ControlSignalType` unification stays a
+  follow-up (noted in TASK-WEB-046's deferred block).
+- The no-exception / no-audio residual (turn returns cleanly but produced nothing) — the client
+  watchdog remains the net; not re-signalled server-side here.
+- Changing the client behaviour (the `turn_error` handler shipped in TASK-WEB-046).
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: A WS turn that crashes server-side ends the UI turn immediately
+  Given an active WS voice session
+  When the turn pipeline raises server-side (not a normal degrade-to-fallback)
+  Then the server sends a turn_error terminal control frame to the browser
+    And the browser leaves "Thinking" and offers a retry without waiting for the watchdog
+    And a voice.ws.turn_error_signal event is recorded with the correlation id
+
+Scenario: A normal turn is not falsely signalled
+  Given a WS turn that completes (success or degrade-to-spoken-fallback)
+  Then no turn_error control frame is sent
+```
+
+### Notes
+
+- `_serve_connection` already returns from `run()` when the exception is raised, so the direct
+  send does not race an active pipeline sender. If the subsequent `_safe_stop` still manages to
+  emit `call_end`, the client shows "Call ended" after the retry message — both are terminal
+  (never stuck); accepted minor ordering delta.

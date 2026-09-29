@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import os
 import time
@@ -56,13 +57,14 @@ from voice_common.telemetry import TelemetryRecorder
 from .envelope import ChannelEnvelope
 from .session_factory import SessionFactory
 from .session_telemetry import log_telemetry
-from .websocket_framing import WebSocketAudioSerializer
+from .websocket_framing import ControlType, WebSocketAudioSerializer
 from .ws_common import (
     ACTIVE_SESSIONS_METRIC,
     CLIENT_CONNECTED_EVENT,
     CLIENT_DISCONNECTED_EVENT,
     SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
+    TURN_ERROR_SIGNAL_EVENT,
     WS_MAX_SESSIONS_ENV_VAR,
 )
 
@@ -537,6 +539,10 @@ async def _serve_connection(
         raise
     except Exception:  # noqa: BLE001 - one failed turn must not raise out of the aiohttp handler
         _logger.error("ws session run failed", exc_info=True)
+        # TASK-WEB-049 (BUG-018 runtime half): the pipeline/session crashed with no audio and no
+        # terminal signal reaching the browser. Push an explicit `turn_error` control frame so the
+        # UI leaves "Thinking" immediately instead of waiting for the client watchdog to time out.
+        await _send_turn_error(websocket, telemetry, cid)
     finally:
         # Accounting + telemetry dump run FIRST and unconditionally, so a CancelledError
         # from the stop below (BaseException, not caught by `except Exception`) can never
@@ -561,6 +567,24 @@ def _wire_disconnect_drain(transport: AiohttpWebsocketTransport, session: Any) -
             await session.drain()
         except Exception:  # noqa: BLE001 - drain is best-effort; run() still returns on cancel
             _logger.debug("drain on disconnect failed", exc_info=True)
+
+
+async def _send_turn_error(
+    websocket: web.WebSocketResponse, telemetry: TelemetryRecorder, cid: str
+) -> None:
+    """Force-emit the `turn_error` terminal control frame on a failed turn (TASK-WEB-049).
+
+    Sends the JSON control frame directly on the socket (not through the pipeline output, which
+    may already be torn down), so the browser leaves "Thinking" at once. Best-effort: a closed or
+    dead socket is a no-op — the client watchdog remains the net for that case.
+    """
+    telemetry.record(TURN_ERROR_SIGNAL_EVENT, correlation_id=cid, outcome="error")
+    if websocket.closed:
+        return
+    try:
+        await websocket.send_str(json.dumps({"type": ControlType.TURN_ERROR}))
+    except Exception:  # noqa: BLE001 - the socket may be dying; never raise out of teardown
+        _logger.debug("turn_error signal send failed", exc_info=True)
 
 
 async def _safe_stop(session: Any) -> None:
