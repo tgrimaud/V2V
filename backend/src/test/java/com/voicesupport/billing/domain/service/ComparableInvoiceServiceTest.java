@@ -3,6 +3,7 @@ package com.voicesupport.billing.domain.service;
 import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.domain.model.valueobject.BillingPeriod;
+import com.voicesupport.billing.domain.model.valueobject.DateRange;
 import com.voicesupport.billing.domain.model.valueobject.InvoiceId;
 import com.voicesupport.billing.domain.model.valueobject.InvoiceSummary;
 import com.voicesupport.billing.domain.model.valueobject.Money;
@@ -57,6 +58,30 @@ class ComparableInvoiceServiceTest {
 
         // THEN the ordering is deterministic (tie broken by invoice id ascending)
         assertThat(result).containsExactly(a, b);
+    }
+
+    @Test
+    void available_invoices_orders_by_usage_period_when_the_issue_date_is_identical() {
+        // GIVEN two bill runs issued on the SAME "Billing date" (as on the real eir B2C PDFs) whose
+        // usage periods differ — the August run's id sorts BEFORE September's ascending
+        LocalDate sameIssueDate = LocalDate.of(2026, 9, 25);
+        InvoiceSummary august = new InvoiceSummary(InvoiceId.of("2608129000000039"),
+                new BillingPeriod("2608129000000039", sameIssueDate,
+                        DateRange.of(LocalDate.of(2026, 8, 12), LocalDate.of(2026, 9, 11)), null),
+                Money.ofMinorUnits(1999L, EUR));
+        InvoiceSummary september = new InvoiceSummary(InvoiceId.of("2609129000000008"),
+                new BillingPeriod("2609129000000008", sameIssueDate,
+                        DateRange.of(LocalDate.of(2026, 9, 12), LocalDate.of(2026, 10, 11)), null),
+                Money.ofMinorUnits(7546L, EUR));
+        FakeBssBillingPort port = new FakeBssBillingPort();
+        port.setInvoices(List.of(august, september));
+        ComparableInvoiceService service = new ComparableInvoiceService(port);
+
+        // WHEN the available invoices are listed
+        List<InvoiceSummary> result = service.availableInvoices(ACCOUNT);
+
+        // THEN September (later usage period) is the head — the current invoice — not August (ADR-0054)
+        assertThat(result).containsExactly(september, august);
     }
 
     @Test

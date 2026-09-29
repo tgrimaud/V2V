@@ -3,6 +3,28 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — TASK-BE-059 — eir B2C invoice model validation + realistic mock (branch)
+
+**Summary:**
+
+- Validated the V1 billing domain model against **real anonymized eir B2C invoice PDFs** (accounts
+  `99224964`, `99226126`, `99226337`, two bill runs each). The `Invoice → Section → Group → Item`
+  hierarchy fits; all six invoices reconcile **exactly** on the tax-included basis.
+- Found + fixed an **ordering bug**: the printed "Billing date" is identical across bill runs, so
+  `ComparableInvoiceService`'s `invoiceDate` sort + id tie-break made **August** the "current"
+  invoice. **ADR-0054**: new `DateRange(start,end)` VO; `BillingPeriod(id, invoiceDate, usagePeriod,
+  chargePeriod)` + `orderingDate()` (usage-period start, else issue date); nullable `DateRange
+  period` on `InvoiceItem`/`InvoiceGroup` (proratas). All new ranges nullable + backward-compatible
+  secondary constructors → zero churn, kept flexible for future changes.
+- **Mock data:** `EirB2cSampleFixtures` (6 invoices, real account numbers, 23% VAT, prorata line
+  periods, distinct codes for recurring vs prorated variants) merged into the mock `BssBillingPort`
+  + PDF fallback; the 3 accounts resolvable by number in the mock customer directory → the identity →
+  comparison → explanation chain runs end-to-end on realistic data.
+- **Docs:** ADR-0054, `docs/integrations/galaxion/eir-b2c-invoice-samples.md` (validation,
+  open-question answers, gaps G1–G4). Tests: `DateRangeTest`, `EirB2cSampleFixturesTest`,
+  `ComparableInvoiceService` ordering regression. Backend **652** green + ArchUnit. Branch
+  `task/TASK-BE-059-eir-b2c-period-model-and-mock`, not merged (user is final validator).
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

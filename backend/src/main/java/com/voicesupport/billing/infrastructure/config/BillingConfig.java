@@ -24,7 +24,10 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEn
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
+import com.voicesupport.billing.domain.model.Invoice;
+import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.billing.infrastructure.fixtures.EirB2cSampleFixtures;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +39,9 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
 import java.util.Currency;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 public class BillingConfig {
@@ -75,8 +80,17 @@ public class BillingConfig {
         if (!"mock".equalsIgnoreCase(properties.source())) {
             log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());
         }
-        log.info("[BILLING-BSS] source=mock — in-memory fixtures (customer-eir-001..006)");
-        return new InMemoryBssBillingAdapter(BssBillingFixtures.all());
+        log.info("[BILLING-BSS] source=mock — in-memory fixtures (synthetic eir-00X + real eir B2C samples)");
+        return new InMemoryBssBillingAdapter(mockInvoices());
+    }
+
+    // Mock invoice set = the six synthetic V1 journeys (eir-00X, TASK-BE-040) merged with the realistic
+    // eir B2C samples transcribed from anonymized PDFs (99224964/99226126/99226337, TASK-BE-059). Keys
+    // never overlap, so the two sets compose into one lookup for the in-memory BSS + PDF fallback.
+    private static Map<AccountId, List<Invoice>> mockInvoices() {
+        Map<AccountId, List<Invoice>> merged = new LinkedHashMap<>(BssBillingFixtures.all());
+        merged.putAll(EirB2cSampleFixtures.all());
+        return Map.copyOf(merged);
     }
 
     private static BssBillingPort eirAdapter(BillingBssProperties p, BackendTelemetry telemetry) {
@@ -124,8 +138,8 @@ public class BillingConfig {
             log.warn("[BILLING-PDF] source={} not available yet (real extractor is deferred) — using fixture extractor",
                     source);
         }
-        log.info("[BILLING-PDF] source=fixture — synthetic extractor (customer-eir-001..006)");
-        return new FixtureInvoicePdfExtractorAdapter(BssBillingFixtures.all());
+        log.info("[BILLING-PDF] source=fixture — synthetic extractor (eir-00X + real eir B2C samples)");
+        return new FixtureInvoicePdfExtractorAdapter(mockInvoices());
     }
 
     // Customer directory (ADR-0050, BR-002-1). `mock` (default) = in-memory pilot directory aligned

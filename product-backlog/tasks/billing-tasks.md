@@ -534,3 +534,53 @@ headers; RFC 7807 error format.
 | Ticket | Title | Gate |
 |--------|-------|------|
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data + INFRA-017 P1 answers |
+
+---
+
+## TASK-BE-059 — Validate the invoice model on real eir B2C PDFs + realistic mock data
+
+**Type:** Technical task (domain model + fixtures + docs)
+**Status:** 🚧 Implemented on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` (2026-09-29) — full backend suite green (652), ArchUnit green. Not yet merged (user is final validator).
+**Priority:** High
+**Depends on:** TASK-BE-040 (mock BSS), TASK-BE-042 (comparison), ADR-0005/0052
+**Decision:** ADR-0054
+
+### Context
+
+Three anonymized real eir B2C invoice PDFs (accounts `99224964`, `99226126`, `99226337`, two bill
+runs each) were provided to validate the V1 billing model and to seed realistic mock data. Validation
+(see `docs/integrations/galaxion/eir-b2c-invoice-samples.md`) confirmed the `Invoice → Section →
+Group → Item` hierarchy and exact tax-included reconciliation on all six invoices, and surfaced an
+ordering bug plus a missing per-line period.
+
+### Scope
+
+- **Model (ADR-0054):** new `DateRange(start,end)` VO; `BillingPeriod` extended to
+  `(id, invoiceDate, usagePeriod, chargePeriod)` with `orderingDate()`; nullable `DateRange period`
+  on `InvoiceItem`/`InvoiceGroup`. All new ranges nullable + backward-compatible secondary
+  constructors (zero churn, kept flexible).
+- **Ordering fix:** `ComparableInvoiceService` orders by `orderingDate()` (usage-period start, else
+  issue date) so identical "Billing date" no longer inverts current/previous.
+- **Mock data:** `EirB2cSampleFixtures` (6 invoices, real account numbers, 23% VAT, prorata line
+  periods, distinct codes for recurring vs prorated variants) merged into the mock `BssBillingPort` +
+  PDF fallback; the three accounts resolvable by number in the mock customer directory.
+- **Docs:** ADR-0054 + `eir-b2c-invoice-samples.md` (validation, open-question answers, gaps).
+
+### Acceptance
+
+- Each of the six invoices reconciles exactly on TTC (`Σ line TTC = total TTC`) — tested.
+- The comparator returns September (later usage period) as *current* despite an identical issue date
+  — regression test added.
+- Proratas carry an explicit `DateRange` period — tested.
+- Existing call sites/tests compile unchanged (secondary constructors); `mvn test` + ArchUnit green.
+
+### Out Of Scope / Residual
+
+- `chargePeriod` stored but not yet consumed by the explanation composer (advance-billing wording).
+- Previous-balance / payments / amount-due at invoice level (nil on these samples).
+- Real PDF parser (ADR-0005 fallback) — still the synthetic fixture extractor.
+- Line-period is descriptive only; comparison matching stays by label/code.
+
+**Adversarial review 93/100 (Pass, 2026-09-29)** — no blocking finding; full review at
+`docs/qa/task-be-059-adversarial-review.md`. Residual (accepted): fixtures class > 200 lines (pure
+data); `chargePeriod` + line period stored but not yet surfaced in customer wording.
