@@ -1016,6 +1016,7 @@ cover without `@SpringBootTest`; verify in pilot QA (`curl /actuator/metrics` �
 set on the deployment (ops action); the **metrics** closure is unconditional (default fenced).
 OTLP export (TASK-OPS-007) is unaffected — only the `/actuator/metrics` web endpoint is fenced,
 metrics are still collected + exported.
+Full review (findings table, coverage, evidence): `docs/qa/task-be-023-adversarial-review.md`.
 Mechanism (decided 2026-08-15) implemented: (1) Actuator exposure defaults to `health,info`
 (`MANAGEMENT_ENDPOINTS_EXPOSURE` env, closed by default → `/actuator/metrics` not anonymously
 readable off-box; `/actuator/health` stays exposed for probes); (2) `/v3/api-docs**` (+ `.yaml`)
