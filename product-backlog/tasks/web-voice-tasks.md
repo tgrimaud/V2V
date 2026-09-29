@@ -4354,6 +4354,7 @@ AudioHook error protocol are not re-signalled here (cross-transport `ControlSign
 unification stays a follow-up in TASK-WEB-046's deferred block). (3) The `except` branch fires
 only on a pipeline/session-level crash (normal backend errors degrade to a spoken fallback in
 `StreamedAnswerRunner`) — a targeted defensive signal, not dead code.
+Full review (findings table, coverage, evidence): `docs/qa/task-web-049-adversarial-review.md`.
 **Priority:** High
 **Branch:** `task/TASK-WEB-049-turn-error-terminal-signal` (created off `feat/restart-from-scratch`)
 **Surfaced by:** BUG-018 — TASK-WEB-046 shipped the browser watchdog + a defensive client `turn_error` handler, but **deferred the server half**: nothing on the runtime emits a `turn_error` control frame, so a WS turn that fails at the pipeline/session level leaves the UI in "Thinking" until the client watchdog times out (~20 s) instead of ending the turn immediately.
