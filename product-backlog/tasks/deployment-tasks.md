@@ -1562,6 +1562,7 @@ scenarios · 225 steps**.
 **Status:** 🚧 Implemented on branch — pending adversarial review + QA (2026-09-29). Bridge `POST /drain` + Ansible deploy wiring done; full voice-agent suite green (703 tests). Not yet merged (user is final validator).
 **Priority:** High
 **Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (created off `feat/restart-from-scratch`)
+**QA (pilot):** `docs/qa/task-ops-010-bridge-drain-qa.md` — regression is green + local live smoke proven; pilot runbook covers the container-exec drain, a real Gradium/Genesys call, the deploy integration and the fail-safe degrade (not yet executed on the pilot).
 **Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a bridge recreate / deploy / HAProxy failover mid-turn can hard-cut a live call and strand the UI, because there is no active-session drain.
 
 ### What was implemented (2026-09-29)
