@@ -1559,7 +1559,15 @@ scenarios · 225 steps**.
 **Related:** BUG-018 (stuck-in-thinking incident — P1 fix #3), TASK-OPS-002 (Ansible session-draining hook, grace-only today), TASK-INFRA-007 (LB drain/enable via HAProxy admin socket — stops NEW calls, not live ones), TASK-INFRA-011 (known voice health-gate loopback false-negative), TASK-WEB-008 (per-turn audio `drain()`)
 **Depends on:** TASK-OPS-002 (compose deploy + drain hook), TASK-INFRA-007 (LB drain wiring)
 **Classification:** V1 pilot deployment (release correctness) + voice runtime
-**Status:** 🚧 Implemented on branch — pending adversarial review + QA (2026-09-29). Bridge `POST /drain` + Ansible deploy wiring done; full voice-agent suite green (703 tests). Not yet merged (user is final validator).
+**Status:** 🚧 Implemented on branch — **adversarial review 93/100 (Pass, 2026-09-29, in-session)**; pending pilot QA + merge. Bridge `POST /drain` + Ansible deploy wiring done; full voice-agent suite green (703 tests). Not yet merged (user is final validator).
+Blocking fix applied during review: `hmac.compare_digest` constant-time token compare + extracted
+`_drain_and_report`/`_drain_body`/`_drain_token_matches` helpers to keep `handle_drain` ≤ 20 lines.
+Residual (accepted): (1) WebRTC sessions are not counted (dev/lab only, ADR-0042); (2) on a drain
+timeout the residual socket teardown relies on the container recreate + the browser watchdog
+(TASK-WEB-046), not an active socket-close. Both captured in Out Of Scope below.
+Pilot QA runbook: `docs/qa/task-ops-010-bridge-drain-qa.md` (baseline S0/S1/S5 run 2026-09-29 —
+`/drain` not in the deployed image `0.9.3` yet; S2–S6 blocked until an OPS-010 image is built +
+`vault_voice_drain_token` set + tier redeployed).
 **Priority:** High
 **Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (created off `feat/restart-from-scratch`)
 **QA (pilot):** `docs/qa/task-ops-010-bridge-drain-qa.md` — regression green + local live smoke proven. Pilot baseline run 2026-09-29 (S0/S1/S5): running image `0.9.3` predates OPS-010, so `POST /drain` → 405 (route not mounted) and no token set. S2/S3/S4/S6 blocked until an OPS-010 image is built + `vault_voice_drain_token` set + tier redeployed.
