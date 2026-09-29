@@ -7,6 +7,25 @@
 > `docs/architecture/voice-runtime-http-contract.md#post-drain`. Drain layering:
 > `docs/operations/release-process.md#voice-session-draining`.
 
+## Pilot execution log
+
+**2026-09-29 — baseline run on `vla-ai4cc-t01.prod.lan` (non-destructive S0/S1/S5):**
+
+| Step | Expected | Observed | Verdict |
+|---|---|---|---|
+| S0 token present | boolean | `VOICE_DRAIN_TOKEN present: False`, `VOICE_DRAIN_TIMEOUT_MS: None` | token not set on the running container |
+| S1 `POST /drain` on the deployed image | 503 (token unset) or route | **`HTTP 405 Method Not Allowed`** | **route not mounted** |
+| S5 health | `healthy` | `healthy` | ✅ |
+
+Running image: **`ghcr.io/tgrimaud/voice-support-voice:0.9.3`** — predates TASK-OPS-010 (committed
+2026-09-29, not merged / not built / not deployed). The `405` (not `503`) is the exact
+*not-mounted* contract: the static catch-all is GET-only, so an absent `POST /drain` returns 405
+(matches `tests/test_web_voice_app.py::DrainEndpointTest::test_not_mounted_without_controller`).
+
+**Conclusion:** S2/S3/S4/S6 (real drain, drained Gradium/Genesys call, deploy integration,
+fail-safe degrade) are **blocked until an OPS-010 image is built + `vault_voice_drain_token` is
+set + the tier is redeployed**. Re-run this runbook from S0 after that deploy.
+
 ## What is already proven (do not re-run on the pilot)
 
 - **Automated regression (green):** `voice-agent` unit suite **703** + `behave` **15/43/194**.
