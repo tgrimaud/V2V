@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-005
 - **Title:** On a low-information utterance ("vas-y"), retrieval surfaces internal agent-desk articles (R6/ION appointment tooling, VAA) and the LLM voices them to the end user; confidence drops to ≈0.52 but still PASSES the gate instead of asking to clarify
-- **Status:** Fixed — pending QA live retest (implemented on `fix/BUG-005-internal-kb-content-leak`, Sprint 9)
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (`002eff9`, Sprint 9) — shipped since **v0.4.0** (present through v0.9.3), live-validated on the pilot (status reconciled by git ancestry 2026-09-29). Original branch `fix/BUG-005-internal-kb-content-leak`.
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (live WebRTC test)

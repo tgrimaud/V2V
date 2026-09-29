@@ -2,7 +2,7 @@
 
 - **Severity:** Medium
 - **Priority:** P2
-- **Status:** Fixed (fix/BUG-020-billing-unfetchable-invoice-500)
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (`fecf3ef`, adversarial review 95/100, via the Sprint-14 closure `5650e15`) — shipped since **v0.9.0** (present through v0.9.3). A listed-but-unfetchable invoice now escalates with a controlled reason instead of an HTTP 500. Status reconciled by git ancestry 2026-09-29. Original branch `fix/BUG-020-billing-unfetchable-invoice-500`.
 - **Found by:** Adversarial review of the billing domain (Sprint 14, alongside BUG-019)
 - **Area:** `com.voicesupport.billing.domain.service.BillingExplanationService`
 

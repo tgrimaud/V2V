@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-019
 - **Title:** Confidence gate treats UNEXPLAINED-cause amounts as explained (no escalation, contradictory wording)
-- **Status:** Ready for adversarial review
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (`158a626`, via the Sprint-14 closure `5650e15`) — shipped since **v0.9.0** (present through v0.9.3). UNEXPLAINED-cause amounts now count as residual, not explained (no over-claim of a determined cause). Status reconciled by git ancestry 2026-09-29.
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** Adversarial review (billing domain)

@@ -15,14 +15,14 @@
 
 | Ticket | Objective (the why) | State |
 |---|---|---|
-| **BUG-005** | Stop internal KB passages (notes, non-customer content) from surfacing in an answer. | Fixed — pending live QA retest |
-| **BUG-006** | Ensure the VIP actually fails over to the standby when the active node dies (VRRP failover weight). | Ready for QA retest |
-| **BUG-008** | Don't count an interrupted/failed TTS synthesis in the "time to first audio" latency (it skews p95). | Fix on branch — finalize |
-| **BUG-016** | Stop refusing legitimate EN turns because an off-topic pattern matched inside a word (`king` ⊂ `working`). | Fixed — pending user validation |
+| ~~BUG-005~~ | Stop internal KB passages (notes, non-customer content) from surfacing in an answer. | ✅ Merged (`002eff9`), shipped since v0.4.0 |
+| ~~BUG-006~~ | Ensure the VIP actually fails over to the standby when the active node dies (VRRP failover weight). | ✅ Merged (`7b1ba56`), shipped since v0.5.0 (live 2-node retest = deferred nice-to-have) |
+| ~~BUG-008~~ | Don't count an interrupted/failed TTS synthesis in the "time to first audio" latency (it skews p95). | ✅ Merged (`2fe8260`), shipped since v0.5.0 |
+| ~~BUG-016~~ | Stop refusing legitimate EN turns because an off-topic pattern matched inside a word (`king` ⊂ `working`). | ✅ Merged (`35d95d1`), shipped since v0.6.0 |
 | **BUG-017** | Explain/fix the inconsistent barge-in (interruption) counter on the headless WebSocket path. | New — investigate |
 | **BUG-018** | Never leave the UI stuck on "Thinking" when a turn fails server-side. | 2/3 done; remaining = TASK-OPS-010 drain + server-side `turn_error` terminal signal |
-| **BUG-019** | Don't claim a billing discrepancy was "explained" when the cause was not actually determined. | Ready for review |
-| **BUG-020** | Return a controlled error/message when an invoice can't be fetched, instead of a 500 crash. | Fix on branch — finalize |
+| ~~BUG-019~~ | Don't claim a billing discrepancy was "explained" when the cause was not actually determined. | ✅ Merged (`158a626`, Sprint-14 `5650e15`), shipped since v0.9.0 |
+| ~~BUG-020~~ | Return a controlled error/message when an invoice can't be fetched, instead of a 500 crash. | ✅ Merged (`fecf3ef`, review 95/100), shipped since v0.9.0 |
 | **BUG-024** | Keep the useful grounded answer even when a courtesy/hand-off sentence trails it (don't drop it). | ✅ Symptom (b) merged (`6adb781`). ⏳ Symptom (a) dead-air (audible hand-off on LLM stream error) still deferred — needs a voice-tier repro. |
 
 ## Tasks in flight (WIP)

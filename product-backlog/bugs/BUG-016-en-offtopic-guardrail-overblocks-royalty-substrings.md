@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-016
 - **Title:** Input guardrail OFF_TOPIC royalty pattern lacks word boundaries — over-blocks legitimate EN support turns
-- **Status:** ✅ Fixed on `feat/sprint-11-remote-deployment` (global adversarial review remediation, 2026-08-14) — pending user validation
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (global adversarial-review remediation `35d95d1`, Sprint 11, 2026-08-14) — shipped since **v0.6.0** (present through v0.9.3). Off-topic guardrail no longer over-blocks legitimate EN turns via substring matches (word-boundary matching). Status reconciled by git ancestry 2026-09-29.
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** Retrieval A/B evaluation (2026-08-13) + global adversarial review (2026-08-14)

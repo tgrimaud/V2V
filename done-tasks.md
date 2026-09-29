@@ -3,6 +3,28 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — Bug triage: BUG-005/006/008/016/019/020 reconciled (all already merged + shipped)
+
+**Summary:**
+
+- **Triage pass** (same method as BUG-009-013): the recap listed these six bugs as "pending
+  QA/review/finalize", but **git ancestry proves all six are already merged into
+  `feat/restart-from-scratch` and shipped in releases** — the headers were stale (nothing flips
+  them after sprint-closure fast-forward merges). Verified per bug with
+  `git merge-base --is-ancestor <fix> feat/restart-from-scratch` + `git tag --contains <fix>`:
+  - **BUG-005** internal-KB-content-leak — merge `002eff9`, shipped since **v0.4.0**.
+  - **BUG-006** VRRP failover weight (`-60`) — merge `7b1ba56`, shipped since **v0.5.0** (live 2-node
+    failover retest remains a deferred nice-to-have on the Sprint-11 checklist).
+  - **BUG-008** failed/interrupted TTS span out of the `tts_first_audio` p95 — merge `2fe8260`, **v0.5.0**.
+  - **BUG-016** EN off-topic guardrail word-boundary fix (`king` ⊄ `working`) — remediation `35d95d1`, **v0.6.0**.
+  - **BUG-019** UNEXPLAINED-cause amounts count as residual, not explained — merge `158a626` via the
+    Sprint-14 closure `5650e15`, **v0.9.0**.
+  - **BUG-020** listed-but-unfetchable invoice escalates instead of HTTP 500 — merge `fecf3ef`
+    (adversarial 95/100) via `5650e15`, **v0.9.0**.
+- **Reconciled** the six ticket `**Status:**` headers, three stale `backlog-index.md` rows
+  (BUG-005/006/016; BUG-008 was already accurate, BUG-019/020 are covered by the ✅ Done SPRINT-14
+  row) and the `remaining-work-recap.md` bugs table. No code change — documentation-only reconciliation.
+
 ## 2026-09-28 — TASK-BE-033 lever 2 (prefill-reduction context budget) merged into mainline
 
 **Summary:**

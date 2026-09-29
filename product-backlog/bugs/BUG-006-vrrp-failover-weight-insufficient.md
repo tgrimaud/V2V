@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-006
 - **Title:** Keepalived `chk_haproxy` weight too small — VIP is not released when HAProxy dies
-- **Status:** Ready for QA retest
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (`7b1ba56`, Sprint 11) — shipped since **v0.5.0** (present through v0.9.3). keepalived weight `-60` so VRRP fails over on HAProxy death; regression checks added. Status reconciled by git ancestry 2026-09-29 (live VRRP re-test on a real 2-node pilot remains a nice-to-have, tracked in the Sprint-11 deferred-tests checklist).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** Adversarial review

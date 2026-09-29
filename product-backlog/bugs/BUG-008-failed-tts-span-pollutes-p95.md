@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-008
 - **Title:** `voice.tts.first_audio` span emitted with total-elapsed on failure/unavailable paths
-- **Status:** 🚧 Fixed on `fix/BUG-008-tts-span-outcome-filter` (2026-08-05) — emitter discipline
+- **Status:** ✅ Fixed & merged into `feat/restart-from-scratch` (`2fe8260`, Sprint 11) — shipped since **v0.5.0** (present through v0.9.3). Failed/interrupted TTS turns are kept out of the `tts_first_audio` p95 (success-only distribution); metric definition documented. Status reconciled by git ancestry 2026-09-29. Original branch `fix/BUG-008-tts-span-outcome-filter`.
   (failure/unavailable emit no first-audio span, elapsed on the event) + a success-only outcome
   filter in `pipeline_timing`. Voice-agent **464** unittest + behave **13/36/169** green. Merge on
   explicit user request only.
