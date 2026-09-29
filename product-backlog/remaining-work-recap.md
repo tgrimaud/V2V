@@ -1,15 +1,21 @@
 # Remaining Work Recap — objective of each open/in-flight ticket
 
-> **Snapshot: 2026-09-28 (refreshed after the WIP close-out).** Plain-language purpose
-> ("the why") of each ticket that is still open, in-flight, or on an unmerged branch, so the
+> **Snapshot: 2026-09-29 (refreshed after the WIP close-out + bug/latency triage).** Plain-language
+> purpose ("the why") of each ticket that is still open, in-flight, or on an unmerged branch, so the
 > goal is understood at a glance. This is a point-in-time summary — the authoritative status
 > always lives in the ticket file and `backlog-index.md`. Regenerate/refresh when the picture
 > changes materially.
 >
-> **Closed since the first snapshot (all merged into `feat/restart-from-scratch`):**
-> BUG-024 symptom (b) (`6adb781`, review 92/100), TASK-BE-033 lever-2 prefill-trim (`0232e34`,
-> review 95/100, shipped default-off). TASK-BE-024 / TASK-BE-025 were already merged + shipped
-> since v0.5.0 (recap was stale — no action needed). Mainline backend `mvn clean test` = **642/0/0**.
+> **Closed / reconciled since the first snapshot:**
+> - **Merged:** BUG-024 symptom (b) (`6adb781`, review 92/100), TASK-BE-033 lever-2 prefill-trim
+>   (`0232e34`, review 95/100, shipped default-off). Mainline backend `mvn clean test` = **642/0/0**.
+> - **Triaged (already merged + shipped — headers were stale, reconciled by git ancestry):**
+>   TASK-BE-024 / TASK-BE-025 (v0.5.0); BUG-005 (v0.4.0), BUG-006/008 (v0.5.0), BUG-016 (v0.6.0),
+>   BUG-019/020 (v0.9.0); latency BUG-021 (v0.9.3), TASK-BE-020 (v0.8.0), TASK-WEB-035 (v0.6.0);
+>   TASK-STT-014 was **rejected** (measured harmful).
+> - **Genuinely still open** (below): BUG-017, BUG-018 (2/3), BUG-024 symptom (a); TASK-BE-058;
+>   TASK-WEB-040; TASK-WEB-044; infra OPS-010 / INFRA-005 / BE-023 / BE-030 / BE-026 / BE-031 / BE-057;
+>   OQ-006 / OQ-008 / OQ-009.
 
 ## Bugs to finish
 
@@ -40,14 +46,18 @@
 |---|---|---|
 | **TASK-WEB-044** | Define safe behavior when Genesys is slow/absent/dropped (timeout, drop, 15-min cap, transcode failure) → fail-safe route to the advisor queue (Architect) with auditable reasons. Required before any prod Genesys SLO. | Open |
 
-## Latency (ADR-0029 gate still FAIL)
+## Latency (ADR-0029 gate still FAIL — but the levers are largely spent)
+
+> The remaining gap is **model/provider-dominated** (first-token tail): the reducible in-house
+> slices have been shipped, so the gate stays FAIL until the provider/hosting choice closes it.
 
 | Ticket | Objective (the why) | State |
 |---|---|---|
-| **TASK-STT-014** | Shorten the STT finalize tail ("caller stopped speaking" → final transcript) — the biggest remaining mouth-to-ear contributor. | Open |
-| **TASK-BE-020** | Speed up the backend's first vetted sentence (streaming). Second latency lever. | Open |
-| **TASK-WEB-035** | Same STT finalize optimization, specifically on the WebSocket transport. | Open |
-| **TASK-WEB-040** | Instrument the only still-unmeasured WS latency slice (`channel_ingress`, mic input) to complete the latency report. | Planned (Low) |
+| ~~TASK-STT-014~~ | Shorten the STT finalize tail ("caller stopped speaking" → final transcript). | ❌ **Rejected** — measured harmful (trailing-word loss); not a viable lever |
+| ~~TASK-BE-020~~ | Speed up the backend's first vetted sentence (streaming, warm the reactive path). | ✅ Merged (`10c105d`), shipped since v0.8.0 |
+| ~~TASK-WEB-035~~ | STT time-to-final tail on the WebSocket transport (bounded finalize budget). | ✅ Merged (`9676a45`), shipped since v0.6.0 |
+| **TASK-WEB-040** | Instrument the only still-unmeasured WS latency slice (`channel_ingress`, mic input) to complete the latency report. | 📋 Planned (Low) — genuinely open |
+| _(context)_ | The remaining first-token tail is the **provider/model choice** — TASK-BE-033 lever-1 benchmark (done) + lever-2 prefill-trim (shipped default-off). Enabling a prod default needs a retrieval-quality QA pass. | — |
 
 ## Infra / deploy / resilience
 

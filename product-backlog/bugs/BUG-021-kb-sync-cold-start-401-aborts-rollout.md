@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-021
 - **Title:** Post-deploy KB sync 401 on a freshly-recreated backend aborts the whole rollout
-- **Status:** 🟢 Fixed — readiness gate landed to `feat/restart-from-scratch` (2026-09-23); QA = next cold-container deploy (no live re-deploy since landing yet). Deploy-automation change (no unit harness); lightweight review done at landing. Branch merged (fix landed) then deleted.
+- **Status:** 🟢 Fixed & merged into `feat/restart-from-scratch` (fix `f5932bb`, 2026-09-23) — **shipped in v0.9.3**. QA = next **cold-container** deploy (the v0.9.3 rollout skipped KB sync as a data no-op, so the readiness gate was not exercised on a truly cold container yet). Deploy-automation change (no unit harness); lightweight review done at landing. Branch merged then deleted. Status reconciled by git ancestry 2026-09-29.
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** User validation (v0.9.0 pilot release)

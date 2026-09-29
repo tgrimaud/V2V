@@ -3,6 +3,31 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-29 — Latency triage + full doc-alignment review
+
+**Summary:**
+
+- **Latency triage (by git ancestry, same method as the bug triage):** the recap listed four
+  latency tickets as "Open"; only **one** is genuinely open.
+  - **TASK-STT-014** — ❌ **Rejected** (measured harmful: trailing-word loss); not a viable lever.
+  - **TASK-BE-020** — ✅ merged `10c105d`, shipped since **v0.8.0** (warm the reactive LLM streaming path).
+  - **TASK-WEB-035** — ✅ merged `9676a45`, shipped since **v0.6.0** (STT time-to-final bounded budget on WS).
+  - **TASK-WEB-040** — 📋 genuinely **Planned (Low)** — the WS `channel_ingress` slice instrumentation.
+  - Framing corrected: the ADR-0029 gate stays FAIL but the **reducible in-house slices are spent**;
+    the residual is **provider/model first-token tail** (TASK-BE-033 lever-1 benchmark done + lever-2
+    prefill-trim shipped default-off; enabling a prod default needs a retrieval-quality QA pass).
+- **Doc-alignment review (technical-writer skill):**
+  - **BUG-021** reconciled: fix `f5932bb` is in mainline, **shipped in v0.9.3** (QA on a truly cold
+    container still pending — v0.9.3 skipped KB sync as a no-op).
+  - **TASK-INFRA-005** verified **correctly** "Deferred": its only mainline commit (`fa14052`) is the
+    ticket-creation doc merge, not a code fix → still open (caution: an ancestry grep can match a
+    ticket-doc commit; confirm the commit touches code before declaring a ticket shipped).
+  - Infra tickets OPS-010 / BE-023 / BE-030 / BE-026 / BE-031 / BE-057 have **no fix commit** → genuinely
+    open, recap accurate. OQ-006/008/009 are open product gates, accurate.
+  - **No `docs/` drift** from the merged work: the BE-033 knobs live only in `deploy/` (already updated),
+    no `docs/` env-var reference enumerates them; `release-process.md` pins no version (version = git tag).
+  - Refreshed `remaining-work-recap.md` (latency table + snapshot note) to the reconciled 2026-09-29 state.
+
 ## 2026-09-29 — Bug triage: BUG-005/006/008/016/019/020 reconciled (all already merged + shipped)
 
 **Summary:**
