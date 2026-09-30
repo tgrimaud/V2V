@@ -540,7 +540,7 @@ headers; RFC 7807 error format.
 ## TASK-BE-059 — Validate the invoice model on real eir B2C PDFs + realistic mock data
 
 **Type:** Technical task (domain model + fixtures + docs)
-**Status:** 🚧 Implemented on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` (2026-09-29) — full backend suite green (652), ArchUnit green. Not yet merged (user is final validator).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `5940dcb`) — full backend suite green, ArchUnit green.
 **Priority:** High
 **Depends on:** TASK-BE-040 (mock BSS), TASK-BE-042 (comparison), ADR-0005/0052
 **Decision:** ADR-0054
@@ -636,7 +636,7 @@ gate → safe escalation (correct fail-closed behaviour, but a poor customer ans
 ## TASK-BE-061 — Channel-provided customer identity + RAG↔billing routing on `/converse`
 
 **Type:** Technical task (conversation routing + channel identity) — routing ADR created (ADR-0055)
-**Status:** ✅ Done (2026-09-29) — reshaped to channel-provided identity as the **primary** path (vocal collection dropped to a fallback / out of scope)
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `5940dcb`) — reshaped to channel-provided identity as the **primary** path (vocal collection dropped to a fallback / out of scope)
 **Priority:** High
 **Depends on:** TASK-BE-045 (billing chain), ADR-0052 (billing seam), ADR-0050 (identity), US-042 (language)
 **Relates to:** ADR-0055 (routing decision), BR-002-1 (identity), OQ-001 (identity source), BUG-026 (session-locked envelope)
@@ -702,7 +702,7 @@ non-blocking follow-up.
 ## TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter
 
 **Type:** Technical task (backend billing infrastructure) — ADR-0005 amended
-**Status:** 🚧 Implemented (2026-09-30) on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` — backend **673** green + ArchUnit. Not merged (user is final validator).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `5940dcb`) — backend **673** green + ArchUnit; adversarial 96/100 (Pass).
 **Priority:** High
 **Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-040/047 (`BssBillingPort`, structured JSON adapter), ADR-0004/0005
 **Relates to:** OQ-003 (real BSS access), `missing-inputs.md` (`bill-run-documents/search` response gap)

@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-027
 - **Title:** The streaming conversation path (`/converse-stream`) does not route to the billing chain → the voice UI never uses invoice data even with a channel-provided account
-- **Status:** ✅ Fixed (2026-09-29) — routing extended to `/converse-stream` (shared `BillingRoutingService`); backend 661 tests + ArchUnit green; adversarial review 92/100 (Pass). Pending: live voice retest by the user.
+- **Status:** ✅ Fixed + **merged into `feat/restart-from-scratch` (2026-09-30, `5940dcb`)** — routing extended to `/converse-stream` (shared `BillingRoutingService`); backend + ArchUnit green; adversarial review 92/100 (Pass); live retest PASSED (route=billing streams grounded amounts; no-account → RAG).
 - **Severity:** High
 - **Priority:** P2
 - **Detected by:** User validation (local run) + developer log analysis
