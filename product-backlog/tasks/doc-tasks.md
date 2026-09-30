@@ -8,7 +8,7 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 | TASK-DOC-001 | Full-branch code review after Sprint 5 | Done (2026-07-15) — tracked in `backlog-index.md` |
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
 | TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | ✅ Merged into `feat/restart-from-scratch` (2026-08-07) — spawned spike TASK-WEB-025 |
-| TASK-DOC-009 | Refresh the general target solution diagram + add a simplified version | 🚧 Implemented (2026-09-30, branch `task/TASK-DOC-009-refresh-target-architecture-diagram`) — awaiting validation |
+| TASK-DOC-009 | Refresh the general target solution diagram + add a simplified version | ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `e80a2b4`) |
 
 ---
 
@@ -20,8 +20,8 @@ default LLM), ADR-0048 (bilingual fr/en KB), ADR-0041 (Liquibase schema), ADR-00
 (customer identity / account reference), ADR-0005 (billing-api + PDF), ADR-0040/0043/0049
 (Genesys media/escalation), TASK-OBS-002 (structured JSON logs)
 **Classification:** Documentation (architecture diagram) — not runtime-affecting
-**Status:** 🚧 Implemented (2026-09-30) — awaiting user validation, then commit/push; no merge
-until the user explicitly asks.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `e80a2b4`);
+ticket branch deleted after merge.
 **Priority:** Medium
 **Branch:** `task/TASK-DOC-009-refresh-target-architecture-diagram`
 
