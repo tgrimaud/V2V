@@ -45,6 +45,7 @@ from web_voice.end_of_turn import (  # noqa: E402
     StreamingEndOfTurnDetector,
 )
 from web_voice.streaming_stt_processor import (  # noqa: E402
+    CHANNEL_INGRESS_SPAN,
     STT_DEGRADED_SPOKEN_EVENT,
     STT_DEGRADED_SPOKEN_METRIC,
     STT_FINALIZE_FALLBACK_EVENT,
@@ -255,6 +256,35 @@ class StreamingSttProcessorTest(unittest.IsolatedAsyncioTestCase):
         metrics = {m.name for m in telemetry.metrics()}
         self.assertIn("stt.time_to_final_ms", metrics)
         self.assertIn("stt.time_to_first_partial_ms", metrics)
+
+    async def test_emits_channel_ingress_span_on_streaming_turn(self):
+        # GIVEN telemetry wiring (TASK-WEB-040 — close the only WS-unmeasured canonical slice)
+        telemetry = TelemetryRecorder()
+        session = FakeSession([PartialTranscript("facture")], "facture")
+        processor = _processor(FakeProvider(session), telemetry)
+        # WHEN a full turn streams through (3 speech frames + trailing silence)
+        frames = [_speech_frame()] * 3 + [_silence_frame()] * 10
+        await _drive(processor, frames)
+        # THEN exactly one voice.channel.ingress span is recorded for the turn
+        ingress = [s for s in telemetry.spans() if s.name == CHANNEL_INGRESS_SPAN]
+        self.assertEqual(len(ingress), 1)
+        # AND it carries the correlation id, channel, provider and the real received bytes
+        attrs = ingress[0].attributes
+        self.assertEqual(attrs["correlation_id"], "corr-1")
+        self.assertEqual(attrs["channel"], "web_voice")
+        self.assertGreater(attrs["audio_bytes"], 0)
+        self.assertEqual(attrs["audio_bytes"] % FRAME_BYTES, 0)
+        # AND a matching received event is emitted
+        self.assertIn("voice.channel.ingress.received", {e.name for e in telemetry.events()})
+
+    async def test_no_channel_ingress_span_when_no_session_opened(self):
+        # GIVEN a control end-of-turn arriving before any speech (no session ever opened)
+        telemetry = TelemetryRecorder()
+        processor = _processor(FakeProvider(), telemetry)
+        # WHEN only silence + a control EOT flow through (headless / no-speech turn)
+        await _drive(processor, [_silence_frame()] * 3 + [EndOfTurnSignalFrame()])
+        # THEN no channel-ingress span is fabricated (slice stays honestly unmeasured)
+        self.assertNotIn(CHANNEL_INGRESS_SPAN, [s.name for s in telemetry.spans()])
 
     async def test_stamps_per_turn_identity_on_turn_spans(self):
         # GIVEN telemetry wiring on a streaming turn (TASK-WEB-017)

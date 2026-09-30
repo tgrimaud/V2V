@@ -3607,9 +3607,9 @@ finalize tail).
 **Parent:** EPIC-010 (observability, latency & pilot validation)
 **Related decisions:** ADR-0028 (observability), ADR-0029 (gate), TASK-WEB-030 (WS canonical per-slice)
 **Classification:** V1 pilot gate (observability) — telemetry emission, runtime-affecting (span only)
-**Status:** 📋 Planned — surfaced 2026-08-26 by the TASK-WEB-039 WS-live measurement.
+**Status:** 🔧 Implemented (2026-09-30, branch `task/TASK-WEB-040-ws-channel-ingress-slice`) — `voice.channel.ingress` span emitted per turn by `StreamingSttProcessor` (session-open → finalize receive window + `audio_bytes`), registered as a third `channel_ingress` candidate in `voice_common.pipeline_timing` (first-present-wins keeps batch `web.voice.ingress` and streaming distributions apart). Covers **both** streaming transports (WS + WebRTC), which share the processor. No-op without a session (headless/no-speech stays honestly unmeasured — no fabricated 0). Completeness slice only (not in the mouth-to-ear composite → ADR-0029 verdict unaffected). Tests: +3 (processor emit + no-session guard + report mapping); 691 unittest + 15/43/194 behave green. Adversarial review **95/100 Pass** — `docs/qa/task-web-040-adversarial-review.md`.
 **Priority:** Low
-**Branch:** `task/TASK-WEB-040-ws-channel-ingress-slice` (to create)
+**Branch:** `task/TASK-WEB-040-ws-channel-ingress-slice`
 
 ### Context
 

@@ -40,7 +40,10 @@ PIPELINE_SLICES = (
 # String literals (not imports) so this module stays free of a back-dependency on
 # the emitters; each emitter owns its own span-name constant.
 _SLICE_SPAN_NAMES: dict[str, tuple[str, ...]] = {
-    CHANNEL_INGRESS: ("web.voice.ingress", "stt.audio.accept"),
+    # web.voice.ingress = batch REST (POST-body read); voice.channel.ingress = streaming
+    # transports (WS/WebRTC) receive window for the turn (TASK-WEB-040). First-present-wins
+    # keeps the batch and streaming distributions separate (only one path emits per run).
+    CHANNEL_INGRESS: ("web.voice.ingress", "stt.audio.accept", "voice.channel.ingress"),
     END_OF_TURN: ("voice.end_of_turn",),
     STT: ("stt.request",),
     # backend.first_token wins when present (streaming backends); backend.request

@@ -58,6 +58,16 @@ from .end_of_turn import (
 
 DEFAULT_PROVIDER_NAME = "gradium-stt-streaming"
 STT_REQUEST_SPAN = "stt.request"
+# Streaming channel-ingress slice (TASK-WEB-040). The batch REST path emits
+# `web.voice.ingress` (POST-body read time); the streaming transports (WS + WebRTC) feed
+# audio frame-by-frame through the pipeline and never call that path, leaving
+# `channel_ingress` the only canonical US-036 slice unmeasured on WS. This span closes the
+# gap: it measures the transport receive window for the turn (session open -> finalize) and
+# the audio bytes actually received over the wire. It is a completeness slice, NOT part of
+# the mouth-to-ear composite (which is stt + backend_first_token + tts_first_audio), so it
+# never affects the ADR-0029 verdict. Registered as a `channel_ingress` candidate in
+# voice_common.pipeline_timing (first-present-wins keeps batch/streaming distributions apart).
+CHANNEL_INGRESS_SPAN = "voice.channel.ingress"
 # TASK-WEB-018: when streaming STT finalize fails (timeout / provider error), the loop
 # must not go silent — it speaks the safe degraded fallback (same policy as the batch
 # path and the backend degraded mode). This event proves a fallback was actually driven
@@ -167,6 +177,10 @@ class StreamingSttProcessor(FrameProcessor):
         self._session: Any = None
         self._turn_timer: Timer | None = None
         self._first_partial_ms: float | None = None
+        # Audio bytes received over the wire for the current turn (TASK-WEB-040). Reset at
+        # session open, accumulated while the session is open, reported on the channel-ingress
+        # span at finalize. len(frame.audio) is the real PCM payload handed to STT.
+        self._ingress_bytes = 0
         # Monotonic per-turn index on this streaming session (TASK-WEB-017). One recorder
         # lives for the whole call, so we advance a fresh per-turn identity at each
         # end-of-turn while the per-conversation correlation_id stays stable; all spans
@@ -237,6 +251,7 @@ class StreamingSttProcessor(FrameProcessor):
         if self._bot_speaking and not self._barge_in_fired:
             await self._maybe_barge_in(frame.audio)
         if self._session is not None:
+            self._ingress_bytes += len(frame.audio)
             await self._session.send_audio(frame.audio)
             await self._emit_partials(self._session, direction)
         if decision.detection is not None:
@@ -293,6 +308,7 @@ class StreamingSttProcessor(FrameProcessor):
             self._session = await self._provider.open()
         self._turn_timer = Timer()
         self._first_partial_ms = None
+        self._ingress_bytes = 0
 
     def _emit_prewarm_outcome(self, outcome: str | None) -> None:
         if self._telemetry is None or self._envelope is None or outcome is None:
@@ -323,6 +339,7 @@ class StreamingSttProcessor(FrameProcessor):
         self._finalize_fallback = False
         if session is None:
             return
+        self._record_channel_ingress()
         tail = Timer()
         try:
             await session.finish()
@@ -467,6 +484,27 @@ class StreamingSttProcessor(FrameProcessor):
             message_id=str(uuid4()),
             turn_index=self._turn_index,
         )
+
+    def _record_channel_ingress(self) -> None:
+        """Emit the streaming channel-ingress slice for the turn (TASK-WEB-040).
+
+        Measures the transport receive window (session open -> finalize) and the audio bytes
+        actually received over the wire, closing the only canonical US-036 slice that read
+        `NOT MEASURED` on the streaming (WS/WebRTC) path. Completeness slice only — it is not
+        part of the mouth-to-ear composite, so it never changes the ADR-0029 verdict. No-op
+        without telemetry/envelope or before any session opened (`_turn_timer is None`), so a
+        headless/no-speech turn stays honestly unmeasured rather than reporting a fabricated 0.
+        """
+        if self._telemetry is None or self._envelope is None or self._turn_timer is None:
+            return
+        attrs = {
+            "correlation_id": self._envelope.correlation_id,
+            "channel": getattr(self._envelope, "channel", None),
+            "provider": self._provider_name,
+            "audio_bytes": self._ingress_bytes,
+        }
+        self._telemetry.span(CHANNEL_INGRESS_SPAN, self._turn_timer.elapsed_ms(), **attrs)
+        self._telemetry.record("voice.channel.ingress.received", **attrs)
 
     def _record_end_of_turn(self, detection: EndOfTurnResult) -> None:
         if self._telemetry is None or self._envelope is None or detection.slice_ms is None:
