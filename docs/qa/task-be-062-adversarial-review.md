@@ -14,8 +14,24 @@ are recorded with recommended follow-ups.
 
 ## Satisfaction Score
 
-Score: **90/100**
-QA gate: **Pass** (residual risk recorded)
+Score: **90/100** → **96/100 after remediation** (see below)
+QA gate: **Pass**
+
+## Post-Review Remediation (2026-09-30, same session)
+
+Both non-blocking findings were fixed immediately after the review (user requested "corrige"):
+
+1. **`PARTIAL` extraction now fails closed (BR-003).** `PdfBssBillingAdapter` treats a `PARTIAL`
+   extraction like `FAILED` → `Optional.empty` (escalation), so a partial parse is never presented as a
+   complete invoice. `PdfBssBillingAdapterTest.fetchInvoice_partialExtraction_failsClosedPerBr003` locks it.
+2. **Per-extraction outcome telemetry added.** `fetchInvoice` now records the BSS slice via
+   `recordLatency(Slices.BSS, "pdf", outcome, reason, elapsed)` with a non-PII `reason`:
+   `document_unavailable` | `extraction_failed` | `extraction_partial` | `ownership_mismatch` (and
+   `success`/`n/a` on the happy path). Every fail-closed branch is asserted in tests
+   (`assertBssSlice(outcome, reason)`). QA/Ops can now filter `slice=bss provider=pdf reason=…`.
+
+Backend **673** + ArchUnit green after remediation. Findings #1 and #2 below are **Resolved**; the only
+residual is the deferred real REST adapter + real PDFBox parser (unchanged, blocked on OQ-003).
 
 ## Blocking Findings
 
@@ -25,8 +41,8 @@ _None._
 
 | Severity | Finding | Evidence | Recommendation |
 |---|---|---|---|
-| Medium (latent) | **`PARTIAL` extraction status is dropped at the `BssBillingPort` boundary.** `PdfBssBillingAdapter.downloadAndExtract` returns the invoice for both `SUCCESS` and `PARTIAL` (via `hasInvoice()`), discarding `ExtractionResult.issues`. `ExtractionResult`'s own contract says the status is first-class "so the answer/confidence layer never treats a partial extraction as a complete one (BR-003)", but the port only carries `Invoice`/empty, so downstream sees a PARTIAL as complete. The comparison confidence gate is a *partial* safety net (a missing line usually breaks reconciliation → `residual_too_high` → escalate), but a missing zero/near-zero line can still be judged `EXPLAINABLE` at 0.9. | `PdfBssBillingAdapter` L57-65; `ExtractionResult` doc L6-9; `PdfBssBillingAdapterTest.fetchInvoice_partialExtraction_stillReturnsTheInvoice`. Does **not** trigger today: the fixture extractor only emits `PARTIAL` for a `-partial`-suffixed reference, which no fixture uses. | When the real PDFBox parser lands (deferred), either **fail-closed on `PARTIAL`** at this adapter (return empty → escalation, strict BR-003) or **thread the extraction status** to the confidence layer so a partial extraction is explicitly de-rated. Decide with Product (there is already a comparison-level `PARTIAL`/0.6 tier — extraction-PARTIAL is a different axis). |
-| Low (latent) | **No extraction-outcome telemetry; a `FAILED` extraction records the BSS slice as `outcome=success`.** `telemetry.time(Slices.BSS, "pdf", …)` marks success whenever no exception is thrown, so `FAILED`/`PARTIAL` extractions are invisible as such (folded into a generic `bss success` + empty result). ADR-0005 states "extraction failures must be explicit". | `PdfBssBillingAdapter.fetchInvoice` L48-51 wraps `downloadAndExtract`; a `FAILED` result returns empty but the slice still logs `outcome=success` (observed live: `slice=bss provider=pdf outcome=success`). Consistent with `EirBssBillingAdapter` (ownership-drop also logs success). | Emit a dedicated extraction event/metric (`pdf.extraction` with `outcome=success\|partial\|failed` + issue count) so QA/Ops can measure PDF extraction quality once the real parser is live. Matters most with real PDFs; low value against fixtures. |
+| ✅ Resolved | (was Medium/latent) **`PARTIAL` extraction status was dropped at the `BssBillingPort` boundary.** Now fails closed (see Post-Review Remediation #1). `PdfBssBillingAdapter.downloadAndExtract` returns the invoice for both `SUCCESS` and `PARTIAL` (via `hasInvoice()`), discarding `ExtractionResult.issues`. `ExtractionResult`'s own contract says the status is first-class "so the answer/confidence layer never treats a partial extraction as a complete one (BR-003)", but the port only carries `Invoice`/empty, so downstream sees a PARTIAL as complete. The comparison confidence gate is a *partial* safety net (a missing line usually breaks reconciliation → `residual_too_high` → escalate), but a missing zero/near-zero line can still be judged `EXPLAINABLE` at 0.9. | `PdfBssBillingAdapter` L57-65; `ExtractionResult` doc L6-9; `PdfBssBillingAdapterTest.fetchInvoice_partialExtraction_stillReturnsTheInvoice`. Does **not** trigger today: the fixture extractor only emits `PARTIAL` for a `-partial`-suffixed reference, which no fixture uses. | When the real PDFBox parser lands (deferred), either **fail-closed on `PARTIAL`** at this adapter (return empty → escalation, strict BR-003) or **thread the extraction status** to the confidence layer so a partial extraction is explicitly de-rated. Decide with Product (there is already a comparison-level `PARTIAL`/0.6 tier — extraction-PARTIAL is a different axis). |
+| ✅ Resolved | (was Low/latent) **No extraction-outcome telemetry; a `FAILED` extraction recorded the BSS slice as `outcome=success`.** Now records `outcome=error` + a distinct `reason` per branch (see Post-Review Remediation #2). `telemetry.time(Slices.BSS, "pdf", …)` marks success whenever no exception is thrown, so `FAILED`/`PARTIAL` extractions are invisible as such (folded into a generic `bss success` + empty result). ADR-0005 states "extraction failures must be explicit". | `PdfBssBillingAdapter.fetchInvoice` L48-51 wraps `downloadAndExtract`; a `FAILED` result returns empty but the slice still logs `outcome=success` (observed live: `slice=bss provider=pdf outcome=success`). Consistent with `EirBssBillingAdapter` (ownership-drop also logs success). | Emit a dedicated extraction event/metric (`pdf.extraction` with `outcome=success\|partial\|failed` + issue count) so QA/Ops can measure PDF extraction quality once the real parser is live. Matters most with real PDFs; low value against fixtures. |
 | Low | **No automated test for the `source=pdf` bean selection.** The `BillingConfig` switch (`mock`/`eir`/`pdf` → correct `BssBillingPort` impl) is only covered by the manual live smoke, not a unit/slice test. | `BillingConfig.bssBillingPort`; verified live (`[BILLING-BSS] source=pdf`). Consistent with `eir` (also not unit-tested). | Optional: a small `@Value`-driven config test asserting the selected adapter type per source. Consistent gap with the existing `eir` path — low priority. |
 
 ## Story Coverage
@@ -84,7 +100,7 @@ _None blocking._ Recommended (before/with the real PDFBox parser + real REST `Bi
 
 ## Residual Risk If Accepted
 
-- `PARTIAL` extractions are treated as complete at the `BssBillingPort` boundary (latent: never triggered
-  by current fixtures; real parser deferred). Downstream reconciliation is only a partial safety net.
-- PDF extraction failures are not individually observable yet (folded into `bss success` + empty). Both
-  risks concentrate on the deferred real-PDF path and should be closed **before** enabling a real parser.
+- Both original findings are **resolved** (PARTIAL fail-closed; per-extraction telemetry). The only
+  remaining residual is scope-deferred, not a defect: the real REST `BillRunDocumentPort` adapter and the
+  real PDFBox parser are not yet implemented (blocked on OQ-003 + the `bill-run-documents/search`
+  period/amount gap). The fixture path is complete and tested.

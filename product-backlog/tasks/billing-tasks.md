@@ -745,9 +745,9 @@ PDF → parse → same structure" with a single config change, knowing the **rea
   same port + set the base URL; nothing else changes.
 - **Real PDF parser** (PDFBox) behind `InvoicePdfExtractorPort` (`pdf.source=pdfbox`) — still fixture.
 
-**Adversarial review 90/100 (Pass, 2026-09-30)** — no blocking finding; full review at
-`docs/qa/task-be-062-adversarial-review.md`. Residual (accepted, both **latent** — not triggered by
-current fixtures, real parser deferred): (1) `PARTIAL` extraction status is collapsed to a complete
-`Invoice` at the `BssBillingPort` boundary (BR-003) — decide fail-closed vs. thread-the-status before a
-real PDFBox parser; (2) no per-extraction outcome telemetry (a `FAILED` extraction logs the BSS slice as
-`success`). Both must be closed **before** enabling a real parser.
+**Adversarial review 90/100 → 96/100 after remediation (Pass, 2026-09-30)** — no blocking finding; full
+review at `docs/qa/task-be-062-adversarial-review.md`. Both non-blocking findings **fixed same session**:
+(1) `PARTIAL` extraction now **fails closed** at the PDF adapter (BR-003 — never treat a partial parse as
+complete); (2) **per-extraction telemetry** added — the BSS slice records a non-PII `reason`
+(`document_unavailable`/`extraction_failed`/`extraction_partial`/`ownership_mismatch`). Backend 673 + ArchUnit
+green. Residual: only the scope-deferred real REST adapter + real PDFBox parser (OQ-003).

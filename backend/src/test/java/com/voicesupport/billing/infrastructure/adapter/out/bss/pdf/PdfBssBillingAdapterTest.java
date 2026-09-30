@@ -56,19 +56,19 @@ class PdfBssBillingAdapterTest {
         assertEquals(ACCOUNT, documents.lastAccount);
         assertEquals(INVOICE, documents.lastInvoice);
         assertEquals("202602", extractor.lastSource.reference());
-        assertTrue(registry.find("voice_support.slice").tag("slice", Slices.BSS).tag("provider", "pdf")
-                .timer().count() >= 1, "BSS slice must be recorded with provider=pdf");
+        assertBssSlice("success", "n/a");
     }
 
     @Test
-    void fetchInvoice_partialExtraction_stillReturnsTheInvoice() {
-        // GIVEN a partial extraction (some lines missing) — still carries an invoice; the confidence
-        // gate downstream decides whether it is explainable (never dropped here)
+    void fetchInvoice_partialExtraction_failsClosedPerBr003() {
+        // GIVEN a partial extraction (some lines missing): BR-003 / ADR-0005 forbid treating it as
+        // complete, so the PDF adapter fails closed (escalation) rather than exposing a skewed invoice
         documents.pdf = Optional.of(new PdfSource("202602", "x".getBytes(StandardCharsets.UTF_8)));
         extractor.next = ExtractionResult.partial(invoice(ACCOUNT), List.of("some lines could not be read"));
 
-        // WHEN / THEN the invoice is returned
-        assertTrue(adapter.fetchInvoice(ACCOUNT, INVOICE).isPresent());
+        // WHEN / THEN no invoice is returned and the slice records the extraction_partial reason
+        assertTrue(adapter.fetchInvoice(ACCOUNT, INVOICE).isEmpty());
+        assertBssSlice("error", "extraction_partial");
     }
 
     @Test
@@ -79,9 +79,10 @@ class PdfBssBillingAdapterTest {
         // WHEN the invoice is fetched
         Optional<Invoice> result = adapter.fetchInvoice(ACCOUNT, INVOICE);
 
-        // THEN it fails closed to empty and never calls the extractor (no bytes to parse)
+        // THEN it fails closed to empty, never calls the extractor, and records document_unavailable
         assertTrue(result.isEmpty());
         assertFalse(extractor.called);
+        assertBssSlice("error", "document_unavailable");
     }
 
     @Test
@@ -92,6 +93,7 @@ class PdfBssBillingAdapterTest {
 
         // WHEN / THEN a FAILED extraction degrades to empty (safe escalation, never a 500)
         assertTrue(adapter.fetchInvoice(ACCOUNT, INVOICE).isEmpty());
+        assertBssSlice("error", "extraction_failed");
     }
 
     @Test
@@ -102,6 +104,7 @@ class PdfBssBillingAdapterTest {
 
         // WHEN / THEN it is dropped rather than exposing another account's invoice
         assertTrue(adapter.fetchInvoice(ACCOUNT, INVOICE).isEmpty());
+        assertBssSlice("error", "ownership_mismatch");
     }
 
     @Test
@@ -115,8 +118,15 @@ class PdfBssBillingAdapterTest {
         // THEN the port result is returned, account-scoped, and the slice is recorded
         assertEquals(2, summaries.size());
         assertEquals(ACCOUNT, documents.lastAccount);
-        assertTrue(registry.find("voice_support.slice").tag("slice", Slices.BSS).tag("provider", "pdf")
-                .timer().count() >= 1, "BSS slice must be recorded with provider=pdf");
+        assertBssSlice("success", "n/a");
+    }
+
+    private void assertBssSlice(String outcome, String reason) {
+        assertTrue(registry.find("voice_support.slice")
+                        .tag("slice", Slices.BSS).tag("provider", "pdf")
+                        .tag("outcome", outcome).tag("reason", reason)
+                        .timer().count() >= 1,
+                "BSS slice must be recorded with provider=pdf outcome=" + outcome + " reason=" + reason);
     }
 
     private static Invoice invoice(AccountId owner) {
