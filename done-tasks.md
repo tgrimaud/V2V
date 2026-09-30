@@ -3,6 +3,38 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-30 — TASK-OBS-002 — Structured JSON logs (correlation_id + sanitization), both tiers
+
+**Summary:**
+
+- Made both runtimes **good log emitters** independent of the SRE-owned OTLP collector
+  (TASK-OPS-007 is externally blocked; being a good emitter is not). Env-gated, **default text**
+  so local dev / tests / current pilot behaviour are unchanged.
+- **Voice runtime (Python):** `voice_common/logging_config.py` `JsonLogFormatter` (fixed shape
+  `timestamp/level/logger/message` + optional `correlation_id`/`error`, only fixed keys so an
+  accidental `extra=` can't leak) + `configure_logging()` installing it on root only when
+  `VOICE_LOG_FORMAT=json` (default path a pure no-op). `voice_common/log_context.py` a
+  `correlation_id` `ContextVar` bound on **all four** voice ingress paths — browser WS
+  (`_serve_connection`), **Genesys** (`_serve_genesys_connection`), **WebRTC**
+  (`_start_session_task`, isolated copied context so concurrent calls on the shared loop don't
+  leak ids) and **batch REST** (`handle_turn` scope + `_run_blocking` copying the context into
+  the thread executor). `voice_common/sanitization.py` `scrub_message()` reuses the per-token
+  redactor and additionally redacts the value side of `key=value` tokens; 2048-char cap.
+- **Backend (Java, config-only):** enable Spring Boot 3.4 **native** structured logging via
+  `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`; the existing `CorrelationIdFilter` already sets
+  `correlation_id` + `channel` in the MDC, serialized by the ecs/logstash encoder. `mvn test`
+  unaffected.
+- **Deploy (both tiers, default OFF):** `VOICE_LOG_FORMAT` / `LOGGING_STRUCTURED_FORMAT_CONSOLE`
+  passthrough in the voice + backend compose `environment:` blocks, the Ansible `*.env.j2`
+  templates, and `group_vars` (`voice_log_format` / `backend_log_format`, empty = off). Additive
+  + opt-in exactly like `otel_collector_endpoint`; enabling on the pilot is a deploy toggle.
+
+**Evidence:** voice `unittest` **698** + `behave` 15/43/194 green; `test_logging_config.py`
+(6) + 4 correlation-binding tests. Adversarial review **96/100 (Pass)** —
+`docs/qa/task-obs-002-adversarial-review.md`. Merged into `feat/restart-from-scratch` `--no-ff`
+`59c5b99` (commits `58e6ab2` socle + `f5d2eb9` correlation extension). Follow-up capability:
+turn JSON on per tier when SRE's log pipeline / collector arrives (one env var + rolling redeploy).
+
 ## 2026-09-30 — TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter (ADR-0005 amended)
 
 **Summary:**

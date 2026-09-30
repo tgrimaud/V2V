@@ -8,7 +8,7 @@ export/tracing layer on top of the per-slice instrumentation already built.
 | Task | Title | Classification | Status |
 |---|---|---|---|
 | TASK-OBS-001 | OpenTelemetry export (OTLP) for backend + voice runtime, or accept the residual risk in ADR-0028 | V1 hardening (observability) | ✅ Merged into `feat/restart-from-scratch` (2026-07-29, ff `bfde816..e79964b`) — hybrid; review 93/100 + QA GO; ticket branch deleted |
-| TASK-OBS-002 | Structured JSON logs (correlation_id + sanitization) on both tiers, env-gated default-off — a good log emitter independent of the SRE-owned collector | V1 hardening (observability) | 🔧 Implemented (branch `task/TASK-OBS-002-structured-json-logs`) — voice JSON formatter + per-turn correlation_id contextvar bound on all four ingress paths (WS, Genesys, WebRTC, batch REST) + message/error scrubbing (`VOICE_LOG_FORMAT=json`); backend Spring Boot 3.4 native structured logging carrying MDC `correlation_id`/`channel` (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`); both default text. Voice `unittest` 698 + `behave` 15/43/194 green. Adversarial review 96/100 (Pass); QA pending; not merged |
+| TASK-OBS-002 | Structured JSON logs (correlation_id + sanitization) on both tiers, env-gated default-off — a good log emitter independent of the SRE-owned collector | V1 hardening (observability) | ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `59c5b99`) — voice JSON formatter + per-turn correlation_id contextvar bound on all four ingress paths (WS, Genesys, WebRTC, batch REST) + message/error scrubbing (`VOICE_LOG_FORMAT=json`); backend Spring Boot 3.4 native structured logging carrying MDC `correlation_id`/`channel` (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`); both default text. Voice `unittest` 698 + `behave` 15/43/194 green. Adversarial review 96/100 (Pass) |
 
 ---
 
@@ -138,9 +138,10 @@ Delivered on `task/TASK-OBS-001-otel-export` (from `feat/restart-from-scratch`):
 
 **Parent:** EPIC-010 (Observability, latency and pilot validation)
 **Classification:** V1 hardening (observability)
-**Status:** 🔧 Implemented on `task/TASK-OBS-002-structured-json-logs` (from
-`feat/restart-from-scratch`). Correlation id bound on all four voice ingress paths.
-Adversarial review 96/100 (Pass); QA pending; not merged.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `59c5b99`).
+Correlation id bound on all four voice ingress paths. Adversarial review 96/100 (Pass);
+voice `unittest` 698 + `behave` 15/43/194 green (re-run on the merge tip). Env-gated,
+default OFF on both tiers.
 **Priority:** Medium
 **Branch:** `task/TASK-OBS-002-structured-json-logs`
 **Adversarial review:** 96/100 (Pass) — `docs/qa/task-obs-002-adversarial-review.md`
