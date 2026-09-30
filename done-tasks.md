@@ -3,6 +3,26 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-30 — TASK-WEB-040 — Emit `channel_ingress` slice on the streaming path
+
+**Summary:**
+
+- Closed the one canonical US-036 latency slice that read `NOT MEASURED` on the streaming
+  path: `StreamingSttProcessor` now emits a **`voice.channel.ingress`** span per turn
+  (session-open → finalize window, with `correlation_id`, `channel`, `provider`, `audio_bytes`).
+  Shared by **both** streaming transports (WS + WebRTC).
+- Registered as a **third** `channel_ingress` candidate in `voice_common/pipeline_timing.py`
+  (`web.voice.ingress` batch / `stt.audio.accept` fixture / `voice.channel.ingress` streaming) —
+  first-present-wins keeps batch and streaming distributions from mixing.
+- **Completeness slice only** — NOT part of the mouth-to-ear composite, so the ADR-0029 verdict
+  is unaffected. No-op without a session (a headless / no-speech run stays honestly unmeasured;
+  no fabricated 0).
+
+**Evidence:** +3 tests (processor emit, no-session guard, report mapping); voice `unittest`
+**701** + `behave` 15/43/194 green. Adversarial review **95/100 (Pass)** —
+`docs/qa/task-web-040-adversarial-review.md`. Merged into `feat/restart-from-scratch` `--no-ff`
+`f186131` (commit `6777576`).
+
 ## 2026-09-30 — TASK-OBS-002 — Structured JSON logs (correlation_id + sanitization), both tiers
 
 **Summary:**
