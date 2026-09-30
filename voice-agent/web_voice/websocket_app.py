@@ -54,6 +54,7 @@ from pipecat.utils.security.allowed_origins import is_origin_allowed
 from voice_common.telemetry import TelemetryRecorder
 
 from .envelope import ChannelEnvelope
+from voice_common.log_context import reset_correlation_id, set_correlation_id
 from .session_factory import SessionFactory
 from .session_telemetry import log_telemetry
 from .websocket_framing import WebSocketAudioSerializer
@@ -532,6 +533,10 @@ async def _serve_connection(
     session, _ = factory.build_session(transport, envelope, telemetry)
     _wire_disconnect_drain(transport, session)
     cid = envelope.correlation_id
+    # TASK-OBS-002: bind the correlation id for this connection's context before the pipeline
+    # tasks are created (in session.run()), so every structured log line emitted while the
+    # session runs — including from the child frame-processing tasks — carries it.
+    cid_token = set_correlation_id(cid)
     active.count += 1
     telemetry.record(
         SESSION_STARTED_EVENT, correlation_id=cid, effective_language=envelope.language or "auto"
@@ -559,6 +564,7 @@ async def _serve_connection(
         _emit_gauge(telemetry, cid, active.count, max_sessions, "closed")
         log(telemetry)
         await _safe_stop(session)
+        reset_correlation_id(cid_token)
 
 
 def _wire_disconnect_drain(transport: AiohttpWebsocketTransport, session: Any) -> None:

@@ -36,6 +36,7 @@ from typing import Any, Awaitable, Callable
 from aiohttp import web
 from pipecat.utils.security.allowed_origins import is_origin_allowed
 
+from voice_common.log_context import reset_correlation_id, set_correlation_id
 from voice_common.telemetry import TelemetryRecorder
 
 from .envelope import GENESYS_AUDIO_CONNECTOR_CHANNEL, ChannelEnvelope
@@ -173,17 +174,24 @@ async def _serve_genesys_connection(
         conversation_id=genesys_conversation_id(request), language=default_language
     )
     cid = envelope.correlation_id
-    serializer = _build_serializer(wire_codec, sample_rate, telemetry, cid)
-    transport = _build_transport(websocket, serializer, sample_rate)
-    # farewell (ADR-0035) is wired to the drain teardown + voice.call_end reason (TASK-WEB-042).
-    session, farewell = factory.build_session(transport, envelope, telemetry)
-    control = wire_genesys_call_control(transport, session, farewell, telemetry, cid)
-    active.count += 1
-    record_started(telemetry, cid, envelope, wire_codec, active.count, max_sessions)
-    control.drain.cap = schedule_cap(
-        session, control.drain, telemetry, cid, max_session_s, cap_drain_grace_s, on_cap=control.on_cap
-    )
-    await _run_and_teardown(session, telemetry, cid, active, max_sessions, control, log)
+    # TASK-OBS-002: bind the correlation id for this connection's context BEFORE the pipeline
+    # tasks are created (in session.run()), so every structured log line emitted while the
+    # Genesys call runs — including from the child frame-processing tasks — carries it.
+    cid_token = set_correlation_id(cid)
+    try:
+        serializer = _build_serializer(wire_codec, sample_rate, telemetry, cid)
+        transport = _build_transport(websocket, serializer, sample_rate)
+        # farewell (ADR-0035) is wired to the drain teardown + voice.call_end reason (TASK-WEB-042).
+        session, farewell = factory.build_session(transport, envelope, telemetry)
+        control = wire_genesys_call_control(transport, session, farewell, telemetry, cid)
+        active.count += 1
+        record_started(telemetry, cid, envelope, wire_codec, active.count, max_sessions)
+        control.drain.cap = schedule_cap(
+            session, control.drain, telemetry, cid, max_session_s, cap_drain_grace_s, on_cap=control.on_cap
+        )
+        await _run_and_teardown(session, telemetry, cid, active, max_sessions, control, log)
+    finally:
+        reset_correlation_id(cid_token)
 
 
 async def _run_and_teardown(

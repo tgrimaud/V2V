@@ -81,6 +81,39 @@ def _reason_code(exc: Exception, domain: str, type_codes: dict[type[Exception], 
     return f"{domain}_error"
 
 
+_MAX_LOG_LEN = 2048
+
+
+def scrub_message(message: str) -> str:
+    """Redact secret/path/id tokens from a free-text log message (TASK-OBS-002).
+
+    Applies the same per-token redaction as `sanitize_error` (paths, filenames, UUIDs,
+    secret-prefixed tokens, long numeric/opaque ids) so structured log lines never leak
+    credentials or PII, while ordinary words and plain dates stay readable. Uses a larger
+    cap than the error-reason path because log lines are legitimately longer.
+    """
+    if not message:
+        return message
+    redacted = " ".join(_scrub_log_token(token) for token in message.split()).strip()
+    if len(redacted) > _MAX_LOG_LEN:
+        return redacted[:_MAX_LOG_LEN].rstrip() + "..."
+    return redacted
+
+
+def _scrub_log_token(token: str) -> str:
+    """Redact a whitespace token, also covering `key=value` pairs common in log lines.
+
+    `sanitize_error` splits on whitespace only, so a `key=secret` token would slip through.
+    For logs we additionally redact the value side of a `key=value` token, keeping the key
+    readable. Leaves `sanitize_error`'s own tokenization untouched (this helper is log-only).
+    """
+    if "=" in token:
+        key, sep, value = token.partition("=")
+        if value:
+            return f"{key}{sep}{_redact_token(value)}"
+    return _redact_token(token)
+
+
 def _redact(message: str) -> str:
     tokens = [_redact_token(token) for token in message.split()]
     redacted = " ".join(tokens).strip()

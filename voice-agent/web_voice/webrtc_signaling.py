@@ -19,6 +19,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from voice_common.log_context import set_correlation_id
 from voice_common.telemetry import TelemetryRecorder
 
 from .async_loop import BackgroundEventLoop
@@ -172,6 +173,20 @@ class WebRtcSignalingService:
         )
         return self._answer_payload(record.connection.get_answer(), record.envelope)
 
+    def _start_session_task(self, session: Any, correlation_id: str) -> Any:
+        """Start the session's `run()` in a context carrying its correlation id (TASK-OBS-002).
+
+        Every structured log line from this call's pipeline tasks is then stamped with the
+        id. All WebRTC sessions share one background loop, so an isolated copied context (not
+        a process-wide set) keeps each concurrent call's id from leaking into another's.
+        """
+        import asyncio
+        import contextvars
+
+        ctx = contextvars.copy_context()
+        ctx.run(set_correlation_id, correlation_id)
+        return asyncio.get_running_loop().create_task(session.run(), context=ctx)
+
     async def _new_session(self, body: dict) -> dict:
         import asyncio
 
@@ -205,7 +220,7 @@ class WebRtcSignalingService:
             self._emit_active_gauge(telemetry, outcome="accepted")
             self._wire_farewell(record)
             answer = self._answer_payload(connection.get_answer(), envelope)
-            record.task = asyncio.ensure_future(session.run())
+            record.task = self._start_session_task(session, envelope.correlation_id)
             return answer
         finally:
             # Release the reservation once the session is registered (or the offer failed).

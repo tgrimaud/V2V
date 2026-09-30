@@ -71,6 +71,11 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}"
       OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-0.0}"
+      # --- Structured JSON logs (TASK-OBS-002): Spring Boot 3.4 native structured logging,
+      # relaxed-binds to logging.structured.format.console. Empty (default) = human-readable
+      # text (local dev unchanged); set to `ecs` (or `logstash`) to emit one JSON line per log
+      # carrying the MDC correlation_id + channel, mirroring the voice runtime's VOICE_LOG_FORMAT.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: "${LOGGING_STRUCTURED_FORMAT_CONSOLE:-}"
       # --- JVM tuning without a rebuild (sized to share the 8 GB VM with ollama) ---
       JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}"
       # Deep readiness includes the embedding hop (BUG-014): a broken ollama path returns

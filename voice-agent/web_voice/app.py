@@ -15,6 +15,7 @@ stdlib server got the same isolation for free via one thread per request.
 
 from __future__ import annotations
 
+import contextvars
 import functools
 import json
 from typing import Any, Callable
@@ -22,6 +23,7 @@ from typing import Any, Callable
 from aiohttp import web
 
 from stt_validation.models import SttOutcome
+from voice_common.log_context import correlation_id_scope
 from voice_common.telemetry import TelemetryRecorder, Timer
 
 from .error_response import SessionCapacityError, client_error_body
@@ -89,11 +91,19 @@ async def _read_capped_body(request: web.Request) -> bytes | None:
 
 
 async def _run_blocking(func: Callable, *args, **kwargs):
-    """Off-load a blocking processor/signaling call to a thread so the loop stays free."""
+    """Off-load a blocking processor/signaling call to a thread so the loop stays free.
+
+    TASK-OBS-002: `run_in_executor` does NOT copy the caller's context into the worker
+    thread, so the correlation-id contextvar would be lost for logs emitted inside the
+    blocking call. Capture the current context and run the call under it so those log lines
+    stay stamped with the turn's correlation id.
+    """
     import asyncio
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+    ctx = contextvars.copy_context()
+    call = functools.partial(ctx.run, functools.partial(func, *args, **kwargs))
+    return await loop.run_in_executor(None, call)
 
 
 def make_app(
@@ -194,26 +204,31 @@ def make_app(
         if audio is None:
             return _json_response(413, {"error": "audio_too_large"})
         envelope = _envelope_from_query(request.query_string)
-        telemetry = TelemetryRecorder()
-        result = await _run_blocking(
-            processor.run_turn, audio, envelope, telemetry, received_ms=received_ms
-        )
-        transcript = result.transcript_result
-        if transcript is None or transcript.outcome is not SttOutcome.SUCCESS:
+        # TASK-OBS-002: bind the turn's correlation id for the handler + the blocking calls
+        # (propagated into the executor by _run_blocking) so structured logs are stamped.
+        with correlation_id_scope(envelope.correlation_id):
+            telemetry = TelemetryRecorder()
+            result = await _run_blocking(
+                processor.run_turn, audio, envelope, telemetry, received_ms=received_ms
+            )
+            transcript = result.transcript_result
+            if transcript is None or transcript.outcome is not SttOutcome.SUCCESS:
+                _log_turn(telemetry)
+                return _json_response(502, _turn_stt_error(transcript, envelope))
+            response = result.tts_response
+            if response is None or response.wav is None:
+                _log_turn(telemetry)
+                return _json_response(502, _turn_tts_error(response, envelope))
+            full = _full_turn_response(result)
+            send = Timer()
+            reply = _json_response(
+                200, _turn_success_body(transcript, result.answer_result, full.wav)
+            )
+            await _run_blocking(
+                processor.record_egress, full, envelope, telemetry, sent_ms=send.elapsed_ms()
+            )
             _log_turn(telemetry)
-            return _json_response(502, _turn_stt_error(transcript, envelope))
-        response = result.tts_response
-        if response is None or response.wav is None:
-            _log_turn(telemetry)
-            return _json_response(502, _turn_tts_error(response, envelope))
-        full = _full_turn_response(result)
-        send = Timer()
-        reply = _json_response(200, _turn_success_body(transcript, result.answer_result, full.wav))
-        await _run_blocking(
-            processor.record_egress, full, envelope, telemetry, sent_ms=send.elapsed_ms()
-        )
-        _log_turn(telemetry)
-        return reply
+            return reply
 
     async def handle_webrtc_offer(request: web.Request) -> web.StreamResponse:
         if _is_chunked(request):

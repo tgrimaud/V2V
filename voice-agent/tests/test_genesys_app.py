@@ -195,6 +195,39 @@ class GenesysHandlerLifecycleTest(GenesysHandlerServeMixin):
         self.assertEqual(logged, [shared])
         await websocket.close()
 
+    async def test_correlation_id_is_bound_in_context_during_the_call(self) -> None:
+        # GIVEN a session that records the correlation id in scope when run() is invoked
+        from voice_common.log_context import get_correlation_id
+
+        seen: dict[str, str | None] = {}
+
+        class _CidSession(_FakeSession):
+            async def run(self) -> None:
+                seen["run"] = get_correlation_id()
+                await super().run()
+
+        class _CidFactory(_FakeFactory):
+            def build_session(self, transport, envelope, telemetry):
+                session = _CidSession()
+                self.sessions.append(session)
+                self.envelopes.append(envelope)
+                return session, None
+
+        factory = _CidFactory()
+        handler = make_genesys_handler(
+            factory, authenticator=_ACCEPT_ALL, telemetry_factory=TelemetryRecorder,
+            log=lambda _r: None,
+        )
+        client = await self._serve(handler)
+        # WHEN a Genesys call opens
+        websocket = await client.ws_connect("/genesys/audiohook?conversationId=conv-cid")
+        await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
+        # THEN run() saw the call's correlation id (TASK-OBS-002), matching the envelope
+        self.assertIsNotNone(seen.get("run"))
+        self.assertEqual(seen["run"], factory.envelopes[0].correlation_id)
+        factory.sessions[0].release()
+        await websocket.close()
+
     async def test_conversation_id_becomes_the_deterministic_one_trace_traceparent(self) -> None:
         # GIVEN a handler and a call whose Genesys conversationId is known
         shared = TelemetryRecorder()
