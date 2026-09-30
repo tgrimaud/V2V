@@ -8,6 +8,63 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 | TASK-DOC-001 | Full-branch code review after Sprint 5 | Done (2026-07-15) — tracked in `backlog-index.md` |
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
 | TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | ✅ Merged into `feat/restart-from-scratch` (2026-08-07) — spawned spike TASK-WEB-025 |
+| TASK-DOC-009 | Refresh the general target solution diagram + add a simplified version | 🚧 Implemented (2026-09-30, branch `task/TASK-DOC-009-refresh-target-architecture-diagram`) — awaiting validation |
+
+---
+
+## TASK-DOC-009 - Refresh The Target Solution Diagram + Add A Simplified Version
+
+**Parent:** EPIC-001 (Product and architecture baseline)
+**Related decisions:** ADR-0047 (mono-port async voice runtime), ADR-0051 (OpenAI `gpt-5`
+default LLM), ADR-0048 (bilingual fr/en KB), ADR-0041 (Liquibase schema), ADR-0050/0055
+(customer identity / account reference), ADR-0005 (billing-api + PDF), ADR-0040/0043/0049
+(Genesys media/escalation), TASK-OBS-002 (structured JSON logs)
+**Classification:** Documentation (architecture diagram) — not runtime-affecting
+**Status:** 🚧 Implemented (2026-09-30) — awaiting user validation, then commit/push; no merge
+until the user explicitly asks.
+**Priority:** Medium
+**Branch:** `task/TASK-DOC-009-refresh-target-architecture-diagram`
+
+### Trigger
+
+The general target solution diagram (`docs/architecture/diagrams/target-v1-solution.drawio`)
+was last edited on 2026-08-07 and had drifted from the ~15 architecture decisions taken
+since (notably ADR-0047 mono-port runtime, ADR-0051 OpenAI default LLM, ADR-0048 bilingual
+KB, ADR-0050/0055 identity, and the TASK-OBS-002 observability work). No PNG/SVG export was
+committed, so the diagram could not be viewed without opening draw.io.
+
+### Scope
+
+- Refresh `target-v1-solution.drawio` labels to the current target: mono-port async voice
+  runtime on `:8090` (WS + WebRTC + `/genesys/audiohook`, ADR-0047); answer engine on `:8080`
+  (`/converse` + `/converse-stream` SSE); default LLM OpenAI `gpt-5` (ADR-0051) with
+  Mistral/Ollama alternatives; Postgres + pgvector bilingual fr/en KB + 768-dim embeddings
+  (ADR-0048, Liquibase ADR-0041); `billing-api` REST + PDF via `bill-run-documents` (ADR-0005);
+  OpenTelemetry (OTLP opt-in) + structured JSON logs with `correlation_id` (TASK-OBS-002).
+- Add a customer-identity node (channel ANI via Genesys or supplied `account_reference`,
+  ADR-0050/0055) and an "applied decisions" note listing the reflected ADRs/tasks.
+- Create a new simplified sibling `target-v1-solution-simplified.drawio` — a high-level
+  left-to-right stakeholder flow (client → voice edge → answer engine → data/AI/escalation)
+  with a colour legend. Authored in **English** (docs-in-English rule).
+- Export both to PNG (`target-v1-solution.png`, `target-v1-solution-simplified.png`) and update
+  `docs/architecture/diagrams/README.md` (add both rows, refresh the branch note, document the
+  PNG export command).
+
+### Out Of Scope
+
+- Any code, port, adapter or endpoint change; no OpenTelemetry change (docs-only).
+- Rewriting the older component/class diagrams (`application-components`, `architecture-overview`,
+  `hexagonal-architecture`, `voice-streaming-sequence`) — tracked separately if needed.
+
+### Acceptance Criteria
+
+- `target-v1-solution.drawio` reflects the current target decisions above; both `.drawio` files
+  are well-formed (`python3 -c "import xml.dom.minidom as m; m.parse(...)"` passes).
+- A simplified diagram exists and renders legibly (no overlapping labels / detached arrows,
+  verified from the exported PNG).
+- Both PNG exports are committed and referenced from the diagrams README.
+- `git diff --check` passes; the simplified diagram is authored in English (docs-in-English
+  rule); the detailed `target-v1-solution.drawio` stays French to match the existing artifact.
 
 ---
 

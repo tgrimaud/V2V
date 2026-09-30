@@ -25,13 +25,13 @@
         <mxCell id="realtime" value="Edge temps reel voix" style="swimlane;startSize=30;fillColor=#fff0e6;strokeColor=#d79b00;fontStyle=1;html=1;" vertex="1" parent="1">
           <mxGeometry x="330" y="90" width="300" height="410" as="geometry" />
         </mxCell>
-        <mxCell id="ingress" value="Ingress / LB&lt;br&gt;TLS + WebSocket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
+        <mxCell id="ingress" value="Ingress / HAProxy&lt;br&gt;TLS + WS/HTTP (VIP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
           <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="telephony" value="Genesys Cloud CX&lt;br&gt;Audio Connector (AudioHook) - Twilio fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="realtime">
           <mxGeometry x="30" y="140" width="150" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="pipecat" value="Pipecat&lt;br&gt;orchestration voix temps reel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
+        <mxCell id="pipecat" value="Voice runtime (Pipecat)&lt;br&gt;serveur async mono-port :8090&lt;br&gt;WS + WebRTC + /genesys/audiohook (ADR-0047)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
           <mxGeometry x="30" y="230" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="gradium" value="Adapters Gradium&lt;br&gt;STT + TTS de reference" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="realtime">
@@ -40,7 +40,7 @@
         <mxCell id="backend" value="Backend applicatif - coeur produit agnostique" style="swimlane;startSize=30;fillColor=#e8f5e9;strokeColor=#82b366;fontStyle=1;html=1;" vertex="1" parent="1">
           <mxGeometry x="670" y="90" width="430" height="580" as="geometry" />
         </mxCell>
-        <mxCell id="conversation_api" value="API conversation&lt;br&gt;SSE / REST / WS bridge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
+        <mxCell id="conversation_api" value="Answer engine (backend :8080)&lt;br&gt;/converse + /converse-stream (SSE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
           <mxGeometry x="30" y="50" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="orchestrator" value="Orchestrateur / graph&lt;br&gt;conversationnel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="backend">
@@ -76,7 +76,7 @@
         <mxCell id="kb_connectors" value="Connecteurs KB&lt;br&gt;Markdown / PDF / Confluence / DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
           <mxGeometry x="30" y="270" width="150" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="vector_store" value="Postgres + pgvector&lt;br&gt;chunks KB + embeddings" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+        <mxCell id="vector_store" value="Postgres + pgvector&lt;br&gt;KB bilingue fr/en + embeddings 768&lt;br&gt;(ADR-0048, Liquibase ADR-0041)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
           <mxGeometry x="230" y="265" width="120" height="75" as="geometry" />
         </mxCell>
         <mxCell id="redis" value="Redis&lt;br&gt;sessions + cache semantique" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
@@ -106,7 +106,7 @@
         <mxCell id="llm_port" value="LlmPort&lt;br&gt;generation / reformulation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
           <mxGeometry x="30" y="55" width="150" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="llm_providers" value="LLM providers&lt;br&gt;Mistral / Ollama / autre" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
+        <mxCell id="llm_providers" value="LLM providers&lt;br&gt;OpenAI gpt-5 (defaut, ADR-0051)&lt;br&gt;Mistral (pilote) / Ollama" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
           <mxGeometry x="250" y="55" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="embedding_port" value="EmbeddingPort&lt;br&gt;Ollama aujourd'hui" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="ai">
@@ -118,7 +118,7 @@
         <mxCell id="ops" value="Exploitation, securite et SLO" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;html=1;" vertex="1" parent="1">
           <mxGeometry x="1140" y="710" width="400" height="230" as="geometry" />
         </mxCell>
-        <mxCell id="otel" value="OpenTelemetry&lt;br&gt;spans pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
+        <mxCell id="otel" value="OpenTelemetry (OTLP opt-in)&lt;br&gt;+ logs JSON correlation_id&lt;br&gt;(TASK-OBS-002)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
           <mxGeometry x="30" y="55" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="dashboards" value="Grafana / Tempo / Loki&lt;br&gt;SLO first audio" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="ops">
@@ -133,6 +133,15 @@
         <mxCell id="legend" value="&lt;b&gt;Legende&lt;/b&gt;&lt;br&gt;Vert = coeur produit&lt;br&gt;Orange = edge voix&lt;br&gt;Jaune = donnees&lt;br&gt;Violet = IA/voix interchangeable&lt;br&gt;Rouge = externe / humain&lt;br&gt;Gris = exploitation" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="40" y="830" width="250" height="140" as="geometry" />
         </mxCell>
+        <mxCell id="identity" value="Identite client&lt;br&gt;canal (ANI Genesys) ou account_reference fourni&lt;br&gt;(ADR-0050/0055)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="data">
+          <mxGeometry x="30" y="485" width="340" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="e_identity_bssport" value="resout le client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="data" source="identity" target="bss_port">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="updates_note" value="&lt;b&gt;Decisions appliquees (a jour 2026-09-30)&lt;/b&gt;&lt;br&gt;ADR-0047 serveur voix async mono-port :8090 (WS/WebRTC/AudioHook)&lt;br&gt;ADR-0053 WebSocket interimaire + serveur stdlib retires&lt;br&gt;ADR-0051 OpenAI gpt-5 = LLM par defaut (Mistral pin pilote)&lt;br&gt;ADR-0048 KB bilingue fr/en + filtre langue&lt;br&gt;ADR-0050/0054/0055 identite client + periode facture + routing billing sur /converse&lt;br&gt;ADR-0005 extraction PDF facture deterministe avant explication LLM&lt;br&gt;ADR-0040/0043/0049 Genesys Audio Connector = plan media V2V (pilote v0.8.0)&lt;br&gt;TASK-OBS-002 logs JSON structures + correlation_id (2 tiers)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fontSize=11;fillColor=#eaf4ea;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="310" y="810" width="600" height="160" as="geometry" />
+        </mxCell>
         <mxCell id="e_user_phone" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#666666;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="user" target="phone">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -145,7 +154,7 @@
         <mxCell id="e_phone_telephony" value="audio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="phone" target="telephony">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_web_ingress" value="WebSocket" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_voice" target="ingress">
+        <mxCell id="e_web_ingress" value="WebRTC / WS (:8090)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_voice" target="ingress">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_text_ingress" value="texte" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="web_text" target="ingress">
@@ -187,7 +196,7 @@
         <mxCell id="e_comparison_bssport" value="lecture BSS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="comparison" target="bss_port">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_bssport_bss" value="REST / SOAP / SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="bss_port" target="bss">
+        <mxCell id="e_bssport_bss" value="billing-api REST + PDF&#10;(bill-run-documents, ADR-0005)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="bss_port" target="bss">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_bssport_snapshot" value="snapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#d6b656;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="bss_port" target="billing_snapshot">
