@@ -123,6 +123,16 @@ class PipelineTimingReportTest(unittest.TestCase):
             self.assertIsNone(by_slice[name].report)
             self.assertTrue(by_slice[name].note)
 
+    def test_channel_ingress_measured_from_streaming_span(self) -> None:
+        # GIVEN a streaming (WS/WebRTC) turn that emitted the TASK-WEB-040 ingress span
+        # (the batch web.voice.ingress is absent on this path)
+        report = PipelineTimingReport.from_spans([_span("voice.channel.ingress", 640.0)])
+        by_slice = {s.slice: s for s in report.slices}
+
+        # THEN the channel_ingress slice is measured from the streaming span
+        self.assertTrue(by_slice[CHANNEL_INGRESS].measured)
+        self.assertEqual(by_slice[CHANNEL_INGRESS].report.p50_ms, 640.0)
+
     def test_backend_slice_is_measured_from_first_token_span(self) -> None:
         # GIVEN a reviewed sample carrying the backend first-token span (TASK-WEB-003-E)
         spans = [_span("backend.first_token", float(value)) for value in range(1, 21)]
