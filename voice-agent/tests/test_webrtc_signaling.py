@@ -222,6 +222,39 @@ class WebRtcSignalingCleanupTest(unittest.IsolatedAsyncioTestCase):
 
 
 @unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
+class WebRtcCorrelationContextTest(unittest.IsolatedAsyncioTestCase):
+    """TASK-OBS-002: the session run() task is started in a context carrying the call's
+    correlation id, so every structured log line from its pipeline tasks is stamped with it —
+    without leaking the id into the shared background loop's own context."""
+
+    def _service(self):
+        from web_voice.webrtc_signaling import WebRtcSignalingService
+
+        return WebRtcSignalingService(
+            ingress=_FakeIngress(), egress=_FakeEgress(), backend=_FakeBackend(),
+            loop=SimpleNamespace(), log=lambda _t: None,
+        )
+
+    async def test_session_task_runs_under_the_call_correlation_id(self) -> None:
+        from voice_common.log_context import get_correlation_id, set_correlation_id
+
+        seen: dict[str, str | None] = {}
+
+        class _CidSession:
+            async def run(self) -> None:
+                seen["run"] = get_correlation_id()
+
+        # GIVEN an unrelated id bound in the current (background-loop) context
+        set_correlation_id("other-call")
+        # WHEN the session task is started for a call whose correlation id is known
+        task = self._service()._start_session_task(_CidSession(), "corr-web")
+        await task
+        # THEN run() saw the call's id, and the outer context id is untouched (no leak)
+        self.assertEqual(seen["run"], "corr-web")
+        self.assertEqual(get_correlation_id(), "other-call")
+
+
+@unittest.skipUnless(WEBRTC, "pipecat-ai[webrtc] not installed")
 class WebRtcLanguageSelectionTest(unittest.TestCase):
     """US-042: the per-session streaming STT/TTS providers are selected from the offer
     language carried by the session envelope (fr/en), falling back to the default."""

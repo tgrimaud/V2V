@@ -126,6 +126,43 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["provider"], "stub-backend")
         self.assertTrue(data["correlation_id"])
 
+    async def test_run_blocking_propagates_correlation_context_into_executor(self) -> None:
+        # GIVEN a correlation id bound in the caller's context (TASK-OBS-002)
+        from web_voice.app import _run_blocking
+        from voice_common.log_context import correlation_id_scope, get_correlation_id
+
+        # WHEN a blocking call is off-loaded to the thread executor under that scope
+        with correlation_id_scope("corr-batch"):
+            seen = await _run_blocking(get_correlation_id)
+        # THEN the worker thread inherited the id (run_in_executor does not copy it by default)
+        self.assertEqual(seen, "corr-batch")
+
+    async def test_turn_binds_the_correlation_id_for_the_processor_call(self) -> None:
+        # GIVEN a processor that records the correlation id in scope when run_turn is invoked
+        from types import SimpleNamespace
+        from voice_common.log_context import get_correlation_id
+
+        captured: dict[str, str | None] = {}
+
+        class _CapturingProcessor:
+            def run_turn(self, audio, envelope, telemetry, received_ms):  # noqa: ANN001
+                captured["bound"] = get_correlation_id()
+                captured["envelope"] = envelope.correlation_id
+                return SimpleNamespace(transcript_result=None)
+
+            def record_egress(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+                pass
+
+        client = TestClient(TestServer(make_app(_CapturingProcessor())))
+        await client.start_server()
+        self.addAsyncCleanup(client.close)
+        # WHEN a turn is posted
+        resp = await client.post(TURN_ROUTE, data=b"\x01\x02" * 100)
+        # THEN the processor ran with the turn's correlation id bound (even in the executor)
+        self.assertEqual(resp.status, 502)  # transcript None -> STT error path
+        self.assertIsNotNone(captured["bound"])
+        self.assertEqual(captured["bound"], captured["envelope"])
+
     async def test_turn_rejects_chunked_body_with_411(self) -> None:
         client = await self._client()
         resp = await client.post(TURN_ROUTE, data=_agen())
