@@ -22,6 +22,8 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingServic
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.EirBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEnquiryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.FixtureBillRunDocumentAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.PdfBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.domain.model.Invoice;
@@ -48,10 +50,12 @@ public class BillingConfig {
 
     private static final Logger log = LoggerFactory.getLogger(BillingConfig.class);
 
-    // BSS billing source (ADR-0004). `mock` (default) = in-memory fixtures customer-eir-001..006 so
-    // the billing chain runs before live access; `eir` = the real read-only adapter over the two Eir
-    // services (TASK-BE-047), enabled once real access is validated. Selected via
-    // VOICE_SUPPORT_BILLING_BSS_SOURCE.
+    // BSS billing source (ADR-0004/0005). `mock` (default) = in-memory fixtures customer-eir-001..006
+    // so the billing chain runs before live access; `eir` = the real read-only adapter over the two
+    // Eir services (structured JSON, TASK-BE-047); `pdf` = the PDF evidence path (TASK-BE-062) that
+    // downloads the invoice document and parses it via InvoicePdfExtractorPort, regenerating the same
+    // domain Invoice. All three sit behind BssBillingPort so switching is a single config change,
+    // VOICE_SUPPORT_BILLING_BSS_SOURCE, with no impact on the comparison engine.
     // Eir BSS settings (used only when source=eir). Defaults keep the mock source; the galaxion-user-*
     // headers default to SYSTEM for the pilot while identity -> header derivation is a follow-up
     // (coordination P4). Base URLs / currency / timeouts are env-tunable (VOICE_SUPPORT_BILLING_BSS_*).
@@ -70,12 +74,19 @@ public class BillingConfig {
     }
 
     @Bean
-    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry) {
+    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry,
+            InvoicePdfExtractorPort invoicePdfExtractorPort) {
         if ("eir".equalsIgnoreCase(properties.source())) {
             log.info("[BILLING-BSS] source=eir — enquiry={} service={} currency={} user-type={}",
                     properties.enquiryBaseUrl(), properties.serviceBaseUrl(),
                     properties.currency(), properties.userType());
             return eirAdapter(properties, telemetry);
+        }
+        if ("pdf".equalsIgnoreCase(properties.source())) {
+            log.info("[BILLING-BSS] source=pdf — invoice PDFs (bill-run-documents) parsed by the PDF extractor "
+                    + "(fixture document source; real REST adapter deferred, OQ-003)");
+            return new PdfBssBillingAdapter(
+                    new FixtureBillRunDocumentAdapter(mockInvoices()), invoicePdfExtractorPort, telemetry);
         }
         if (!"mock".equalsIgnoreCase(properties.source())) {
             log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());

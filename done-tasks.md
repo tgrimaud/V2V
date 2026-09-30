@@ -3,6 +3,29 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-30 — TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter (ADR-0005 amended)
+
+**Summary:**
+
+- Promoted the invoice-PDF path from an unused inline "fallback seam" to a **first-class, selectable
+  implementation of the same `BssBillingPort`** the structured JSON adapter uses. The comparison /
+  confidence / composer chain is unchanged whichever source is active — switching is one config change:
+  `VOICE_SUPPORT_BILLING_BSS_SOURCE` ∈ `{mock, eir, pdf}`.
+- **New out-port `BillRunDocumentPort`** (`listDocuments` + `download → PdfSource`, mapping Galaxion
+  `bill-run-documents/search` + `/{id}/download`) — the "fetch" half. **`PdfBssBillingAdapter`** composes it
+  with the existing `InvoicePdfExtractorPort` and **regenerates the same domain `Invoice`** the JSON adapter
+  returns. LLM never reads the PDF (DEC-002). Fail-closed: empty download / `FAILED` extraction →
+  `Optional.empty` (safe escalation, never 500); `PARTIAL` kept; defense-in-depth ownership check (BR-002-1);
+  BSS hop timed `provider=pdf`.
+- **`FixtureBillRunDocumentAdapter`** (same in-memory fixtures) makes `source=pdf` exercisable now — the
+  synthetic `PdfSource` reference = invoice period id (the key the fixture extractor indexes on).
+- **Deferred:** the real REST `BillRunDocumentPort` adapter — `bill-run-documents/search` returns no
+  period/amount (`missing-inputs.md`) and live access is unproven (OQ-003). Register it behind the same port
+  + base URL later; nothing else changes. Real PDFBox parser also still deferred (`pdf.source=pdfbox`).
+- **Tests.** Backend **673** + ArchUnit/ContextBoundary/Naming green: `PdfBssBillingAdapterTest` (6, incl.
+  fail-closed + ownership), `FixtureBillRunDocumentAdapterTest` (5, incl. end-to-end download→fixture-extractor
+  round-trip). ADR-0005 amended; ticket `tasks/billing-tasks.md` + backlog-index row. Not merged.
+
 ## 2026-09-29 — BUG-027 — `/converse-stream` did not route to billing (voice UI ignored invoice data)
 
 **Summary:**

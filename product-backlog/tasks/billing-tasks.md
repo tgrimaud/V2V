@@ -696,3 +696,51 @@ for later, never the primary path). See ADR-0055.
 `docs/qa/task-be-061-adversarial-review.md`. Residual (accepted): pilot low-bar identity trust
 (OQ-001); session-locked identity (reconnect to switch account); route-split metric is a
 non-blocking follow-up.
+
+---
+
+## TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter
+
+**Type:** Technical task (backend billing infrastructure) — ADR-0005 amended
+**Status:** 🚧 Implemented (2026-09-30) on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` — backend **673** green + ArchUnit. Not merged (user is final validator).
+**Priority:** High
+**Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-040/047 (`BssBillingPort`, structured JSON adapter), ADR-0004/0005
+**Relates to:** OQ-003 (real BSS access), `missing-inputs.md` (`bill-run-documents/search` response gap)
+
+### Context
+
+The invoice-comparison engine already depends only on the outbound port `BssBillingPort`
+(`listInvoices` + `fetchInvoice` → domain `Invoice`), with two implementations: `InMemoryBssBillingAdapter`
+(mock fixtures) and `EirBssBillingAdapter` (real read-only **structured JSON** over the two Eir services).
+A PDF extractor (`InvoicePdfExtractorPort`, ADR-0005) existed but was **wired to nothing** at runtime — the
+PDF was framed as an inline "fallback seam". Requirement (2026-09-30): make PDF retrieval a **first-class,
+selectable `BssBillingPort` implementation** so we can flip between "structured API → JSON" and "API →
+PDF → parse → same structure" with a single config change, knowing the **real APIs can't be tested yet**.
+
+### Decision / Implementation
+
+1. **New outbound port `BillRunDocumentPort`** (`domain/port/out`): `listDocuments(account)` +
+   `download(account, invoiceId) → Optional<PdfSource>` — the "fetch" half, mapping Galaxion
+   `GET /bill-run-documents/search` and `GET /bill-run-documents/{id}/download`. Parsing stays in
+   `InvoicePdfExtractorPort` (the two concerns remain separable).
+2. **`PdfBssBillingAdapter implements BssBillingPort`**: `fetchInvoice` = download → `InvoicePdfExtractorPort.extract` → **regenerates the same domain `Invoice`** the JSON adapter returns. The LLM never reads the PDF (DEC-002). Fail-closed: empty download or `FAILED` extraction → `Optional.empty` (safe escalation, never a 500); `PARTIAL` still carries an invoice (confidence gate decides downstream); defense-in-depth **ownership check** drops a foreign-account invoice (BR-002-1). BSS network hop timed as its own slice (`provider=pdf`).
+3. **Selection = one switch.** `VOICE_SUPPORT_BILLING_BSS_SOURCE` ∈ `{mock, eir, pdf}` in `BillingConfig`. The comparison/confidence/composer chain is **unchanged** whichever source is active.
+4. **`FixtureBillRunDocumentAdapter`** (backed by the same in-memory fixtures) makes `source=pdf` exercisable **now**: the synthetic `PdfSource` carries the invoice **period id** as its reference (what `FixtureInvoicePdfExtractorAdapter` indexes on) + non-empty bytes.
+
+### Acceptance (met)
+
+- `source=pdf` runs the full download → extract → `Invoice` path over the fixtures; the billing route
+  returns the same grounded comparison as `source=mock`. ✅
+- Fail-closed branches locked (empty download, FAILED extraction, ownership mismatch) + PARTIAL kept. ✅
+- Switching source is a single env change, no comparison-engine change. ✅
+- Tests: `PdfBssBillingAdapterTest` (6), `FixtureBillRunDocumentAdapterTest` (5, incl. end-to-end
+  download→fixture-extractor round-trip). Backend 673 + ArchUnit green. ✅
+- ADR-0005 amended. ✅
+
+### Out Of Scope / Deferred
+
+- **Real REST `BillRunDocumentPort` adapter** (`RestBillRunDocumentAdapter`): blocked because
+  `bill-run-documents/search` does **not** return period/amount (can't build `InvoiceSummary` from search
+  alone — `missing-inputs.md`) and live access is unproven (OQ-003). When resolved, register it behind the
+  same port + set the base URL; nothing else changes.
+- **Real PDF parser** (PDFBox) behind `InvoicePdfExtractorPort` (`pdf.source=pdfbox`) — still fixture.

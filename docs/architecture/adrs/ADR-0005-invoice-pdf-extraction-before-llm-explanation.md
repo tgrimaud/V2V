@@ -19,6 +19,23 @@ Accepted
 > but it may reduce the extractor to a secondary path. Deferred pending the access
 > route and field semantics (OQ-003).
 
+> **Update (2026-09-30, TASK-BE-062) — PDF path promoted to a selectable `BssBillingPort`
+> adapter.** The PDF evidence path is no longer an inline "fallback seam" called from inside
+> the explanation service. It is now a **first-class, selectable implementation of the same
+> `BssBillingPort`** the structured JSON adapter implements, so the comparison/confidence/composer
+> chain is unchanged whichever source is active. Selection is a single config switch,
+> `VOICE_SUPPORT_BILLING_BSS_SOURCE` ∈ `{mock, eir, pdf}`. The `pdf` source uses
+> `PdfBssBillingAdapter`, which composes a new outbound port `BillRunDocumentPort`
+> (`listDocuments` + `download` → `PdfSource`, mapping Galaxion `GET /bill-run-documents/search`
+> and `GET /bill-run-documents/{id}/download`) with the existing `InvoicePdfExtractorPort`
+> (`PdfSource` → `ExtractionResult` → `Invoice`). The LLM still never reads the PDF (DEC-002);
+> parsing is deterministic and lands in `PdfBssBillingAdapter`. Fail-closed: an empty download or a
+> `FAILED` extraction → `Optional.empty` (safe escalation, never a 500), plus a defense-in-depth
+> ownership check (BR-002-1). A `FixtureBillRunDocumentAdapter` (backed by the same in-memory
+> invoice fixtures) makes `source=pdf` exercisable now; the **real REST `BillRunDocumentPort`
+> adapter is deferred** because `bill-run-documents/search` does not return period/amount
+> (`missing-inputs.md`) and live access is unproven (OQ-003).
+
 ## Context
 
 The identified Galaxion billing path provides invoice documents through
