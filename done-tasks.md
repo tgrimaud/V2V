@@ -25,6 +25,10 @@
 - **Tests.** Backend **673** + ArchUnit/ContextBoundary/Naming green: `PdfBssBillingAdapterTest` (6, incl.
   fail-closed + ownership), `FixtureBillRunDocumentAdapterTest` (5, incl. end-to-end download→fixture-extractor
   round-trip). ADR-0005 amended; ticket `tasks/billing-tasks.md` + backlog-index row. Not merged.
+- **Adversarial review 90/100 (Pass)** — `docs/qa/task-be-062-adversarial-review.md`. No blocking finding.
+  Residual (accepted, both latent — real parser deferred): `PARTIAL` extraction collapsed to complete at
+  the `BssBillingPort` boundary (BR-003); no per-extraction outcome telemetry. Close both before a real
+  PDFBox parser is enabled.
 
 ## 2026-09-29 — BUG-027 — `/converse-stream` did not route to billing (voice UI ignored invoice data)
 

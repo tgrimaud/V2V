@@ -744,3 +744,10 @@ PDF → parse → same structure" with a single config change, knowing the **rea
   alone — `missing-inputs.md`) and live access is unproven (OQ-003). When resolved, register it behind the
   same port + set the base URL; nothing else changes.
 - **Real PDF parser** (PDFBox) behind `InvoicePdfExtractorPort` (`pdf.source=pdfbox`) — still fixture.
+
+**Adversarial review 90/100 (Pass, 2026-09-30)** — no blocking finding; full review at
+`docs/qa/task-be-062-adversarial-review.md`. Residual (accepted, both **latent** — not triggered by
+current fixtures, real parser deferred): (1) `PARTIAL` extraction status is collapsed to a complete
+`Invoice` at the `BssBillingPort` boundary (BR-003) — decide fail-closed vs. thread-the-status before a
+real PDFBox parser; (2) no per-extraction outcome telemetry (a `FAILED` extraction logs the BSS slice as
+`success`). Both must be closed **before** enabling a real parser.
