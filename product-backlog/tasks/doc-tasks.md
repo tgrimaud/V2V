@@ -45,7 +45,7 @@ committed, so the diagram could not be viewed without opening draw.io.
   ADR-0050/0055) and an "applied decisions" note listing the reflected ADRs/tasks.
 - Create a new simplified sibling `target-v1-solution-simplified.drawio` — a high-level
   left-to-right stakeholder flow (client → voice edge → answer engine → data/AI/escalation)
-  with a colour legend.
+  with a colour legend. Authored in **English** (docs-in-English rule).
 - Export both to PNG (`target-v1-solution.png`, `target-v1-solution-simplified.png`) and update
   `docs/architecture/diagrams/README.md` (add both rows, refresh the branch note, document the
   PNG export command).
@@ -63,8 +63,8 @@ committed, so the diagram could not be viewed without opening draw.io.
 - A simplified diagram exists and renders legibly (no overlapping labels / detached arrows,
   verified from the exported PNG).
 - Both PNG exports are committed and referenced from the diagrams README.
-- `git diff --check` passes; touched English docs stay in English (the two solution diagrams
-  stay French to match the existing `target-v1-solution.drawio` artifact — a consistency choice).
+- `git diff --check` passes; the simplified diagram is authored in English (docs-in-English
+  rule); the detailed `target-v1-solution.drawio` stays French to match the existing artifact.
 
 ---
 

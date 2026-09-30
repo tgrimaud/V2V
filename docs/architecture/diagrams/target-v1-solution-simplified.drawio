@@ -1,65 +1,65 @@
 <mxfile host="Cursor">
-  <diagram name="Solution cible V1 - simplifiee" id="target-v1-solution-simplified">
+  <diagram name="Target Solution V1 - simplified" id="target-v1-solution-simplified">
     <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="820" math="0" shadow="0" adaptiveColors="auto">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="&lt;b&gt;Solution cible V1 (vue simplifiee) - Assistant vocal d'explication de facture operateur&lt;/b&gt;&lt;br&gt;Voice2Voice, BSS source de verite, coeur billing deterministe, IA agnostique via ports/adapters (a jour 2026-09-30)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;align=center;" vertex="1" parent="1">
+        <mxCell id="title" value="&lt;b&gt;Target Solution V1 (simplified view) - Operator invoice explanation voice assistant&lt;/b&gt;&lt;br&gt;Voice2Voice, BSS as source of truth, deterministic billing core, provider-agnostic AI via ports/adapters (updated 2026-09-30)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=15;align=center;" vertex="1" parent="1">
           <mxGeometry x="40" y="20" width="1420" height="50" as="geometry" />
         </mxCell>
 
-        <mxCell id="client" value="Client operateur&lt;br&gt;(voix)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="client" value="Operator customer&lt;br&gt;(voice)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="40" y="180" width="140" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="edge" value="&lt;b&gt;Edge voix temps reel&lt;/b&gt;&lt;br&gt;Genesys Audio Connector (telephone)&lt;br&gt;ou Web WebRTC/WS&lt;br&gt;Voice runtime Pipecat - serveur mono-port :8090&lt;br&gt;STT/TTS Gradium, barge-in, fin de tour" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+        <mxCell id="edge" value="&lt;b&gt;Real-time voice edge&lt;/b&gt;&lt;br&gt;Genesys Audio Connector (telephony)&lt;br&gt;or Web WebRTC/WS&lt;br&gt;Voice runtime Pipecat - single-port server :8090&lt;br&gt;STT/TTS Gradium, barge-in, end-of-turn" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="240" y="160" width="250" height="120" as="geometry" />
         </mxCell>
 
-        <mxCell id="backend" value="&lt;b&gt;Answer engine (backend :8080)&lt;/b&gt;&lt;br&gt;/converse + /converse-stream (SSE)&lt;br&gt;RAG + guardrails + politique de certitude&lt;br&gt;Explication facture deterministe (preuve ou escalade)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=0;" vertex="1" parent="1">
+        <mxCell id="backend" value="&lt;b&gt;Answer engine (backend :8080)&lt;/b&gt;&lt;br&gt;/converse + /converse-stream (SSE)&lt;br&gt;RAG + guardrails + confidence policy&lt;br&gt;Deterministic invoice explanation (evidence or escalation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=0;" vertex="1" parent="1">
           <mxGeometry x="550" y="150" width="270" height="140" as="geometry" />
         </mxCell>
 
-        <mxCell id="bss" value="BSS operateur - lecture seule&lt;br&gt;billing-api + PDF facture&lt;br&gt;(source de verite)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+        <mxCell id="bss" value="Operator BSS - read only&lt;br&gt;billing-api + invoice PDF&lt;br&gt;(source of truth)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
           <mxGeometry x="880" y="90" width="250" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="kb" value="KB Postgres + pgvector&lt;br&gt;bilingue fr/en + embeddings 768" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="kb" value="KB Postgres + pgvector&lt;br&gt;bilingual fr/en + embeddings 768" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="880" y="200" width="250" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="redis" value="Redis&lt;br&gt;sessions + memoire conversation" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="redis" value="Redis&lt;br&gt;sessions + conversation memory" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="880" y="310" width="250" height="70" as="geometry" />
         </mxCell>
 
-        <mxCell id="identity" value="Identite client&lt;br&gt;canal (ANI) ou account_reference fourni&lt;br&gt;(ADR-0050/0055)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="identity" value="Customer identity&lt;br&gt;channel (ANI) or supplied account_reference&lt;br&gt;(ADR-0050/0055)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="330" y="375" width="210" height="58" as="geometry" />
         </mxCell>
 
-        <mxCell id="ai" value="&lt;b&gt;IA interchangeable (ports/adapters)&lt;/b&gt;&lt;br&gt;LLM OpenAI gpt-5 (defaut) / Mistral / Ollama&lt;br&gt;Embeddings Ollama nomic-embed-text&lt;br&gt;STT/TTS Gradium (alternatives possibles)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="ai" value="&lt;b&gt;Swappable AI (ports/adapters)&lt;/b&gt;&lt;br&gt;LLM OpenAI gpt-5 (default) / Mistral / Ollama&lt;br&gt;Embeddings Ollama nomic-embed-text&lt;br&gt;STT/TTS Gradium (alternatives possible)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="240" y="430" width="310" height="110" as="geometry" />
         </mxCell>
 
-        <mxCell id="handoff" value="&lt;b&gt;Escalade humaine&lt;/b&gt;&lt;br&gt;Genesys Cloud CX (Architect)&lt;br&gt;routing + resume de contexte" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+        <mxCell id="handoff" value="&lt;b&gt;Human escalation&lt;/b&gt;&lt;br&gt;Genesys Cloud CX (Architect)&lt;br&gt;routing + context summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
           <mxGeometry x="1190" y="90" width="250" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="agent" value="Agent humain&lt;br&gt;support facturation" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+        <mxCell id="agent" value="Human agent&lt;br&gt;billing support" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
           <mxGeometry x="1210" y="210" width="210" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="obs" value="&lt;b&gt;Exploitation&lt;/b&gt;&lt;br&gt;OpenTelemetry (OTLP opt-in) + logs JSON correlation_id&lt;br&gt;traceparent voix-&gt;backend (une trace par tour)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+        <mxCell id="obs" value="&lt;b&gt;Operations&lt;/b&gt;&lt;br&gt;OpenTelemetry (OTLP opt-in) + JSON logs correlation_id&lt;br&gt;traceparent voice-&gt;backend (one trace per turn)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="600" y="440" width="530" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="legend" value="&lt;b&gt;Legende&lt;/b&gt; &amp;nbsp; Vert = coeur produit &amp;nbsp;|&amp;nbsp; Orange = edge voix &amp;nbsp;|&amp;nbsp; Jaune = donnees &amp;nbsp;|&amp;nbsp; Violet = IA interchangeable &amp;nbsp;|&amp;nbsp; Rouge = externe / humain &amp;nbsp;|&amp;nbsp; Gris = exploitation" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+        <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt; &amp;nbsp; Green = product core &amp;nbsp;|&amp;nbsp; Orange = voice edge &amp;nbsp;|&amp;nbsp; Yellow = data &amp;nbsp;|&amp;nbsp; Purple = swappable AI &amp;nbsp;|&amp;nbsp; Red = external / human &amp;nbsp;|&amp;nbsp; Gray = operations" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="40" y="620" width="1090" height="40" as="geometry" />
         </mxCell>
 
-        <mxCell id="e_client_edge" value="voix" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="client" target="edge">
+        <mxCell id="e_client_edge" value="voice" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="client" target="edge">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_edge_backend" value="transcription + /converse" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#82b366;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;" edge="1" parent="1" source="edge" target="backend">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_backend_edge" value="reponse vetee (SSE)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#82b366;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="edge">
+        <mxCell id="e_backend_edge" value="vetted response (SSE)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#82b366;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="edge">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_edge_ai" value="STT / TTS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="edge" target="ai">
@@ -68,19 +68,19 @@
         <mxCell id="e_backend_ai" value="LLM / embeddings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#9673a6;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="ai">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_backend_bss" value="preuves BSS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="bss">
+        <mxCell id="e_backend_bss" value="BSS evidence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="bss">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_backend_kb" value="recherche KB (RAG)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="kb">
+        <mxCell id="e_backend_kb" value="KB retrieval (RAG)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="kb">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_backend_redis" value="session / memoire" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="redis">
+        <mxCell id="e_backend_redis" value="session / memory" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="redis">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_identity_backend" value="resout le client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.05;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="identity" target="backend">
+        <mxCell id="e_identity_backend" value="resolves the customer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#d6b656;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.05;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="identity" target="backend">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_backend_handoff" value="escalade" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.95;exitY=0;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="handoff">
+        <mxCell id="e_backend_handoff" value="escalation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.95;exitY=0;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="handoff">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="807" y="80" />
@@ -88,7 +88,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_handoff_agent" value="transfert + resume" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff" target="agent">
+        <mxCell id="e_handoff_agent" value="transfer + summary" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="handoff" target="agent">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_backend_obs" value="spans + logs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;dashed=1;strokeColor=#666666;exitX=0.6;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="backend" target="obs">
