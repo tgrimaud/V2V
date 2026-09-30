@@ -60,6 +60,10 @@ services:
       # --- Observability: OTLP opt-in, OFF by default (ADR-0028) ---
       OTEL_METRICS_EXPORT_ENABLED: "${OTEL_METRICS_EXPORT_ENABLED:-false}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+      # --- Structured JSON logs (TASK-OBS-002): empty (default) = plain text; `json` = one
+      # JSON line per log carrying the correlation_id (from the per-turn contextvar) + scrubbed
+      # message/error. Mirrors the backend's LOGGING_STRUCTURED_FORMAT_CONSOLE. ---
+      VOICE_LOG_FORMAT: "${VOICE_LOG_FORMAT:-}"
     # Mirror the image HEALTHCHECK (python ships in the slim image; curl/wget do not).
     healthcheck:
       test:

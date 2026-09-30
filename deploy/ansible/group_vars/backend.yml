@@ -154,3 +154,9 @@ pg_backup_cron_minute: "37"
 pg_backup_cron_hour: "2"          # daily 02:37
 pg_backup_keep: 14                 # ~2 weeks of daily dumps
 pg_backup_remote: ""               # e.g. "backup@vlb-ai4cc-t01.prod.lan:/srv/backups/postgres"
+
+# --- Structured JSON logs (TASK-OBS-002) ---
+# Empty (default) = human-readable text logs. Set to "ecs" (or "logstash") to emit one JSON
+# line per log carrying the MDC correlation_id + channel (Spring Boot 3.4 native structured
+# logging). Additive + opt-in like otel_collector_endpoint; enabling needs a backend redeploy.
+backend_log_format: ""

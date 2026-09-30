@@ -8,6 +8,7 @@ export/tracing layer on top of the per-slice instrumentation already built.
 | Task | Title | Classification | Status |
 |---|---|---|---|
 | TASK-OBS-001 | OpenTelemetry export (OTLP) for backend + voice runtime, or accept the residual risk in ADR-0028 | V1 hardening (observability) | ✅ Merged into `feat/restart-from-scratch` (2026-07-29, ff `bfde816..e79964b`) — hybrid; review 93/100 + QA GO; ticket branch deleted |
+| TASK-OBS-002 | Structured JSON logs (correlation_id + sanitization) on both tiers, env-gated default-off — a good log emitter independent of the SRE-owned collector | V1 hardening (observability) | 🔧 Implemented (branch `task/TASK-OBS-002-structured-json-logs`) — voice JSON formatter + per-turn correlation_id contextvar + message/error scrubbing (`VOICE_LOG_FORMAT=json`); backend Spring Boot 3.4 native structured logging carrying MDC `correlation_id`/`channel` (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`); both default text. Voice `unittest` 694 + `behave` 15/43/194 green. Adversarial review + QA pending |
 
 ---
 
@@ -130,3 +131,93 @@ Delivered on `task/TASK-OBS-001-otel-export` (from `feat/restart-from-scratch`):
   trace** across runtime → backend (W3C `traceparent` propagation on the HTTP hop) exported to
   a collector — needs the collector running and is gated behind the mandatory-export trigger.
   The shared `correlation_id` remains the cross-service join key today.
+
+---
+
+## TASK-OBS-002 — Structured JSON Logs (correlation_id + Sanitization), Both Tiers
+
+**Parent:** EPIC-010 (Observability, latency and pilot validation)
+**Classification:** V1 hardening (observability)
+**Status:** 🔧 Implemented on `task/TASK-OBS-002-structured-json-logs` (from
+`feat/restart-from-scratch`). Adversarial review + QA pending; not merged.
+**Priority:** Medium
+**Branch:** `task/TASK-OBS-002-structured-json-logs`
+**Adversarial review:** 93/100 (Pass) — `docs/qa/task-obs-002-adversarial-review.md`
+**Relates to:** ADR-0028 (backend correlation + slice metrics), TASK-OBS-001 (OTLP export),
+TASK-OPS-007 (centralized collector — SRE-owned), TASK-BE-009, TASK-WEB-017,
+`voice_common/sanitization.py`.
+
+### Context
+
+The centralized OTLP **collector platform is owned by the SRE team** and is not yet in
+place, so the aggregated traces/metrics pipeline (TASK-OPS-007) is externally blocked. That
+blocker does **not** cover being a good *emitter*: today the two runtimes still log
+**human-readable plain text** with no machine-parseable structure and, on the voice side, no
+`correlation_id` on the log line. When the collector (or any log shipper / `docker logs`
+scrape) does arrive, plain text forces brittle regex parsing and the voice logs can't be
+joined to a turn.
+
+This ticket makes both tiers emit **structured JSON logs** carrying the `correlation_id`,
+with secret/PII **sanitization**, entirely under our control and independent of the SRE
+platform. It is additive and **default-off** (text) so local dev, tests and current pilot
+behaviour are unchanged; enabling is a single env var per tier.
+
+### Objective
+
+Emit one JSON log line per event, carrying `correlation_id` (+ `channel` on the backend),
+with sanitized message/error content, on both the Java backend and the Python voice runtime —
+env-gated, default text.
+
+### Scope
+
+- **Voice runtime (Python).**
+  - `voice_common/logging_config.py`: `JsonLogFormatter` (fixed shape `timestamp` (ISO-8601
+    UTC), `level`, `logger`, `message`; optional `correlation_id`, optional `error`) +
+    `configure_logging(stream, level)` that installs the JSON handler on the root logger
+    **only** when `VOICE_LOG_FORMAT=json` (idempotent; returns whether it installed).
+  - `voice_common/log_context.py`: a `correlation_id` **`ContextVar`** with
+    `set_/get_/reset_correlation_id` + a `correlation_id_scope` contextmanager. The WS
+    chokepoint (`web_voice/websocket_app.py::_serve_connection`) binds it **before**
+    `session.run()` creates the pipeline tasks, so every log line emitted during the turn —
+    including from child frame-processing tasks (which capture the context at creation) —
+    carries the id. Reset in `finally`.
+  - `voice_common/sanitization.py`: `scrub_message()` reuses the existing per-token redactor
+    (paths/filenames/UUIDs/secret-prefixed/long-id tokens, safe-token allowlist, dates kept)
+    and additionally redacts the **value** side of `key=value` tokens common in log lines;
+    caps length at 2048 chars. Applied to every JSON `message` and `error`.
+  - `web_voice/server.py`: `configure_logging()` at the top of `main()`.
+- **Backend (Java / Spring Boot 3.4).** No code change: enable **native structured logging**
+  via `LOGGING_STRUCTURED_FORMAT_CONSOLE` (relaxed-binds to
+  `logging.structured.format.console`; `ecs`/`logstash`). The existing `CorrelationIdFilter`
+  already puts `correlation_id` + `channel` in the **MDC**, which the ECS/Logstash encoders
+  serialize into each JSON line automatically. Backend log content is already sanitized
+  (generic codes + correlation id, no upstream echo — ADR-0028 / GlobalExceptionHandler).
+- **Deploy (both tiers, env-gated, default OFF).** `VOICE_LOG_FORMAT` /
+  `LOGGING_STRUCTURED_FORMAT_CONSOLE` passthrough in the voice + backend compose
+  `environment:` blocks, the Ansible `voice.env.j2` / `backend.env.j2` templates, and
+  `group_vars/voice.yml` (`voice_log_format: ""`) / `group_vars/backend.yml`
+  (`backend_log_format: ""`). Additive + opt-in exactly like `otel_collector_endpoint`.
+
+### Acceptance
+
+- Voice: with `VOICE_LOG_FORMAT=json`, each log line is valid JSON with `timestamp/level/
+  logger/message`; carries `correlation_id` when a turn is in scope and omits it otherwise;
+  secrets (`sk-…`, `key=…`), filesystem paths and UUIDs are redacted in `message`/`error`.
+  With the var unset the runtime keeps plain-text logging and existing handlers are untouched.
+- Backend: with `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`, logs are JSON carrying the MDC
+  `correlation_id`/`channel`; unset keeps the current text layout. `mvn test` unchanged
+  (config-only; no call site touched).
+- Existing suites stay green; enabling is a single env var per tier; nothing depends on the
+  SRE collector.
+
+### Notes / follow-ups
+
+- The voice `correlation_id` is bound at the **WS** chokepoint. The **batch REST**
+  (`/api/voice/turn`) and **WebRTC/Genesys** streaming entrypoints are follow-ups: the batch
+  path runs backend I/O in a thread executor where `ContextVar` does not propagate, so it
+  needs an explicit bind per request. Tracked as a residual (not blocking JSON structure,
+  which already applies to every log line regardless of correlation binding).
+- Structured JSON is useful **now**, before any collector: `docker logs` / json-file output
+  becomes machine-parseable and shippable by any future SRE log pipeline.
+- Sanitization is best-effort and shares the OTLP/telemetry redactor; `k=v` value redaction is
+  log-specific and does not change `sanitize_error`'s own tokenization.

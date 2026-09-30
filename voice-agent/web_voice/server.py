@@ -43,6 +43,7 @@ from tts_synthesis.provider_factory import (  # noqa: E402
     build_streaming_provider as build_streaming_tts_provider,
     supports_streaming as tts_supports_streaming,
 )
+from voice_common.logging_config import configure_logging  # noqa: E402
 from voice_common.otel_export import export_recorder  # noqa: E402
 from voice_common.telemetry import TelemetryRecorder  # noqa: E402
 
@@ -412,6 +413,9 @@ def _build_streaming_tts_provider(args) -> Any:
 
 
 def main() -> int:
+    # TASK-OBS-002: enable structured JSON logs (correlation-id + sanitized) when
+    # VOICE_LOG_FORMAT=json; a no-op (text logging) otherwise. Must run before anything logs.
+    configure_logging()
     args = _parse_args()
     ingress = WebVoiceIngress(
         build_provider(args.provider), providers_by_language=_stt_by_language(args.provider)

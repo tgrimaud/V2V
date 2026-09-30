@@ -131,3 +131,8 @@ voice_lb_server_name: "{{ voice_lb_server_names[inventory_hostname] | default(in
 # socat needs a shell (pipe); tasks use ansible.builtin.shell + delegate_to the LB.
 voice_lb_drain_cmd: "echo 'set server {{ voice_lb_backend }}/{{ voice_lb_server_name }} state drain' | socat stdio {{ voice_lb_admin_socket }}"
 voice_lb_enable_cmd: "echo 'set server {{ voice_lb_backend }}/{{ voice_lb_server_name }} state ready' | socat stdio {{ voice_lb_admin_socket }}"
+
+# --- Structured JSON logs (TASK-OBS-002) ---
+# Empty (default) = plain text logs. Set to "json" to emit one JSON line per log carrying the
+# per-turn correlation_id + scrubbed message/error. Additive + opt-in; mirrors backend_log_format.
+voice_log_format: ""
