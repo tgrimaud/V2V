@@ -139,6 +139,7 @@ def _envelope_from_query(query: str) -> ChannelEnvelope:
         external_session_id=_first(params, "session_id"),
         correlation_id=_first(params, "correlation_id"),
         language=_first(params, "language"),
+        account_reference=_first(params, "account_id"),
     )
 
 

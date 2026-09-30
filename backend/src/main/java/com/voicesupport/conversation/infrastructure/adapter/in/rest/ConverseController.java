@@ -4,7 +4,8 @@ import com.voicesupport.conversation.domain.model.valueobject.ChannelEnvelope;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffCommand;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
-import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
+import com.voicesupport.conversation.domain.model.valueobject.RoutableTurn;
+import com.voicesupport.conversation.domain.port.in.ConversationRoutingUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.shared.observability.BackendTelemetry;
@@ -45,19 +46,19 @@ public class ConverseController {
     private static final Logger log = LoggerFactory.getLogger(ConverseController.class);
     private static final String LISTEN_PROMPT = "Je vous écoute, posez-moi votre question.";
 
-    private final ConverseUseCase converseUseCase;
+    private final ConversationRoutingUseCase conversationRoutingUseCase;
     private final IdempotentDeliveryGuard idempotentDeliveryGuard;
     private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
     private final BackendTelemetry telemetry;
     private final ApiKeyGuard apiKeyGuard;
 
     public ConverseController(
-            ConverseUseCase converseUseCase,
+            ConversationRoutingUseCase conversationRoutingUseCase,
             IdempotentDeliveryGuard idempotentDeliveryGuard,
             PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase,
             BackendTelemetry telemetry,
             @Value("${voice-support.conversation.api-key:}") String apiKey) {
-        this.converseUseCase = converseUseCase;
+        this.conversationRoutingUseCase = conversationRoutingUseCase;
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
         this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
         this.telemetry = telemetry;
@@ -125,7 +126,9 @@ public class ConverseController {
         // Memory keys on the envelope's conversation key (external_session_id, falling back to
         // conversation_id) so a Genesys call stays one conversation; a blank key is stateless.
         GeneratedAnswer generated = telemetry.time(Slices.BACKEND_REQUEST, "conversation",
-                () -> converseUseCase.converse(request.transcript(), envelope.conversationKey(), request.language()));
+                () -> conversationRoutingUseCase.answer(new RoutableTurn(
+                        request.transcript(), envelope.conversationKey(), request.language(),
+                        request.accountId(), envelope.channel(), request.correlationId())));
         EscalationHandoffReference reference = prepareHandoffIfEscalated(request, envelope, generated);
         logTurn(request, envelope, generated, elapsedMs(start));
         return ResponseEntity.ok(ConverseResponse.from(generated, reference));

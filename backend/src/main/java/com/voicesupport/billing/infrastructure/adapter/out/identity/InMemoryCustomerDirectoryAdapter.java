@@ -33,13 +33,18 @@ public class InMemoryCustomerDirectoryAdapter implements CustomerDirectoryPort {
     }
 
     private static Map<String, List<AccountId>> defaultDirectory() {
-        return Map.of(
-                "EIR-1001", List.of(AccountId.of("eir-001")),
-                "EIR-1002", List.of(AccountId.of("eir-002")),
-                "EIR-1003", List.of(AccountId.of("eir-003")),
-                "EIR-1004", List.of(AccountId.of("eir-004")),
-                "EIR-1005", List.of(AccountId.of("eir-005")),
-                "EIR-1006", List.of(AccountId.of("eir-006")),
-                "EIR-DUP", List.of(AccountId.of("eir-001"), AccountId.of("eir-002")));
+        Map<String, List<AccountId>> directory = new java.util.LinkedHashMap<>();
+        directory.put("EIR-1001", List.of(AccountId.of("eir-001")));
+        directory.put("EIR-1002", List.of(AccountId.of("eir-002")));
+        directory.put("EIR-1003", List.of(AccountId.of("eir-003")));
+        directory.put("EIR-1004", List.of(AccountId.of("eir-004")));
+        directory.put("EIR-1005", List.of(AccountId.of("eir-005")));
+        directory.put("EIR-1006", List.of(AccountId.of("eir-006")));
+        directory.put("EIR-DUP", List.of(AccountId.of("eir-001"), AccountId.of("eir-002")));
+        // Real eir B2C samples (TASK-BE-059): the customer identifies by the billing account number.
+        directory.put("99224964", List.of(AccountId.of("99224964")));
+        directory.put("99226126", List.of(AccountId.of("99226126")));
+        directory.put("99226337", List.of(AccountId.of("99226337")));
+        return Map.copyOf(directory);
     }
 }

@@ -3,6 +3,7 @@ package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
 import com.voicesupport.conversation.domain.model.valueobject.GeneratedAnswer;
 import com.voicesupport.conversation.domain.model.valueobject.HandoffId;
+import com.voicesupport.conversation.application.service.ConversationRoutingService;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
@@ -32,11 +33,20 @@ class ConverseControllerEnvelopeTest {
 
     private final CapturingConverseUseCase useCase = new CapturingConverseUseCase();
     private final ConverseController controller = new ConverseController(
-            useCase,
+            routing(useCase),
             new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
             PREPARE_HANDOFF,
             new BackendTelemetry(new SimpleMeterRegistry()),
             "");
+
+    // No account reference in these turns, so the router always delegates to the RAG use case; the
+    // billing branch is stubbed to fail if ever taken.
+    private static ConversationRoutingService routing(ConverseUseCase converse) {
+        return new ConversationRoutingService(
+                converse,
+                request -> { throw new AssertionError("billing route not expected"); },
+                transcript -> false);
+    }
 
     @AfterEach
     void clearContext() {
@@ -48,7 +58,7 @@ class ConverseControllerEnvelopeTest {
         // GIVEN a Genesys delivery carrying its external session id
         ConverseRequest request = new ConverseRequest(
                 "Pourquoi ma facture ?", "conv-legacy", "corr-1", "genesys", null,
-                "genesys-conv-9", "evt-1", null, "voice", null);
+                "genesys-conv-9", "evt-1", null, "voice", null, null);
 
         // WHEN the turn is served
         controller.converse(request, null, new MockHttpServletResponse());
@@ -61,7 +71,7 @@ class ConverseControllerEnvelopeTest {
     void falls_back_to_the_conversation_id_when_no_external_session_id() {
         // GIVEN an existing web delivery with only a conversation id (no envelope session id)
         ConverseRequest request = new ConverseRequest(
-                "Bonjour", "c1", "corr-1", "web", null, null, null, null, null, null);
+                "Bonjour", "c1", "corr-1", "web", null, null, null, null, null, null, null);
 
         // WHEN the turn is served
         controller.converse(request, null, new MockHttpServletResponse());
@@ -75,7 +85,7 @@ class ConverseControllerEnvelopeTest {
         // GIVEN two deliveries carrying the same idempotency key
         ConverseRequest delivery = new ConverseRequest(
                 "Pourquoi ma facture ?", null, "corr-1", "genesys", null,
-                "genesys-conv-9", "evt-1", "idem-42", "voice", null);
+                "genesys-conv-9", "evt-1", "idem-42", "voice", null, null);
 
         // WHEN the same delivery arrives twice
         ResponseEntity<ConverseResponse> first = controller.converse(delivery, null, new MockHttpServletResponse());
@@ -92,14 +102,14 @@ class ConverseControllerEnvelopeTest {
         // GIVEN a use case that fails the first turn then succeeds, over a real dedup guard
         var flaky = new FlakyConverseUseCase();
         var flakyController = new ConverseController(
-                flaky,
+                routing(flaky),
                 new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
                 PREPARE_HANDOFF,
                 new BackendTelemetry(new SimpleMeterRegistry()),
                 "");
         ConverseRequest delivery = new ConverseRequest(
                 "Pourquoi ma facture ?", null, "corr-1", "genesys", null,
-                "genesys-conv-9", "evt-1", "idem-42", "voice", null);
+                "genesys-conv-9", "evt-1", "idem-42", "voice", null, null);
 
         // WHEN the first delivery fails and the same key is retried
         assertThatThrownBy(() -> flakyController.converse(delivery, null, new MockHttpServletResponse()))

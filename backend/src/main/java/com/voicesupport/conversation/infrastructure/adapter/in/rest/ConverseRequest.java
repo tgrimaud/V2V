@@ -32,7 +32,12 @@ public record ConverseRequest(
         @Schema(description = "Reply delivery mode (voice|text); blank defaults to voice.",
                 example = "voice") String replyMode,
         @Schema(description = "Escalation handoff reference riding the envelope (TASK-BE-036).",
-                example = "handoff-7") String escalationContext) {
+                example = "handoff-7") String escalationContext,
+        // TASK-BE-061 / ADR-0055: channel-provided customer identity context. When present, a billing
+        // question routes to the deterministic billing chain (BR-002-1) instead of RAG; blank/absent =
+        // no identity context -> always RAG. Simulates the target header/param the channel will supply.
+        @Schema(description = "Optional channel-provided account reference; blank keeps the RAG path.",
+                example = "99224964") String accountId) {
 
     public boolean hasTranscript() {
         return transcript != null && !transcript.isBlank();

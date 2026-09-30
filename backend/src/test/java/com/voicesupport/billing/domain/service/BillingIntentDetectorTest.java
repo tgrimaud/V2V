@@ -39,6 +39,17 @@ class BillingIntentDetectorTest {
     }
 
     @Test
+    void detects_a_payment_phrasing_without_the_word_facture() {
+        // BUG-027: the customer often says "je paye plus" / "c'est plus cher" without "facture".
+        // The default keyword set (BillingConfig) covers FR payment/price terms.
+        var paymentDetector = new BillingIntentDetector(List.of("paye", "paie", "payer", "prix", "cher"));
+
+        assertThat(paymentDetector.isBillingExplanationRequest(
+                "pourquoi je paye plus ce mois-ci que le mois dernier")).isTrue();
+        assertThat(paymentDetector.isBillingExplanationRequest("c'est plus cher que le mois dernier")).isTrue();
+    }
+
+    @Test
     void ignores_a_non_billing_question() {
         // GIVEN a question with no billing keyword
         // WHEN / THEN it is not a billing request

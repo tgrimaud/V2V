@@ -1,5 +1,6 @@
 package com.voicesupport.conversation.infrastructure.adapter.in.rest;
 
+import com.voicesupport.conversation.application.service.ConversationRoutingService;
 import com.voicesupport.conversation.application.service.EscalationHandoffService;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoff;
 import com.voicesupport.conversation.domain.model.valueobject.EscalationHandoffReference;
@@ -48,7 +49,7 @@ class ConverseControllerEscalationTest {
                 "Je vous mets en relation avec un conseiller.", GuardrailDecision.Verdict.LOW_CONFIDENCE));
         ConverseRequest request = new ConverseRequest(
                 "Pourquoi ma facture a augmenté ?", null, "corr-1", "genesys", null,
-                "genesys-conv-9", "evt-1", null, "voice", null);
+                "genesys-conv-9", "evt-1", null, "voice", null, null);
 
         // WHEN the turn is served
         ResponseEntity<ConverseResponse> response = controller.converse(request, null, new MockHttpServletResponse());
@@ -73,7 +74,7 @@ class ConverseControllerEscalationTest {
         ConverseController controller = controllerReturning(
                 GeneratedAnswer.grounded("La proration explique l'écart.", 0.83));
         ConverseRequest request = new ConverseRequest(
-                "Pourquoi ma facture ?", "c1", "corr-1", "web", null, null, null, null, null, null);
+                "Pourquoi ma facture ?", "c1", "corr-1", "web", null, null, null, null, null, null, null);
 
         // WHEN the turn is served
         ResponseEntity<ConverseResponse> response = controller.converse(request, null, new MockHttpServletResponse());
@@ -85,8 +86,13 @@ class ConverseControllerEscalationTest {
 
     private ConverseController controllerReturning(GeneratedAnswer answer) {
         ConverseUseCase useCase = (transcript, conversationId) -> answer;
-        return new ConverseController(
+        // No account reference in these turns -> the router always delegates to RAG; billing stubbed.
+        ConversationRoutingService routing = new ConversationRoutingService(
                 useCase,
+                request -> { throw new AssertionError("billing route not expected"); },
+                transcript -> false);
+        return new ConverseController(
+                routing,
                 new IdempotentDeliveryGuard(new InMemoryDeliveryDeduplicationAdapter(1000)),
                 handoffService,
                 new BackendTelemetry(new SimpleMeterRegistry()),

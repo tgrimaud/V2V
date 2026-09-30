@@ -3,6 +3,109 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-09-30 — TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter (ADR-0005 amended)
+
+**Summary:**
+
+- Promoted the invoice-PDF path from an unused inline "fallback seam" to a **first-class, selectable
+  implementation of the same `BssBillingPort`** the structured JSON adapter uses. The comparison /
+  confidence / composer chain is unchanged whichever source is active — switching is one config change:
+  `VOICE_SUPPORT_BILLING_BSS_SOURCE` ∈ `{mock, eir, pdf}`.
+- **New out-port `BillRunDocumentPort`** (`listDocuments` + `download → PdfSource`, mapping Galaxion
+  `bill-run-documents/search` + `/{id}/download`) — the "fetch" half. **`PdfBssBillingAdapter`** composes it
+  with the existing `InvoicePdfExtractorPort` and **regenerates the same domain `Invoice`** the JSON adapter
+  returns. LLM never reads the PDF (DEC-002). Fail-closed: empty download / `FAILED` extraction →
+  `Optional.empty` (safe escalation, never 500); `PARTIAL` kept; defense-in-depth ownership check (BR-002-1);
+  BSS hop timed `provider=pdf`.
+- **`FixtureBillRunDocumentAdapter`** (same in-memory fixtures) makes `source=pdf` exercisable now — the
+  synthetic `PdfSource` reference = invoice period id (the key the fixture extractor indexes on).
+- **Deferred:** the real REST `BillRunDocumentPort` adapter — `bill-run-documents/search` returns no
+  period/amount (`missing-inputs.md`) and live access is unproven (OQ-003). Register it behind the same port
+  + base URL later; nothing else changes. Real PDFBox parser also still deferred (`pdf.source=pdfbox`).
+- **Tests.** Backend **673** + ArchUnit/ContextBoundary/Naming green: `PdfBssBillingAdapterTest` (6, incl.
+  fail-closed + ownership), `FixtureBillRunDocumentAdapterTest` (5, incl. end-to-end download→fixture-extractor
+  round-trip). ADR-0005 amended; ticket `tasks/billing-tasks.md` + backlog-index row. Not merged.
+- **Adversarial review 90/100 → 96/100 after remediation (Pass)** — `docs/qa/task-be-062-adversarial-review.md`.
+  No blocking finding; both non-blocking findings **fixed same session**: (1) `PARTIAL` extraction now
+  **fails closed** at the PDF adapter (BR-003); (2) **per-extraction telemetry** — the BSS slice records a
+  non-PII `reason` (`document_unavailable`/`extraction_failed`/`extraction_partial`/`ownership_mismatch`).
+  Residual: only the scope-deferred real REST adapter + PDFBox parser (OQ-003).
+
+## 2026-09-29 — BUG-027 — `/converse-stream` did not route to billing (voice UI ignored invoice data)
+
+**Summary:**
+
+- Follow-up defect of TASK-BE-061: routing was wired on the blocking `/converse` only, but the
+  voice UI uses the **streaming** `/converse-stream` (`VOICE_BACKEND_STREAM` on by default), which
+  stayed pure RAG. So selecting account `99224964` and asking "ma facture est plus élevée" got a
+  generic RAG answer — the billing chain was never reached on the real voice path. Found on the
+  local run; backend logs showed `[CONVERSE-STREAM] … grounded=true confidence≈0.73` with **no
+  `[ROUTE]` line**, vs `/converse` which logged `[ROUTE] route=billing … slice=billing explained`.
+- **Fix.** Extracted the routing **decision** into a single application service
+  `BillingRoutingService` (`Optional<GeneratedAnswer> billingAnswer(RoutableTurn)`), reused by
+  `ConversationRoutingService` (blocking) and `ConverseStreamSession` (streaming) — one source of
+  truth for the predicate + billing-request mapping (`RoutableTurn.toBillingExplanationRequest()`).
+  On a billing turn the streaming session emits the pre-computed grounded billing text as a
+  `chunk` + `done` (the chain returns a full vetted answer, not a token stream — ADR-0052 D1a);
+  else it streams RAG. `[ROUTE] … stream=true` logged; reference never in clear.
+- **Tests.** Backend **661** + ArchUnit green: `ConverseStreamControllerBillingRoutingTest`
+  (billing route streams grounded text + RAG bypassed; no-account keeps RAG), `BillingRoutingServiceTest`
+  (decision unit), 7 streaming `@WebMvcTest` configs given a disabled router bean.
+- **Secondary recall fix.** Live retest exposed a second gap: `[ROUTE] route=rag account_ref_present=true`
+  for "pourquoi je **paye** plus…" — routing fired but `BillingIntentDetector` missed the phrasing (no FR
+  payment/price verb in the default keywords). Extended `BillingConfig` default
+  `voice-support.billing.intent.keywords` with `paye,paie,payer,paiement,prix,coute,cher` (+ regression
+  test); keywords stay env-tunable.
+- **Docs.** ADR-0055 amended (routing applies to both endpoints); BUG-027 ticket + backlog-index row;
+  adversarial review 92/100 (Pass) at `docs/qa/bug-027-adversarial-review.md`.
+
+## 2026-09-29 — TASK-BE-061 — Channel-provided identity + RAG↔billing routing on `/converse` (ADR-0055)
+
+**Summary:**
+
+- Reshaped from "verbally collect the account number then explain" to **channel-provided identity as
+  the primary path** (target: Genesys ANI / authenticated header/param; pilot: a UI account listbox that
+  simulates it). Vocal collection dropped to an out-of-scope fallback. Decision recorded as **ADR-0055**.
+- **Backend routing.** New application `ConversationRoutingService` (`ConversationRoutingUseCase`);
+  `ConverseController` depends on it instead of `ConverseUseCase`. `/converse` routes to the ADR-0052
+  billing chain (`AnswerBillingQuestionUseCase`) **iff** an account reference is present **and**
+  `BillingIntentDetector` flags a billing question; otherwise RAG. "No account" + billing → RAG generic
+  (fail-safe — never guess whose invoice). Billing-intent stays one source of truth, exposed via a
+  published `DetectBillingIntentUseCase` (billing `port/in`) and consumed through the conversation
+  out-port `BillingIntentPort` + `InProcBillingIntentAdapter` (no type leakage; ArchUnit green).
+- **Wire (`account_id`).** `ConverseRequest` gains `account_id` (snake_case). Python: `ChannelEnvelope`
+  gains `account_reference` (session-locked once per connection like the BUG-026 language lock);
+  `AnswerRequest` carries it; `HttpBackendAdapter` sends `account_id` in the `/converse` body only when
+  present. UI: an account `<select>` (3 eir B2C accounts + "Sans compte") on `ws/webrtc/index.html`,
+  sent via `?account_id=` (WS/batch) / offer body (WebRTC).
+- **Privacy.** Reference is personal data — never logged in clear. Only `route`/`account_ref_present`
+  ride logs (`[ROUTE] route={billing|rag} account_ref_present={}`) and telemetry.
+- **Tests.** Backend 656 green + ArchUnit (`ConversationRoutingServiceTest` billing/RAG/no-account/lang;
+  4 `@WebMvcTest` configs updated). Python 688 + behave 15/43/194 (`test_http_backend` account_id
+  present/absent, `test_websocket_app` `_resolve_account_reference`).
+
+## 2026-09-29 — TASK-BE-059 — eir B2C invoice model validation + realistic mock (branch)
+
+**Summary:**
+
+- Validated the V1 billing domain model against **real anonymized eir B2C invoice PDFs** (accounts
+  `99224964`, `99226126`, `99226337`, two bill runs each). The `Invoice → Section → Group → Item`
+  hierarchy fits; all six invoices reconcile **exactly** on the tax-included basis.
+- Found + fixed an **ordering bug**: the printed "Billing date" is identical across bill runs, so
+  `ComparableInvoiceService`'s `invoiceDate` sort + id tie-break made **August** the "current"
+  invoice. **ADR-0054**: new `DateRange(start,end)` VO; `BillingPeriod(id, invoiceDate, usagePeriod,
+  chargePeriod)` + `orderingDate()` (usage-period start, else issue date); nullable `DateRange
+  period` on `InvoiceItem`/`InvoiceGroup` (proratas). All new ranges nullable + backward-compatible
+  secondary constructors → zero churn, kept flexible for future changes.
+- **Mock data:** `EirB2cSampleFixtures` (6 invoices, real account numbers, 23% VAT, prorata line
+  periods, distinct codes for recurring vs prorated variants) merged into the mock `BssBillingPort`
+  + PDF fallback; the 3 accounts resolvable by number in the mock customer directory → the identity →
+  comparison → explanation chain runs end-to-end on realistic data.
+- **Docs:** ADR-0054, `docs/integrations/galaxion/eir-b2c-invoice-samples.md` (validation,
+  open-question answers, gaps G1–G4). Tests: `DateRangeTest`, `EirB2cSampleFixturesTest`,
+  `ComparableInvoiceService` ordering regression. Backend **652** green + ArchUnit. Branch
+  `task/TASK-BE-059-eir-b2c-period-model-and-mock`, not merged (user is final validator).
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

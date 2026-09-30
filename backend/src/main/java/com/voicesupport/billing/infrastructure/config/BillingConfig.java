@@ -22,9 +22,14 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingServic
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.EirBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEnquiryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.FixtureBillRunDocumentAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.PdfBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
+import com.voicesupport.billing.domain.model.Invoice;
+import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.billing.infrastructure.fixtures.EirB2cSampleFixtures;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,17 +41,21 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
 import java.util.Currency;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 public class BillingConfig {
 
     private static final Logger log = LoggerFactory.getLogger(BillingConfig.class);
 
-    // BSS billing source (ADR-0004). `mock` (default) = in-memory fixtures customer-eir-001..006 so
-    // the billing chain runs before live access; `eir` = the real read-only adapter over the two Eir
-    // services (TASK-BE-047), enabled once real access is validated. Selected via
-    // VOICE_SUPPORT_BILLING_BSS_SOURCE.
+    // BSS billing source (ADR-0004/0005). `mock` (default) = in-memory fixtures customer-eir-001..006
+    // so the billing chain runs before live access; `eir` = the real read-only adapter over the two
+    // Eir services (structured JSON, TASK-BE-047); `pdf` = the PDF evidence path (TASK-BE-062) that
+    // downloads the invoice document and parses it via InvoicePdfExtractorPort, regenerating the same
+    // domain Invoice. All three sit behind BssBillingPort so switching is a single config change,
+    // VOICE_SUPPORT_BILLING_BSS_SOURCE, with no impact on the comparison engine.
     // Eir BSS settings (used only when source=eir). Defaults keep the mock source; the galaxion-user-*
     // headers default to SYSTEM for the pilot while identity -> header derivation is a follow-up
     // (coordination P4). Base URLs / currency / timeouts are env-tunable (VOICE_SUPPORT_BILLING_BSS_*).
@@ -65,18 +74,34 @@ public class BillingConfig {
     }
 
     @Bean
-    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry) {
+    public BssBillingPort bssBillingPort(BillingBssProperties properties, BackendTelemetry telemetry,
+            InvoicePdfExtractorPort invoicePdfExtractorPort) {
         if ("eir".equalsIgnoreCase(properties.source())) {
             log.info("[BILLING-BSS] source=eir — enquiry={} service={} currency={} user-type={}",
                     properties.enquiryBaseUrl(), properties.serviceBaseUrl(),
                     properties.currency(), properties.userType());
             return eirAdapter(properties, telemetry);
         }
+        if ("pdf".equalsIgnoreCase(properties.source())) {
+            log.info("[BILLING-BSS] source=pdf — invoice PDFs (bill-run-documents) parsed by the PDF extractor "
+                    + "(fixture document source; real REST adapter deferred, OQ-003)");
+            return new PdfBssBillingAdapter(
+                    new FixtureBillRunDocumentAdapter(mockInvoices()), invoicePdfExtractorPort, telemetry);
+        }
         if (!"mock".equalsIgnoreCase(properties.source())) {
             log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());
         }
-        log.info("[BILLING-BSS] source=mock — in-memory fixtures (customer-eir-001..006)");
-        return new InMemoryBssBillingAdapter(BssBillingFixtures.all());
+        log.info("[BILLING-BSS] source=mock — in-memory fixtures (synthetic eir-00X + real eir B2C samples)");
+        return new InMemoryBssBillingAdapter(mockInvoices());
+    }
+
+    // Mock invoice set = the six synthetic V1 journeys (eir-00X, TASK-BE-040) merged with the realistic
+    // eir B2C samples transcribed from anonymized PDFs (99224964/99226126/99226337, TASK-BE-059). Keys
+    // never overlap, so the two sets compose into one lookup for the in-memory BSS + PDF fallback.
+    private static Map<AccountId, List<Invoice>> mockInvoices() {
+        Map<AccountId, List<Invoice>> merged = new LinkedHashMap<>(BssBillingFixtures.all());
+        merged.putAll(EirB2cSampleFixtures.all());
+        return Map.copyOf(merged);
     }
 
     private static BssBillingPort eirAdapter(BillingBssProperties p, BackendTelemetry telemetry) {
@@ -124,8 +149,8 @@ public class BillingConfig {
             log.warn("[BILLING-PDF] source={} not available yet (real extractor is deferred) — using fixture extractor",
                     source);
         }
-        log.info("[BILLING-PDF] source=fixture — synthetic extractor (customer-eir-001..006)");
-        return new FixtureInvoicePdfExtractorAdapter(BssBillingFixtures.all());
+        log.info("[BILLING-PDF] source=fixture — synthetic extractor (eir-00X + real eir B2C samples)");
+        return new FixtureInvoicePdfExtractorAdapter(mockInvoices());
     }
 
     // Customer directory (ADR-0050, BR-002-1). `mock` (default) = in-memory pilot directory aligned
@@ -154,7 +179,8 @@ public class BillingConfig {
     public BillingIntentDetector billingIntentDetector(
             @Value("${voice-support.billing.intent.keywords:"
                     + "facture,factures,facturation,montant,prelevement,tarif,augmente,augmentation,"
-                    + "remise,invoice,bill,billing,charge,charged,amount,price,increase,discount}")
+                    + "remise,paye,paie,payer,paiement,prix,coute,cher,"
+                    + "invoice,bill,billing,charge,charged,amount,price,increase,discount}")
             String keywordsCsv) {
         List<String> keywords = Arrays.stream(keywordsCsv.split(","))
                 .map(String::trim).filter(keyword -> !keyword.isBlank()).toList();

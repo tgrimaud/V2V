@@ -11,6 +11,7 @@ const statusEl = document.getElementById("status");
 const transcriptEl = document.getElementById("transcript");
 const metaEl = document.getElementById("meta");
 const languageEl = document.getElementById("language");
+const accountEl = document.getElementById("account");
 
 // US-042: the UI-selected language is forwarded to the runtime (query param), which
 // forces the backend answer language instead of auto-detecting it.
@@ -18,9 +19,20 @@ function selectedLanguage() {
   return languageEl && languageEl.value ? languageEl.value : "";
 }
 
+// TASK-BE-061 / ADR-0055: the channel-provided account id ("" = no account), forwarded to the
+// runtime so a billing question routes to the deterministic billing chain instead of RAG.
+function selectedAccount() {
+  return accountEl && accountEl.value ? accountEl.value : "";
+}
+
 function turnUrl() {
+  const params = new URLSearchParams();
   const lang = selectedLanguage();
-  return lang ? TURN_ENDPOINT + "?language=" + encodeURIComponent(lang) : TURN_ENDPOINT;
+  if (lang) params.set("language", lang);
+  const account = selectedAccount();
+  if (account) params.set("account_id", account);
+  const query = params.toString();
+  return query ? TURN_ENDPOINT + "?" + query : TURN_ENDPOINT;
 }
 
 let audioContext = null;

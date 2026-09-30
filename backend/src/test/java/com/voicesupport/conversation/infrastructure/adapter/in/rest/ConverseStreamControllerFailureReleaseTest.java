@@ -10,6 +10,7 @@ import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
 import com.voicesupport.conversation.infrastructure.adapter.out.idempotency.InMemoryDeliveryDeduplicationAdapter;
 import com.voicesupport.shared.config.JacksonConfig;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
+import com.voicesupport.conversation.application.service.BillingRoutingService;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -133,6 +134,12 @@ class ConverseStreamControllerFailureReleaseTest {
         @Bean
         BackendTelemetry backendTelemetry() {
             return new BackendTelemetry(new SimpleMeterRegistry());
+        }
+
+        @Bean
+        BillingRoutingService billingTurnRouter() {
+            return new BillingRoutingService(
+                    r -> { throw new AssertionError("billing route not expected"); }, t -> false);
         }
 
         @Bean

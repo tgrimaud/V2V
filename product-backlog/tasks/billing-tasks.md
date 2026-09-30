@@ -534,3 +534,220 @@ headers; RFC 7807 error format.
 | Ticket | Title | Gate |
 |--------|-------|------|
 | TASK-QA-020 | Real-data validation on provided anonymized PDFs/payloads | real data + INFRA-017 P1 answers |
+
+---
+
+## TASK-BE-059 — Validate the invoice model on real eir B2C PDFs + realistic mock data
+
+**Type:** Technical task (domain model + fixtures + docs)
+**Status:** 🚧 Implemented on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` (2026-09-29) — full backend suite green (652), ArchUnit green. Not yet merged (user is final validator).
+**Priority:** High
+**Depends on:** TASK-BE-040 (mock BSS), TASK-BE-042 (comparison), ADR-0005/0052
+**Decision:** ADR-0054
+
+### Context
+
+Three anonymized real eir B2C invoice PDFs (accounts `99224964`, `99226126`, `99226337`, two bill
+runs each) were provided to validate the V1 billing model and to seed realistic mock data. Validation
+(see `docs/integrations/galaxion/eir-b2c-invoice-samples.md`) confirmed the `Invoice → Section →
+Group → Item` hierarchy and exact tax-included reconciliation on all six invoices, and surfaced an
+ordering bug plus a missing per-line period.
+
+### Scope
+
+- **Model (ADR-0054):** new `DateRange(start,end)` VO; `BillingPeriod` extended to
+  `(id, invoiceDate, usagePeriod, chargePeriod)` with `orderingDate()`; nullable `DateRange period`
+  on `InvoiceItem`/`InvoiceGroup`. All new ranges nullable + backward-compatible secondary
+  constructors (zero churn, kept flexible).
+- **Ordering fix:** `ComparableInvoiceService` orders by `orderingDate()` (usage-period start, else
+  issue date) so identical "Billing date" no longer inverts current/previous.
+- **Mock data:** `EirB2cSampleFixtures` (6 invoices, real account numbers, 23% VAT, prorata line
+  periods, distinct codes for recurring vs prorated variants) merged into the mock `BssBillingPort` +
+  PDF fallback; the three accounts resolvable by number in the mock customer directory.
+- **Docs:** ADR-0054 + `eir-b2c-invoice-samples.md` (validation, open-question answers, gaps).
+
+### Acceptance
+
+- Each of the six invoices reconciles exactly on TTC (`Σ line TTC = total TTC`) — tested.
+- The comparator returns September (later usage period) as *current* despite an identical issue date
+  — regression test added.
+- Proratas carry an explicit `DateRange` period — tested.
+- Existing call sites/tests compile unchanged (secondary constructors); `mvn test` + ArchUnit green.
+
+### Out Of Scope / Residual
+
+- `chargePeriod` stored but not yet consumed by the explanation composer (advance-billing wording).
+- Previous-balance / payments / amount-due at invoice level (nil on these samples).
+- Real PDF parser (ADR-0005 fallback) — still the synthetic fixture extractor.
+- Line-period is descriptive only; comparison matching stays by label/code.
+
+**Adversarial review 93/100 (Pass, 2026-09-29)** — no blocking finding; full review at
+`docs/qa/task-be-059-adversarial-review.md`. Residual (accepted): fixtures class > 200 lines (pure
+data); `chargePeriod` + line period stored but not yet surfaced in customer wording.
+
+---
+
+## TASK-BE-060 — Cause attribution for multi-service invoices (new/removed service, one-off fees)
+
+**Type:** Technical task (billing comparison + confidence)
+**Status:** 📋 Proposed (follow-up surfaced by TASK-BE-059 on real eir B2C mock data)
+**Priority:** High
+**Depends on:** TASK-BE-042 (comparison), TASK-BE-043 (confidence gate), TASK-BE-059 (real mock data)
+**Relates to:** OQ-002 (residual ratio), ADR-0052
+
+### Context
+
+Replaying the deterministic billing chain over the real eir B2C mock samples (TASK-BE-059) shows V1
+explains the **single-service** delta cleanly (account `99224964`: "+55.47 € … option change +16.98,
+pro-rata +8.50, one-off +29.99"), but **fails closed** on the two **multi-service** accounts:
+
+- `99226126` (Fibre → Fibre+TV) → `NOT_ENOUGH_DATA` / `residual_too_high`
+- `99226337` (Fibre+TV → +Mobile) → `NOT_ENOUGH_DATA` / `residual_too_high`
+
+Root cause: the comparison keys deltas by line label/code, so **a whole service section appearing or
+disappearing** (new eir TV / new Mobile) and **one-off charges being removed** (FTTH installation,
+broadband activation) do not map onto a `BillingCauseType`; the unexplained residual exceeds the 5%
+gate → safe escalation (correct fail-closed behaviour, but a poor customer answer for a common case).
+
+### Scope
+
+- Map structural changes to typed causes: **NEW_SERVICE / SERVICE_REMOVED** (a section present on one
+  side only) and **ONE_OFF removal/appearance** aggregated at group level.
+- Compose a customer-facing line for those causes ("un nouveau service … / des frais ponctuels du mois
+  dernier qui disparaissent").
+- Re-examine the 5% `max-residual-ratio` gate for multi-service invoices (OQ-002): a fully attributed
+  structural change should be EXPLAINABLE, not escalated.
+
+### Acceptance
+
+- `99226126` and `99226337` Aug→Sep deltas are **EXPLAINABLE** (or PARTIAL with a bounded residual),
+  not escalated, with grounded per-cause amounts summing to the total delta.
+- The single-service case (`99224964`) stays EXPLAINED.
+- New non-regression tests use the TASK-BE-059 eir B2C fixtures.
+- Fail-closed preserved for genuinely unexplained residuals.
+
+### Out Of Scope
+
+- Live BSS / real PDF parsing (still fixtures).
+- Routing billing from `/converse` (separate follow-up).
+
+---
+
+## TASK-BE-061 — Channel-provided customer identity + RAG↔billing routing on `/converse`
+
+**Type:** Technical task (conversation routing + channel identity) — routing ADR created (ADR-0055)
+**Status:** ✅ Done (2026-09-29) — reshaped to channel-provided identity as the **primary** path (vocal collection dropped to a fallback / out of scope)
+**Priority:** High
+**Depends on:** TASK-BE-045 (billing chain), ADR-0052 (billing seam), ADR-0050 (identity), US-042 (language)
+**Relates to:** ADR-0055 (routing decision), BR-002-1 (identity), OQ-001 (identity source), BUG-026 (session-locked envelope)
+
+### Context
+
+Today the customer-facing loop (web/voice) calls `POST /api/conversation/converse` → **RAG only**. The
+deterministic billing chain lives behind a **separate** endpoint `POST /api/conversation/billing-explain`
+that the voice runtime never calls, and it needs a customer `reference` (account number) that the main
+loop never collects. So a real "I don't understand, my bill is higher than last month" spoken in the app
+got a **generic KB answer**, never a real invoice comparison.
+
+**Reshape (2026-09-29).** Rather than asking the customer to dictate the account number vocally, we align
+with the **target** architecture where identity is asserted by the **channel up front** (Genesys ANI / an
+authenticated header or query param — ADR-0050 channel-provided reference). The reference is carried as
+ambient session identity into `/converse`; vocal collection of the number is **out of scope** (a fallback
+for later, never the primary path). See ADR-0055.
+
+### What was built
+
+1. **Channel identity up front.** The pilot web UI (`ws.html`/`webrtc.html`/`index.html`) gains an account
+   **listbox** — the 3 eir B2C sample accounts (`99224964`, `99226126`, `99226337`) + a **"Sans compte"**
+   default. The choice is sent once per connection (`?account_id=` on WS/batch, `account_id` in the WebRTC
+   offer body), threaded through `ChannelEnvelope.account_reference` (session-locked, like the BUG-026
+   language lock) → `AnswerRequest` → `/converse` body `account_id`. This **simulates** the target
+   header/param with zero conversation-engine change when the real channel is wired.
+2. **Routing on `/converse`.** New application `ConversationRoutingService` (`ConversationRoutingUseCase`);
+   `ConverseController` depends on it instead of `ConverseUseCase`. Routes to the billing chain
+   (`AnswerBillingQuestionUseCase`) **iff** an account reference is present **and** `BillingIntentDetector`
+   flags a billing question (ADR-0052 D2a); otherwise RAG. **"No account" + billing question → RAG generic**
+   (fail-safe — never guess whose invoice to open).
+3. **Cross-context seam (no type leakage).** Billing-intent stays a single source of truth exposed via a
+   published `DetectBillingIntentUseCase` (billing `port/in`) and consumed through the conversation out-port
+   `BillingIntentPort` via `InProcBillingIntentAdapter` (mirrors the ADR-0052 `BillingExplanationPort` seam).
+4. **Fail-closed + DEC-002 unchanged** (the ADR-0052 chain is only *reached*, not modified).
+
+### Acceptance (met)
+
+- With an account selected and a billing turn, `/converse` returns a grounded comparison (or a fail-closed
+  safe hand-off) — no separate endpoint call by the user. ✅
+- "Sans compte" (no `account_id`), or a non-billing turn, keeps the RAG path unchanged. ✅
+- Regression tests lock both branches (`ConversationRoutingServiceTest`: billing vs RAG vs no-account vs
+  language forwarding); Python threading tests (`test_http_backend`, `test_websocket_app`). ✅
+- OpenTelemetry / logs: `[ROUTE] route={billing|rag} account_ref_present={}` (never the value);
+  `account_ref_present` on the Python envelope telemetry. Reference (personal data) never logged in clear. ✅
+- ADR created (ADR-0055). ✅
+
+### Out Of Scope
+
+- **Vocal collection** of the account number (slot-filling, digit-over-STT robustness, max-retries) — a
+  fallback for a later ticket; the channel supplies identity in the primary path.
+- Improving multi-service cause attribution (TASK-BE-060).
+- Live BSS / real PDF parsing (still fixtures).
+- Strong customer authentication (OQ-001) — pilot accepts a channel-provided reference at a low bar.
+
+**Adversarial review 93/100 (Pass, 2026-09-29)** — no blocking finding; full review at
+`docs/qa/task-be-061-adversarial-review.md`. Residual (accepted): pilot low-bar identity trust
+(OQ-001); session-locked identity (reconnect to switch account); route-split metric is a
+non-blocking follow-up.
+
+---
+
+## TASK-BE-062 — PDF evidence path as a selectable `BssBillingPort` adapter
+
+**Type:** Technical task (backend billing infrastructure) — ADR-0005 amended
+**Status:** 🚧 Implemented (2026-09-30) on branch `task/TASK-BE-059-eir-b2c-period-model-and-mock` — backend **673** green + ArchUnit. Not merged (user is final validator).
+**Priority:** High
+**Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-040/047 (`BssBillingPort`, structured JSON adapter), ADR-0004/0005
+**Relates to:** OQ-003 (real BSS access), `missing-inputs.md` (`bill-run-documents/search` response gap)
+
+### Context
+
+The invoice-comparison engine already depends only on the outbound port `BssBillingPort`
+(`listInvoices` + `fetchInvoice` → domain `Invoice`), with two implementations: `InMemoryBssBillingAdapter`
+(mock fixtures) and `EirBssBillingAdapter` (real read-only **structured JSON** over the two Eir services).
+A PDF extractor (`InvoicePdfExtractorPort`, ADR-0005) existed but was **wired to nothing** at runtime — the
+PDF was framed as an inline "fallback seam". Requirement (2026-09-30): make PDF retrieval a **first-class,
+selectable `BssBillingPort` implementation** so we can flip between "structured API → JSON" and "API →
+PDF → parse → same structure" with a single config change, knowing the **real APIs can't be tested yet**.
+
+### Decision / Implementation
+
+1. **New outbound port `BillRunDocumentPort`** (`domain/port/out`): `listDocuments(account)` +
+   `download(account, invoiceId) → Optional<PdfSource>` — the "fetch" half, mapping Galaxion
+   `GET /bill-run-documents/search` and `GET /bill-run-documents/{id}/download`. Parsing stays in
+   `InvoicePdfExtractorPort` (the two concerns remain separable).
+2. **`PdfBssBillingAdapter implements BssBillingPort`**: `fetchInvoice` = download → `InvoicePdfExtractorPort.extract` → **regenerates the same domain `Invoice`** the JSON adapter returns. The LLM never reads the PDF (DEC-002). Fail-closed: empty download or `FAILED` extraction → `Optional.empty` (safe escalation, never a 500); `PARTIAL` still carries an invoice (confidence gate decides downstream); defense-in-depth **ownership check** drops a foreign-account invoice (BR-002-1). BSS network hop timed as its own slice (`provider=pdf`).
+3. **Selection = one switch.** `VOICE_SUPPORT_BILLING_BSS_SOURCE` ∈ `{mock, eir, pdf}` in `BillingConfig`. The comparison/confidence/composer chain is **unchanged** whichever source is active.
+4. **`FixtureBillRunDocumentAdapter`** (backed by the same in-memory fixtures) makes `source=pdf` exercisable **now**: the synthetic `PdfSource` carries the invoice **period id** as its reference (what `FixtureInvoicePdfExtractorAdapter` indexes on) + non-empty bytes.
+
+### Acceptance (met)
+
+- `source=pdf` runs the full download → extract → `Invoice` path over the fixtures; the billing route
+  returns the same grounded comparison as `source=mock`. ✅
+- Fail-closed branches locked (empty download, FAILED extraction, ownership mismatch) + PARTIAL kept. ✅
+- Switching source is a single env change, no comparison-engine change. ✅
+- Tests: `PdfBssBillingAdapterTest` (6), `FixtureBillRunDocumentAdapterTest` (5, incl. end-to-end
+  download→fixture-extractor round-trip). Backend 673 + ArchUnit green. ✅
+- ADR-0005 amended. ✅
+
+### Out Of Scope / Deferred
+
+- **Real REST `BillRunDocumentPort` adapter** (`RestBillRunDocumentAdapter`): blocked because
+  `bill-run-documents/search` does **not** return period/amount (can't build `InvoiceSummary` from search
+  alone — `missing-inputs.md`) and live access is unproven (OQ-003). When resolved, register it behind the
+  same port + set the base URL; nothing else changes.
+- **Real PDF parser** (PDFBox) behind `InvoicePdfExtractorPort` (`pdf.source=pdfbox`) — still fixture.
+
+**Adversarial review 90/100 → 96/100 after remediation (Pass, 2026-09-30)** — no blocking finding; full
+review at `docs/qa/task-be-062-adversarial-review.md`. Both non-blocking findings **fixed same session**:
+(1) `PARTIAL` extraction now **fails closed** at the PDF adapter (BR-003 — never treat a partial parse as
+complete); (2) **per-extraction telemetry** added — the BSS slice records a non-PII `reason`
+(`document_unavailable`/`extraction_failed`/`extraction_partial`/`ownership_mismatch`). Backend 673 + ArchUnit
+green. Residual: only the scope-deferred real REST adapter + real PDFBox parser (OQ-003).

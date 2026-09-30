@@ -10,6 +10,7 @@ const OFFER_URL = "/api/voice/webrtc/offer";
 const startBtn = document.getElementById("start");
 const stopBtn = document.getElementById("stop");
 const languageEl = document.getElementById("language");
+const accountEl = document.getElementById("account");
 const statusEl = document.getElementById("status");
 const statusText = document.getElementById("statusText");
 const corrEl = document.getElementById("corr");
@@ -151,6 +152,7 @@ async function startCall() {
   // US-042: the language is fixed for the whole call (STT/answer/TTS), so lock the selector
   // while live; it is sent once on the offer and carried by the session envelope.
   if (languageEl) languageEl.disabled = true;
+  if (accountEl) accountEl.disabled = true;
   setStatus("Requesting microphone…");
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
@@ -181,6 +183,8 @@ async function startCall() {
         sdp: pc.localDescription.sdp,
         type: pc.localDescription.type,
         language: languageEl && languageEl.value ? languageEl.value : undefined,
+        // TASK-BE-061 / ADR-0055: channel-provided account id ("" -> undefined = no account).
+        account_id: accountEl && accountEl.value ? accountEl.value : undefined,
       }),
     });
     if (!res.ok) throw new Error("signaling failed: " + res.status);
@@ -198,6 +202,7 @@ function stopCall() {
   stopBtn.disabled = true;
   startBtn.disabled = false;
   if (languageEl) languageEl.disabled = false;
+  if (accountEl) accountEl.disabled = false;
   stopLatencyPolling();
   if (pc) {
     pc.close();

@@ -493,6 +493,18 @@ def _resolve_session_language(request: web.Request, default_language: str | None
     return default_language
 
 
+def _resolve_account_reference(request: web.Request) -> str | None:
+    """TASK-BE-061 / ADR-0055: the channel-provided account reference for the session.
+
+    The web client sends the selected account (or nothing for the "no account" choice) as the
+    ``?account_id=`` query param. Carried on the per-connection envelope so a billing question
+    routes to the deterministic billing chain from the first turn; blank/absent keeps RAG. This
+    simulates the target where the channel supplies identity up front (Genesys ANI / a header).
+    """
+    account = (request.query.get("account_id") or "").strip()
+    return account or None
+
+
 async def _serve_connection(
     websocket: web.WebSocketResponse,
     request: web.Request,
@@ -512,7 +524,8 @@ async def _serve_connection(
     # BUG-026: the envelope is built ONCE per WS connection (= one session) and reused for
     # every turn, so locking its language here locks the whole session's answer language.
     session_language = _resolve_session_language(request, default_language)
-    envelope = ChannelEnvelope.for_web_turn(language=session_language)
+    envelope = ChannelEnvelope.for_web_turn(
+        language=session_language, account_reference=_resolve_account_reference(request))
     transport = build_aiohttp_ws_transport(
         websocket, sample_rate=sample_rate, serializer=serializer
     )
