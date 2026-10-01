@@ -750,4 +750,64 @@ review at `docs/qa/task-be-062-adversarial-review.md`. Both non-blocking finding
 (1) `PARTIAL` extraction now **fails closed** at the PDF adapter (BR-003 — never treat a partial parse as
 complete); (2) **per-extraction telemetry** added — the BSS slice records a non-PII `reason`
 (`document_unavailable`/`extraction_failed`/`extraction_partial`/`ownership_mismatch`). Backend 673 + ArchUnit
-green. Residual: only the scope-deferred real REST adapter + real PDFBox parser (OQ-003).
+green. Residual: only the scope-deferred real REST adapter + real PDFBox parser (OQ-003). **The real REST
+adapter is now implemented in TASK-BE-063 (gated off by default).**
+
+---
+
+## TASK-BE-063 — Real Galaxion `bill-run-documents` REST adapter (search + download)
+
+**Type:** Technical task (backend billing infrastructure) — ADR-0005
+**Status:** 🔧 In review — backend **691** green + ArchUnit; wired **off by default** (fixture stays active). Branch `task/TASK-BE-063-bill-run-documents-rest`.
+**Adversarial review 94/100 (Pass, 2026-10-01)** — no blocking finding; Residual (accepted): HTTP-mapping layer untested (consistent with the Eir REST adapters, no HTTP harness yet) + live tenant unproven (OQ-003). Full review: `docs/qa/task-be-063-adversarial-review.md`.
+**Priority:** Medium
+**Depends on:** TASK-BE-062 (`BillRunDocumentPort` + `PdfBssBillingAdapter`), TASK-BE-047 (Eir REST pattern)
+**Relates to:** OQ-003 (real BSS access unproven), `missing-inputs.md` (`bill-run-documents/search` response gap)
+
+### Context
+
+TASK-BE-062 shipped the PDF evidence path as a selectable `BssBillingPort` adapter but left the **real**
+`BillRunDocumentPort` implementation deferred — only `FixtureBillRunDocumentAdapter` existed. This task
+implements the two real Galaxion `bill-run-documents` routes **now**, even though they are not called at
+runtime yet (live access unproven, OQ-003), so the HTTP contract is in place and reviewed ahead of time.
+
+### Decision / Implementation
+
+1. **`BillRunDocumentClient` seam** (`adapter/out/bss/pdf`): `search(criteria, user) → List<BillRunDocument>`
+   + `download(documentId, billPeriodId, user) → Optional<byte[]>`. Nested DTOs `DocumentSearchCriteria`
+   (billRunAccountId / accountId / invoiceNumber / billPeriodId) and `BillRunDocument` (id / filename /
+   contentType) — the only fields the search response carries. Mirrors the Eir `*Client` pattern.
+2. **`RestBillRunDocumentAdapter implements BillRunDocumentClient`** (RestClient-backed, thin HTTP mapping,
+   like `RestBillingEnquiryAdapter`): `GET /bill-run-documents/search` with the non-blank criteria as query
+   params; `GET /bill-run-documents/{document_id}/download` returning `application/octet-stream` bytes. Both
+   send the `galaxion-user-type` / `galaxion-user-identifier` headers; `404 → empty`, other errors propagate
+   (sanitized 503 upstream).
+3. **`GalaxionBillRunDocumentAdapter implements BillRunDocumentPort`** (uses the client; unit-tested with a
+   fake): `download(account, invoiceId)` searches by `accountId + invoiceNumber`, takes the first non-blank
+   document id, downloads the bytes and wraps them as `PdfSource(documentId, bytes)`. **Fail-closed**: no
+   document, no bytes, or zero-length bytes → `Optional.empty`.
+4. **`listDocuments` is BLOCKED by a contract gap** and fail-closes to an empty list: the
+   `/bill-run-documents/search` response carries only id/filename/contentType — **no period, no amount** —
+   so no `InvoiceSummary` (which needs period + TTC total) can be built from search alone (`missing-inputs.md`).
+   It must not fabricate period/amount; comparable-invoice listing for `source=pdf` stays on a structured hop
+   (`eir`) or waits for the search response to carry period/amount (OQ-003).
+5. **Wiring = off by default.** `BillingConfig` wires `GalaxionBillRunDocumentAdapter` only when
+   `voice-support.billing.bss.billrun.base-url` is set; blank (default) keeps `FixtureBillRunDocumentAdapter`,
+   so the running `source=pdf` behaviour is unchanged and nothing is called at runtime yet.
+
+### Acceptance (met)
+
+- Both routes implemented with correct params/headers/octet-stream mapping. ✅
+- `download` wired search→download with fail-closed branches; `listDocuments` documented + fail-closed. ✅
+- Selection is a single config (`billrun.base-url`); default unchanged (fixtures). ✅
+- Tests: `GalaxionBillRunDocumentAdapterTest` (6, via a fake client). Backend 691 + ArchUnit green. ✅
+
+### Out Of Scope / Deferred
+
+- **Live validation against the real Galaxion tenant** (OQ-003) — base URL unset until access is proven.
+- **Real PDF parser** (PDFBox) behind `InvoicePdfExtractorPort` (`pdf.source=pdfbox`) — pairs with this
+  adapter but stays fixture for now.
+- **`listDocuments` real listing** — blocked until `search` carries period/amount (coordination request).
+- **Observability**: the real adapter is not reachable at runtime (base URL unset), so no new slice is wired;
+  when activated it sits under the existing `PdfBssBillingAdapter` BSS slice (`provider=pdf`). Not
+  runtime-affecting until the base URL is set.

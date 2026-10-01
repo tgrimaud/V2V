@@ -22,8 +22,11 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.BillingServic
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.EirBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEnquiryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
+import com.voicesupport.billing.domain.port.out.BillRunDocumentPort;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.FixtureBillRunDocumentAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.GalaxionBillRunDocumentAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.PdfBssBillingAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.RestBillRunDocumentAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.domain.model.Invoice;
@@ -68,9 +71,10 @@ public class BillingConfig {
             @Value("${voice-support.billing.bss.eir.user-type:SYSTEM}") String userType,
             @Value("${voice-support.billing.bss.eir.user-identifier:SYSTEM}") String userIdentifier,
             @Value("${voice-support.billing.bss.eir.connect-ms:2000}") long connectMs,
-            @Value("${voice-support.billing.bss.eir.read-ms:5000}") long readMs) {
+            @Value("${voice-support.billing.bss.eir.read-ms:5000}") long readMs,
+            @Value("${voice-support.billing.bss.billrun.base-url:}") String billRunBaseUrl) {
         return new BillingBssProperties(source, enquiryBaseUrl, serviceBaseUrl, currency,
-                userType, userIdentifier, connectMs, readMs);
+                userType, userIdentifier, connectMs, readMs, billRunBaseUrl);
     }
 
     @Bean
@@ -83,10 +87,8 @@ public class BillingConfig {
             return eirAdapter(properties, telemetry);
         }
         if ("pdf".equalsIgnoreCase(properties.source())) {
-            log.info("[BILLING-BSS] source=pdf — invoice PDFs (bill-run-documents) parsed by the PDF extractor "
-                    + "(fixture document source; real REST adapter deferred, OQ-003)");
             return new PdfBssBillingAdapter(
-                    new FixtureBillRunDocumentAdapter(mockInvoices()), invoicePdfExtractorPort, telemetry);
+                    billRunDocumentPort(properties), invoicePdfExtractorPort, telemetry);
         }
         if (!"mock".equalsIgnoreCase(properties.source())) {
             log.warn("[BILLING-BSS] source={} unknown — using mock fixtures", properties.source());
@@ -102,6 +104,22 @@ public class BillingConfig {
         Map<AccountId, List<Invoice>> merged = new LinkedHashMap<>(BssBillingFixtures.all());
         merged.putAll(EirB2cSampleFixtures.all());
         return Map.copyOf(merged);
+    }
+
+    // PDF document source for source=pdf. Default (blank base URL) = the in-memory fixture documents so
+    // the whole download -> extract -> Invoice path stays exercisable now; when a bill-run-documents base
+    // URL is configured, the real Galaxion adapter is wired instead (TASK-BE-063). Nothing else changes.
+    private BillRunDocumentPort billRunDocumentPort(BillingBssProperties p) {
+        if (p.billRunBaseUrl() == null || p.billRunBaseUrl().isBlank()) {
+            log.info("[BILLING-BSS] source=pdf — fixture document source (bill-run-documents base URL unset; "
+                    + "real REST adapter + PDFBox parser deferred, OQ-003)");
+            return new FixtureBillRunDocumentAdapter(mockInvoices());
+        }
+        log.info("[BILLING-BSS] source=pdf — real bill-run-documents adapter base={} user-type={} (OQ-003: "
+                + "search lacks period/amount, so listDocuments is fail-closed)", p.billRunBaseUrl(), p.userType());
+        RestClient restClient = restClient(p.billRunBaseUrl(), p.connectMs(), p.readMs());
+        return new GalaxionBillRunDocumentAdapter(
+                new RestBillRunDocumentAdapter(restClient), new GalaxionUser(p.userType(), p.userIdentifier()));
     }
 
     private static BssBillingPort eirAdapter(BillingBssProperties p, BackendTelemetry telemetry) {
