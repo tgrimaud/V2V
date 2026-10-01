@@ -19,7 +19,7 @@ from stt_validation.pipeline_timing import (
 )
 from tts_synthesis import FixtureTtsProvider
 from web_voice import ChannelEnvelope, WebVoiceEgress, WebVoiceIngress
-from web_voice.app import make_app
+from web_voice.app import DRAIN_ROUTE, make_app
 from web_voice.runtime import PipecatTurnProcessor, StdlibTurnProcessor
 from web_voice.server import (
     OPENAPI_ROUTE,
@@ -266,5 +266,5 @@ def step_valid_openapi_yaml(context):
 @then("the document describes every voice endpoint the server exposes")
 def step_openapi_covers_routes(context):
     documented = set(context.openapi_doc["paths"].keys())
-    exposed = {STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE, OPENAPI_ROUTE}
+    exposed = {STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE, OPENAPI_ROUTE, DRAIN_ROUTE}
     assert documented == exposed, f"spec drift: documented={documented} exposed={exposed}"
