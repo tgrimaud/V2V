@@ -31,10 +31,11 @@ import java.util.List;
 // PDFs arrive (OQ-003). Pure (no PDFBox) so it is unit-testable without generating a PDF, and it
 // lives outside adapter.out (it is a parsing component, not an outbound adapter); the LLM never
 // reads the PDF — parsing stays deterministic here (DEC-002).
-public final class InvoiceTextParser {
+public final class InvoiceTextParser implements PdfTextInvoiceParser {
 
     private static final Currency DEFAULT_CURRENCY = Currency.getInstance("EUR");
 
+    @Override
     public ExtractionResult parse(String text, String documentReference) {
         Fields fields = new Fields(documentReference);
         for (String raw : text == null ? new String[0] : text.split("\\r?\\n")) {

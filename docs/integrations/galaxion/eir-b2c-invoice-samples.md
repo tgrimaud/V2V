@@ -8,8 +8,12 @@ B2C invoice PDFs**: three billing accounts, two consecutive bill runs each (Augu
 lists the gaps that ADR-0054 addresses. The transcribed invoices back the realistic mock
 (`EirB2cSampleFixtures`, TASK-BE-059).
 
-Source files (not committed — anonymized test PDFs held outside the repo):
-`99224964|99226126|99226337_EIR_MOBILE_TEST_20260812|20260912_B2C.pdf`.
+Source files: the six anonymized test PDFs
+(`99224964|99226126|99226337_EIR_MOBILE_TEST_20260812|20260912_B2C.pdf`) are committed as backend test
+resources under `backend/src/test/resources/billing/eir-b2c/` (TASK-BE-065). The real eir B2C layout
+parser (`EirB2cInvoiceLayoutParser`, `pdf.source=eir-b2c`) parses them, and `EirB2cRealPdfParsingTest`
+asserts `parse(real PDF) == EirB2cSampleFixtures` on the full business structure (identity, period
+windows, section → group → item tree, inferred category, prorata periods, 23% VAT split, reconciliation).
 
 ## Structure observed on the invoice
 
