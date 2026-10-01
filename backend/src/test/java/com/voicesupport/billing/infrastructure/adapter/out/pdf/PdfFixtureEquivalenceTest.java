@@ -7,6 +7,7 @@ import com.voicesupport.billing.domain.model.InvoiceItem;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.domain.model.valueobject.PdfSource;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.billing.infrastructure.fixtures.EirB2cSampleFixtures;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -25,20 +26,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 // Golden cross-check (TASK-BE-064): parsing a PDF built from a mock invoice must yield the SAME
-// business data as the mock fixture it came from. There is no real Galaxion PDF yet, so each of the
-// six BssBillingFixtures invoices is rendered to a real PDF via the labeled grammar, then re-parsed by
-// the real PdfBoxInvoiceExtractorAdapter. We assert business equivalence (invoice id, account, period,
-// TTC/HT/VAT totals, and per-line category + TTC amount) — not provenance (Evidence.source legitimately
-// becomes "pdfbox") nor the per-line VAT split (the grammar carries one amount per line + a global VAT).
+// business data as the mock fixture it came from. This is a SEMANTIC round-trip, not a real-layout
+// test: the raw anonymized eir B2C PDFs are held outside the repo (eir-b2c-invoice-samples.md), so each
+// fixture invoice is rendered to a real PDF via the labeled grammar, then re-parsed by the real
+// PdfBoxInvoiceExtractorAdapter. We assert business equivalence (invoice id, account, period, TTC/HT/VAT
+// totals, and per-line category + TTC amount) — NOT provenance (Evidence.source legitimately becomes
+// "pdfbox"), the section/group tree, the per-line periods, nor the per-line VAT split (the grammar
+// carries one amount per line + a global VAT). Proving the parser reproduces the fixtures from the real
+// eir PDF layout needs those PDF bytes + a parser tuned to the eir layout (OQ-003, follow-up ticket).
 class PdfFixtureEquivalenceTest {
 
     private final PdfBoxInvoiceExtractorAdapter adapter = new PdfBoxInvoiceExtractorAdapter();
 
     @Test
-    void everyMockInvoiceRenderedAsPdfReParsesToTheSameBusinessData() throws IOException {
+    void everySyntheticMockInvoiceRenderedAsPdfReParsesToTheSameBusinessData() throws IOException {
         // GIVEN the six synthetic BSS invoices that feed both the mock and the fixture-PDF sources
-        Map<AccountId, List<Invoice>> fixtures = BssBillingFixtures.all();
+        assertAllReParseToTheSameBusinessData(BssBillingFixtures.all());
+    }
 
+    @Test
+    void everyRealEirB2cTranscribedInvoiceRenderedAsPdfReParsesToTheSameBusinessData() throws IOException {
+        // GIVEN the three real billing accounts transcribed from the anonymized eir B2C sample PDFs
+        // (99224964 / 99226126 / 99226337), with negative discount lines, proratas and multi-section trees
+        assertAllReParseToTheSameBusinessData(EirB2cSampleFixtures.all());
+    }
+
+    private void assertAllReParseToTheSameBusinessData(Map<AccountId, List<Invoice>> fixtures) throws IOException {
         for (List<Invoice> invoices : fixtures.values()) {
             for (Invoice expected : invoices) {
                 // WHEN the invoice is rendered to a real PDF and re-parsed by the real extractor

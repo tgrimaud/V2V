@@ -13,7 +13,7 @@
 - `infrastructure/pdf/InvoiceTextParser.java` — deterministic text→`Invoice` parser.
 - `infrastructure/adapter/out/pdf/PdfBoxInvoiceExtractorAdapter.java` — PDFBox text layer + fail-closed.
 - `infrastructure/config/BillingConfig.java` — `pdf.source` switch (`fixture`|`pdfbox`), default `fixture`.
-- Tests: `InvoiceTextParserTest` (7), `PdfBoxInvoiceExtractorAdapterTest` (3), `PdfFixtureEquivalenceTest` (1 golden cross-check vs the mock fixtures). Backend **709** + ArchUnit green.
+- Tests: `InvoiceTextParserTest` (7), `PdfBoxInvoiceExtractorAdapterTest` (3), `PdfFixtureEquivalenceTest` (2 golden cross-checks vs **both** fixture sets). Backend **710** + ArchUnit green.
 
 ## Findings
 
@@ -40,7 +40,7 @@
 
 - `backend/src/test/java/.../infrastructure/pdf/InvoiceTextParserTest.java` — 7 pure-text cases.
 - `backend/src/test/java/.../adapter/out/pdf/PdfBoxInvoiceExtractorAdapterTest.java` — 3 real-PDFBox cases.
-- `backend/src/test/java/.../adapter/out/pdf/PdfFixtureEquivalenceTest.java` — golden cross-check: each of the six `BssBillingFixtures` invoices rendered to a real PDF and re-parsed yields the **same business data** (invoice id, account, period id+date, TTC/HT/VAT totals, per-line category + TTC amount); the no-line "unusable" fixture → FAILED. Asserts business equivalence, not provenance (`Evidence.source` → `pdfbox`) nor the per-line VAT split the grammar does not carry.
+- `backend/src/test/java/.../adapter/out/pdf/PdfFixtureEquivalenceTest.java` — two golden cross-checks: each `BssBillingFixtures` (6 synthetic) **and** `EirB2cSampleFixtures` (3 real accounts transcribed from anonymized eir B2C PDFs — negative discounts, proratas, multi-section, 23% VAT) invoice rendered to a real PDF and re-parsed yields the **same business data** (invoice id, account, period id+date, TTC/HT/VAT totals, per-line category + TTC amount); the no-line "unusable" fixture → FAILED. Asserts business equivalence, not provenance (`Evidence.source` → `pdfbox`), the section/group tree, line periods, nor the per-line VAT split the grammar does not carry. **This is a semantic round-trip, not a real-layout test** — the raw eir PDFs are held outside the repo; real-layout parsing is TASK-BE-065 (OQ-003).
 - `mvn test`: **708** tests, 0 failures/errors, ArchUnit (`HexagonalArchitectureTest`, `NamingConventionsTest`, `ContextBoundaryTest`) green.
 - Manual fakes only, no Mockito, GIVEN/WHEN/THEN. No `@SpringBootTest` → no DB/Ollama needed.
 

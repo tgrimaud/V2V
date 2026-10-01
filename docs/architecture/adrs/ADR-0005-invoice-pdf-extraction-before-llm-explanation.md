@@ -41,8 +41,17 @@ Accepted
 > still lacks period/amount (`missing-inputs.md`, OQ-003); and (2) the **real `InvoicePdfExtractorPort`**
 > (`PdfBoxInvoiceExtractorAdapter`, `pdf.source=pdfbox`) using Apache PDFBox for deterministic text
 > extraction + an `InvoiceTextParser` aligned with `invoice-extraction-json.md` (SUCCESS/PARTIAL/FAILED
-> on reconciliation; fail-closed on empty/corrupt). The grammar/label set is tuned to the real Galaxion
-> layout once sample PDFs arrive (OQ-003). Defaults stay fixture so local/pilot behaviour is unchanged.
+> on reconciliation; fail-closed on empty/corrupt). A golden cross-check (`PdfFixtureEquivalenceTest`)
+> proves the parser round-trips **both** fixture sets — the six synthetic journeys (`BssBillingFixtures`)
+> **and** the three real accounts transcribed from the anonymized eir B2C PDFs (`EirB2cSampleFixtures`,
+> `eir-b2c-invoice-samples.md`) — to the same business data.
+>
+> **Important scoping:** the parser reads a **synthetic labeled grammar**, not the real eir B2C PDF
+> layout, and the raw anonymized PDFs are **held outside the repo** (per `eir-b2c-invoice-samples.md`), so
+> the cross-check is a semantic round-trip, not proof the real eir layout is handled. Tuning the parser to
+> the real eir B2C layout (header + per-service sections + negative discount lines + prorata line periods +
+> invoice-level 23% VAT) and validating `parse(real eir PDF) == EirB2cSampleFixtures` is **TASK-BE-065**
+> (needs the raw PDF bytes — OQ-003). Defaults stay fixture so local/pilot behaviour is unchanged.
 
 ## Context
 
