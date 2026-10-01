@@ -817,8 +817,8 @@ runtime yet (live access unproven, OQ-003), so the HTTP contract is in place and
 ## TASK-BE-064 — Real invoice-PDF extractor (Apache PDFBox, `pdf.source=pdfbox`)
 
 **Type:** Technical task (backend billing infrastructure) — ADR-0005 amended · new dependency (Apache PDFBox)
-**Status:** 🔧 In review — backend **708** green + ArchUnit; selectable via `pdf.source=pdfbox`, **default stays fixture**. Branch `task/TASK-BE-064-pdfbox-extractor`.
-**Adversarial review 93/100 (Pass, 2026-10-01)** — no blocking finding; Residual (accepted): the labeled grammar is a synthetic contract, not the real Galaxion PDF layout (OQ-003), mitigated by fixture-default (no live `pdfbox` path). Full review: `docs/qa/task-be-064-adversarial-review.md`.
+**Status:** 🔧 In review — backend **709** green + ArchUnit; selectable via `pdf.source=pdfbox`, **default stays fixture**. Branch `task/TASK-BE-064-pdfbox-extractor`.
+**Adversarial review 94/100 (Pass, 2026-10-01)** — no blocking finding; a golden cross-check (`PdfFixtureEquivalenceTest`) proves the parser round-trips every mock invoice to the same business data. Residual (accepted): the labeled grammar is a synthetic contract, not the real Galaxion PDF layout (OQ-003), mitigated by fixture-default (no live `pdfbox` path). Full review: `docs/qa/task-be-064-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-062/063 (PDF path + document adapter)
 **Relates to:** OQ-003 (real PDFs unproven), `invoice-extraction-json.md` (normalized contract)
@@ -855,7 +855,10 @@ real document bytes.
 - SUCCESS/PARTIAL/FAILED per the contract; fail-closed on empty/corrupt (never throws). ✅
 - Single config switch; default fixture unchanged. ✅
 - Tests: `InvoiceTextParserTest` (7, pure text) + `PdfBoxInvoiceExtractorAdapterTest` (3, real PDF round-trip
-  via PDFBox + empty + corrupt). Backend **708** + ArchUnit green. ✅
+  via PDFBox + empty + corrupt) + `PdfFixtureEquivalenceTest` (1 golden cross-check: every
+  `BssBillingFixtures` invoice rendered to a real PDF re-parses to the **same business data** — id,
+  account, period, TTC/HT/VAT totals, per-line category+TTC; the no-line fixture → FAILED). Backend
+  **709** + ArchUnit green. ✅
 - ADR-0005 amended; PDFBox vetted + pinned. ✅
 
 ### Out Of Scope / Deferred

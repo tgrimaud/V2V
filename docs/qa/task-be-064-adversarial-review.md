@@ -5,7 +5,7 @@
 - **Reviewer:** adversarial-code-review skill
 - **Date:** 2026-10-01
 - **Verdict:** ✅ Pass
-- **Score:** 93/100
+- **Score:** 94/100
 
 ## Scope reviewed
 
@@ -13,7 +13,7 @@
 - `infrastructure/pdf/InvoiceTextParser.java` — deterministic text→`Invoice` parser.
 - `infrastructure/adapter/out/pdf/PdfBoxInvoiceExtractorAdapter.java` — PDFBox text layer + fail-closed.
 - `infrastructure/config/BillingConfig.java` — `pdf.source` switch (`fixture`|`pdfbox`), default `fixture`.
-- Tests: `InvoiceTextParserTest` (7), `PdfBoxInvoiceExtractorAdapterTest` (3). Backend **708** + ArchUnit green.
+- Tests: `InvoiceTextParserTest` (7), `PdfBoxInvoiceExtractorAdapterTest` (3), `PdfFixtureEquivalenceTest` (1 golden cross-check vs the mock fixtures). Backend **709** + ArchUnit green.
 
 ## Findings
 
@@ -23,7 +23,7 @@
 
 | # | Severity | Finding | Disposition |
 |---|----------|---------|-------------|
-| 1 | Low | The labeled grammar (`INVOICE/ACCOUNT/PERIOD/.../LINE a\|b\|c`) is a **synthetic contract**, not the real Galaxion PDF layout; a real statement will not match without grammar tuning. | **Accepted / documented** — no anonymized sample PDF exists (OQ-003). The adapter is **off by default** (`pdf.source=fixture`); runtime behaviour unchanged. The ADR-0005 amendment + ticket Out-Of-Scope state the grammar is tuned when sample PDFs arrive. Scoping a layout parser to a non-existent sample would be guesswork. |
+| 1 | Low | The labeled grammar (`INVOICE/ACCOUNT/PERIOD/.../LINE a\|b\|c`) is a **synthetic contract**, not the real Galaxion PDF layout; a real statement will not match without grammar tuning. | **Accepted / documented** — no anonymized sample PDF exists (OQ-003). The adapter is **off by default** (`pdf.source=fixture`); runtime behaviour unchanged. The ADR-0005 amendment + ticket Out-Of-Scope state the grammar is tuned when sample PDFs arrive. Scoping a layout parser to a non-existent sample would be guesswork. `PdfFixtureEquivalenceTest` proves the parser is faithful to the shared `BssBillingFixtures` source (every mock invoice round-trips to the same business data), so only the surface layout — not the semantics — remains to tune. |
 | 2 | Low | VAT is split at invoice level only (`tax=0` per line); line `taxExcluded==taxIncluded`. | **Accepted** — same deliberate stance as `EirBssBillingAdapter`; the PDF text grammar carries one amount per line + one global VAT, so per-line tax cannot be derived. |
 | 3 | Info | `normalizeDecimal` treats the **last-occurring** separator as the decimal; a format using `.` as decimal with `,` thousands (e.g. `1,234.50`) and vice-versa are both handled, but an ambiguous `1.234` (no decimals) is read as `1.234` → 123 cents. | **Accepted** — covered by a thousands-separator test (`1 234.50`); genuinely ambiguous no-decimal grouped amounts are a layout concern folded into finding #1. |
 | 4 | Info | `movePointRight(2).setScale(0, HALF_UP)` rounds sub-cent inputs; acceptable for currency cents. | No action. |
@@ -40,6 +40,7 @@
 
 - `backend/src/test/java/.../infrastructure/pdf/InvoiceTextParserTest.java` — 7 pure-text cases.
 - `backend/src/test/java/.../adapter/out/pdf/PdfBoxInvoiceExtractorAdapterTest.java` — 3 real-PDFBox cases.
+- `backend/src/test/java/.../adapter/out/pdf/PdfFixtureEquivalenceTest.java` — golden cross-check: each of the six `BssBillingFixtures` invoices rendered to a real PDF and re-parsed yields the **same business data** (invoice id, account, period id+date, TTC/HT/VAT totals, per-line category + TTC amount); the no-line "unusable" fixture → FAILED. Asserts business equivalence, not provenance (`Evidence.source` → `pdfbox`) nor the per-line VAT split the grammar does not carry.
 - `mvn test`: **708** tests, 0 failures/errors, ArchUnit (`HexagonalArchitectureTest`, `NamingConventionsTest`, `ContextBoundaryTest`) green.
 - Manual fakes only, no Mockito, GIVEN/WHEN/THEN. No `@SpringBootTest` → no DB/Ollama needed.
 
