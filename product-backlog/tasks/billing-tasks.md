@@ -758,7 +758,7 @@ adapter is now implemented in TASK-BE-063 (gated off by default).**
 ## TASK-BE-063 — Real Galaxion `bill-run-documents` REST adapter (search + download)
 
 **Type:** Technical task (backend billing infrastructure) — ADR-0005
-**Status:** 🔧 In review — backend **691** green + ArchUnit; wired **off by default** (fixture stays active). Branch `task/TASK-BE-063-bill-run-documents-rest`.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`) — backend **691** green + ArchUnit; wired **off by default** (fixture stays active).
 **Adversarial review 94/100 (Pass, 2026-10-01)** — no blocking finding; Residual (accepted): HTTP-mapping layer untested (consistent with the Eir REST adapters, no HTTP harness yet) + live tenant unproven (OQ-003). Full review: `docs/qa/task-be-063-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-062 (`BillRunDocumentPort` + `PdfBssBillingAdapter`), TASK-BE-047 (Eir REST pattern)
