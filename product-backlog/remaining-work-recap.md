@@ -1,6 +1,7 @@
 # Remaining Work Recap — objective of each open/in-flight ticket
 
-> **Snapshot: 2026-09-29 (refreshed after the WIP close-out + bug/latency triage).** Plain-language
+> **Snapshot: 2026-10-01 (refreshed after merging TASK-OBS-002, TASK-WEB-040, TASK-DOC-009,
+> TASK-BE-023, TASK-OPS-010, TASK-WEB-049 into `feat/restart-from-scratch` + branch cleanup).** Plain-language
 > purpose ("the why") of each ticket that is still open, in-flight, or on an unmerged branch, so the
 > goal is understood at a glance. This is a point-in-time summary — the authoritative status
 > always lives in the ticket file and `backlog-index.md`. Regenerate/refresh when the picture
@@ -13,8 +14,12 @@
 >   TASK-BE-024 / TASK-BE-025 (v0.5.0); BUG-005 (v0.4.0), BUG-006/008 (v0.5.0), BUG-016 (v0.6.0),
 >   BUG-019/020 (v0.9.0); latency BUG-021 (v0.9.3), TASK-BE-020 (v0.8.0), TASK-WEB-035 (v0.6.0);
 >   TASK-STT-014 was **rejected** (measured harmful).
-> - **Genuinely still open** (below): BUG-017, BUG-018 (2/3), BUG-024 symptom (a); TASK-BE-058;
->   TASK-WEB-040; TASK-WEB-044; infra OPS-010 / INFRA-005 / BE-023 / BE-030 / BE-026 / BE-031 / BE-057;
+> - **Merged 2026-10-01 (this cycle):** TASK-OBS-002 (structured JSON logs, both tiers),
+>   TASK-WEB-040 (`channel_ingress` slice), TASK-DOC-009 (target diagram refresh + simplified EN),
+>   TASK-BE-023 (ops-surface hardening), TASK-OPS-010 (bridge `/drain`), TASK-WEB-049 (server
+>   `turn_error` signal) → **BUG-018 fully closed** (residual: pilot deploy QA of `/drain`).
+> - **Genuinely still open** (below): BUG-017, BUG-024 symptom (a); TASK-BE-058;
+>   TASK-WEB-044; infra INFRA-005 / BE-030 / BE-026 / BE-031 / BE-057; INFRA-018 (parked);
 >   OQ-006 / OQ-008 / OQ-009.
 
 ## Bugs to finish
@@ -56,16 +61,16 @@
 | ~~TASK-STT-014~~ | Shorten the STT finalize tail ("caller stopped speaking" → final transcript). | ❌ **Rejected** — measured harmful (trailing-word loss); not a viable lever |
 | ~~TASK-BE-020~~ | Speed up the backend's first vetted sentence (streaming, warm the reactive path). | ✅ Merged (`10c105d`), shipped since v0.8.0 |
 | ~~TASK-WEB-035~~ | STT time-to-final tail on the WebSocket transport (bounded finalize budget). | ✅ Merged (`9676a45`), shipped since v0.6.0 |
-| **TASK-WEB-040** | Instrument the only still-unmeasured WS latency slice (`channel_ingress`, mic input) to complete the latency report. | 📋 Planned (Low) — genuinely open |
+| ~~TASK-WEB-040~~ | Instrument the only still-unmeasured WS latency slice (`channel_ingress`, mic input) to complete the latency report. | ✅ Merged (`f186131`, review 95/100) 2026-09-30 |
 | _(context)_ | The remaining first-token tail is the **provider/model choice** — TASK-BE-033 lever-1 benchmark (done) + lever-2 prefill-trim (shipped default-off). Enabling a prod default needs a retrieval-quality QA pass. | — |
 
 ## Infra / deploy / resilience
 
 | Ticket | Objective (the why) | State |
 |---|---|---|
-| **TASK-OPS-010** | Drain active sessions cleanly before recreating a container on deploy (don't cut a live call). Unblocks BUG-018's last third. | 🚧 Implemented on branch (pending review + QA, 2026-09-29) — bridge `POST /drain` + Ansible wiring, 703 tests green; not merged |
+| ~~TASK-OPS-010~~ | Drain active sessions cleanly before recreating a container on deploy (don't cut a live call). Unblocked BUG-018's last third. | ✅ Merged 2026-10-01 (`--no-ff`, review 93/100). Residual: pilot deploy QA of `/drain` (needs an OPS-010 image + `vault_voice_drain_token`) |
 | **TASK-INFRA-005** | Keep a WebRTC session routed to the same bridge (signaling stickiness at the LB) — negotiation breaks otherwise with 2 bridges. | Deferred — validate live |
-| **TASK-BE-023** | Close unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/metrics`) before external exposure. | Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — Actuator default `health,info`; docs gated behind `x-api-key`; `mvn test` 650 green. Pending review + QA + merge |
+| ~~TASK-BE-023~~ | Close unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/metrics`) before external exposure. | ✅ Merged 2026-10-01 (`--no-ff`, review 93/100). Residual: pilot QA (`/actuator/metrics` → 404 by default) on next deploy |
 | **TASK-BE-030** | If Redis (shared memory) fails, fall back to local memory and stay in service instead of dropping out of rotation. | Planned |
 | **TASK-BE-026** | Retry idempotent reads + circuit-break (resilience4j) when an upstream is down. | Deferred |
 | **TASK-BE-031** | Reduce personal data sent to cloud providers (STT/TTS/LLM) — engineering piece of the OQ-009 compliance work. | Planned |
