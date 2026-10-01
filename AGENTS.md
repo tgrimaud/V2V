@@ -83,6 +83,16 @@
 - Run `adversarial-code-review` before QA acceptance. The developer must fix
   findings until the adversarial reviewer is at least 90% satisfied, unless
   Product or Architecture explicitly accepts the residual risk.
+- **Persist every adversarial review — never leave it only in chat.** As soon as a
+  review is produced, write it to git in two places: (1) a full review file
+  `docs/qa/<ticket-id>-adversarial-review.md` using the skill's output format
+  (Verdict, Score, blocking + non-blocking/low + Info findings tables, Story
+  Coverage, Test Evidence, Observability, Security, Required Actions, Residual);
+  and (2) a one-line pointer in the ticket's `**Status:**` block —
+  `**Adversarial review NN/100 (Pass, YYYY-MM-DD)** — blocking fix applied: …;
+  Residual (accepted): …` plus a link to the review file. A review that exists
+  only in the chat transcript is considered **not done** — the transcript is not a
+  versioned repo artifact and cannot be searched/audited later.
 - After adversarial review passes, QA runs functional and latency validation.
   Any QA bug must become an explicit bug ticket using
   `product-backlog/templates/bug-ticket-template.md`, then restarts the loop:
@@ -219,6 +229,7 @@
 - Minting or forward-porting a ticket/ADR/BUG id without grepping it across **all** branches (mainline + sprint + task branches + `main`), not just the current branch — the same ids were independently reused for *different* work on different branches (BUG-017, TASK-WEB-037/038) and collisions only surface at merge/forward-port time (resolved here: BUG-017→BUG-018, WEB-037/038→WEB-045/046).
  - Relying on `git cherry`'s `+`/`-` alone to decide what's unique when forward-porting — union-resolved cherry-picks change patch-ids, so already-ported commits still show `+`. Confirm uniqueness by content, not the marker.
  - Trusting a ticket's `**Status:**` header (or the `backlog-index.md` row) to decide what's still open — headers go **stale** after sprint-closure fast-forward merges (nothing flips them). Reconcile by git ancestry: `git merge-base --is-ancestor <fix> feat/restart-from-scratch` + `git log --grep=<ID> <mainline>` + `git tag --contains <fix>`. This session BUG-025/TASK-BE-034 and BUG-009-013 all read "pending/ready for review" but were already merged + shipped (v0.5.2→v0.9.2 via Sprint-11 closure `6bf8de2`) — flip the header AND the index row to match reality.
+ - Leaving an adversarial review **only in the chat transcript** — the score, the blocking fix applied, and especially the non-blocking/low findings then vanish from git and can't be searched or audited later (exactly what happened to TASK-OPS-010/WEB-049/BE-023 until they were back-filled). Persist every review as `docs/qa/<ticket-id>-adversarial-review.md` (full skill format: findings tables incl. Low/Info) **and** a `**Adversarial review NN/100 (Pass, date)** — blocking fix applied …; Residual (accepted) …` pointer line in the ticket, in the same turn you produce the review. `rg -n "^\| Low|Non-Blocking Findings" docs/qa/` must surface them.
  - Wiring a per-connection channel envelope from the server default and only reading the client's `?language=` for telemetry (BUG-026) — the web-voice WS envelope (`ChannelEnvelope.for_web_turn`) is built **once per connection and reused every turn**, so it must carry the client selection to lock the session language. Resolve it via a small pure helper with a `{fr,en}` allowlist (junk code → fallback, never force a wrong language; empty+no-default → `None` = auto). Keep that runtime allowlist in sync with the backend `AnswerLanguage` set if a 3rd language is added.
 
 ## Checklist After Substantive Changes
@@ -230,3 +241,6 @@
 - [ ] If runtime behavior changed: add/update OpenTelemetry traces, metrics and
       structured logs, or document why the story is not runtime-affecting.
 - [ ] Update `docs/` together with code (not as a separate batch).
+- [ ] If an adversarial review was produced: persist it to
+      `docs/qa/<ticket-id>-adversarial-review.md` + add the `**Adversarial review
+      NN/100 …**` pointer line in the ticket. Never leave a review only in chat.

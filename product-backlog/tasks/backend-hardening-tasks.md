@@ -13,7 +13,7 @@ pilot, unless pulled in earlier.
 | TASK-QA-018 | Mutation testing (PIT) for the backend domain guardrails/classifier — measure test *effectiveness*, not just coverage | V1 hardening / test quality | TASK-BE-004, BUG-001, BUG-005 | ✅ Done — merged 2026-07-27 into `feat/restart-from-scratch` (`58cdb2c`); 97 % killed / 97 % strength, threshold 95 |
 | TASK-BE-019 | Authenticate/isolate the unauthenticated backend endpoints (`/api/knowledge/ingest`, `/sync`, `/api/conversation/answer`, `/retrieve`) | V1 security hardening | TASK-BE-006, TASK-BE-012 | 🚧 Implemented on `task/TASK-BE-019-endpoint-auth` (2026-07-28) — central `ApiKeyAuthInterceptor` gates the 4 endpoints (same rule as `/converse`), sanitized 401 `ERR_401`; `mvn test` **312** green (+7). ✅ Adversarial review 93/100 + QA GO (live gate smoke on :8081) — ✅ Merged into `feat/restart-from-scratch` (2026-07-28, merge commit `e5cb64a`) |
 | TASK-BE-022 | Constant-time API-key gate unification (`ApiKeyGuard`) + client-controlled log/header sanitization (`correlation_id`/`channel`) | V1 security hardening | TASK-BE-019 | ✅ **Merged into `feat/sprint-11-remote-deployment`** (2026-08-04, `--no-ff` `3dafffd`; adversarial **95/100** + QA **GO**) — built on `task/TASK-BE-022-auth-log-hardening` — findings **#1** (timing side-channel) & **#3** (log injection) of the 2026-08-04 backend adversarial review (91/100). `/converse` + `/converse-stream` now delegate to `ApiKeyGuard.authorized` (`MessageDigest.isEqual`, dropping the `String.equals` byte-by-byte timing leak that duplicated the gate 3×); `CorrelationId.sanitize` strips ISO control chars + caps 200 chars on every client-supplied id/channel before it reaches the MDC, a structured log, or a response header. `mvn test` **336** green (+5 `CorrelationIdTest`, +1 MVC CR/LF-echo regression), ArchUnit OK. `docs/qa/task-be-022-auth-log-hardening-qa-report.md`. Merge on explicit user request only |
-| TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | Proposed (2026-08-04) — finding **#4** of the 2026-08-04 backend adversarial review; **ticket only, deferred** (acceptable on the localhost pilot; blocking before the API doc / metrics surface is reachable off-box) |
+| TASK-BE-023 | Restrict the unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/*`) before any non-localhost exposure | V1 security hardening | TASK-BE-016, TASK-BE-019 | ✅ Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`) — adversarial review 93/100 |
 | TASK-BE-024 | Conversation-memory adapter hardening: sanitize the client-controlled `conversation_id` in degraded-path logs + pipeline the Redis append (RPUSH/LTRIM/PEXPIRE) into one round-trip | V1 security + latency hardening | TASK-BE-021, TASK-BE-022 | 🚧 Implemented on `task/TASK-BE-024-conversation-memory-hardening` (2026-08-05) — low-severity findings of the Sprint 11 full adversarial review. `RedisConversationMemoryAdapter` now routes `conversationId` through `CorrelationId.sanitize` on all three degraded/skip log lines (log-injection close-out); `RedisConversationTurnStoreAdapter.appendTrimExpire` pipelines the three Redis ops into a single round-trip (hot turn path). `mvn test` **337** green (+1 CR/LF log-forge regression), ArchUnit OK. Merge on explicit user request only |
 | TASK-BE-026 | LLM provider fallback on upstream `503`/unavailable — try an alternate configured model before degrading | V1 resilience hardening | TASK-BE-012, TASK-BE-005 | Proposed (2026-08-14) — surfaced during pilot voice-journey validation: the whole `mistral-small` family returned `503 Service unavailable` (code 3831) on the Mistral cloud while `mistral-medium-2508` / `ministral-8b-latest` answered normally, taking the bot to the safe fallback for a model-specific outage |
 
@@ -1008,10 +1008,24 @@ Delivered on `task/TASK-BE-022-auth-log-hardening`:
 
 **Parent:** EPIC-009 (Trust, security and auditability) — cross-cutting API hardening
 **Classification:** V1 security hardening
-**Status:** ✅ Ready / Scheduled (mechanism decided 2026-08-15, global-review decision #5).
-The trigger condition is now **met**: since Sprint 11 the backend answers off-box on the
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`); branch deleted after merge — **adversarial review 93/100 (Pass, 2026-09-29)**. Pilot QA (actuator/metrics 404 default) still to run on next deploy.
+No blocking findings. Residual (accepted): (1) no automated assertion that `/actuator/metrics`
+returns 404 by default — it's a Spring exposure-config default (`include: health,info`), heavy to
+cover without `@SpringBootTest`; verify in pilot QA (`curl /actuator/metrics` → 404,
+`/actuator/health` → 200). (2) The **docs** closure is conditional on `CONVERSATION_API_KEY` being
+set on the deployment (ops action); the **metrics** closure is unconditional (default fenced).
+OTLP export (TASK-OPS-007) is unaffected — only the `/actuator/metrics` web endpoint is fenced,
+metrics are still collected + exported.
+Full review (findings table, coverage, evidence): `docs/qa/task-be-023-adversarial-review.md`.
+Mechanism (decided 2026-08-15) implemented: (1) Actuator exposure defaults to `health,info`
+(`MANAGEMENT_ENDPOINTS_EXPOSURE` env, closed by default → `/actuator/metrics` not anonymously
+readable off-box; `/actuator/health` stays exposed for probes); (2) `/v3/api-docs**` (+ `.yaml`)
+and `/swagger-ui**` added to the existing `ApiKeyAuthInterceptor` path list → gated behind
+`x-api-key` when a key is configured, open on the localhost pilot / QA (no key). `mvn test` 650
+green (+8), ArchUnit OK. Not yet merged (user is final validator).
+The trigger condition was **met**: since Sprint 11 the backend answers off-box on the
 backend VIP `.11:80` (VM↔VM on `192.168.0.0/24`), so `/v3/api-docs`, `/swagger-ui**` and
-`/actuator/metrics` are anonymously reachable on the internal subnet. Do **before** broadening
+`/actuator/metrics` were anonymously reachable on the internal subnet. Done **before** broadening
 exposure (external channels / Genesys); **not** P1 — exposure is internal-subnet only (no public
 route reaches the backend; the `.10:443` edge routes to the voice bridges, not the backend).
 **Priority:** Medium

@@ -158,6 +158,34 @@ turn JSON on per tier when SRE's log pipeline / collector arrives (one env var +
   `ComparableInvoiceService` ordering regression. Backend **652** green + ArchUnit. Branch
   `task/TASK-BE-059-eir-b2c-period-model-and-mock`, not merged (user is final validator).
 
+## 2026-09-29 — TASK-BE-023: restrict the unauthenticated ops surface
+
+**Summary:**
+
+- Implemented the 2026-08-15 combined mechanism so the backend's ops/doc surface is not
+  anonymously reachable once it answers off-box (Sprint 11 backend VIP), while the localhost
+  pilot / QA stays frictionless:
+  - **Actuator:** `application.yml` exposure now defaults to `health,info`
+    (`MANAGEMENT_ENDPOINTS_EXPOSURE` env, same env-driven-posture precedent as BE-021's
+    `REDIS_HEALTH_ENABLED`), so `/actuator/metrics` is **not** anonymously readable off-box;
+    `/actuator/health` stays exposed for the container + HAProxy probes. Reopen with
+    `MANAGEMENT_ENDPOINTS_EXPOSURE=health,info,metrics` on a trusted/QA env.
+  - **API docs:** `/v3/api-docs`, `/v3/api-docs/**`, `/v3/api-docs.yaml`, `/swagger-ui.html`,
+    `/swagger-ui/**` added to the existing `ApiKeyAuthInterceptor` path list (`WebSecurityMvcConfig`)
+    → gated behind `x-api-key` when a key is configured, open when no key is set (localhost pilot).
+    Reuses the BE-019 `ApiKeyGuard` (constant-time compare, open-when-unset) — no new mechanism.
+- **Deploy:** `MANAGEMENT_ENDPOINTS_EXPOSURE` added to `backend.env.j2` (default `health,info`),
+  `group_vars/backend.yml`, and `deploy/compose/backend/.env.example` (key parity preserved —
+  `qa-validate-ansible.sh` render + parity all PASS). Docs: `deployment-eir-ai4cc-tst.md` env table.
+- **Tests:** new `OpsSurfaceApiKeyTest` (keyed posture: `/v3/api-docs`, `.yaml`, grouped `/**`,
+  `/swagger-ui/index.html` → 401 without header, 200 with) + `OpsSurfaceOpenWithoutKeyTest` (no
+  key → open) via a probe controller at the exact served paths. `mvn test` **650** green (+8),
+  ArchUnit (Hexagonal/ContextBoundary/Naming) green.
+- **Scope:** pure transport/config hardening — no domain, RAG or LLM change. Not P1 (internal
+  subnet only) but done before broadening exposure (external channels / Genesys).
+- **Branch:** `task/TASK-BE-023-restrict-ops-surface` (off `feat/restart-from-scratch`).
+  Adversarial review 93/100. Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`).
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

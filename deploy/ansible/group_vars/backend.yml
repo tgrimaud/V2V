@@ -64,6 +64,12 @@ redis_timeout: "2s"
 conversation_memory_ttl_seconds: 3600
 redis_health_enabled: true
 
+# TASK-BE-023 (ops-surface hardening): Actuator web exposure. Default health,info keeps
+# /actuator/metrics closed to anonymous callers on the off-box backend VIP; /actuator/health stays
+# exposed for the container + HAProxy probes. Set to "health,info,metrics" only on a trusted/QA env
+# if actuator metrics are needed (pilot observability uses the OTLP collector, not actuator scrape).
+management_endpoints_exposure: "health,info"
+
 # RAG context budget (TASK-BE-033 lever 2): caps the KB text fed to the LLM to shrink prompt
 # prefill (a ~linear driver of backend_first_token). 0 = off (default). Measured on the pilot
 # (2026-09-22, OpenAI provider, n=50): capping the ~2318-char context to ~1200 (-47%) cut the

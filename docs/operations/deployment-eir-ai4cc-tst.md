@@ -184,7 +184,8 @@ the compose stack (`podman compose`) consumes. Defaults below are the code defau
 | `MISTRAL_API_KEY` | from secrets | chat LLM (cloud) — pinned pilot provider |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | from secrets / `https://api.openai.com` | chat LLM (OpenAI/Azure Foundry) — **only** when `LLM_PROVIDER=openai`; base-url is the ROOT without `/v1` (Azure Foundry: `https://<res>.services.ai.azure.com/openai`). Egress: `api.openai.com:443` or the Foundry host. |
 | `OPENAI_CHAT_MODEL` / `OPENAI_REASONING_EFFORT` | `gpt-5` / `minimal` | reasoning latency lever; empty effort for a non-reasoning model |
-| `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only) |
+| `CONVERSATION_API_KEY` | from secrets (non-empty) | `x-api-key` gate; empty = open (dev only). With a key set, the OpenAPI docs (`/v3/api-docs`, `.yaml`) + Swagger UI are gated too (TASK-BE-023) |
+| `MANAGEMENT_ENDPOINTS_EXPOSURE` | `health,info` (default) | Actuator exposure (TASK-BE-023): `/actuator/metrics` NOT anonymously readable off-box; `/actuator/health` stays exposed for probes. Set `health,info,metrics` only on a trusted/QA env |
 | `CONVERSATION_STORE` | `redis` | Redis-backed memory (TASK-BE-021); default `memory` (in-process) |
 | `REDIS_HOST` / `REDIS_PORT` | `192.168.0.107` / `6379` | Redis for shared memory (TASK-BE-021) |
 | `REDIS_PASSWORD` / `REDIS_TIMEOUT` | from secrets / `2s` | Redis auth (if enabled) + command timeout |
