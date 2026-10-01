@@ -32,9 +32,17 @@ Accepted
 > parsing is deterministic and lands in `PdfBssBillingAdapter`. Fail-closed: an empty download or a
 > `FAILED` extraction → `Optional.empty` (safe escalation, never a 500), plus a defense-in-depth
 > ownership check (BR-002-1). A `FixtureBillRunDocumentAdapter` (backed by the same in-memory
-> invoice fixtures) makes `source=pdf` exercisable now; the **real REST `BillRunDocumentPort`
-> adapter is deferred** because `bill-run-documents/search` does not return period/amount
-> (`missing-inputs.md`) and live access is unproven (OQ-003).
+> invoice fixtures) makes `source=pdf` exercisable now.
+>
+> **Amendment (2026-10-01, TASK-BE-063 + TASK-BE-064).** Both deferred pieces are now implemented
+> (wired **off by default**): (1) the real REST `BillRunDocumentPort` adapter
+> (`GalaxionBillRunDocumentAdapter` over `RestBillRunDocumentAdapter`) — `download` works
+> (search→download→`PdfSource`), `listDocuments` fail-closes because `bill-run-documents/search`
+> still lacks period/amount (`missing-inputs.md`, OQ-003); and (2) the **real `InvoicePdfExtractorPort`**
+> (`PdfBoxInvoiceExtractorAdapter`, `pdf.source=pdfbox`) using Apache PDFBox for deterministic text
+> extraction + an `InvoiceTextParser` aligned with `invoice-extraction-json.md` (SUCCESS/PARTIAL/FAILED
+> on reconciliation; fail-closed on empty/corrupt). The grammar/label set is tuned to the real Galaxion
+> layout once sample PDFs arrive (OQ-003). Defaults stay fixture so local/pilot behaviour is unchanged.
 
 ## Context
 

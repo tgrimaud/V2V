@@ -26,6 +26,11 @@
         <!-- KB CSV ingestion (TASK-BE-013, ADR-0030): not managed by the Spring Boot BOM. -->
         <jsoup.version>1.22.2</jsoup.version>
         <commons-csv.version>1.14.1</commons-csv.version>
+        <!-- Deterministic invoice-PDF text extraction (TASK-BE-064, ADR-0005): Apache PDFBox,
+             Apache-2.0, the de-facto Java PDF library. Not managed by the Spring Boot BOM. 3.0.x is
+             the current line (Java 17+). pdfbox 3 pulls fontbox + commons-logging; commons-io stays
+             pinned at 2.19.0 (dependencyManagement) so a pdfbox transitive cannot downgrade it. -->
+        <pdfbox.version>3.0.5</pdfbox.version>
         <!-- OpenAPI/Swagger (TASK-BE-016): not managed by the Spring Boot BOM. 2.8.x is the
              springdoc line compatible with Spring Boot 3.4.x (OpenAPI 3.1 by default). Pinned to
              2.8.14 (NOT 2.8.15+): 2.8.15 registers the swagger-ui pattern
@@ -185,6 +190,12 @@
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>${jsoup.version}</version>
+        </dependency>
+        <!-- TASK-BE-064: real invoice-PDF extractor (pdf.source=pdfbox). -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
 
         <dependency>

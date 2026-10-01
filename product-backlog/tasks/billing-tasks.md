@@ -811,3 +811,58 @@ runtime yet (live access unproven, OQ-003), so the HTTP contract is in place and
 - **Observability**: the real adapter is not reachable at runtime (base URL unset), so no new slice is wired;
   when activated it sits under the existing `PdfBssBillingAdapter` BSS slice (`provider=pdf`). Not
   runtime-affecting until the base URL is set.
+
+---
+
+## TASK-BE-064 — Real invoice-PDF extractor (Apache PDFBox, `pdf.source=pdfbox`)
+
+**Type:** Technical task (backend billing infrastructure) — ADR-0005 amended · new dependency (Apache PDFBox)
+**Status:** 🔧 In review — backend **708** green + ArchUnit; selectable via `pdf.source=pdfbox`, **default stays fixture**. Branch `task/TASK-BE-064-pdfbox-extractor`.
+**Adversarial review 93/100 (Pass, 2026-10-01)** — no blocking finding; Residual (accepted): the labeled grammar is a synthetic contract, not the real Galaxion PDF layout (OQ-003), mitigated by fixture-default (no live `pdfbox` path). Full review: `docs/qa/task-be-064-adversarial-review.md`.
+**Priority:** Medium
+**Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-062/063 (PDF path + document adapter)
+**Relates to:** OQ-003 (real PDFs unproven), `invoice-extraction-json.md` (normalized contract)
+
+### Context
+
+The PDF evidence path (TASK-BE-062) and the real document adapter (TASK-BE-063) were in place, but the
+`InvoicePdfExtractorPort` only had a **synthetic** fixture implementation — no real PDF was ever parsed. This
+task implements the real extractor so the whole `bill-run-documents` → PDF bytes → `Invoice` chain can run on
+real document bytes.
+
+### Decision / Implementation
+
+1. **Dependency:** Apache **PDFBox 3.0.5** (Apache-2.0, de-facto Java PDF library, actively maintained). Pinned
+   in `pom.xml`; `commons-io` stays pinned at 2.19.0 in `dependencyManagement` so a PDFBox transitive cannot
+   downgrade it (verified `dependency:tree`). Approved implicitly by the request (the project had no PDF-parsing
+   capability — `jsoup`=HTML, `commons-csv`=CSV).
+2. **`PdfBoxInvoiceExtractorAdapter implements InvoicePdfExtractorPort`** (`adapter/out/pdf`): `Loader.loadPDF`
+   + `PDFTextStripper` turn the bytes into text (the real, deterministic PDF layer), then delegates to the
+   parser. **Fail-closed**: empty document, corrupt/unreadable PDF or any parsing error → `ExtractionResult.failed`
+   (never throws); the failure reason carries only the document reference + error type (no PDF content → no PII).
+3. **`InvoiceTextParser`** (`infrastructure/pdf`, a pure parsing component outside `adapter.out` so the ArchUnit
+   adapter-naming rule does not apply): parses a labeled grammar — `INVOICE / ACCOUNT / PERIOD / DATE / CURRENCY
+   / LINE <category>|<label>|<amount> / VAT / TOTAL` — amounts to integer cents (comma/dot decimals + thousands
+   separators). Status mirrors `invoice-extraction-json.md`: **FAILED** (unusable) when a required field is missing,
+   **PARTIAL** when lines do not reconcile with the total, **SUCCESS** (parseable) when they reconcile. Unknown
+   categories → `OTHER`; VAT split exposed at invoice level only (same stance as `EirBssBillingAdapter`).
+4. **Selection = one switch.** `voice-support.billing.pdf.source` ∈ `{fixture, pdfbox}` in `BillingConfig`;
+   default `fixture`, so local/pilot behaviour is unchanged until explicitly flipped.
+
+### Acceptance (met)
+
+- Real PDFBox text extraction + deterministic parse to the domain `Invoice`. ✅
+- SUCCESS/PARTIAL/FAILED per the contract; fail-closed on empty/corrupt (never throws). ✅
+- Single config switch; default fixture unchanged. ✅
+- Tests: `InvoiceTextParserTest` (7, pure text) + `PdfBoxInvoiceExtractorAdapterTest` (3, real PDF round-trip
+  via PDFBox + empty + corrupt). Backend **708** + ArchUnit green. ✅
+- ADR-0005 amended; PDFBox vetted + pinned. ✅
+
+### Out Of Scope / Deferred
+
+- **Grammar tuning to the real Galaxion PDF layout** — the labeled grammar is the stable contract; the exact
+  label/section mapping is tuned when anonymized sample PDFs arrive (OQ-003).
+- **Live activation** — `pdf.source` stays `fixture` by default; flip to `pdfbox` + pair with the real
+  `bill-run-documents` base URL (TASK-BE-063) once real documents are available.
+- **Observability**: `pdfbox` is not the default, so no runtime change; when active it runs under the existing
+  `PdfBssBillingAdapter` BSS slice (`provider=pdf`) + per-extraction `reason`. Not runtime-affecting by default.
