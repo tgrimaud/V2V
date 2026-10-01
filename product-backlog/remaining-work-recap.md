@@ -26,7 +26,7 @@
 | ~~BUG-008~~ | Don't count an interrupted/failed TTS synthesis in the "time to first audio" latency (it skews p95). | ✅ Merged (`2fe8260`), shipped since v0.5.0 |
 | ~~BUG-016~~ | Stop refusing legitimate EN turns because an off-topic pattern matched inside a word (`king` ⊂ `working`). | ✅ Merged (`35d95d1`), shipped since v0.6.0 |
 | **BUG-017** | Explain/fix the inconsistent barge-in (interruption) counter on the headless WebSocket path. | New — investigate |
-| **BUG-018** | Never leave the UI stuck on "Thinking" when a turn fails server-side. | 2/3 done; remaining = TASK-OPS-010 drain + server-side `turn_error` terminal signal |
+| **BUG-018** | Never leave the UI stuck on "Thinking" when a turn fails server-side. | 2/3 merged; TASK-OPS-010 drain now implemented on branch (pending review/QA); remaining after that = server-side `turn_error` terminal signal |
 | ~~BUG-019~~ | Don't claim a billing discrepancy was "explained" when the cause was not actually determined. | ✅ Merged (`158a626`, Sprint-14 `5650e15`), shipped since v0.9.0 |
 | ~~BUG-020~~ | Return a controlled error/message when an invoice can't be fetched, instead of a 500 crash. | ✅ Merged (`fecf3ef`, review 95/100), shipped since v0.9.0 |
 | **BUG-024** | Keep the useful grounded answer even when a courtesy/hand-off sentence trails it (don't drop it). | ✅ Symptom (b) merged (`6adb781`). ⏳ Symptom (a) dead-air (audible hand-off on LLM stream error) still deferred — needs a voice-tier repro. |
@@ -63,7 +63,7 @@
 
 | Ticket | Objective (the why) | State |
 |---|---|---|
-| **TASK-OPS-010** | Drain active sessions cleanly before recreating a container on deploy (don't cut a live call). Unblocks BUG-018's last third. | Planned (P1) |
+| **TASK-OPS-010** | Drain active sessions cleanly before recreating a container on deploy (don't cut a live call). Unblocks BUG-018's last third. | 🚧 Implemented on branch (pending review + QA, 2026-09-29) — bridge `POST /drain` + Ansible wiring, 703 tests green; not merged |
 | **TASK-INFRA-005** | Keep a WebRTC session routed to the same bridge (signaling stickiness at the LB) — negotiation breaks otherwise with 2 bridges. | Deferred — validate live |
 | **TASK-BE-023** | Close unauthenticated ops surface (`/swagger-ui`, `/v3/api-docs`, `/actuator/metrics`) before external exposure. | Implemented on branch `task/TASK-BE-023-restrict-ops-surface` (2026-09-29) — Actuator default `health,info`; docs gated behind `x-api-key`; `mvn test` 650 green. Pending review + QA + merge |
 | **TASK-BE-030** | If Redis (shared memory) fails, fall back to local memory and stay in service instead of dropping out of rotation. | Planned |

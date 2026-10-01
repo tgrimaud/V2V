@@ -136,11 +136,11 @@ Pick the previous tag from the GHCR packages (image tags have no `v`). To roll b
 > [`backup-restore.md`](backup-restore.md) for the Redis + Postgres restore procedures
 > (RPO/RTO). The deploy schedules those backups automatically (TASK-OPS-008).
 
-## Voice session draining (best-effort — known limitation)
+## Voice session draining
 
-Restarting a voice bridge must avoid hard-cutting active calls. The bridge has no
-active-session count or `/drain` endpoint yet, so an exact "wait until 0 active
-calls" cannot be done from the outside. Draining is therefore best-effort:
+Restarting a voice bridge must avoid hard-cutting active calls. Draining runs four
+fail-safe layers (`roles/compose_tier/tasks/drain.yml`); each degrades to the next and
+never aborts the roll:
 
 1. **Rolling `serial: 1`** — only one bridge recreates at a time; the VIP peer
    keeps serving new and existing calls.
@@ -157,17 +157,27 @@ calls" cannot be done from the outside. Draining is therefore best-effort:
    `-e '{"voice_lb_socket_hosts":["vlp-ai4cc-t01.prod.lan","vlp-ai4cc-t02.prod.lan"]}'`.
    Even enabled, the delegated tasks are non-fatal (`ignore_unreachable` +
    `failed_when: false`): a failing LB hook degrades to grace-only, it never aborts.
-3. **Bounded grace** — `voice_drain_grace_seconds` (default 60s) lets an in-flight
-   call wind down before the container is recreated.
+3. **Exact bridge drain** (`TASK-OPS-010`) — `POST /drain` makes the bridge itself refuse
+   new sessions (WS 1013) and **block until 0 active calls** (WS + Genesys) or
+   `voice_drain_timeout_seconds` (default 90s) elapses. The deploy calls it **inside the
+   container namespace** (`docker exec … python -c` — the slim image ships python, not
+   curl), so it is immune to the host loopback/firewall quirk that made a host-side probe
+   unreliable on this tier (`TASK-INFRA-011`). The endpoint is **token-gated**:
+   `VOICE_DRAIN_TOKEN` is rendered from `vault_voice_drain_token`; when the vault secret is
+   **unset** the token is empty, `/drain` returns `503` (disabled), and the deploy falls back
+   to the grace window — so `POST /drain` is never an unauthenticated "stop taking calls"
+   trigger on the edge-facing `:8090`. The step is fail-safe (`failed_when: false`): a
+   failure or timeout degrades to the grace window.
+4. **Bounded grace (fallback)** — `voice_drain_grace_seconds` (default 60s) runs **only when
+   layer 3 did not confirm a clean drain** (token unset, command failed, or it timed out with
+   calls still running), so a confirmed drain skips the redundant wait while every degraded
+   path still gets the safety pause.
 
-**To make draining exact**, complete the remaining path:
-
-- **Bridge `/drain` endpoint** (follow-up): expose active-session count and a
-  drain mode on the voice bridge, and replace the fixed grace with a poll-until-zero
-  (bounded) wait. The LB node-down hook above already stops *new* calls; this closes
-  the "wait until 0 active calls" gap the bridge cannot yet report.
-
-Until then, prefer deploying voice during a low-traffic window.
+**Enable the exact drain** by adding `vault_voice_drain_token` to `group_vars/all/vault.yml`
+(any strong random string, e.g. `openssl rand -hex 24`) and redeploying voice; the bridge
+picks it up from the rendered `.env` and the deploy step activates automatically. Until the
+token is set, or during a large concurrent-call window, prefer deploying voice during a
+low-traffic window.
 
 ## Secrets handling
 

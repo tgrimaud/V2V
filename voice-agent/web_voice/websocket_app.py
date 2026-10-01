@@ -78,6 +78,9 @@ DEFAULT_MAX_WS_SESSIONS_ASYNC = 8
 # single-client socle used, so browsers keep the "try again shortly" behaviour.
 WS_TRY_AGAIN_LATER = 1013
 REASON_CAPACITY = "capacity"
+# The bridge is draining ahead of a recreate/failover (TASK-OPS-010): new connections are
+# refused with the SAME WS 1013 (try again later) so browsers keep retrying at the LB peer.
+REASON_DRAINING = "draining"
 _WS_CLOSE_TIMEOUT = 0.5
 # BUG-026 / US-042: answer languages the UI selector may LOCK for a session. A `?language=`
 # value outside this set is ignored (falls back to the server default / auto-detection) so a
@@ -438,6 +441,7 @@ def make_ws_handler(
     serializer_factory: Callable[[], WebSocketAudioSerializer] = WebSocketAudioSerializer,
     telemetry_factory: Callable[[], TelemetryRecorder] = TelemetryRecorder,
     log: Callable[[TelemetryRecorder], None] = log_telemetry,
+    drain_controller: Any = None,
 ) -> Callable[[web.Request], Awaitable[web.WebSocketResponse]]:
     """Build the `GET /ws` handler: one session per connection, N concurrent (ADR-0047).
 
@@ -445,9 +449,16 @@ def make_ws_handler(
     and awaits it inline on the aiohttp loop. A connection above `max_sessions` is refused with
     WS close 1013 (try again later). Every outcome (accepted / closed / rejected) is stamped on
     the same telemetry names as the interim path for a cross-transport pilot chart.
+
+    `drain_controller` (TASK-OPS-010, optional) lets a graceful deploy drain refuse NEW
+    connections while in-flight calls wind down: its active-session counter is registered here
+    so `POST /drain` can wait for 0 active calls, and a connection arriving while draining is
+    refused with the same WS 1013 as an over-capacity one.
     """
     active = _ActiveSessions()
     ceiling = max_sessions if max_sessions > 0 else DEFAULT_MAX_WS_SESSIONS_ASYNC
+    if drain_controller is not None:
+        drain_controller.register_counter(lambda: active.count)
 
     async def handler(request: web.Request) -> web.WebSocketResponse:
         websocket = web.WebSocketResponse()
@@ -456,6 +467,14 @@ def make_ws_handler(
             request.headers.get("Origin", ""), allowed_origins
         ):
             await websocket.close(code=1008)  # policy violation
+            return websocket
+        # Refuse new calls while the bridge is draining ahead of a recreate (TASK-OPS-010),
+        # before reserving a slot — the LB peer keeps serving, browsers retry (WS 1013).
+        if drain_controller is not None and drain_controller.is_draining():
+            await _reject(
+                websocket, active, ceiling, default_language, telemetry_factory, log,
+                reason=REASON_DRAINING,
+            )
             return websocket
         # Capacity check + slot reservation are synchronous (no await between them), so the
         # single-loop counter can't be oversubscribed by interleaved handlers.
@@ -596,14 +615,15 @@ async def _reject(
     default_language: str | None,
     telemetry_factory: Callable[[], TelemetryRecorder],
     log: Callable[[TelemetryRecorder], None],
+    reason: str = REASON_CAPACITY,
 ) -> None:
-    """Refuse an over-capacity connection with WS 1013 and record the refusal evidence."""
+    """Refuse a connection with WS 1013 and record the refusal evidence (capacity or drain)."""
     telemetry = telemetry_factory()
     cid = ChannelEnvelope.for_web_turn(language=default_language).correlation_id
     telemetry.record(
         SESSION_REJECTED_EVENT,
         correlation_id=cid,
-        reason=REASON_CAPACITY,
+        reason=reason,
         active_sessions=active.count,
         max_sessions=max_sessions,
     )

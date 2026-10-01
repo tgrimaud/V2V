@@ -186,6 +186,33 @@ turn JSON on per tier when SRE's log pipeline / collector arrives (one env var +
 - **Branch:** `task/TASK-BE-023-restrict-ops-surface` (off `feat/restart-from-scratch`).
   Adversarial review 93/100. Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`).
 
+## 2026-09-29 — TASK-OPS-010: bridge active-session `/drain` endpoint + deploy wiring (BUG-018 fix #3)
+
+**Summary:**
+
+- Closed the documented "no active-session drain" gap so a bridge recreate/deploy/failover
+  lets live calls wind down instead of hard-cutting (one BUG-018 root cause). Branch
+  `task/TASK-OPS-010-bridge-drain-endpoint` off `feat/restart-from-scratch`.
+- **Bridge** (`voice-agent/web_voice/`): new `drain.py` `DrainController` — draining flag +
+  registered active-session counters (WS + Genesys `_ActiveSessions.count`); `begin_drain()`
+  refuses new connections (WS 1013, LB peer serves → browsers retry); `wait_drained(timeout_ms)`
+  blocks until 0 active or a bounded timeout. Token-gated `POST /drain` in `app.py`
+  (unset token ⇒ 503 fail-closed; wrong ⇒ 403), returning `{status, drained, active_at_start,
+  remaining, elapsed_ms, timeout_ms}`. Wired through `server.py` (WS + Genesys handlers +
+  `make_app`). OTel: `voice.drain.requested` / `voice.drain.completed` + `voice.drain.remaining_sessions`.
+- **Deploy** (`roles/compose_tier/tasks/drain.yml`): calls `POST /drain` inside the container
+  namespace (`docker exec … python -c`; slim image has python, not curl) — immune to the
+  TASK-INFRA-011 loopback quirk; token read from the container env (never on host `ps`).
+  Fail-safe (`failed_when: false`); the grace window now runs only when the exact drain did not
+  confirm. Vars in `group_vars/voice.yml` (`voice_drain_token` ⇐ `vault_voice_drain_token`,
+  default empty ⇒ disabled; `voice_drain_timeout_seconds: 90`), env template, compose,
+  `.env.example`, `vault.example.yml`.
+- **Docs:** `release-process.md` (4-layer drain), first-deploy runbook + `deployment-eir-ai4cc-tst.md`
+  (env vars / optional vault secret), `group_vars/voice.yml` caveat removed.
+- **Tests:** `test_drain.py` (controller state, bounded wait with injected clock, config), `/drain`
+  endpoint tests, WS refuse-while-draining + counter registration. Full voice-agent suite **703 green**.
+- **Status:** adversarial review 93/100. Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`); branch deleted. Pilot QA (deploy `/drain` into the image, run S0/S1/S5) still to run on next deploy.
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

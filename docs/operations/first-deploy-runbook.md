@@ -96,6 +96,7 @@ Required values:
 | `vault_openai_api_key` | Chat LLM (cloud, OpenAI/Azure Foundry) — **only** if switching the pilot to `llm_provider: openai` (ADR-0051; app default is openai, pilot pins mistral-api). Optional otherwise. |
 | `vault_gradium_api_key` | STT/TTS (cloud) |
 | `vault_conversation_api_key` | Shared `x-api-key`: backend `CONVERSATION_API_KEY` **==** voice `VOICE_BACKEND_API_KEY` |
+| `vault_voice_drain_token` | **Optional** (TASK-OPS-010): token gating the voice bridge `POST /drain`. Set a strong random string (`openssl rand -hex 24`) to enable the exact "wait for 0 active calls" drain before recreate; empty ⇒ `/drain` disabled, deploy degrades to LB drain + grace window |
 | `vault_registry_username` / `vault_registry_token` | GHCR read-only pull (private packages); `registry_login_required: true` |
 
 ## Step 3 — Provision the container runtime (once per host)

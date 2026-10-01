@@ -1559,10 +1559,56 @@ scenarios · 225 steps**.
 **Related:** BUG-018 (stuck-in-thinking incident — P1 fix #3), TASK-OPS-002 (Ansible session-draining hook, grace-only today), TASK-INFRA-007 (LB drain/enable via HAProxy admin socket — stops NEW calls, not live ones), TASK-INFRA-011 (known voice health-gate loopback false-negative), TASK-WEB-008 (per-turn audio `drain()`)
 **Depends on:** TASK-OPS-002 (compose deploy + drain hook), TASK-INFRA-007 (LB drain wiring)
 **Classification:** V1 pilot deployment (release correctness) + voice runtime
-**Status:** 📋 Planned (P1, planning only — not implemented). Filed 2026-08-27 from the BUG-018 investigation.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`); branch deleted — **adversarial review 93/100 (Pass, 2026-09-29)**. Bridge `POST /drain` + Ansible deploy wiring done; full voice-agent suite green (703 tests). Pilot QA (S2–S6) still blocked until an OPS-010 image is built + `vault_voice_drain_token` set + tier redeployed.
+Blocking fix applied during review: `hmac.compare_digest` constant-time token compare + extracted
+`_drain_and_report`/`_drain_body`/`_drain_token_matches` helpers to keep `handle_drain` ≤ 20 lines.
+Residual (accepted): (1) WebRTC sessions are not counted (dev/lab only, ADR-0042); (2) on a drain
+timeout the residual socket teardown relies on the container recreate + the browser watchdog
+(TASK-WEB-046), not an active socket-close. Both captured in Out Of Scope below.
+Pilot QA runbook: `docs/qa/task-ops-010-bridge-drain-qa.md` (baseline S0/S1/S5 run 2026-09-29 —
+`/drain` not in the deployed image `0.9.3` yet; S2–S6 blocked until an OPS-010 image is built +
+`vault_voice_drain_token` set + tier redeployed).
+Full review (findings table, coverage, evidence): `docs/qa/task-ops-010-adversarial-review.md`.
 **Priority:** High
-**Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (to create when work starts)
+**Branch:** `task/TASK-OPS-010-bridge-drain-endpoint` (created off `feat/restart-from-scratch`)
+**QA (pilot):** `docs/qa/task-ops-010-bridge-drain-qa.md` — regression green + local live smoke proven. Pilot baseline run 2026-09-29 (S0/S1/S5): running image `0.9.3` predates OPS-010, so `POST /drain` → 405 (route not mounted) and no token set. S2/S3/S4/S6 blocked until an OPS-010 image is built + `vault_voice_drain_token` set + tier redeployed.
 **Surfaced by:** BUG-018 read-only investigation (2026-08-27) — a bridge recreate / deploy / HAProxy failover mid-turn can hard-cut a live call and strand the UI, because there is no active-session drain.
+
+### What was implemented (2026-09-29)
+
+- **Bridge drain controller** (`web_voice/drain.py`, new): `DrainController` holds the
+  draining flag + a list of registered active-session counters (WS + Genesys both register
+  `_ActiveSessions.count`). `begin_drain()` makes the transport handlers refuse NEW
+  connections (WS close 1013, same as the capacity ceiling — the LB peer keeps serving, so
+  browsers retry); `wait_drained(timeout_ms)` blocks until the summed counters reach 0 or the
+  bounded timeout elapses, returning a `DrainOutcome` (`drained` / `timeout`, started/remaining
+  counts, elapsed). Reuses the existing gauges, no new session state.
+- **Control endpoint** `POST /drain` (`web_voice/app.py`, mounted only when a controller is
+  wired): **token-gated** via `VOICE_DRAIN_TOKEN` (unset ⇒ `503 drain_not_configured`,
+  fail-closed so the edge-facing `:8090` never exposes an unauthenticated "stop taking calls"
+  trigger; wrong token ⇒ `403`). Returns `{status, drained, active_at_start, remaining,
+  elapsed_ms, timeout_ms}`. `?timeout_ms=` overrides the default (`VOICE_DRAIN_TIMEOUT_MS`).
+- **OpenTelemetry:** `voice.drain.requested` / `voice.drain.completed` events + a
+  `voice.drain.remaining_sessions` metric carry the outcome so a deploy that could not fully
+  drain is observable.
+- **Deploy wiring** (`roles/compose_tier/tasks/drain.yml`): between the LB drain and the grace
+  window, the deploy calls `POST /drain` **inside the container namespace**
+  (`docker exec … python -c` — the slim image ships python, not curl), immune to the
+  TASK-INFRA-011 host-loopback quirk; the token is read from the container's own env so it
+  never lands on the host `ps` argv. Fail-safe (`failed_when: false`): any failure/timeout
+  degrades to the grace window, which now runs **only** when the exact drain did not confirm
+  a clean drain. Wired vars in `group_vars/voice.yml` (`voice_drain_token` from
+  `vault_voice_drain_token`, default empty ⇒ disabled; `voice_drain_timeout_seconds: 90`),
+  the env template, `docker-compose.yml`, `.env.example`, and `vault.example.yml`.
+- **On-timeout terminal signal:** remaining calls are ended by the container recreate; the
+  client-side terminal signal is the shipped browser watchdog (TASK-WEB-046). This ticket's
+  code does the bounded server-side wait; it does not re-implement socket teardown.
+- **Docs:** `docs/operations/release-process.md` (4-layer drain), first-deploy runbook +
+  `deployment-eir-ai4cc-tst.md` (new env vars / optional vault secret), `group_vars/voice.yml`
+  caveat removed.
+- **Tests:** `tests/test_drain.py` (controller state, bounded wait with injected clock, config
+  helpers), `/drain` endpoint tests (token gate, drained, timeout, not-mounted) and a WS
+  "refuse while draining" + counter-registration test. Full suite 703 passing.
 
 ### Context
 
@@ -1627,6 +1673,14 @@ Scenario: Drain is fail-safe
   (TASK-WEB-046) — sibling BUG-018 P1 fixes.
 - Repointing the health gate off loopback (TASK-INFRA-011) — only accounted for here, not
   fixed.
+- **WebRTC signaling sessions are not counted by the drain.** The drain wires the two pilot
+  live transports (WS — the primary V1 transport per ADR-0046 — and Genesys). WebRTC is a
+  dev/lab path (ADR-0042) not used for pilot live calls, so its active-session accounting
+  (`voice_max_webrtc_sessions`, held inside `WebRtcSignalingService`) is intentionally left
+  unregistered; a follow-up can register it if WebRTC becomes a pilot live transport.
+- Actively closing still-running sockets on drain **timeout** — the deploy degrades to the
+  grace window and the container recreate closes them, with the client-side terminal signal
+  provided by the shipped browser watchdog (TASK-WEB-046).
 
 ## TASK-INFRA-015 - Enable the Genesys AudioHook endpoint on the pilot voice bridge (config + secrets + rollout)
 

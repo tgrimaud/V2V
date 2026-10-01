@@ -25,6 +25,7 @@ from conversation_backend import (  # noqa: E402
 from tts_synthesis import FixtureTtsProvider  # noqa: E402
 from web_voice import WebVoiceEgress, WebVoiceIngress  # noqa: E402
 from web_voice.app import make_app  # noqa: E402
+from web_voice.drain import DrainController  # noqa: E402
 from web_voice.error_response import SessionCapacityError  # noqa: E402
 from web_voice.runtime import PIPECAT, STDLIB, build_turn_processor  # noqa: E402
 from web_voice.server import STT_ROUTE, TTS_ROUTE, TURN_ROUTE, WEBRTC_OFFER_ROUTE  # noqa: E402
@@ -328,6 +329,72 @@ class WebVoiceAppTest(unittest.IsolatedAsyncioTestCase):
         payload = await resp.read()
         self.assertEqual(json.loads(payload)["error"], "webrtc_negotiation_failed")
         self.assertNotIn(b"boom", payload)
+
+
+class DrainEndpointTest(unittest.IsolatedAsyncioTestCase):
+    """POST /drain control endpoint (TASK-OPS-010): token gate + drained/timeout outcomes."""
+
+    async def _client(self, controller) -> TestClient:  # noqa: ANN001
+        processor = build_turn_processor(PIPECAT, _ingress(), _egress(), None)
+        app = make_app(processor, drain_controller=controller)
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        self.addAsyncCleanup(client.close)
+        return client
+
+    async def test_not_mounted_without_controller(self) -> None:
+        # GIVEN an app built with no drain controller (the base HTTP surface is unchanged)
+        processor = build_turn_processor(PIPECAT, _ingress(), _egress(), None)
+        client = TestClient(TestServer(make_app(processor)))
+        await client.start_server()
+        self.addAsyncCleanup(client.close)
+        # THEN there is no POST /drain route: the only /drain route is the GET static
+        # catch-all, so a POST is 405 Method Not Allowed (proves the control route is absent).
+        resp = await client.post("/drain")
+        self.assertEqual(resp.status, 405)
+
+    async def test_unconfigured_token_disables_drain_with_503(self) -> None:
+        # GIVEN a controller with no token (fail-closed: no unauthenticated drain trigger)
+        client = await self._client(DrainController(token=None))
+        resp = await client.post("/drain")
+        self.assertEqual(resp.status, 503)
+        self.assertEqual((await resp.json())["error"], "drain_not_configured")
+
+    async def test_wrong_token_is_forbidden(self) -> None:
+        client = await self._client(DrainController(token="s3cr3t"))
+        resp = await client.post("/drain", headers={"X-Drain-Token": "nope"})
+        self.assertEqual(resp.status, 403)
+        self.assertEqual((await resp.json())["error"], "forbidden")
+
+    async def test_drains_when_no_active_sessions(self) -> None:
+        # GIVEN a configured controller with zero active calls
+        controller = DrainController(token="s3cr3t")
+        controller.register_counter(lambda: 0)
+        client = await self._client(controller)
+        # WHEN a valid drain is requested
+        resp = await client.post("/drain", headers={"X-Drain-Token": "s3cr3t"})
+        # THEN it reports drained immediately, and the bridge is now refusing new sessions
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertEqual(body["status"], "drained")
+        self.assertTrue(body["drained"])
+        self.assertEqual(body["remaining"], 0)
+        self.assertTrue(controller.is_draining())
+
+    async def test_times_out_with_a_stuck_call(self) -> None:
+        # GIVEN a call that never ends and a tiny wait budget passed via ?timeout_ms=
+        controller = DrainController(token="s3cr3t")
+        controller.register_counter(lambda: 1)
+        client = await self._client(controller)
+        resp = await client.post("/drain?timeout_ms=1", headers={"X-Drain-Token": "s3cr3t"})
+        # THEN it returns a timeout outcome (the deploy degrades to grace behaviour), not an error
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertEqual(body["status"], "timeout")
+        self.assertFalse(body["drained"])
+        self.assertEqual(body["active_at_start"], 1)
+        self.assertEqual(body["remaining"], 1)
+        self.assertEqual(body["timeout_ms"], 1)
 
 
 if __name__ == "__main__":
