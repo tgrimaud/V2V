@@ -23,6 +23,9 @@ CLIENT_CONNECTED_EVENT = "voice.ws.client_connected"
 CLIENT_DISCONNECTED_EVENT = "voice.ws.client_disconnected"
 ACTIVE_SESSIONS_METRIC = "voice.ws.active_sessions"
 SESSION_REJECTED_EVENT = "voice.ws.session_rejected"
+# TASK-WEB-049 (BUG-018 runtime half): recorded when the server force-emits a `turn_error`
+# terminal control frame on a failed WS turn/session teardown, so a silent stranding is visible.
+TURN_ERROR_SIGNAL_EVENT = "voice.ws.turn_error_signal"
 
 
 def ws_language_config() -> str | None:

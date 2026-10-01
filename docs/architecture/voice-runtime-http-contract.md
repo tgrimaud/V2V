@@ -285,6 +285,17 @@ that finalizes a trailing utterance inside one live session.
 - **Telemetry:** `voice.drain.requested` / `voice.drain.completed` events + a
   `voice.drain.remaining_sessions` metric carry the outcome.
 
+**Terminal error control frame (`/ws`, TASK-WEB-049 / BUG-018 runtime half):** when a WS
+turn fails at the pipeline/session level (an exception out of `session.run()`, not a normal
+degrade-to-spoken-fallback), the runtime sends one JSON control frame
+`{"type": "turn_error"}` to the browser before teardown, so the UI leaves "Thinking"
+immediately instead of waiting for the client watchdog (the browser client honours it:
+clears the watchdog, stops playback, offers a retry — never fabricates an answer, DEC-002).
+It records a `voice.ws.turn_error_signal` event (`correlation_id`, `outcome=error`). It is a
+best-effort send: an already-dead socket is a no-op and the TASK-WEB-046 client watchdog
+remains the net. WebRTC (dev/lab, ADR-0042) and the Genesys AudioHook error protocol are out
+of scope here.
+
 ## Telemetry
 
 Every batch call emits OpenTelemetry-style spans on a per-request

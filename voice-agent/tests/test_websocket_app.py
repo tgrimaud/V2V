@@ -50,6 +50,7 @@ from web_voice.websocket_app import (  # noqa: E402
     REASON_DRAINING,
     SESSION_REJECTED_EVENT,
     SESSION_STARTED_EVENT,
+    TURN_ERROR_SIGNAL_EVENT,
     WS_TRY_AGAIN_LATER,
     SUPPORTED_ANSWER_LANGUAGES,
     AiohttpWebsocketTransport,
@@ -276,6 +277,32 @@ class _FakeFactory:
         session = _FakeSession()
         self.sessions.append(session)
         self.transports.append(transport)
+        return session, None
+
+
+class _FailingSession:
+    """A session whose `run()` raises — a pipeline/session-level crash (TASK-WEB-049)."""
+
+    def __init__(self) -> None:
+        self.stopped = False
+
+    async def run(self) -> None:
+        raise RuntimeError("boom: pipeline crashed mid-turn")
+
+    async def drain(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+
+class _FailingFactory:
+    def __init__(self) -> None:
+        self.sessions: list[_FailingSession] = []
+
+    def build_session(self, transport, envelope, telemetry):
+        session = _FailingSession()
+        self.sessions.append(session)
         return session, None
 
 
@@ -553,6 +580,48 @@ class WsHandlerLifecycleTest(unittest.IsolatedAsyncioTestCase):
         # THEN the WS active-session counter is registered so POST /drain can wait on it
         self.assertEqual(controller.active_sessions(), 0)
         self.assertEqual(len(controller._counters), 1)
+
+    async def test_failed_session_run_emits_turn_error_terminal_signal(self) -> None:
+        # GIVEN a handler whose session crashes at run() (pipeline/session-level failure)
+        shared = TelemetryRecorder()
+        logged: list[TelemetryRecorder] = []
+        factory = _FailingFactory()
+        handler = make_ws_handler(
+            factory, max_sessions=1, telemetry_factory=lambda: shared, log=logged.append
+        )
+        client = await self._serve(handler)
+        websocket = await client.ws_connect("/ws")
+        # WHEN the turn crashes THEN the server force-emits a turn_error control frame (TASK-WEB-049)
+        message = await asyncio.wait_for(websocket.receive(), timeout=10)
+        self.assertEqual(message.type, WSMsgType.TEXT)
+        self.assertIn("turn_error", message.data)
+        # AND a turn_error_signal event is recorded with the correlation id (BUG-018 observability)
+        await _wait_for(lambda: bool(logged))
+        signal = [e for e in shared.events() if e.name == TURN_ERROR_SIGNAL_EVENT]
+        self.assertEqual(len(signal), 1)
+        self.assertEqual(signal[0].attributes["outcome"], "error")
+        self.assertTrue(signal[0].attributes.get("correlation_id"))
+        # AND the session was still stopped in the finally (slot freed, no leak)
+        self.assertTrue(factory.sessions[0].stopped)
+        await websocket.close()
+
+    async def test_normal_turn_does_not_emit_turn_error(self) -> None:
+        # GIVEN a handler with a session that completes normally (no crash)
+        shared = TelemetryRecorder()
+        logged: list[TelemetryRecorder] = []
+        factory = _FakeFactory()
+        handler = make_ws_handler(
+            factory, max_sessions=1, telemetry_factory=lambda: shared, log=logged.append
+        )
+        client = await self._serve(handler)
+        websocket = await client.ws_connect("/ws")
+        await _wait_for(lambda: bool(factory.sessions) and factory.sessions[0].ran)
+        # WHEN the turn completes (run() returns without raising)
+        factory.sessions[0].release()
+        await _wait_for(lambda: bool(logged))
+        # THEN no turn_error terminal signal was emitted (negative case)
+        self.assertNotIn(TURN_ERROR_SIGNAL_EVENT, [e.name for e in shared.events()])
+        await websocket.close()
 
     async def test_disconnect_drains_the_session_so_run_returns(self) -> None:
         # GIVEN a real transport wired to a fake session via the handler's drain wiring

@@ -43,6 +43,10 @@ class ControlType:
     CLOSE = "close"
     CLOSED = "closed"
     CALL_END = "call_end"
+    # TASK-WEB-049 (BUG-018 runtime half): terminal error signal for a turn/session that failed
+    # server-side, so the browser leaves "Thinking" immediately (ws.js already honours it) instead
+    # of waiting for the client watchdog. Server -> client only (not an inbound AudioHook event).
+    TURN_ERROR = "turn_error"
     BARGE_IN = "barge_in"
     LANGUAGE = "language"
     PLAYBACK_STARTED = "playback_started"

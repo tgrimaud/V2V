@@ -213,6 +213,33 @@ turn JSON on per tier when SRE's log pipeline / collector arrives (one env var +
   endpoint tests, WS refuse-while-draining + counter registration. Full voice-agent suite **703 green**.
 - **Status:** adversarial review 93/100. Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`); branch deleted. Pilot QA (deploy `/drain` into the image, run S0/S1/S5) still to run on next deploy.
 
+## 2026-09-29 — TASK-WEB-049: server-side `turn_error` terminal signal (BUG-018 runtime half)
+
+**Summary:**
+
+- Implemented the deferred server half of **TASK-WEB-046** (BUG-018 fix #2): the WS
+  `web_voice/websocket_app.py::_serve_connection` failure branch (an exception out of
+  `session.run()`) now force-emits a `{"type":"turn_error"}` control frame to the browser
+  **before** teardown, so the UI leaves "Thinking" immediately instead of waiting ~20 s for the
+  TASK-WEB-046 client watchdog. The browser client already honoured `turn_error` (shipped by
+  TASK-WEB-046) — this is the runtime half only.
+- **Best-effort + fail-safe:** direct JSON send on the raw socket (robust to a half-broken
+  pipeline, bypasses the possibly-torn-down output transport); a closed/dead socket is a no-op
+  and the client watchdog stays the net. Never raises out of the handler.
+- **Vocabulary + observability:** added `ControlType.TURN_ERROR` (`websocket_framing.py`) and a
+  `voice.ws.turn_error_signal` event (`ws_common.py`, `correlation_id` + `outcome=error`) so a
+  force-emitted terminal signal is visible in telemetry (BUG-018 AC).
+- **Scope:** WS path only (primary V1 transport, ADR-0046). WebRTC (dev/lab, ADR-0042) and the
+  Genesys AudioHook error protocol are out of scope (cross-transport `ControlSignalType`
+  unification stays a follow-up).
+- **Tests:** +2 `test_websocket_app.py` (failed `run()` → `turn_error` frame + event over a real
+  aiohttp socket; normal turn → no signal). Full voice-agent suite **685 OK**, `behave`
+  **15 features / 43 scenarios / 194 steps** green. Docs: `voice-runtime-http-contract.md`
+  (terminal error control frame), ticket `TASK-WEB-049`, `BUG-018`, `backlog-index`,
+  `remaining-work-recap`.
+- **Branch:** `task/TASK-WEB-049-turn-error-terminal-signal` (off `feat/restart-from-scratch`).
+  Adversarial review 94/100. Merged into `feat/restart-from-scratch` (2026-10-01, `--no-ff`); branch deleted.
+
 ## 2026-09-29 — Latency triage + full doc-alignment review
 
 **Summary:**

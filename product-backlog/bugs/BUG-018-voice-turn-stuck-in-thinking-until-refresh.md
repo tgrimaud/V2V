@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-018
 - **Title:** The web voice UI can stay stuck in "thinking" for a long time and only recovers on a manual page refresh
-- **Status:** In progress — 2 of 3 fixes merged + user-validated 2026-09-17 (`feat/sprint-16-review-remediation`): TASK-WEB-045 (overall wall-clock deadline) + TASK-WEB-046 (browser thinking-watchdog). Fix #3 **TASK-OPS-010 (deploy-time active-session drain) is now implemented on branch `task/TASK-OPS-010-bridge-drain-endpoint` (2026-09-29), pending adversarial review + QA + merge** (bridge `POST /drain` + Ansible wiring, 703 voice-agent tests green). Remaining after that: the deferred server-side `turn_error` terminal signal on teardown.
+- **Status:** ✅ Fixed — all fixes merged into `feat/restart-from-scratch`: TASK-WEB-045 (overall wall-clock deadline) + TASK-WEB-046 (browser thinking-watchdog), user-validated 2026-09-17 (`feat/sprint-16-review-remediation`); TASK-OPS-010 (deploy-time active-session drain, bridge `POST /drain` + Ansible wiring, review 93/100) + TASK-WEB-049 (server-side `turn_error` terminal control frame on WS `_serve_connection` failure, review 94/100) merged 2026-10-01 (`--no-ff`). Residual: pilot deploy QA of the `/drain` path (needs an OPS-010 image + `vault_voice_drain_token`).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation (pilot)
