@@ -2,7 +2,9 @@ package com.voicesupport.billing.infrastructure.config;
 
 // Resolved configuration for the BSS billing source. Groups the `eir` adapter settings so the
 // BillingConfig bean stays small. Values default to the mock source; the Eir base URLs, currency,
-// authorization headers and timeouts are only used when source=eir (TASK-BE-047).
+// authorization headers and timeouts are only used when source=eir (TASK-BE-047). `billRunBaseUrl`
+// is only used when source=pdf: when set, the real Galaxion bill-run-documents adapter is wired
+// instead of the fixture document source (TASK-BE-063); blank keeps the fixtures.
 public record BillingBssProperties(
         String source,
         String enquiryBaseUrl,
@@ -11,5 +13,6 @@ public record BillingBssProperties(
         String userType,
         String userIdentifier,
         long connectMs,
-        long readMs) {
+        long readMs,
+        String billRunBaseUrl) {
 }
