@@ -872,42 +872,55 @@ real document bytes.
 
 ---
 
-## TASK-BE-065 — Tune the PDF parser to the real eir B2C layout + validate against the sample PDFs
+## TASK-BE-065 — Real eir B2C invoice-PDF layout parser + validation against the sample PDFs
 
 **Type:** Technical task (backend billing infrastructure) — follow-up of TASK-BE-064
-**Status:** 📥 To do — **blocked on inputs** (raw anonymized eir B2C PDF bytes, held outside the repo — OQ-003)
+**Status:** 🔧 In review — backend **711** green + ArchUnit; `pdf.source=eir-b2c`, **default stays fixture**. Branch `task/TASK-BE-065-eir-b2c-layout-parser` (off TASK-BE-064). Inputs now provided (6 PDFs committed as test resources).
+**Adversarial review 93/100 (Pass, 2026-10-01)** — no blocking finding; `EirB2cRealPdfParsingTest` proves `parse(real eir PDF) == EirB2cSampleFixtures`. Residual (accepted): category SUBSCRIPTION/OPTION heuristic + 23% VAT + single-body-page assumptions tuned to the current eir samples. Full review: `docs/qa/task-be-065-adversarial-review.md`.
 **Priority:** Medium
-**Depends on:** TASK-BE-064 (PDFBox extractor + synthetic grammar), TASK-BE-059 (`EirB2cSampleFixtures`, `eir-b2c-invoice-samples.md`)
+**Depends on:** TASK-BE-064 (PDFBox extractor + `PdfTextInvoiceParser` seam), TASK-BE-059 (`EirB2cSampleFixtures`, `eir-b2c-invoice-samples.md`)
 **Relates to:** OQ-003, ADR-0005, ADR-0054
 
 ### Context
 
-TASK-BE-064 ships a real PDFBox text layer + a deterministic parser, but the parser reads a **synthetic
-labeled grammar** (`INVOICE/ACCOUNT/LINE a|b|c/VAT/TOTAL`), not the real eir B2C PDF layout. The three real
-accounts (`99224964`, `99226126`, `99226337`) were **transcribed** from anonymized eir B2C PDFs into
-`EirB2cSampleFixtures`, and `PdfFixtureEquivalenceTest` already proves the parser round-trips those fixtures
-**semantically** — but through our own grammar renderer, not the real PDF layout. The raw PDFs are **held
-outside the repo** (`eir-b2c-invoice-samples.md`: `…_EIR_MOBILE_TEST_…_B2C.pdf`), so we cannot yet prove
-`parse(real eir PDF) == EirB2cSampleFixtures`.
+TASK-BE-064 shipped a real PDFBox text layer + a deterministic parser, but that parser reads a **synthetic
+labeled grammar**, not the real eir B2C PDF layout. The three real accounts (`99224964`, `99226126`,
+`99226337`) were transcribed from anonymized eir B2C PDFs into `EirB2cSampleFixtures`. The user provided the
+raw PDFs, so we can now prove `parse(real eir PDF) == EirB2cSampleFixtures`.
 
-### Scope
+### Decision / Implementation
 
-1. **Obtain the anonymized eir B2C sample PDFs** (coordination / `galaxion-coordination-request.md`) and
-   commit them as test resources (or a sanitized equivalent) if licensing allows.
-2. **Tune the parser to the eir B2C layout** (`eir-b2c-invoice-samples.md`): "at a glance" header + "Detail of
-   your eir service" body, per-service **sections** (MSISDN/UAN + product), "Subscription and options for the
-   period from X to Y" / "One-time charges and adjustments…" **groups** with subtotals, **negative discount
-   lines**, **prorata line periods** (`from 25 Sep until 11 Oct`), and **invoice-level 23% VAT only** (G1).
-   Preserve the ADR-0054 period model (usage vs monthly charge window, line periods).
-3. **Golden validation:** `parse(real eir PDF) == EirB2cSampleFixtures` at full structural fidelity (sections,
-   groups, line codes, periods, 23% VAT split), replacing/extending the current semantic round-trip.
+1. **Test resources:** the six anonymized PDFs committed under `backend/src/test/resources/billing/eir-b2c/`.
+2. **`PdfTextInvoiceParser` seam** (`infrastructure/pdf`): the PDFBox adapter extracts text once and delegates
+   to a layout-specific parser. `InvoiceTextParser` (generic, `pdfbox`) now implements it; a new
+   `EirB2cInvoiceLayoutParser` (`eir-b2c`) handles the real layout. `PdfBoxInvoiceExtractorAdapter` gains a
+   parser-injecting constructor (default = generic, so TASK-BE-064 behaviour is unchanged).
+3. **`EirB2cInvoiceLayoutParser` + `EirInvoiceBodyReader` + `EirInvoiceText`:** parse the "at a glance" header
+   (billing account, bill number, billing/usage/monthly-charge windows, stated VAT-incl total) and the
+   "Detail of your eir service" body — per-service **sections**, "Subscription and options" / "One-time charges
+   and adjustments" **groups** (with their window), **items** (trailing 2-decimal amount; the `€10`/`€46`
+   discount tokens in labels carry no decimals so they are never mistaken for the amount), **negative discount
+   lines**, **prorata line periods** (`from X until Y`), **UAN/service-identifier metadata skipped**. Category
+   is inferred per group (DISCOUNT → ONE_OFF → PRORATA → first recurring = SUBSCRIPTION, rest = OPTION), which
+   reproduces every fixture category. Per-line VAT derived at 23% (G1), identical to `EirB2cSampleFixtures`, so
+   roll-ups reconcile exactly. Status: FAILED (missing header/lines) / PARTIAL (not reconciling with the stated
+   total) / SUCCESS.
+4. **One switch:** `voice-support.billing.pdf.source` ∈ `{fixture, pdfbox, eir-b2c}`, default `fixture`.
 
-### Acceptance
+### Acceptance (met)
 
-- The real eir B2C sample PDFs parse to the exact `EirB2cSampleFixtures` tree (ids, sections, groups, line
-  codes/labels/periods, amounts, 23% VAT split, exact reconciliation).
-- Deterministic, fail-closed, no PII in failure reasons (as TASK-BE-064).
-- Closes the OQ-003 "real PDF layout" leg for eir B2C.
+- `EirB2cRealPdfParsingTest` parses the six **real** PDFs and asserts equivalence to `EirB2cSampleFixtures` on
+  the full business structure: identity, period windows, section→group→item tree, inferred category, prorata
+  line periods, per-line + rolled-up amounts (23% VAT split), SUCCESS/reconciliation. ✅
+- Deterministic, fail-closed, no PDF content in failure reasons (as TASK-BE-064). ✅
+- Default fixture unchanged; backend **711** + ArchUnit green. ✅
+- Closes the OQ-003 "real PDF layout" leg for eir B2C. ✅
+
+### Not asserted (by design)
+
+- Synthetic enrichment absent from the PDF (section/group/item ids, line `code`/`type`/`vatType`, evidence
+  `source`) and the **exact label wording** — `EirB2cSampleFixtures` paraphrased some labels; the parser keeps
+  the verbatim PDF text (strictly more faithful). Structure + amounts + categories + periods are asserted.
 
 ### Out Of Scope
 

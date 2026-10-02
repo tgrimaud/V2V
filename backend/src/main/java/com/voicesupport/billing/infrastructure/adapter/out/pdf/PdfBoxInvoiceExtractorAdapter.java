@@ -4,6 +4,7 @@ import com.voicesupport.billing.domain.model.ExtractionResult;
 import com.voicesupport.billing.domain.model.valueobject.PdfSource;
 import com.voicesupport.billing.domain.port.out.InvoicePdfExtractorPort;
 import com.voicesupport.billing.infrastructure.pdf.InvoiceTextParser;
+import com.voicesupport.billing.infrastructure.pdf.PdfTextInvoiceParser;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -17,13 +18,18 @@ import java.util.Objects;
 // Fail-closed: an empty document, a corrupt/unreadable PDF, or any parsing error yields a FAILED
 // ExtractionResult (never a thrown exception), so the PdfBssBillingAdapter degrades to a safe
 // escalation rather than a 500. The failure reason carries only the document reference + the error
-// type, never PDF content (no PII leak).
+// type, never PDF content (no PII leak). The PDFBox text layer is shared; the layout-specific parsing
+// is injected (generic labeled grammar for pdf.source=pdfbox, real eir B2C layout for pdf.source=eir-b2c).
 public class PdfBoxInvoiceExtractorAdapter implements InvoicePdfExtractorPort {
 
-    private final InvoiceTextParser parser;
+    private final PdfTextInvoiceParser parser;
 
     public PdfBoxInvoiceExtractorAdapter() {
-        this.parser = new InvoiceTextParser();
+        this(new InvoiceTextParser());
+    }
+
+    public PdfBoxInvoiceExtractorAdapter(PdfTextInvoiceParser parser) {
+        this.parser = parser;
     }
 
     @Override

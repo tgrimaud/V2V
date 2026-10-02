@@ -46,12 +46,15 @@ Accepted
 > **and** the three real accounts transcribed from the anonymized eir B2C PDFs (`EirB2cSampleFixtures`,
 > `eir-b2c-invoice-samples.md`) — to the same business data.
 >
-> **Important scoping:** the parser reads a **synthetic labeled grammar**, not the real eir B2C PDF
-> layout, and the raw anonymized PDFs are **held outside the repo** (per `eir-b2c-invoice-samples.md`), so
-> the cross-check is a semantic round-trip, not proof the real eir layout is handled. Tuning the parser to
-> the real eir B2C layout (header + per-service sections + negative discount lines + prorata line periods +
-> invoice-level 23% VAT) and validating `parse(real eir PDF) == EirB2cSampleFixtures` is **TASK-BE-065**
-> (needs the raw PDF bytes — OQ-003). Defaults stay fixture so local/pilot behaviour is unchanged.
+> The generic `pdfbox` grammar is a synthetic contract; the **real eir B2C layout** is handled by a second
+> parser (**TASK-BE-065**, `pdf.source=eir-b2c`): `EirB2cInvoiceLayoutParser` reads the actual eir layout
+> (header + per-service sections + Subscription/One-time groups + negative discount lines + prorata line
+> periods + invoice-level 23% VAT, G1) via the shared `PdfTextInvoiceParser` seam on the same PDFBox text
+> layer. The six anonymized eir B2C sample PDFs are now committed as backend test resources, and
+> `EirB2cRealPdfParsingTest` proves **`parse(real eir PDF) == EirB2cSampleFixtures`** on the full business
+> structure (identity, period windows, section→group→item tree, inferred category, prorata periods, 23% VAT
+> split, reconciliation) — closing the OQ-003 "real PDF layout" leg for eir B2C. Defaults stay fixture so
+> local/pilot behaviour is unchanged (`pdf.source` ∈ {fixture, pdfbox, eir-b2c}).
 
 ## Context
 

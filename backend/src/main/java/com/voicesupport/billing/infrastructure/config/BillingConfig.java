@@ -30,6 +30,7 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.RestBillRunDo
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.PdfBoxInvoiceExtractorAdapter;
+import com.voicesupport.billing.infrastructure.pdf.EirB2cInvoiceLayoutParser;
 import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
@@ -166,8 +167,12 @@ public class BillingConfig {
     public InvoicePdfExtractorPort invoicePdfExtractorPort(
             @Value("${voice-support.billing.pdf.source:fixture}") String source) {
         if ("pdfbox".equalsIgnoreCase(source)) {
-            log.info("[BILLING-PDF] source=pdfbox — real Apache PDFBox extractor (deterministic text parsing)");
+            log.info("[BILLING-PDF] source=pdfbox — real Apache PDFBox extractor (generic labeled grammar)");
             return new PdfBoxInvoiceExtractorAdapter();
+        }
+        if ("eir-b2c".equalsIgnoreCase(source)) {
+            log.info("[BILLING-PDF] source=eir-b2c — real Apache PDFBox extractor (eir B2C invoice layout)");
+            return new PdfBoxInvoiceExtractorAdapter(new EirB2cInvoiceLayoutParser());
         }
         if (!"fixture".equalsIgnoreCase(source)) {
             log.warn("[BILLING-PDF] source={} unknown — using fixture extractor", source);
