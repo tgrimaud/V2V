@@ -29,6 +29,7 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.PdfBssBilling
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.RestBillRunDocumentAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.identity.InMemoryCustomerDirectoryAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.pdf.FixtureInvoicePdfExtractorAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.pdf.PdfBoxInvoiceExtractorAdapter;
 import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
@@ -157,15 +158,19 @@ public class BillingConfig {
         return new ComparisonConfidenceService(maxResidualRatio);
     }
 
-    // Invoice PDF extractor (ADR-0005 fallback path). `fixture` (default) = synthetic extractor over
-    // customer-eir-001..006; the real parser (e.g. PDFBox) registers under source=pdfbox once real
-    // PDFs are available (TASK-BE-047-adjacent). Selected via VOICE_SUPPORT_BILLING_PDF_SOURCE.
+    // Invoice PDF extractor (ADR-0005). `fixture` (default) = synthetic extractor over the eir-00X +
+    // B2C samples; `pdfbox` = the real Apache PDFBox extractor (TASK-BE-064) that reads text from the
+    // PDF and parses the labeled invoice grammar (invoice-extraction-json.md). Selected via
+    // VOICE_SUPPORT_BILLING_PDF_SOURCE. Default stays fixture so local/pilot behaviour is unchanged.
     @Bean
     public InvoicePdfExtractorPort invoicePdfExtractorPort(
             @Value("${voice-support.billing.pdf.source:fixture}") String source) {
+        if ("pdfbox".equalsIgnoreCase(source)) {
+            log.info("[BILLING-PDF] source=pdfbox — real Apache PDFBox extractor (deterministic text parsing)");
+            return new PdfBoxInvoiceExtractorAdapter();
+        }
         if (!"fixture".equalsIgnoreCase(source)) {
-            log.warn("[BILLING-PDF] source={} not available yet (real extractor is deferred) — using fixture extractor",
-                    source);
+            log.warn("[BILLING-PDF] source={} unknown — using fixture extractor", source);
         }
         log.info("[BILLING-PDF] source=fixture — synthetic extractor (eir-00X + real eir B2C samples)");
         return new FixtureInvoicePdfExtractorAdapter(mockInvoices());

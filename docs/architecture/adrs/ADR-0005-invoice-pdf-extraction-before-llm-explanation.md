@@ -32,9 +32,26 @@ Accepted
 > parsing is deterministic and lands in `PdfBssBillingAdapter`. Fail-closed: an empty download or a
 > `FAILED` extraction → `Optional.empty` (safe escalation, never a 500), plus a defense-in-depth
 > ownership check (BR-002-1). A `FixtureBillRunDocumentAdapter` (backed by the same in-memory
-> invoice fixtures) makes `source=pdf` exercisable now; the **real REST `BillRunDocumentPort`
-> adapter is deferred** because `bill-run-documents/search` does not return period/amount
-> (`missing-inputs.md`) and live access is unproven (OQ-003).
+> invoice fixtures) makes `source=pdf` exercisable now.
+>
+> **Amendment (2026-10-01, TASK-BE-063 + TASK-BE-064).** Both deferred pieces are now implemented
+> (wired **off by default**): (1) the real REST `BillRunDocumentPort` adapter
+> (`GalaxionBillRunDocumentAdapter` over `RestBillRunDocumentAdapter`) — `download` works
+> (search→download→`PdfSource`), `listDocuments` fail-closes because `bill-run-documents/search`
+> still lacks period/amount (`missing-inputs.md`, OQ-003); and (2) the **real `InvoicePdfExtractorPort`**
+> (`PdfBoxInvoiceExtractorAdapter`, `pdf.source=pdfbox`) using Apache PDFBox for deterministic text
+> extraction + an `InvoiceTextParser` aligned with `invoice-extraction-json.md` (SUCCESS/PARTIAL/FAILED
+> on reconciliation; fail-closed on empty/corrupt). A golden cross-check (`PdfFixtureEquivalenceTest`)
+> proves the parser round-trips **both** fixture sets — the six synthetic journeys (`BssBillingFixtures`)
+> **and** the three real accounts transcribed from the anonymized eir B2C PDFs (`EirB2cSampleFixtures`,
+> `eir-b2c-invoice-samples.md`) — to the same business data.
+>
+> **Important scoping:** the parser reads a **synthetic labeled grammar**, not the real eir B2C PDF
+> layout, and the raw anonymized PDFs are **held outside the repo** (per `eir-b2c-invoice-samples.md`), so
+> the cross-check is a semantic round-trip, not proof the real eir layout is handled. Tuning the parser to
+> the real eir B2C layout (header + per-service sections + negative discount lines + prorata line periods +
+> invoice-level 23% VAT) and validating `parse(real eir PDF) == EirB2cSampleFixtures` is **TASK-BE-065**
+> (needs the raw PDF bytes — OQ-003). Defaults stay fixture so local/pilot behaviour is unchanged.
 
 ## Context
 
