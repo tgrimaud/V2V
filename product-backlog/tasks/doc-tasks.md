@@ -9,6 +9,47 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
 | TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | ✅ Merged into `feat/restart-from-scratch` (2026-08-07) — spawned spike TASK-WEB-025 |
 | TASK-DOC-009 | Refresh the general target solution diagram + add a simplified version | ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `e80a2b4`) |
+| TASK-DOC-010 | Export the agent (LLM) system prompt as a human-readable English doc | In progress — `docs/product/agent-system-prompt.md` |
+
+---
+
+## TASK-DOC-010 - Export The Agent (LLM) System Prompt As An English Doc
+
+**Parent:** EPIC-001 (Product and architecture baseline)
+**Related decisions:** DEC-002 (grounded voice-first answers), TASK-BE-056 (Eir "Bob" English
+persona), TASK-BE-053 (de-triplicated shared prompt), TASK-BE-015 (answer-language directive),
+TASK-BE-018 (conciseness budget)
+**Classification:** Documentation — not runtime-affecting (no code / prompt change)
+**Status:** In progress — `docs/product/agent-system-prompt.md` added on this branch.
+**Priority:** Low
+**Branch:** `task/TASK-DOC-010-agent-system-prompt-export`
+
+### Trigger
+
+Stakeholder request to export, in English, the system prompt actually sent to the LLM by the
+conversational agent (for review / reuse / documentation).
+
+### Scope
+
+- Add `docs/product/agent-system-prompt.md` capturing the **assembled** English system prompt
+  (base prompt + per-call history / conciseness / language directives, with dynamic placeholders
+  flagged) exactly as sent for an English turn.
+- Point to the source of truth in code (`AbstractChatClientAnswerAdapter.DEC002_VOICE_SYSTEM_PROMPT`
+  + `buildSystemMessage(...)`, and `AnswerLanguage` for the per-language directives + hand-off
+  sentence) so the doc cannot be mistaken for the authoritative definition.
+- Note the French variant for reference (English turn is what was requested).
+
+### Out Of Scope
+
+- Any change to the prompt text, the adapter, `AnswerLanguage`, RAG, or guardrails (export only).
+- Not runtime-affecting → no OpenTelemetry change.
+
+### Acceptance Criteria
+
+- `docs/product/agent-system-prompt.md` reflects the current base prompt + directives verbatim
+  (English), with the dynamic placeholders (`{context}`, `{history}`, `{N}`) clearly marked.
+- The doc links to the authoritative code locations and is written in English (docs-in-English
+  rule). `git diff --check` passes.
 
 ---
 
