@@ -817,7 +817,7 @@ runtime yet (live access unproven, OQ-003), so the HTTP contract is in place and
 ## TASK-BE-064 — Real invoice-PDF extractor (Apache PDFBox, `pdf.source=pdfbox`)
 
 **Type:** Technical task (backend billing infrastructure) — ADR-0005 amended · new dependency (Apache PDFBox)
-**Status:** 🔧 In review — backend **710** green + ArchUnit; selectable via `pdf.source=pdfbox`, **default stays fixture**. Branch `task/TASK-BE-064-pdfbox-extractor`.
+**Status:** ✅ **Merged into `feat/restart-from-scratch` (2026-10-02, `--no-ff` `a70447e`)** — backend 711 + ArchUnit green; selectable via `pdf.source=pdfbox`, **default stays fixture**.
 **Adversarial review 94/100 (Pass, 2026-10-01)** — no blocking finding; a golden cross-check (`PdfFixtureEquivalenceTest`) proves the parser round-trips every synthetic (`BssBillingFixtures`) **and** real-transcribed (`EirB2cSampleFixtures`, 3 accounts) invoice to the same business data. Residual (accepted): the parser reads a synthetic labeled grammar, not the real eir B2C PDF layout, and the raw PDFs are held outside the repo — real-layout parsing + `parse(real eir PDF)==fixture` is the follow-up **TASK-BE-065** (OQ-003); mitigated by fixture-default (no live `pdfbox` path). Full review: `docs/qa/task-be-064-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-041 (`InvoicePdfExtractorPort` + `ExtractionResult`), TASK-BE-062/063 (PDF path + document adapter)
@@ -875,7 +875,7 @@ real document bytes.
 ## TASK-BE-065 — Real eir B2C invoice-PDF layout parser + validation against the sample PDFs
 
 **Type:** Technical task (backend billing infrastructure) — follow-up of TASK-BE-064
-**Status:** 🔧 In review — backend **711** green + ArchUnit; `pdf.source=eir-b2c`, **default stays fixture**. Branch `task/TASK-BE-065-eir-b2c-layout-parser` (off TASK-BE-064). Inputs now provided (6 PDFs committed as test resources).
+**Status:** ✅ **Merged into `feat/restart-from-scratch` (2026-10-02, `--no-ff` `f3731e9`)** — backend 711 + ArchUnit green; `pdf.source=eir-b2c`, **default stays fixture**. Inputs provided (6 PDFs committed as test resources).
 **Adversarial review 93/100 (Pass, 2026-10-01)** — no blocking finding; `EirB2cRealPdfParsingTest` proves `parse(real eir PDF) == EirB2cSampleFixtures`. Residual (accepted): category SUBSCRIPTION/OPTION heuristic + 23% VAT + single-body-page assumptions tuned to the current eir samples. Full review: `docs/qa/task-be-065-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-064 (PDFBox extractor + `PdfTextInvoiceParser` seam), TASK-BE-059 (`EirB2cSampleFixtures`, `eir-b2c-invoice-samples.md`)

@@ -3,6 +3,33 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-02 — TASK-BE-064 + TASK-BE-065 — Real invoice-PDF extraction (Apache PDFBox) + real eir B2C layout parser
+
+**Summary:**
+
+- **TASK-BE-064** — implemented the real `InvoicePdfExtractorPort` (`PdfBoxInvoiceExtractorAdapter`,
+  `pdf.source=pdfbox`): Apache PDFBox 3.0.5 (`Loader` + `PDFTextStripper`) turns PDF bytes into text,
+  then a deterministic `InvoiceTextParser` (`infrastructure/pdf`, labeled grammar) maps it to the
+  domain `Invoice` per `invoice-extraction-json.md` (SUCCESS/PARTIAL/FAILED on reconciliation,
+  fail-closed on empty/corrupt, no PDF content in failure reasons). PDFBox pinned; `commons-io` kept
+  at 2.19.0 (no transitive downgrade). `PdfFixtureEquivalenceTest` golden round-trip proves the parser
+  reproduces both `BssBillingFixtures` (6 synthetic) and `EirB2cSampleFixtures` (3 real-transcribed)
+  invoices.
+- **TASK-BE-065** — implemented the **real eir B2C layout** parser (`EirB2cInvoiceLayoutParser`,
+  `pdf.source=eir-b2c`) via a shared `PdfTextInvoiceParser` seam on the same PDFBox text layer
+  (`EirInvoiceBodyReader` + `EirInvoiceText`): header + per-service sections + Subscription/One-time
+  groups + negative discounts + prorata line periods + invoice-level 23% VAT (G1). The 6 anonymized
+  eir B2C sample PDFs are committed as backend test resources, and `EirB2cRealPdfParsingTest` proves
+  **`parse(real eir PDF) == EirB2cSampleFixtures`** on the full business structure (identity, period
+  windows, section→group→item tree, inferred category, prorata periods, per-line + rolled-up amounts,
+  reconciliation). Closes the OQ-003 real-PDF-layout leg for eir B2C.
+- **Default stays `fixture`** for both — local/pilot runtime unchanged (`pdf.source` ∈ {fixture, pdfbox, eir-b2c}).
+
+**Evidence:** backend **711** + ArchUnit green. Adversarial reviews **94/100** (BE-064,
+`docs/qa/task-be-064-adversarial-review.md`) and **93/100** (BE-065,
+`docs/qa/task-be-065-adversarial-review.md`). ADR-0005 amended. Merged into
+`feat/restart-from-scratch` `--no-ff` `a70447e` (BE-064) then `f3731e9` (BE-065).
+
 ## 2026-09-30 — TASK-WEB-040 — Emit `channel_ingress` slice on the streaming path
 
 **Summary:**
