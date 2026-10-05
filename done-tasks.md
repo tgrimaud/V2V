@@ -16,10 +16,18 @@
   invoice-unique line codes, comparison never drops a line), TASK-BE-067 (SERVICE_ADDED/REMOVED causes),
   TASK-BE-062 (PARTIAL fail-closed + telemetry), TASK-DOC-010 (EN prompt export) + billing/docs
   adversarial review 92/100. All three real sample accounts reconcile to €0.00 residual; backend 715 + ArchUnit green.
-- **Pilot deploy: PENDING** — the control node currently has **no route to the `10.195.56.0/24` pilot
-  subnet** (DNS resolves `*.prod.lan`, but SSH :22 times out on all 5 VMs; VPN tunnels up but don't cover
-  that subnet). Deploy once on-network with:
-  `cd deploy/ansible && ansible-playbook deploy.yml -e image_tag=0.9.4` (vault via `.vault_pass`).
+- **Pilot deploy: ✅ DONE (2026-10-05)** — deployed to eir-ai4cc-tst, all six hosts on `0.9.4` and
+  `(healthy)`: redis `vlb-t02`; backend `vla-t03`/`vla-t04` (`voice-support-backend:0.9.4`, +Ollama
+  sidecar healthy); voice `vla-t01`/`vla-t02` (`voice-support-voice:0.9.4`). Health gates passed;
+  independent verification OK. Shared `vector_store` = **10,168** chunks (RAG populated).
+- **Deploy note (KB sync):** the first deploy run aborted at the post-deploy KB sync — the
+  `POST /api/knowledge/sync` HTTP call exceeded its 2400 s (40 min) inner timeout (per ADR-0030 every
+  article is domain-classified by a CPU-Ollama embedding call on each sync; the full pass ran > 40 min
+  today). Under `serial:1`/`max_fail_percentage:0` that aborted the roll after backend `t03`. Re-ran with
+  `-e kb_sync_after_deploy=false` (safe: code-only release, KB unchanged, store already populated) to
+  complete `t04` + the voice tier. **Follow-up (ops):** the KB-sync step reliably exceeds the 40 min
+  HTTP timeout on CPU embedding and aborts deploys — raise `kb_sync_timeout`/`kb_sync_async_seconds`, or
+  make the sync non-fatal / run it out-of-band, or skip when the KB is unchanged. Candidate TASK-OPS.
 
 ## 2026-10-05 — TASK-BE-067 — Attribute an appearing/removed subscription (new/removed service) to a business cause
 
