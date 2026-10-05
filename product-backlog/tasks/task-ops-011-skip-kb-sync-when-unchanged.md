@@ -1,6 +1,6 @@
 # TASK-OPS-011 — Skip the post-deploy KB sync when no KB source changed
 
-**Type:** Ops / deploy task · **Status:** Implemented + live-validated on pilot (sync skipped, all tiers green). Adversarial review 93/100 (Pass, 2026-10-05, `docs/qa/task-ops-011-adversarial-review.md`). Awaiting user validation; not merged.
+**Type:** Ops / deploy task · **Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-05, `--no-ff` `c5cff48`); branch deleted. Live-validated on pilot (sync skipped, all tiers green). Adversarial review 93/100 (Pass, `docs/qa/task-ops-011-adversarial-review.md`).
 **Branch:** `task/TASK-OPS-011-skip-kb-sync-when-unchanged` (off `feat/restart-from-scratch`)
 **Related:** TASK-OPS-009 (post-deploy KB sync), ADR-0048 (CSV corpus), ADR-0030 (domain classification at parse), TASK-INFRA-011 (deploy health gate), v0.9.4 deploy
 

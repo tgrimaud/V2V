@@ -20,7 +20,7 @@
   (`PLAY RECAP` 0 failed / 0 unreachable); `vector_store` kept at 10,168 chunks. `--syntax-check` clean.
 - **Adversarial review:** 93/100 (Pass) — `docs/qa/task-ops-011-adversarial-review.md`. Residual
   (documented): a manual store wipe without a KB change needs `-e kb_sync_force=true`.
-- Branch `task/TASK-OPS-011-skip-kb-sync-when-unchanged`; **not merged** (awaiting user validation).
+- ✅ Merged into `feat/restart-from-scratch` (2026-10-05, `--no-ff` `c5cff48`); branch deleted.
 
 ## 2026-10-05 — Release v0.9.4 cut (end-to-end real eir B2C PDF billing path + comparison hardening)
 
