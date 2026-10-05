@@ -932,7 +932,7 @@ raw PDFs, so we can now prove `parse(real eir PDF) == EirB2cSampleFixtures`.
 ## TASK-BE-066 — Serve the real eir B2C sample PDFs at runtime (end-to-end PDF path)
 
 **Type:** Technical task (backend billing infrastructure) — follow-up of TASK-BE-065
-**Status:** In progress on `task/TASK-BE-066-runtime-real-eir-b2c-pdf-source` (off `feat/restart-from-scratch`) — backend **715** + ArchUnit green; **default stays fixture**, awaiting user validation (not merged).
+**Status:** In progress on `task/TASK-BE-066-runtime-real-eir-b2c-pdf-source` (off `feat/restart-from-scratch`) — backend **705** + ArchUnit green; **default stays fixture**, awaiting user validation (not merged). The new `EirB2cBillingComparisonE2eTest` proves the real-PDF→comparison path end to end for account `99224964` ("pourquoi je paye plus ce mois-ci") and **surfaced BUG-028** (parser `code=null` → comparison collapses same-category lines → €1.99 residual).
 **Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; `SampleEirB2cBillRunDocumentAdapterTest` proves real `%PDF` bytes are served and the full `PdfBssBillingAdapter` chain regenerates every sample invoice. Residual (accepted): `listDocuments` metadata + file-name date mapping tuned to the fixed eir B2C sample set (OQ-003). Full review: `docs/qa/task-be-066-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-065 (`EirB2cInvoiceLayoutParser`, sample PDFs), TASK-BE-062 (`PdfBssBillingAdapter`)
@@ -970,10 +970,16 @@ end to end. This closes that gap so a local/pilot run can exercise the true evid
   (> 1 KB, not the stub); fail-closed on unknown account/invoice; and the full `PdfBssBillingAdapter`
   chain (sample docs + eir-b2c extractor) regenerates every sample invoice (id + account + TTC) for all
   three accounts × 2 months. ✅
-- Default `fixture`/`fixture` unchanged; backend **715** + ArchUnit green. ✅
+- `EirB2cBillingComparisonE2eTest`: real download → PDFBox → parse → `ComparableInvoiceService` →
+  `InvoiceComparisonService` for `99224964` (Sep vs Aug): real totals €19.99/€75.46, delta +€55.47
+  attributed to the real causes (ONE_OFF €29.99, PRORATION €8.50, OPTION_CHANGE €14.99). Documents the
+  **BUG-028** residual (€1.99 collapsed OPTION line); flip to residual 0 / OPTION_CHANGE €16.98 when fixed. ✅
+- Default `fixture`/`fixture` unchanged; backend **705** + ArchUnit green. ✅
 - ADR-0005 amended; `eir-b2c-invoice-samples.md` documents the runtime switch. ✅
 
 ### Out Of Scope
 
 - Real Galaxion `bill-run-documents/search` metadata (listDocuments still from the sample catalog, OQ-003);
   non-eir layouts; flipping the runtime default away from fixture.
+- Fixing BUG-028 (parser line codes / comparison line-matching) — a distinct defect this E2E test surfaced;
+  tracked as its own bug ticket, not implemented here.
