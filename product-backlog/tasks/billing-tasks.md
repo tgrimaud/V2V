@@ -966,7 +966,7 @@ raw PDFs, so we can now prove `parse(real eir PDF) == EirB2cSampleFixtures`.
 ## TASK-BE-066 — Serve the real eir B2C sample PDFs at runtime (end-to-end PDF path)
 
 **Type:** Technical task (backend billing infrastructure) — follow-up of TASK-BE-065
-**Status:** In progress on `task/TASK-BE-066-runtime-real-eir-b2c-pdf-source` (off `feat/restart-from-scratch`) — backend **705** + ArchUnit green; **default stays fixture**, awaiting user validation (not merged). The new `EirB2cBillingComparisonE2eTest` proves the real-PDF→comparison path end to end for account `99224964` ("pourquoi je paye plus ce mois-ci") and **surfaced BUG-028** (parser `code=null` → comparison collapses same-category lines → €1.99 residual).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-05, `--no-ff` `d408a57`; shipped in `v0.9.4`) — backend **705** + ArchUnit green; **default stays fixture**. The new `EirB2cBillingComparisonE2eTest` proves the real-PDF→comparison path end to end for account `99224964` ("pourquoi je paye plus ce mois-ci") and **surfaced BUG-028** (parser `code=null` → comparison collapses same-category lines → €1.99 residual).
 **Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; `SampleEirB2cBillRunDocumentAdapterTest` proves real `%PDF` bytes are served and the full `PdfBssBillingAdapter` chain regenerates every sample invoice. Residual (accepted): `listDocuments` metadata + file-name date mapping tuned to the fixed eir B2C sample set (OQ-003). Full review: `docs/qa/task-be-066-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-065 (`EirB2cInvoiceLayoutParser`, sample PDFs), TASK-BE-062 (`PdfBssBillingAdapter`)
@@ -1021,7 +1021,7 @@ end to end. This closes that gap so a local/pilot run can exercise the true evid
 ## TASK-BE-067 — Attribute an appearing/disappearing subscription (a new/removed service) to a business cause instead of UNEXPLAINED
 
 **Type:** Technical task (backend billing domain) — follow-up of BUG-028 E2E coverage
-**Status:** ✅ Done on `task/TASK-BE-067-subscription-service-change-cause` (off `feat/restart-from-scratch`) — `SUBSCRIPTION` delta now resolves by `ChangeKind` (APPEARED→`SERVICE_ADDED`, DISAPPEARED→`SERVICE_REMOVED`, CHANGED→`UNEXPLAINED`); composer voices the new causes (FR/EN); E2E for 99226126/99226337 now residual €0.00. Backend **715** + ArchUnit green. **Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; residual (accepted): a plan-swap reads as remove+add. Full review: `docs/qa/task-be-067-adversarial-review.md`. Awaiting user validation (not merged).
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-05, `--no-ff` `ffea869`; shipped in `v0.9.4`) — `SUBSCRIPTION` delta now resolves by `ChangeKind` (APPEARED→`SERVICE_ADDED`, DISAPPEARED→`SERVICE_REMOVED`, CHANGED→`UNEXPLAINED`); composer voices the new causes (FR/EN); E2E for 99226126/99226337 now residual €0.00. Backend **715** + ArchUnit green. **Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; residual (accepted): a plan-swap reads as remove+add. Full review: `docs/qa/task-be-067-adversarial-review.md`.
 **Priority:** Medium
 **Depends on:** TASK-BE-042 (`InvoiceComparisonService`), TASK-BE-066 (real-PDF E2E coverage)
 **Relates to:** EPIC-004, BR-003, DEC-002

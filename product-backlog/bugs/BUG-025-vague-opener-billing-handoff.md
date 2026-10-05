@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-025
 - **Title:** A generic billing opener ("j'ai un problème avec ma facture" / "I have a problem with my bill") triggers a low-confidence advisor hand-off instead of a targeted clarification
-- **Status:** ✅ Closed — merged into `feat/restart-from-scratch` (`77f5297`, 2026-09-23); adversarial review 91/100 (Pass) + QA GO + deployed to the pilot (0.9.3-blf2). Follow-ups tracked as [TASK-BE-057](../tasks/backend-tasks.md).
+- **Status:** ✅ Closed — merged into `feat/restart-from-scratch` (`77f5297`, 2026-09-23); adversarial review 91/100 (Pass) + QA GO + deployed to the pilot (0.9.3-blf2). Follow-ups tracked as [TASK-BE-057](../tasks/task-be-057-opener-detector-followups.md).
 - **Severity:** High
 - **Priority:** P1
 - **Detected by:** User validation
