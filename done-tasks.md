@@ -3,6 +3,25 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — TASK-OPS-011 — Skip the post-deploy KB sync when no KB source changed
+
+**Summary:**
+
+- The post-deploy `POST /api/knowledge/sync` re-classifies every article via a CPU-Ollama embedding at
+  parse time (ADR-0030) on **every** deploy, so even an unchanged corpus runs > 40 min — it exceeded
+  the 2400 s HTTP timeout during the **v0.9.4** deploy and aborted the roll after the first backend node.
+- **Deploy change (not runtime-affecting):** `kb_assets.yml` registers the three `copy` tasks and sets
+  `kb_assets_changed` from their checksums; `kb_sync.yml` runs the sync only when
+  `kb_sync_required = kb_assets_changed or kb_sync_force`, else logs "KB sync SKIPPED". The warm-up
+  readiness gate (BUG-021) and the read-only retrieval smoke still run every deploy. Added documented
+  knob `kb_sync_force: false`; updated `main.yml`/`group_vars`/`release-process.md`.
+- **Live-validated on the pilot:** a no-KB-change re-deploy of `0.9.4` skipped the sync on both backend
+  nodes and completed **all** tiers (backend t03/t04 + voice t01/t02 + redis) in ~4 min
+  (`PLAY RECAP` 0 failed / 0 unreachable); `vector_store` kept at 10,168 chunks. `--syntax-check` clean.
+- **Adversarial review:** 93/100 (Pass) — `docs/qa/task-ops-011-adversarial-review.md`. Residual
+  (documented): a manual store wipe without a KB change needs `-e kb_sync_force=true`.
+- Branch `task/TASK-OPS-011-skip-kb-sync-when-unchanged`; **not merged** (awaiting user validation).
+
 ## 2026-10-05 — Release v0.9.4 cut (end-to-end real eir B2C PDF billing path + comparison hardening)
 
 **Summary:**
