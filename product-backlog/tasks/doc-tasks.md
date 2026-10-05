@@ -9,7 +9,7 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 | TASK-DOC-002 | Full adversarial code+doc review after Sprint 9 | ✅ Done (2026-07-28) — merged into `feat/restart-from-scratch` |
 | TASK-DOC-006 | Clarify Genesys AudioHook vs Audio Connector as the V2V media plane | ✅ Merged into `feat/restart-from-scratch` (2026-08-07) — spawned spike TASK-WEB-025 |
 | TASK-DOC-009 | Refresh the general target solution diagram + add a simplified version | ✅ Merged into `feat/restart-from-scratch` (2026-09-30, `--no-ff` `e80a2b4`) |
-| TASK-DOC-010 | Export the agent (LLM) system prompt as a human-readable English doc | In progress — `docs/product/agent-system-prompt.md` |
+| TASK-DOC-010 | Export the agent (LLM) system prompt as a human-readable English doc | ✅ Merged (2026-10-05, `ba33705`) — `docs/product/agent-system-prompt.md` |
 
 ---
 
@@ -20,9 +20,9 @@ be written in English (see `.cursor/skills/technical-writer/SKILL.md`).
 persona), TASK-BE-053 (de-triplicated shared prompt), TASK-BE-015 (answer-language directive),
 TASK-BE-018 (conciseness budget)
 **Classification:** Documentation — not runtime-affecting (no code / prompt change)
-**Status:** In progress — `docs/product/agent-system-prompt.md` added on this branch.
+**Status:** ✅ Merged into `feat/restart-from-scratch` (2026-10-05, `--no-ff` `ba33705`); `docs/product/agent-system-prompt.md` added.
 **Priority:** Low
-**Branch:** `task/TASK-DOC-010-agent-system-prompt-export`
+**Branch:** `task/TASK-DOC-010-agent-system-prompt-export` (merged, deleted)
 
 ### Trigger
 
