@@ -3,6 +3,24 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — Release v0.9.4 cut (end-to-end real eir B2C PDF billing path + comparison hardening)
+
+**Summary:**
+
+- Tagged **`v0.9.4`** on `feat/restart-from-scratch` @ `d223f65` and pushed; CI (`images.yml`, tag
+  trigger `v*.*.*`) built and published both multi-arch images to GHCR:
+  `ghcr.io/tgrimaud/voice-support-backend:0.9.4` (`sha256:ffe9c5e9…`) and
+  `ghcr.io/tgrimaud/voice-support-voice:0.9.4` (`sha256:b1f8cea7…`) — digests verified.
+- Scope since v0.9.3: TASK-BE-063/064/065 (real Galaxion bill-run-documents REST adapter + PDFBox
+  extractor + eir B2C layout parser), TASK-BE-066 (serve real sample PDFs end-to-end), BUG-028 (stable
+  invoice-unique line codes, comparison never drops a line), TASK-BE-067 (SERVICE_ADDED/REMOVED causes),
+  TASK-BE-062 (PARTIAL fail-closed + telemetry), TASK-DOC-010 (EN prompt export) + billing/docs
+  adversarial review 92/100. All three real sample accounts reconcile to €0.00 residual; backend 715 + ArchUnit green.
+- **Pilot deploy: PENDING** — the control node currently has **no route to the `10.195.56.0/24` pilot
+  subnet** (DNS resolves `*.prod.lan`, but SSH :22 times out on all 5 VMs; VPN tunnels up but don't cover
+  that subnet). Deploy once on-network with:
+  `cd deploy/ansible && ansible-playbook deploy.yml -e image_tag=0.9.4` (vault via `.vault_pass`).
+
 ## 2026-10-05 — TASK-BE-067 — Attribute an appearing/removed subscription (new/removed service) to a business cause
 
 **Summary:**
