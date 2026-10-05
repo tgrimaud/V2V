@@ -987,7 +987,7 @@ end to end. This closes that gap so a local/pilot run can exercise the true evid
 ## TASK-BE-067 — Attribute an appearing/disappearing subscription (a new/removed service) to a business cause instead of UNEXPLAINED
 
 **Type:** Technical task (backend billing domain) — follow-up of BUG-028 E2E coverage
-**Status:** Proposed (not started) — surfaced by the multi-account `EirB2cBillingComparisonE2eTest`
+**Status:** ✅ Done on `task/TASK-BE-067-subscription-service-change-cause` (off `feat/restart-from-scratch`) — `SUBSCRIPTION` delta now resolves by `ChangeKind` (APPEARED→`SERVICE_ADDED`, DISAPPEARED→`SERVICE_REMOVED`, CHANGED→`UNEXPLAINED`); composer voices the new causes (FR/EN); E2E for 99226126/99226337 now residual €0.00. Backend **715** + ArchUnit green. **Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; residual (accepted): a plan-swap reads as remove+add. Full review: `docs/qa/task-be-067-adversarial-review.md`. Awaiting user validation (not merged).
 **Priority:** Medium
 **Depends on:** TASK-BE-042 (`InvoiceComparisonService`), TASK-BE-066 (real-PDF E2E coverage)
 **Relates to:** EPIC-004, BR-003, DEC-002

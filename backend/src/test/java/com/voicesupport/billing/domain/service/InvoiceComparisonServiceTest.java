@@ -114,21 +114,55 @@ class InvoiceComparisonServiceTest {
     }
 
     @Test
-    void an_unexplained_category_line_is_not_a_cause_and_becomes_the_residual() {
-        // GIVEN a +500 change carried entirely by a bare subscription line (maps to UNEXPLAINED) —
-        // the coarse Eir case: recurringAmount moved but no finer line says why
-        Invoice previous = header("prev", 0L, List.of());
+    void an_opaque_in_place_subscription_change_is_not_a_cause_and_becomes_the_residual() {
+        // GIVEN a subscription present in BOTH months whose amount moved +200 with no finer line to say
+        // why — the coarse Eir case: recurringAmount moved opaquely (a CHANGED subscription)
+        Invoice previous = header("prev", 300L, List.of(line("base", LineCategory.SUBSCRIPTION, 300L)));
         Invoice current = header("curr", 500L, List.of(line("base", LineCategory.SUBSCRIPTION, 500L)));
 
         // WHEN they are compared
         InvoiceComparison comparison = service.compare(previous, current);
 
-        // THEN no business cause is claimed and the whole 500 is surfaced as residual (never voiced as
+        // THEN no business cause is claimed and the whole +200 is surfaced as residual (never voiced as
         // "explained by an unexplained part")
-        assertThat(comparison.totalDelta().minorUnits()).isEqualTo(500L);
+        assertThat(comparison.totalDelta().minorUnits()).isEqualTo(200L);
         assertThat(comparison.lineDeltas()).hasSize(1);
         assertThat(comparison.causes()).isEmpty();
-        assertThat(comparison.unexplainedAmount().minorUnits()).isEqualTo(500L);
+        assertThat(comparison.unexplainedAmount().minorUnits()).isEqualTo(200L);
+    }
+
+    @Test
+    void a_new_subscription_line_is_attributed_to_service_added() {
+        // GIVEN a brand-new service subscription appearing (absent in the previous bill) — TASK-BE-067
+        Invoice previous = header("prev", 0L, List.of());
+        Invoice current = header("curr", 1999L, List.of(line("tv", LineCategory.SUBSCRIPTION, 1999L)));
+
+        // WHEN they are compared
+        InvoiceComparison comparison = service.compare(previous, current);
+
+        // THEN it is a named SERVICE_ADDED cause and nothing is left unexplained
+        assertThat(comparison.causes()).singleElement().satisfies(cause -> {
+            assertThat(cause.type()).isEqualTo(BillingCauseType.SERVICE_ADDED);
+            assertThat(cause.impact().minorUnits()).isEqualTo(1999L);
+        });
+        assertThat(comparison.unexplainedAmount().isZero()).isTrue();
+    }
+
+    @Test
+    void a_removed_subscription_line_is_attributed_to_service_removed() {
+        // GIVEN a service subscription that was billed previously and is gone now — TASK-BE-067
+        Invoice previous = header("prev", 1999L, List.of(line("tv", LineCategory.SUBSCRIPTION, 1999L)));
+        Invoice current = header("curr", 0L, List.of());
+
+        // WHEN they are compared
+        InvoiceComparison comparison = service.compare(previous, current);
+
+        // THEN it is a named SERVICE_REMOVED cause (negative impact) and nothing is left unexplained
+        assertThat(comparison.causes()).singleElement().satisfies(cause -> {
+            assertThat(cause.type()).isEqualTo(BillingCauseType.SERVICE_REMOVED);
+            assertThat(cause.impact().minorUnits()).isEqualTo(-1999L);
+        });
+        assertThat(comparison.unexplainedAmount().isZero()).isTrue();
     }
 
     @Test

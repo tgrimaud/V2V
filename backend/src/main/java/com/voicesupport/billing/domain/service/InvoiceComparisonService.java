@@ -69,9 +69,9 @@ public class InvoiceComparisonService implements CompareInvoicesUseCase {
         if (contribution.isZero()) {
             return null;
         }
-        LineDelta lineDelta = new LineDelta(label(present), kind(previous, current),
-                previousAmount, currentAmount, contribution);
-        return new CategorizedDelta(lineDelta, cause(present.category()));
+        ChangeKind changeKind = kind(previous, current);
+        LineDelta lineDelta = new LineDelta(label(present), changeKind, previousAmount, currentAmount, contribution);
+        return new CategorizedDelta(lineDelta, cause(present.category(), changeKind));
     }
 
     private List<BillingCause> causes(List<CategorizedDelta> categorized, Currency currency) {
@@ -152,7 +152,18 @@ public class InvoiceComparisonService implements CompareInvoicesUseCase {
         return item.type() != null ? item.type() : item.category().name();
     }
 
-    private static BillingCauseType cause(LineCategory category) {
+    // A subscription line that appeared / disappeared is a new / removed service — a named cause the
+    // explanation can voice (TASK-BE-067). A subscription that merely CHANGED in place has no finer line
+    // to say why, so it stays UNEXPLAINED (the opaque recurring-amount move). Non-subscription categories
+    // are mapped by category alone.
+    private static BillingCauseType cause(LineCategory category, ChangeKind kind) {
+        if (category == LineCategory.SUBSCRIPTION) {
+            return switch (kind) {
+                case APPEARED -> BillingCauseType.SERVICE_ADDED;
+                case DISAPPEARED -> BillingCauseType.SERVICE_REMOVED;
+                default -> BillingCauseType.UNEXPLAINED;
+            };
+        }
         return CAUSE_BY_CATEGORY.getOrDefault(category, BillingCauseType.UNEXPLAINED);
     }
 

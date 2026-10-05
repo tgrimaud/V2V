@@ -46,6 +46,23 @@ The LLM must not calculate invoice amounts or invent billing causes.
 - **Start with FAQ-only invoice explanations**: rejected because invoice deltas
   need customer-specific data and proof.
 
+## Amendment (2026-10-05, TASK-BE-067) — service added/removed is a named cause
+
+The deterministic comparison attributes each line delta to a `BillingCauseType`. A
+`SUBSCRIPTION` line was previously left unmapped and always fell into the fail-closed
+`UNEXPLAINED` bucket. Real multi-service invoices showed this is too coarse: when a customer
+**adds or removes a whole service**, that service's base line is a `SUBSCRIPTION` that
+**appeared** or **disappeared** — a perfectly explainable change, not an opaque one.
+
+Decision: the cause of a `SUBSCRIPTION` delta now depends on its `ChangeKind` —
+`APPEARED → SERVICE_ADDED`, `DISAPPEARED → SERVICE_REMOVED` (both named, voiceable causes that
+reduce the residual) — while an in-place `CHANGED` subscription (recurring amount moved with no
+finer line to say why) **stays `UNEXPLAINED`** and keeps gating confidence/escalation (BR-003).
+Still deterministic, no LLM. Non-subscription categories are unchanged (mapped by category).
+Verified end to end on the real eir B2C PDFs (`EirB2cBillingComparisonE2eTest`): accounts
+adding eir TV / eir Mobile 5G are now fully explained (residual €0.00) instead of carrying the
+new service's base amount as an unexplained residual.
+
 ## Related Documents
 
 - `docs/product/v1-scope.md`
