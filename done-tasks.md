@@ -3,6 +3,26 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — TASK-DOC-010 — Export the agent (LLM) system prompt as an English doc
+
+**Summary:**
+
+- Added `docs/product/agent-system-prompt.md`: a human-readable **English** export of the
+  conversational agent's system prompt, assembled exactly as sent to the LLM for an English turn
+  (base `DEC002_VOICE_SYSTEM_PROMPT` + per-call history/conciseness/language directives, dynamic
+  placeholders `{context}`/`{history}`/`{N}` flagged). The base prompt is already English (Bob/Eir
+  persona). Doc points to the code source of truth (`AbstractChatClientAnswerAdapter` +
+  `AnswerLanguage`) and notes the FR variant. **Docs-only, not runtime-affecting (export only).**
+- Registered TASK-DOC-010 in `product-backlog/tasks/doc-tasks.md` + `backlog-index.md`.
+- Branch `task/TASK-DOC-010-agent-system-prompt-export` (off `feat/restart-from-scratch`), committed
+  + pushed; `git diff --check` clean. Not merged (awaiting user request).
+- **Reference lookup (no change):** English TTS voice id = `vimnD4UQG_36P43U`, env `GRADIUM_VOICE_ID_EN`
+  (`deploy/ansible/group_vars/voice.yml`); empty ⇒ falls back to the FR voice (TASK-OPS-014).
+
+### Files changed
+- `docs/product/agent-system-prompt.md` — new English prompt export.
+- `product-backlog/tasks/doc-tasks.md`, `product-backlog/backlog-index.md` — TASK-DOC-010 registered.
+
 ## 2026-10-02 — TASK-BE-064 + TASK-BE-065 — Real invoice-PDF extraction (Apache PDFBox) + real eir B2C layout parser
 
 **Summary:**
