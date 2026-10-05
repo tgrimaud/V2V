@@ -3,6 +3,34 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — BUG-028 — eir B2C parser emitted `code=null` → comparison collapsed same-category lines
+
+**Summary:**
+
+- Fixed the defect surfaced by the TASK-BE-066 E2E test: `EirB2cInvoiceLayoutParser` built each
+  `InvoiceItem` with `code=null`, so `InvoiceComparisonService` (matches by `code`, falls back to the
+  category name) collapsed sibling same-category lines via `putIfAbsent` and dropped all but the first —
+  e.g. 99224964 September's two OPTION lines (`15GB Bundle` €14.99 + `eir Mobile Security` €1.99) merged
+  to one, leaving €1.99 as a spurious unexplained residual. Fixtures hid it (unique synthetic codes).
+- **Parser:** new pure `EirInvoiceText.slug(label)` + `EirInvoiceBodyReader.uniqueCode(label)` assign a
+  **stable, invoice-unique** slug code (first occurrence = bare slug → same product matches across months;
+  repeats get a numeric suffix). A dated prorata/one-off label keeps its own slug, distinct from the
+  recurring product. Item `id` stays positional (`line-N`).
+- **Comparison:** `InvoiceComparisonService.index()` hardened — a colliding matching key is now
+  disambiguated (`#N`) instead of silently dropped, so **no line ever vanishes from the diff** regardless
+  of source. Deterministic, no LLM (ADR-0003, DEC-002).
+- **Evidence:** `EirB2cBillingComparisonE2eTest` flipped to residual **€0.00** / OPTION_CHANGE **€16.98**;
+  new `EirInvoiceTextTest` (4, slug contract) + `InvoiceComparisonServiceTest.never_drops…` (1). Backend
+  **710** + ArchUnit green. Adversarial review **94/100** (`docs/qa/BUG-028-adversarial-review.md`).
+  Not merged (awaiting user).
+
+### Files changed
+- `backend/src/main/java/com/voicesupport/billing/infrastructure/pdf/EirInvoiceText.java` — `slug`.
+- `backend/src/main/java/com/voicesupport/billing/infrastructure/pdf/EirInvoiceBodyReader.java` — `uniqueCode` code assignment.
+- `backend/src/main/java/com/voicesupport/billing/domain/service/InvoiceComparisonService.java` — `index()`/`disambiguate()`.
+- `backend/src/test/.../pdf/EirInvoiceTextTest.java` (new), `.../pdf/EirB2cBillingComparisonE2eTest.java` (assertions), `.../service/InvoiceComparisonServiceTest.java` (regression).
+- `product-backlog/bugs/BUG-028-…md`, `product-backlog/backlog-index.md`, `docs/qa/BUG-028-adversarial-review.md`.
+
 ## 2026-10-05 — TASK-DOC-010 — Export the agent (LLM) system prompt as an English doc
 
 **Summary:**

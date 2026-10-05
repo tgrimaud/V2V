@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-028
 - **Title:** `EirB2cInvoiceLayoutParser` emits `code=null` → the deterministic comparison collapses same-category lines and leaves a spurious residual
-- **Status:** New (not started) — surfaced by the TASK-BE-066 end-to-end real-PDF test
+- **Status:** ✅ Fixed on `fix/BUG-028-eir-b2c-parser-line-code` (off `feat/restart-from-scratch`) — parser emits a stable, invoice-unique slug `code`; `InvoiceComparisonService.index()` hardened to never drop a colliding line; `EirB2cBillingComparisonE2eTest` now asserts residual €0.00 / OPTION_CHANGE €16.98. Backend **710** + ArchUnit green. **Adversarial review 94/100 (Pass, 2026-10-05)** — no blocking finding; residual (accepted): line code is label-derived (stable for V1 eir labels). Full review: `docs/qa/BUG-028-adversarial-review.md`. Awaiting user validation (not merged).
 - **Severity:** Medium
 - **Priority:** P2
 - **Detected by:** TASK-BE-066 `EirB2cBillingComparisonE2eTest` (real-PDF end-to-end comparison)

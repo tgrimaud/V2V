@@ -103,12 +103,26 @@ public class InvoiceComparisonService implements CompareInvoicesUseCase {
                 .reduce(Money.zero(currency), Money::plus);
     }
 
+    // Indexes lines by their matching key. A line is NEVER silently dropped (BUG-028): if two lines
+    // share the same key within one invoice (e.g. a source that reuses a code), the repeats are
+    // disambiguated so each still contributes to the comparison rather than vanishing from the diff.
     private static Map<String, InvoiceItem> index(List<InvoiceItem> lines) {
         Map<String, InvoiceItem> byKey = new LinkedHashMap<>();
         for (InvoiceItem line : lines) {
-            byKey.putIfAbsent(label(line), line);
+            byKey.put(disambiguate(byKey, label(line)), line);
         }
         return byKey;
+    }
+
+    private static String disambiguate(Map<String, InvoiceItem> byKey, String key) {
+        if (!byKey.containsKey(key)) {
+            return key;
+        }
+        int occurrence = 2;
+        while (byKey.containsKey(key + "#" + occurrence)) {
+            occurrence++;
+        }
+        return key + "#" + occurrence;
     }
 
     private static Set<String> union(Map<String, InvoiceItem> previous, Map<String, InvoiceItem> current) {

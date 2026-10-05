@@ -40,15 +40,13 @@ class EirB2cBillingComparisonE2eTest {
     private final RetrieveComparableInvoicesUseCase comparables = new ComparableInvoiceService(bss);
     private final CompareInvoicesUseCase comparison = new InvoiceComparisonService();
 
-    // Characterization of the current end-to-end behaviour. The real parsed invoices drive the
-    // comparison (real totals + delta + the business causes), BUT a known residual of €1.99 is left
-    // unexplained: BUG-028 — EirB2cInvoiceLayoutParser emits InvoiceItem with code=null, so the
-    // comparison (which matches lines by code, falling back to the category name) collapses the two
-    // SEPTEMBER OPTION lines ("15GB Bundle" €14.99 and "eir Mobile Security" €1.99) into one and drops
-    // the €1.99 from the diff. Fixtures hid this (unique synthetic codes); real parsed data exposes it.
-    // When BUG-028 is fixed, flip unexplained to 0 and OPTION_CHANGE to 1698 (1499 + 199).
+    // End-to-end on the REAL parsed PDFs: the +€55.47 increase is fully attributed to the real line
+    // changes with zero residual. This exercises BUG-028's fix — EirB2cInvoiceLayoutParser now emits a
+    // stable, invoice-unique slug code per line, so the comparison keeps the two SEPTEMBER OPTION lines
+    // ("15GB Bundle" €14.99 and "eir Mobile Security" €1.99) distinct instead of collapsing them by
+    // category name (previously dropping the €1.99 into an unexplained residual).
     @Test
-    void payMoreThisMonth_account99224964_isDrivenByTheRealParsedPdfs_withKnownResidual() {
+    void payMoreThisMonth_account99224964_isFullyExplainedFromTheRealParsedPdfs() {
         // GIVEN the account's invoices listed most-recent-first (September first, then August)
         AccountId account = AccountId.of("99224964");
         List<InvoiceSummary> available = comparables.availableInvoices(account);
@@ -71,9 +69,12 @@ class EirB2cBillingComparisonE2eTest {
                 .collect(Collectors.toMap(BillingCause::type, cause -> cause.impact().minorUnits()));
         assertEquals(2999L, impactByCause.get(BillingCauseType.ONE_OFF_FEE), "1GB USA/Canada roaming bundle");
         assertEquals(850L, impactByCause.get(BillingCauseType.PRORATION), "15GB bundle prorata");
-        assertEquals(1499L, impactByCause.get(BillingCauseType.OPTION_CHANGE), "15GB Bundle (mobile security dropped — BUG-028)");
+        assertEquals(1698L, impactByCause.get(BillingCauseType.OPTION_CHANGE),
+                "15GB Bundle €14.99 + eir Mobile Security €1.99 (both kept — BUG-028 fixed)");
 
-        // AND a known €1.99 residual remains until BUG-028 (parser line codes) is fixed — target 0.
-        assertEquals(199, result.unexplainedAmount().minorUnits(), "KNOWN residual pending BUG-028 (target 0)");
+        // AND nothing is left unexplained: the identified causes account for the whole delta (BR-003).
+        assertEquals(0, result.unexplainedAmount().minorUnits(), "nothing unexplained");
+        long explained = impactByCause.values().stream().mapToLong(Long::longValue).sum();
+        assertEquals(5547L, explained, "identified causes sum to the total delta");
     }
 }

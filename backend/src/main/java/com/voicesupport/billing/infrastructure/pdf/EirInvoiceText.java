@@ -30,6 +30,7 @@ final class EirInvoiceText {
     private static final Pattern SUBTOTAL = Pattern.compile("^\\u20AC\\s*-?\\d{1,3}(?:,\\d{3})*\\.\\d{2}$");
     private static final Pattern GROUP_PERIOD = Pattern.compile("for the period from (.+?) to (.+?)\\s*$");
     private static final Pattern LINE_PERIOD = Pattern.compile("from (\\d{1,2}\\s+[A-Za-z]{3}\\s+\\d{2}) until (\\d{1,2}\\s+[A-Za-z]{3}\\s+\\d{2})");
+    private static final Pattern NON_ALNUM = Pattern.compile("[^a-z0-9]+");
 
     private EirInvoiceText() {
     }
@@ -60,6 +61,27 @@ final class EirInvoiceText {
 
     static String stripTrailingAmount(String line) {
         return TRAILING_AMOUNT.matcher(line).replaceAll("").strip();
+    }
+
+    // Normalizes a line label into a stable, case/whitespace-insensitive product key used as the
+    // invoice-item code (BUG-028). The code is what InvoiceComparisonService matches on across months,
+    // so the same product gets the same slug in both bills ("15GB Bundle" -> "15gb-bundle"), while a
+    // prorata/one-off line keeps its embedded dates and therefore a distinct slug.
+    static String slug(String label) {
+        if (label == null) {
+            return "";
+        }
+        String lower = label.toLowerCase().strip();
+        String replaced = NON_ALNUM.matcher(lower).replaceAll("-");
+        int start = 0;
+        int end = replaced.length();
+        while (start < end && replaced.charAt(start) == '-') {
+            start++;
+        }
+        while (end > start && replaced.charAt(end - 1) == '-') {
+            end--;
+        }
+        return replaced.substring(start, end);
     }
 
     static boolean isSubtotal(String line) {
