@@ -8,12 +8,20 @@ B2C invoice PDFs**: three billing accounts, two consecutive bill runs each (Augu
 lists the gaps that ADR-0054 addresses. The transcribed invoices back the realistic mock
 (`EirB2cSampleFixtures`, TASK-BE-059).
 
-Source files: the six anonymized test PDFs
-(`99224964|99226126|99226337_EIR_MOBILE_TEST_20260812|20260912_B2C.pdf`) are committed as backend test
-resources under `backend/src/test/resources/billing/eir-b2c/` (TASK-BE-065). The real eir B2C layout
-parser (`EirB2cInvoiceLayoutParser`, `pdf.source=eir-b2c`) parses them, and `EirB2cRealPdfParsingTest`
+Source files: the six anonymized PDFs
+(`99224964|99226126|99226337_EIR_MOBILE_TEST_20260812|20260912_B2C.pdf`) ship as backend **main**
+resources under `backend/src/main/resources/billing/eir-b2c/` (promoted from test resources in
+TASK-BE-066 so they are available at runtime). The real eir B2C layout parser
+(`EirB2cInvoiceLayoutParser`, `pdf.source=eir-b2c`) parses them, and `EirB2cRealPdfParsingTest`
 asserts `parse(real PDF) == EirB2cSampleFixtures` on the full business structure (identity, period
 windows, section → group → item tree, inferred category, prorata periods, 23% VAT split, reconciliation).
+
+Runtime usage (TASK-BE-066): with `voice-support.billing.bss.source=pdf`,
+`voice-support.billing.bss.billrun.source=sample` and `voice-support.billing.pdf.source=eir-b2c`, the
+`SampleEirB2cBillRunDocumentAdapter` serves these real PDF bytes so the bot runs the full
+download → PDFBox → parse → compare chain on the real documents for accounts `99224964`, `99226126`
+and `99226337`. Defaults stay `fixture` (synthetic shortcut), so standard local/pilot behaviour is
+unchanged.
 
 ## Structure observed on the invoice
 
