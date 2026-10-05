@@ -127,7 +127,11 @@ kb_sync_after_deploy: true
 # each is domain-classified by an embedding call at parse time (ADR-0030), so a full run
 # takes ~15-30 min on the pilot. kb_sync.yml fires the sync async (poll:0) and waits via
 # async_status: poll every kb_sync_poll_delay s, up to kb_sync_poll_retries times
-# (90 * 30 s = 45 min headroom). Idempotent re-deploys finish in seconds.
+# (90 * 30 s = 45 min headroom). TASK-OPS-011: even an *unchanged* re-sync re-classifies every
+# article at parse time (ADR-0030), so it is NOT fast — it ran > 40 min and timed out on code-only
+# redeploys. The sync is therefore skipped unless a KB source changed this deploy (kb_assets_changed);
+# set kb_sync_force: true to run it regardless (e.g. after a manual store wipe).
+kb_sync_force: false           # force a full re-sync even when no KB source changed (TASK-OPS-011)
 kb_sync_timeout: 2400          # async worker's own HTTP read timeout (s)
 kb_sync_async_seconds: 2700    # async job max lifetime (s)
 kb_sync_poll_retries: 90       # async_status polls

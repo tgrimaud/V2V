@@ -64,6 +64,25 @@
   changed_when: false          # readiness probe: never a state change
   no_log: true                 # args carry the api-key header
 
+# TASK-OPS-011: only run the (slow, > 40 min on CPU) sync when the mounted KB sources actually changed
+# this deploy (kb_assets_changed, set in kb_assets.yml from the copy checksums) — or when forced with
+# -e kb_sync_force=true. On an unchanged, already-populated store a code-only redeploy skips the sync
+# entirely instead of re-classifying every article and timing out. The warm-up above and the retrieval
+# smoke below still run (cheap pipeline health checks), so the deploy is still verified either way.
+- name: "Decide whether the KB sync must run (TASK-OPS-011)"
+  ansible.builtin.set_fact:
+    kb_sync_required: "{{ (kb_assets_changed | default(true) | bool) or (kb_sync_force | default(false) | bool) }}"
+  run_once: true
+
+- name: "Report that the KB sync is skipped (sources unchanged)"
+  ansible.builtin.debug:
+    msg: >-
+      KB sync SKIPPED on {{ inventory_hostname }}: mounted KB sources unchanged since the last deploy
+      (kb_assets_changed=false). The existing pgvector index is kept as-is. Force a full re-sync with
+      -e kb_sync_force=true (or change a KB source).
+  when: not kb_sync_required
+  run_once: true
+
 - name: "Trigger the KB sync (POST /api/knowledge/sync, async)"
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ backend_port }}/api/knowledge/sync"
@@ -77,6 +96,7 @@
   poll: 0
   run_once: true
   no_log: true
+  when: kb_sync_required
 
 # Not no_log: async_status polls by job id only — its args carry no api key, and the uri
 # module result never echoes the request header. Keeping it visible surfaces the HTTP
@@ -89,6 +109,7 @@
   retries: "{{ kb_sync_poll_retries | default(90) }}"
   delay: "{{ kb_sync_poll_delay | default(30) }}"
   run_once: true
+  when: kb_sync_required
 
 # Non-secret confirmation the sync ran (aggregate counts only, no KB content / no key).
 - name: "Report the KB sync outcome"
@@ -100,6 +121,7 @@
       skipped={{ kb_sync_result.json.skipped | default('?') }}
       deleted={{ kb_sync_result.json.deleted | default('?') }}
   run_once: true
+  when: kb_sync_required
 
 # /api/knowledge/sync returns an aggregate SyncReport { processed, ingested, skipped,
 # deleted } across ALL connectors (markdown + CSV). Gate on `processed` above the
@@ -113,6 +135,7 @@
       - (kb_sync_result.status | default(0) | int) == 200
       - kb_sync_result.json is defined
       - (kb_sync_result.json.processed | default(0) | int) >= (kb_sync_min_processed | default(50) | int)
+    quiet: true
     fail_msg: >-
       KB sync processed {{ kb_sync_result.json.processed | default('?') }} documents
       (< {{ kb_sync_min_processed | default(50) }}) — the CSV corpus was not seen. Check the
@@ -120,6 +143,7 @@
       sync logs; the RAG may be markdown-only.
     success_msg: "KB sync processed the full corpus (markdown + CSV)."
   run_once: true
+  when: kb_sync_required
 
 # Extra pipeline signal: POST /api/conversation/retrieve must answer end-to-end (embedding
 # + pgvector search + audience filter). This is deliberately NOT the "CSV loaded" gate (the

@@ -83,7 +83,10 @@
   ansible.builtin.include_tasks: health.yml
 
 # Backend tier only: sync the mounted KB assets into pgvector so a (re)deploy never leaves
-# the RAG markdown-only or empty (TASK-OPS-009, ADR-0048). Idempotent (content_hash skip).
+# the RAG markdown-only or empty (TASK-OPS-009, ADR-0048). Idempotent (content_hash skip) and,
+# since TASK-OPS-011, skipped entirely when no KB source changed this deploy (kb_assets_changed)
+# so a code-only redeploy no longer pays the > 40 min CPU re-classification; force with
+# -e kb_sync_force=true.
 - name: "Sync the knowledge base into pgvector"
   ansible.builtin.include_tasks: kb_sync.yml
   when: tier == 'backend' and (kb_sync_after_deploy | default(true) | bool)

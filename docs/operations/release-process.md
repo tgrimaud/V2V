@@ -108,6 +108,14 @@ curl -fsS -X POST http://192.168.0.11/api/knowledge/sync
 
 (or wait for the scheduler). Subsequent deploys keep the existing index.
 
+> **KB sync runs only when a KB source changed (TASK-OPS-011).** The post-deploy sync is slow — per
+> ADR-0030 every article is domain-classified by a CPU-Ollama embedding call on each sync, so a full
+> pass runs ~15–40 min and can exceed the 2400 s HTTP timeout (that aborted the first v0.9.4 roll).
+> The deploy therefore skips the sync when none of the mounted KB sources (markdown + CSV) changed
+> this run (detected from the `ansible.builtin.copy` checksums), and prints "KB sync SKIPPED". A
+> fresh host or a changed KB source still syncs. Force a full re-sync (e.g. after a manual
+> `DELETE FROM vector_store`) with `-e kb_sync_force=true`.
+
 ## Verify
 
 - **Backend**: `curl -fsS http://192.168.0.11/actuator/health` → `{"status":"UP"}` (VIP `.11:80`)

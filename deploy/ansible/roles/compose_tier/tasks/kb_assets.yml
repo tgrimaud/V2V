@@ -22,6 +22,7 @@
     owner: root
     group: root
     mode: "0644"
+  register: kb_md_copy
 
 - name: "Copy the CSV article corpus ({{ kb_csv_filename }})"
   ansible.builtin.copy:
@@ -30,6 +31,7 @@
     owner: root
     group: root
     mode: "0644"
+  register: kb_csv_copy
 
 # TASK-BE-034 / ADR-0048 bilingual: also drop the FR corpus when the language filter is on, so a
 # re-sync loads both source_types (csv-article + csv-article-fr) into the shared store.
@@ -41,3 +43,15 @@
     group: root
     mode: "0644"
   when: kb_retrieval_language_filter_enabled | default(false) | bool
+  register: kb_csv_fr_copy
+
+# TASK-OPS-011: record whether any mounted KB source actually changed this deploy. The post-deploy
+# sync (kb_sync.yml) is skipped when nothing changed, because POST /api/knowledge/sync re-classifies
+# every article via a CPU-Ollama embedding at parse time (ADR-0030) — a full pass runs > 40 min and
+# previously timed out and aborted the roll on every (even unchanged) code-only redeploy. The
+# ansible.builtin.copy modules above already compare content checksums, so `is changed` is an exact
+# "KB source differs from what's on the host" signal; a fresh host reports changed (files created) so
+# the first sync still runs. The FR copy may be skipped (register still defined, changed=false then).
+- name: "Record whether the mounted KB assets changed this deploy (TASK-OPS-011)"
+  ansible.builtin.set_fact:
+    kb_assets_changed: "{{ (kb_md_copy is changed) or (kb_csv_copy is changed) or (kb_csv_fr_copy is defined and (kb_csv_fr_copy is changed)) }}"
