@@ -5,7 +5,6 @@ import com.voicesupport.billing.domain.model.BillingCauseType;
 import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.InvoiceComparison;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
-import com.voicesupport.billing.domain.model.valueobject.InvoiceId;
 import com.voicesupport.billing.domain.model.valueobject.InvoiceSummary;
 import com.voicesupport.billing.domain.port.in.CompareInvoicesUseCase;
 import com.voicesupport.billing.domain.port.in.RetrieveComparableInvoicesUseCase;
@@ -40,41 +39,83 @@ class EirB2cBillingComparisonE2eTest {
     private final RetrieveComparableInvoicesUseCase comparables = new ComparableInvoiceService(bss);
     private final CompareInvoicesUseCase comparison = new InvoiceComparisonService();
 
-    // End-to-end on the REAL parsed PDFs: the +€55.47 increase is fully attributed to the real line
-    // changes with zero residual. This exercises BUG-028's fix — EirB2cInvoiceLayoutParser now emits a
-    // stable, invoice-unique slug code per line, so the comparison keeps the two SEPTEMBER OPTION lines
-    // ("15GB Bundle" €14.99 and "eir Mobile Security" €1.99) distinct instead of collapsing them by
-    // category name (previously dropping the €1.99 into an unexplained residual).
+    // 99224964 (single mobile line) — the +€55.47 increase is FULLY explained, zero residual. Exercises
+    // BUG-028's fix: the two September OPTION lines ("15GB Bundle" €14.99 and "eir Mobile Security" €1.99)
+    // stay distinct (stable slug codes) instead of collapsing by category name (which dropped the €1.99).
     @Test
-    void payMoreThisMonth_account99224964_isFullyExplainedFromTheRealParsedPdfs() {
-        // GIVEN the account's invoices listed most-recent-first (September first, then August)
-        AccountId account = AccountId.of("99224964");
-        List<InvoiceSummary> available = comparables.availableInvoices(account);
-        assertEquals(2, available.size());
-        InvoiceId september = available.get(0).id();
-        InvoiceId august = available.get(1).id();
-        assertEquals("2609129000000008", september.value(), "most recent = September");
-        assertEquals("2608129000000039", august.value(), "previous = August");
+    void account99224964_singleMobileLine_isFullyExplained() {
+        InvoiceComparison result = compareSeptemberVsAugust("99224964", "2609129000000008", "2608129000000039",
+                1999, 7546);
 
-        // WHEN both invoices are fetched from the REAL PDFs (download bytes -> PDFBox -> parse) and compared
-        Invoice sep = bss.fetchInvoice(account, september).orElseThrow();
-        Invoice aug = bss.fetchInvoice(account, august).orElseThrow();
-        assertEquals(1999, aug.totals().taxIncluded().minorUnits(), "August total TTC (€19.99) from the real PDF");
-        assertEquals(7546, sep.totals().taxIncluded().minorUnits(), "September total TTC (€75.46) from the real PDF");
-        InvoiceComparison result = comparison.compare(aug, sep);
-
-        // THEN the +€55.47 increase comes from the real parsed amounts and is attributed to the real causes
         assertEquals(5547, result.totalDelta().minorUnits(), "total delta +€55.47 from the real invoices");
-        Map<BillingCauseType, Long> impactByCause = result.causes().stream()
-                .collect(Collectors.toMap(BillingCause::type, cause -> cause.impact().minorUnits()));
-        assertEquals(2999L, impactByCause.get(BillingCauseType.ONE_OFF_FEE), "1GB USA/Canada roaming bundle");
-        assertEquals(850L, impactByCause.get(BillingCauseType.PRORATION), "15GB bundle prorata");
-        assertEquals(1698L, impactByCause.get(BillingCauseType.OPTION_CHANGE),
+        Map<BillingCauseType, Long> impact = impacts(result);
+        assertEquals(2999L, impact.get(BillingCauseType.ONE_OFF_FEE), "1GB USA/Canada roaming bundle");
+        assertEquals(850L, impact.get(BillingCauseType.PRORATION), "15GB bundle prorata");
+        assertEquals(1698L, impact.get(BillingCauseType.OPTION_CHANGE),
                 "15GB Bundle €14.99 + eir Mobile Security €1.99 (both kept — BUG-028 fixed)");
-
-        // AND nothing is left unexplained: the identified causes account for the whole delta (BR-003).
         assertEquals(0, result.unexplainedAmount().minorUnits(), "nothing unexplained");
-        long explained = impactByCause.values().stream().mapToLong(Long::longValue).sum();
-        assertEquals(5547L, explained, "identified causes sum to the total delta");
+        assertEquals(5547L, impact.values().stream().mapToLong(Long::longValue).sum(),
+                "identified causes sum to the whole delta (BR-003)");
+    }
+
+    // 99226126 (fibre → fibre + new eir TV) — a strong BUG-028 regression case: three DISCOUNT lines
+    // (one fibre + two new TV, incl. a prorata) that ALL share the DISCOUNT category. Before the fix they
+    // collapsed to a single DISCOUNT key; now each is kept, so DISCOUNT_EXPIRY sums the two real TV
+    // discounts. The new eir TV base line is a SUBSCRIPTION, which maps to UNEXPLAINED by current design,
+    // so it surfaces as a (traceable) residual — see TASK-BE-067.
+    @Test
+    void account99226126_newTvService_keepsEveryDiscountLine_baseIsResidual() {
+        InvoiceComparison result = compareSeptemberVsAugust("99226126", "2609129000000009", "2608129000000040",
+                13998, 7347);
+
+        assertEquals(-6651, result.totalDelta().minorUnits(), "net change −€66.51 (install fee gone, TV added)");
+        Map<BillingCauseType, Long> impact = impacts(result);
+        assertEquals(-9999L, impact.get(BillingCauseType.ONE_OFF_FEE), "fibre installation fee no longer billed");
+        assertEquals(1133L, impact.get(BillingCauseType.PRORATION), "eir TV prorata");
+        assertEquals(-783L, impact.get(BillingCauseType.DISCOUNT_EXPIRY),
+                "BOTH new TV discounts kept: −€2.83 prorata + −€5.00 (BUG-028: not collapsed)");
+        assertEquals(999L, impact.get(BillingCauseType.OPTION_CHANGE), "eir TV Extra pack");
+        assertEquals(1999, result.unexplainedAmount().minorUnits(),
+                "new eir TV base subscription €19.99 → SUBSCRIPTION maps to UNEXPLAINED (TASK-BE-067)");
+    }
+
+    // 99226337 (fibre + TV → fibre + TV + new mobile 5G) — the richest invoice: multiple DISCOUNT lines
+    // across three sections, prorata lines appearing AND disappearing. BUG-028 proof: the three real
+    // discount deltas are all kept (DISCOUNT_EXPIRY = +€0.64 − €5.66 − €10.00). The new eir Mobile 5G base
+    // line is a SUBSCRIPTION → the €64.99 residual.
+    @Test
+    void account99226337_newMobile5gService_keepsEveryDiscountAndProrata_baseIsResidual() {
+        InvoiceComparison result = compareSeptemberVsAugust("99226337", "2609129000000011", "2608129000000042",
+                14689, 18112);
+
+        assertEquals(3423, result.totalDelta().minorUnits(), "net change +€34.23");
+        Map<BillingCauseType, Long> impact = impacts(result);
+        assertEquals(-4999L, impact.get(BillingCauseType.ONE_OFF_FEE), "broadband activation fee no longer billed");
+        assertEquals(3425L, impact.get(BillingCauseType.PRORATION),
+                "mobile 5G prorata +€36.83 minus the Aug TV prorata −€2.58 that rolled off");
+        assertEquals(-1502L, impact.get(BillingCauseType.DISCOUNT_EXPIRY),
+                "three discount deltas kept: +€0.64 − €5.66 − €10.00 (BUG-028: not collapsed)");
+        assertEquals(6499, result.unexplainedAmount().minorUnits(),
+                "new eir Mobile Connect Plus 5G base €64.99 → SUBSCRIPTION maps to UNEXPLAINED (TASK-BE-067)");
+    }
+
+    private InvoiceComparison compareSeptemberVsAugust(String accountId, String septemberId, String augustId,
+            long augustTotalCents, long septemberTotalCents) {
+        AccountId account = AccountId.of(accountId);
+        List<InvoiceSummary> available = comparables.availableInvoices(account);
+        assertEquals(2, available.size(), "two bill runs for " + accountId);
+        assertEquals(septemberId, available.get(0).id().value(), "most recent = September for " + accountId);
+        assertEquals(augustId, available.get(1).id().value(), "previous = August for " + accountId);
+        Invoice september = bss.fetchInvoice(account, available.get(0).id()).orElseThrow();
+        Invoice august = bss.fetchInvoice(account, available.get(1).id()).orElseThrow();
+        assertEquals(augustTotalCents, august.totals().taxIncluded().minorUnits(), "August total " + accountId);
+        assertEquals(septemberTotalCents, september.totals().taxIncluded().minorUnits(),
+                "September total " + accountId);
+        return comparison.compare(august, september);
+    }
+
+    private static Map<BillingCauseType, Long> impacts(InvoiceComparison result) {
+        return result.causes().stream()
+                .collect(Collectors.toMap(BillingCause::type, cause -> cause.impact().minorUnits()));
     }
 }

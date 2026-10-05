@@ -20,9 +20,14 @@
   disambiguated (`#N`) instead of silently dropped, so **no line ever vanishes from the diff** regardless
   of source. Deterministic, no LLM (ADR-0003, DEC-002).
 - **Evidence:** `EirB2cBillingComparisonE2eTest` flipped to residual **€0.00** / OPTION_CHANGE **€16.98**;
-  new `EirInvoiceTextTest` (4, slug contract) + `InvoiceComparisonServiceTest.never_drops…` (1). Backend
-  **710** + ArchUnit green. Adversarial review **94/100** (`docs/qa/BUG-028-adversarial-review.md`).
-  Not merged (awaiting user).
+  new `EirInvoiceTextTest` (4, slug contract) + `InvoiceComparisonServiceTest.never_drops…` (1). Adversarial
+  review **94/100** (`docs/qa/BUG-028-adversarial-review.md`).
+- **Multi-account validation:** extended the E2E to all three real accounts. 99226126 (adds eir TV) and
+  99226337 (adds eir Mobile 5G) each carry **three/multiple DISCOUNT lines** that previously collapsed to one
+  — now all kept (DISCOUNT_EXPIRY = −€7.83 / −€15.02), proving BUG-028 across accounts. These two surfaced a
+  separate finding (a NEW service's base line is `SUBSCRIPTION` → `UNEXPLAINED` → traceable residual €19.99 /
+  €64.99), filed as **TASK-BE-067** (new cause for an appearing/removed service). Backend **712** + ArchUnit
+  green.
 
 ### Files changed
 - `backend/src/main/java/com/voicesupport/billing/infrastructure/pdf/EirInvoiceText.java` — `slug`.
