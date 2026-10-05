@@ -983,3 +983,40 @@ end to end. This closes that gap so a local/pilot run can exercise the true evid
   non-eir layouts; flipping the runtime default away from fixture.
 - Fixing BUG-028 (parser line codes / comparison line-matching) — a distinct defect this E2E test surfaced;
   tracked as its own bug ticket, not implemented here.
+
+## TASK-BE-067 — Attribute an appearing/disappearing subscription (a new/removed service) to a business cause instead of UNEXPLAINED
+
+**Type:** Technical task (backend billing domain) — follow-up of BUG-028 E2E coverage
+**Status:** Proposed (not started) — surfaced by the multi-account `EirB2cBillingComparisonE2eTest`
+**Priority:** Medium
+**Depends on:** TASK-BE-042 (`InvoiceComparisonService`), TASK-BE-066 (real-PDF E2E coverage)
+**Relates to:** EPIC-004, BR-003, DEC-002
+
+### Context
+
+`InvoiceComparisonService.CAUSE_BY_CATEGORY` intentionally leaves `SUBSCRIPTION` unmapped → a subscription
+delta falls into `UNEXPLAINED` (the "recurring amount moved for an opaque reason" case). The multi-account
+E2E coverage showed the limitation: when a customer **adds a whole new service**, the parser classifies that
+service's **base line** as `SUBSCRIPTION`, so its amount surfaces as an *unexplained residual* even though it
+is perfectly explainable ("you added eir TV / eir Mobile 5G"):
+
+- `99226126` (adds eir TV): residual **€19.99** = new eir TV base subscription.
+- `99226337` (adds eir Mobile Connect Plus 5G): residual **€64.99** = new mobile 5G base subscription.
+
+The amount is fully traceable (it equals exactly the new service's base line, with its prorata + discounts
+already attributed to PRORATION/DISCOUNT_EXPIRY), so this is **not** a lost line (BUG-028 is fixed). It is a
+cause-taxonomy gap that makes the voice answer say part of the increase is "unexplained" and could trigger an
+unnecessary low-confidence caveat/escalation.
+
+### Decision / scope (to agree with Product)
+
+- Distinguish an **APPEARED/DISAPPEARED** subscription (a new/removed service → a named cause, e.g.
+  `SERVICE_ADDED` / `SERVICE_REMOVED` or a reused `SUBSCRIPTION_CHANGE`) from a **CHANGED** subscription whose
+  amount moved with no finer line (which legitimately stays `UNEXPLAINED`).
+- Keep it deterministic/no-LLM; the new cause must carry the line delta so the explanation can voice it.
+- Update `EirB2cBillingComparisonE2eTest` for `99226126`/`99226337` to assert the new cause (residual → 0),
+  and add domain unit tests for the APPEARED vs CHANGED subscription split.
+
+### Out Of Scope
+
+- Any change to the opaque CHANGED-subscription behaviour (stays UNEXPLAINED).

@@ -132,6 +132,29 @@ class InvoiceComparisonServiceTest {
     }
 
     @Test
+    void never_drops_a_second_line_that_shares_a_matching_key() {
+        // GIVEN two OPTION lines in the new invoice that resolve to the SAME matching key (same code) —
+        // the BUG-028 shape: before the fix the second line was silently dropped by putIfAbsent and its
+        // amount vanished from the diff into the residual.
+        Invoice previous = header("prev", 0L, List.of());
+        Invoice current = header("curr", 1698L, List.of(
+                line("opt", LineCategory.OPTION, 1499L),
+                line("opt", LineCategory.OPTION, 199L)));
+
+        // WHEN they are compared
+        InvoiceComparison comparison = service.compare(previous, current);
+
+        // THEN both lines contribute: OPTION_CHANGE sums to 1698 and nothing is left unexplained
+        assertThat(comparison.totalDelta().minorUnits()).isEqualTo(1698L);
+        assertThat(comparison.lineDeltas()).hasSize(2);
+        assertThat(comparison.causes()).singleElement().satisfies(cause -> {
+            assertThat(cause.type()).isEqualTo(BillingCauseType.OPTION_CHANGE);
+            assertThat(cause.impact().minorUnits()).isEqualTo(1698L);
+        });
+        assertThat(comparison.unexplainedAmount().isZero()).isTrue();
+    }
+
+    @Test
     void throws_when_an_invoice_is_null() {
         // GIVEN a valid current invoice
         Invoice current = fixture("eir-001", "2026-02");

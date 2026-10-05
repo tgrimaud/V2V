@@ -9,7 +9,9 @@ import com.voicesupport.billing.domain.model.valueobject.LineAmounts;
 import com.voicesupport.billing.domain.model.valueobject.LineCategory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // Reads the "Detail of your eir service" body into the domain section -> group -> item tree
 // (TASK-BE-065). The body is a flat line sequence; this single pass tracks the current section and
@@ -23,6 +25,7 @@ final class EirInvoiceBodyReader {
 
     private final List<InvoiceSection> sections = new ArrayList<>();
     private final String documentReference;
+    private final Map<String, Integer> codeCounts = new HashMap<>();
     private SectionDraft section;
     private GroupDraft group;
     private int lineCounter;
@@ -82,8 +85,20 @@ final class EirInvoiceBodyReader {
         DateRange period = EirInvoiceText.linePeriod(label);
         LineCategory category = group.classify(cents, label);
         Evidence evidence = new Evidence("pdfbox-eir", documentReference, label);
-        group.items.add(new InvoiceItem("line-" + (++lineCounter), null, null, null,
+        group.items.add(new InvoiceItem("line-" + (++lineCounter), null, uniqueCode(label), null,
                 category, EirInvoiceText.amount23(cents), evidence, period));
+    }
+
+    // Stable, invoice-unique product code from the label slug (BUG-028): the first occurrence keeps the
+    // bare slug (so the same product matches across months), repeats get a numeric suffix so no line is
+    // ever collapsed. Falls back to "line" when a label slugs to empty.
+    private String uniqueCode(String label) {
+        String base = EirInvoiceText.slug(label);
+        if (base.isEmpty()) {
+            base = "line";
+        }
+        int occurrence = codeCounts.merge(base, 1, Integer::sum);
+        return occurrence == 1 ? base : base + "-" + occurrence;
     }
 
     private void closeGroup() {
