@@ -24,6 +24,7 @@ import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingEn
 import com.voicesupport.billing.infrastructure.adapter.out.bss.eir.RestBillingServiceAdapter;
 import com.voicesupport.billing.domain.port.out.BillRunDocumentPort;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.FixtureBillRunDocumentAdapter;
+import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.SampleEirB2cBillRunDocumentAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.GalaxionBillRunDocumentAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.PdfBssBillingAdapter;
 import com.voicesupport.billing.infrastructure.adapter.out.bss.pdf.RestBillRunDocumentAdapter;
@@ -74,9 +75,10 @@ public class BillingConfig {
             @Value("${voice-support.billing.bss.eir.user-identifier:SYSTEM}") String userIdentifier,
             @Value("${voice-support.billing.bss.eir.connect-ms:2000}") long connectMs,
             @Value("${voice-support.billing.bss.eir.read-ms:5000}") long readMs,
-            @Value("${voice-support.billing.bss.billrun.base-url:}") String billRunBaseUrl) {
+            @Value("${voice-support.billing.bss.billrun.base-url:}") String billRunBaseUrl,
+            @Value("${voice-support.billing.bss.billrun.source:fixture}") String billRunSource) {
         return new BillingBssProperties(source, enquiryBaseUrl, serviceBaseUrl, currency,
-                userType, userIdentifier, connectMs, readMs, billRunBaseUrl);
+                userType, userIdentifier, connectMs, readMs, billRunBaseUrl, billRunSource);
     }
 
     @Bean
@@ -113,6 +115,11 @@ public class BillingConfig {
     // URL is configured, the real Galaxion adapter is wired instead (TASK-BE-063). Nothing else changes.
     private BillRunDocumentPort billRunDocumentPort(BillingBssProperties p) {
         if (p.billRunBaseUrl() == null || p.billRunBaseUrl().isBlank()) {
+            if ("sample".equalsIgnoreCase(p.billRunSource())) {
+                log.info("[BILLING-BSS] source=pdf — sample document source: real eir B2C sample PDFs on the "
+                        + "classpath (download real bytes -> extractor), pair with pdf.source=eir-b2c (TASK-BE-066)");
+                return new SampleEirB2cBillRunDocumentAdapter();
+            }
             log.info("[BILLING-BSS] source=pdf — fixture document source (bill-run-documents base URL unset; "
                     + "real REST adapter + PDFBox parser deferred, OQ-003)");
             return new FixtureBillRunDocumentAdapter(mockInvoices());

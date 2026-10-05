@@ -55,6 +55,18 @@ Accepted
 > structure (identity, period windows, section→group→item tree, inferred category, prorata periods, 23% VAT
 > split, reconciliation) — closing the OQ-003 "real PDF layout" leg for eir B2C. Defaults stay fixture so
 > local/pilot behaviour is unchanged (`pdf.source` ∈ {fixture, pdfbox, eir-b2c}).
+>
+> **Amendment (2026-10-05, TASK-BE-066).** The real eir B2C sample PDFs are promoted from test resources to
+> `backend/src/main/resources/billing/eir-b2c/` and served at runtime by a new document source
+> `SampleEirB2cBillRunDocumentAdapter` (`BillRunDocumentPort`), selectable with
+> `voice-support.billing.bss.billrun.source=sample` (default `fixture`, blank base URL). Its `download()`
+> returns the **actual PDF bytes** (not the synthetic period-id stub of `FixtureBillRunDocumentAdapter`), so
+> with `bss.source=pdf` + `pdf.source=eir-b2c` the whole runtime chain runs end to end on real documents:
+> download real bytes → PDFBox text → `EirB2cInvoiceLayoutParser` → domain `Invoice` → comparison (the LLM
+> never reads the PDF, DEC-002). `listDocuments` metadata (id/period/total) still comes from the
+> `EirB2cSampleFixtures` catalog as the `bill-run-documents/search` stand-in (OQ-003), but the compared
+> invoices are the real-parsed ones. Default stays `fixture` so local/pilot behaviour is unchanged
+> (`billrun.source` ∈ {fixture, sample}; the real Galaxion REST adapter still wires when a base URL is set).
 
 ## Context
 

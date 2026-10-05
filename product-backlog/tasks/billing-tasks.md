@@ -926,3 +926,54 @@ raw PDFs, so we can now prove `parse(real eir PDF) == EirB2cSampleFixtures`.
 
 - Non-eir Galaxion layouts; carry-forward / previous-balance (G3); consuming `chargePeriod` in the explanation
   composer (G4) — separate follow-ups.
+
+---
+
+## TASK-BE-066 — Serve the real eir B2C sample PDFs at runtime (end-to-end PDF path)
+
+**Type:** Technical task (backend billing infrastructure) — follow-up of TASK-BE-065
+**Status:** In progress on `task/TASK-BE-066-runtime-real-eir-b2c-pdf-source` (off `feat/restart-from-scratch`) — backend **715** + ArchUnit green; **default stays fixture**, awaiting user validation (not merged).
+**Adversarial review 93/100 (Pass, 2026-10-05)** — no blocking finding; `SampleEirB2cBillRunDocumentAdapterTest` proves real `%PDF` bytes are served and the full `PdfBssBillingAdapter` chain regenerates every sample invoice. Residual (accepted): `listDocuments` metadata + file-name date mapping tuned to the fixed eir B2C sample set (OQ-003). Full review: `docs/qa/task-be-066-adversarial-review.md`.
+**Priority:** Medium
+**Depends on:** TASK-BE-065 (`EirB2cInvoiceLayoutParser`, sample PDFs), TASK-BE-062 (`PdfBssBillingAdapter`)
+**Relates to:** OQ-003, ADR-0005
+
+### Context
+
+After TASK-BE-065, `parse(real eir PDF) == EirB2cSampleFixtures` was proven only in a **unit test** — the
+real PDFs lived in `src/test/resources`. At runtime, even with `pdf.source=eir-b2c`, the document source was
+`FixtureBillRunDocumentAdapter`, whose `download()` returns the period id as bytes (a synthetic shortcut via
+`FixtureInvoicePdfExtractorAdapter`). So the live bot never actually downloaded + parsed the real PDF bytes
+end to end. This closes that gap so a local/pilot run can exercise the true evidence path on real documents.
+
+### Decision / Implementation
+
+1. **Promote the PDFs to main resources:** the six anonymized PDFs moved
+   (`git mv`) from `src/test/resources/billing/eir-b2c/` to
+   `backend/src/main/resources/billing/eir-b2c/` so they ship at runtime (still on the test classpath, so
+   `EirB2cRealPdfParsingTest` is unaffected).
+2. **New document source `SampleEirB2cBillRunDocumentAdapter`** (`BillRunDocumentPort`): `download()` returns
+   the **actual PDF bytes** from the classpath (deterministic file name from account + the invoice id's
+   leading `YYMMDD` bill-run date); `listDocuments()` advertises the two sample invoices per account from the
+   `EirB2cSampleFixtures` catalog (search-metadata stand-in, OQ-003). Fail-closed on unknown account/invoice
+   or missing/empty resource.
+3. **One switch:** `voice-support.billing.bss.billrun.source` ∈ `{fixture, sample}`, default `fixture`
+   (added to `BillingBssProperties` + `BillingConfig.billRunDocumentPort`). The real Galaxion REST adapter
+   still wires when `billrun.base-url` is set.
+4. **End to end:** `bss.source=pdf` + `billrun.source=sample` + `pdf.source=eir-b2c` runs
+   download real bytes → PDFBox text → `EirB2cInvoiceLayoutParser` → domain `Invoice` → comparison. The LLM
+   never reads the PDF (DEC-002).
+
+### Acceptance (met)
+
+- `SampleEirB2cBillRunDocumentAdapterTest`: catalog listing; `download` returns real `%PDF` bytes
+  (> 1 KB, not the stub); fail-closed on unknown account/invoice; and the full `PdfBssBillingAdapter`
+  chain (sample docs + eir-b2c extractor) regenerates every sample invoice (id + account + TTC) for all
+  three accounts × 2 months. ✅
+- Default `fixture`/`fixture` unchanged; backend **715** + ArchUnit green. ✅
+- ADR-0005 amended; `eir-b2c-invoice-samples.md` documents the runtime switch. ✅
+
+### Out Of Scope
+
+- Real Galaxion `bill-run-documents/search` metadata (listDocuments still from the sample catalog, OQ-003);
+  non-eir layouts; flipping the runtime default away from fixture.

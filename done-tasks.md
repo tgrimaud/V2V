@@ -3,6 +3,36 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — TASK-BE-066 — Serve the real eir B2C sample PDFs at runtime (end-to-end PDF path)
+
+**Summary:**
+
+- Closed the test-only gap left by TASK-BE-065: `parse(real eir PDF) == EirB2cSampleFixtures` was
+  proven only in a unit test, while at runtime the `pdf` BSS source used `FixtureBillRunDocumentAdapter`
+  (download returns the period id as bytes → synthetic shortcut), so the live bot never parsed the real
+  PDF bytes.
+- **Promoted** the 6 anonymized eir B2C sample PDFs (`git mv`) from `src/test/resources/billing/eir-b2c/`
+  to `backend/src/main/resources/billing/eir-b2c/` (still on the test classpath → `EirB2cRealPdfParsingTest`
+  unaffected).
+- **New `SampleEirB2cBillRunDocumentAdapter`** (`BillRunDocumentPort`): `download()` serves the **real PDF
+  bytes** from the classpath (file resolved from account + the invoice id's leading `YYMMDD` bill-run date);
+  `listDocuments()` advertises the 2 sample invoices/account from the `EirB2cSampleFixtures` catalog
+  (search-metadata stand-in, OQ-003). Fail-closed on unknown account/invoice or missing resource.
+- **New switch** `voice-support.billing.bss.billrun.source` ∈ {fixture (default), sample}
+  (`BillingBssProperties` + `BillingConfig`). With `bss.source=pdf` + `billrun.source=sample` +
+  `pdf.source=eir-b2c` the bot runs the real download → PDFBox → `EirB2cInvoiceLayoutParser` → Invoice →
+  compare chain for 99224964/99226126/99226337 (LLM never reads the PDF, DEC-002). **Defaults unchanged.**
+- **Evidence:** backend **715** + ArchUnit green (4 new tests, incl. the full `PdfBssBillingAdapter` chain
+  over all samples). Adversarial review **93/100** (`docs/qa/task-be-066-adversarial-review.md`).
+  ADR-0005 amended; `eir-b2c-invoice-samples.md` documents the runtime switch. Not merged (awaiting user).
+
+### Files changed
+- `backend/src/main/resources/billing/eir-b2c/*.pdf` — 6 sample PDFs moved from test resources.
+- `backend/src/main/java/com/voicesupport/billing/infrastructure/adapter/out/bss/pdf/SampleEirB2cBillRunDocumentAdapter.java` — new real-PDF document source.
+- `backend/src/main/java/com/voicesupport/billing/infrastructure/config/{BillingConfig,BillingBssProperties}.java` — `billrun.source` switch.
+- `backend/src/test/.../bss/pdf/SampleEirB2cBillRunDocumentAdapterTest.java` — 4 tests.
+- `docs/architecture/adrs/ADR-0005-…md`, `docs/integrations/galaxion/eir-b2c-invoice-samples.md`, `docs/qa/task-be-066-adversarial-review.md`, `product-backlog/{tasks/billing-tasks.md,backlog-index.md}`.
+
 ## 2026-10-02 — TASK-BE-064 + TASK-BE-065 — Real invoice-PDF extraction (Apache PDFBox) + real eir B2C layout parser
 
 **Summary:**
