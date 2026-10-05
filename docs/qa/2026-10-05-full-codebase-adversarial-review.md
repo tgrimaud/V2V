@@ -140,9 +140,11 @@ no un-ticketed debt markers.
 
 ## Required developer actions
 
-1. **(Doc, high value)** Reconcile current-state drift D1–D4: flip the
-   "target-only / not built" billing banners and the ADR index status column to
-   "shipped in v0.9.4", fix the ADR-0052 cite. *(Pending user go — larger edit.)*
+1. **(Doc, high value — DONE)** Reconciled current-state drift D1–D4: flipped the
+   "target-only / not built" billing banners (`README.md`, `docs/README.md`, ADR
+   README) and the ADR-0047 index status to "shipped", fixed the billing-explain
+   cite to ADR-0052 (+ ADR-0055 routing), and corrected the dev-guide "only
+   runnable code" claim (both tiers run).
 2. **(Code, hygiene)** V1/V4/V5 log-sanitization + CancelledError + HMAC-length
    edges — small, isolated fixes; ticket as a backend/voice hardening follow-up.
 3. **(Code, budget)** B1/B2 size-budget extractions when those files are next

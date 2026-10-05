@@ -7,12 +7,15 @@
 > over pgvector, guardrails, memory; `POST /converse` + `POST /converse-stream`).
 > Sprint 11 added the **deployment packaging**: Docker images for both services,
 > `deploy/compose/` stacks per tier (Postgres, Ollama sidecar, Redis), HAProxy/
-> Keepalived VIP config, GitHub Actions CI, and an Ansible deploy — packaged and
-> deployable, not yet live on tst (gated by network-access open inputs). **Still
-> target-only:** billing/BSS, invoice comparison, escalation/Genesys handoff,
-> telephony, and the standalone React frontend. Sections in these docs that
-> describe those parts are design intent. For what actually runs, start at
-> `voice-agent/README.md` and `product-backlog/backlog-index.md`.
+> Keepalived VIP config, GitHub Actions CI, and an Ansible deploy — now **live on
+> the tst pilot** (`v0.9.4`, 6 hosts healthy). **Shipped since (v0.9.4):**
+> billing/BSS (real eir B2C PDF → deterministic invoice comparison, ADR-0052/0054/
+> 0055) and the by-reference escalation/Genesys Audio Connector handoff
+> (`VOICE_GENESYS=on`). **Still target-only:** telephony (Twilio), the Genesys
+> live-org legs + tested degraded modes, and the standalone React frontend.
+> Sections in these docs that describe those parts are design intent. For what
+> actually runs, start at `voice-agent/README.md` and
+> `product-backlog/backlog-index.md`.
 
 ## Structure
 

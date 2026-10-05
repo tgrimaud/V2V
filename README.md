@@ -76,19 +76,22 @@ across two services:
   (+ `OPENAI_BASE_URL` for the Azure Foundry endpoint).
 - Endpoints: `POST /api/conversation/converse`, `/converse-stream`, `/answer`,
   `/retrieve`, `/warm-up`, `/billing-explain`; `POST /api/knowledge/ingest`, `/sync`,
-  `/sync/{sourceType}`; OpenAPI/Swagger UI. `billing-explain` (ADR-0051) runs the
-  deterministic billing chain (identity → comparable invoices → comparison → confidence
-  gate) behind the answer engine — the LLM only rephrases the grounded result (DEC-002),
-  escalating fail-closed by-reference.
+  `/sync/{sourceType}`; OpenAPI/Swagger UI. `billing-explain` (ADR-0052) and billing
+  routing on `/converse` (ADR-0055) run the deterministic billing chain (identity →
+  comparable invoices → comparison → confidence gate) behind the answer engine — the LLM
+  only rephrases the grounded result (DEC-002), escalating fail-closed by-reference.
 
 Delivered capability = **audio in → transcript → RAG-grounded answer → spoken
 answer out**, streaming or batch, with a single correlation id and per-slice
 latency evidence end to end.
-**Not yet built** (target only): customer identity, read-only BSS access,
-invoice PDF extraction + deterministic comparison, escalation contract + Genesys
-handoff, and phone (Twilio) Voice2Voice — see Sprints 10–11.
-See `voice-agent/README.md` to run the full stack and
-`product-backlog/backlog-index.md` for sprint status.
+**Delivered since** (shipped in `v0.9.4`, deployed + smoke-tested on the pilot):
+channel-provided customer identity, read-only BSS access, invoice PDF extraction +
+deterministic comparison, and the by-reference escalation/Genesys handoff (Audio
+Connector media plane, `VOICE_GENESYS=on`).
+**Still target-only:** phone (Twilio) Voice2Voice, the Genesys **live-org** legs
+(real-tenant TLS trust, native barge-in/EOT, Architect fail-safe) and tested
+degraded modes, and the standalone React frontend. See `voice-agent/README.md`
+to run the full stack and `product-backlog/backlog-index.md` for sprint status.
 
 ## V1 Product Outcome
 

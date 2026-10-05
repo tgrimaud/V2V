@@ -29,10 +29,15 @@
 > reference only — **do not run those commands against this checkout, and do not
 > copy its port/endpoint names**; they do not match the rebuilt backend above.
 
-## Working On This Branch (Python voice slice — the only runnable code)
+## Working On This Branch (Python voice runtime)
 
-All code lives under `voice-agent/` (Python 3, standard library + `pipecat-ai` for the
-batch runtime + `behave` for BDD).
+The branch runs a **two-service** stack: this Python voice runtime (`voice-agent/`)
+and the rebuilt Java conversation backend (`backend/`, documented above and released
++ deployed to the pilot). This section covers the voice runtime; the backend builds
+and runs with `cd backend && mvn test` / `mvn spring-boot:run`.
+
+The voice runtime lives under `voice-agent/` (Python 3, standard library + `pipecat-ai`
+for the batch runtime + `behave` for BDD).
 Configuration comes from a repo-root `.env` (copy `.env.example` as a starting point):
 
 ```bash
