@@ -105,6 +105,8 @@ public class BillingExplanationComposer {
             case DISCOUNT_EXPIRY -> fr ? "la fin d'une remise" : "the end of a discount";
             case USAGE_OVERAGE -> fr ? "un dépassement de consommation" : "usage over your plan";
             case OPTION_CHANGE -> fr ? "un changement d'option" : "an option change";
+            case SERVICE_ADDED -> fr ? "l'ajout d'un nouveau service" : "a new service added";
+            case SERVICE_REMOVED -> fr ? "la suppression d'un service" : "a service removed";
             case PRORATION -> fr ? "un ajustement au prorata" : "a pro-rata adjustment";
             case TAX -> fr ? "une variation de taxe" : "a tax change";
             case ONE_OFF_FEE -> fr ? "des frais ponctuels" : "a one-off charge";

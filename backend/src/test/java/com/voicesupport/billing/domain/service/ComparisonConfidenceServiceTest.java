@@ -102,16 +102,17 @@ class ComparisonConfidenceServiceTest {
 
     @Test
     void a_delta_attributed_only_to_the_unexplained_bucket_escalates() {
-        // GIVEN the coarse Eir case: a +500 change carried entirely by a bare subscription line
-        // (maps to UNEXPLAINED) — a line is present but the change is not business-explained
+        // GIVEN the coarse Eir case: a subscription present in BOTH months whose amount moved +500 with
+        // no finer line to say why (an opaque CHANGED subscription → UNEXPLAINED). An appearing/removed
+        // subscription would instead be SERVICE_ADDED/REMOVED (explainable, TASK-BE-067).
         InvoiceComparison comparison = comparisonService.compare(
-                header("prev", 0L, List.of()),
-                header("curr", 500L, List.of(line("base", LineCategory.SUBSCRIPTION, 500L))));
+                header("prev", 500L, List.of(line("base", LineCategory.SUBSCRIPTION, 500L))),
+                header("curr", 1000L, List.of(line("base", LineCategory.SUBSCRIPTION, 1000L))));
 
         // WHEN the gate assesses it
         ExplanationReadiness readiness = gate.assess(comparison);
 
-        // THEN the full amount is residual and it escalates (never "explained by an unexplained part")
+        // THEN the full +500 move is residual and it escalates (never "explained by an unexplained part")
         assertThat(readiness.confidence()).isEqualTo(ExplanationConfidence.INSUFFICIENT);
         assertThat(readiness.reason()).isEqualTo(ReadinessReason.RESIDUAL_TOO_HIGH);
         assertThat(readiness.escalate()).isTrue();

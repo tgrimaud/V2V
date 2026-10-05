@@ -5,6 +5,7 @@ import com.voicesupport.billing.domain.model.Invoice;
 import com.voicesupport.billing.domain.model.InvoiceComparison;
 import com.voicesupport.billing.domain.model.valueobject.AccountId;
 import com.voicesupport.billing.infrastructure.fixtures.BssBillingFixtures;
+import com.voicesupport.billing.infrastructure.fixtures.EirB2cSampleFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -66,6 +67,22 @@ class BillingExplanationComposerTest {
     }
 
     @Test
+    void voices_a_new_service_when_a_subscription_appears() {
+        // GIVEN account 99226126 adding eir TV: a new service subscription appears (TASK-BE-067)
+        InvoiceComparison comparison = comparisonService.compare(
+                eirSample("99226126", "2608129000000040"), eirSample("99226126", "2609129000000009"));
+        ExplanationReadiness readiness = gate.assess(comparison);
+
+        // WHEN composed in each language
+        String fr = composer.compose(comparison, readiness, "fr");
+        String en = composer.compose(comparison, readiness, "en");
+
+        // THEN the new service is named as a cause (not surfaced as an unexplained residual)
+        assertThat(fr).contains("nouveau service");
+        assertThat(en).contains("new service");
+    }
+
+    @Test
     void operational_messages_are_language_aware() {
         // GIVEN / WHEN / THEN the safe operational/hand-off messages are localized
         assertThat(composer.askReference("fr")).contains("référence");
@@ -79,6 +96,12 @@ class BillingExplanationComposerTest {
     private static Invoice fixture(String account, String periodSuffix) {
         return BssBillingFixtures.all().get(AccountId.of(account)).stream()
                 .filter(invoice -> invoice.period().id().endsWith(periodSuffix))
+                .findFirst().orElseThrow();
+    }
+
+    private static Invoice eirSample(String account, String billId) {
+        return EirB2cSampleFixtures.all().get(AccountId.of(account)).stream()
+                .filter(invoice -> invoice.id().value().equals(billId))
                 .findFirst().orElseThrow();
     }
 }

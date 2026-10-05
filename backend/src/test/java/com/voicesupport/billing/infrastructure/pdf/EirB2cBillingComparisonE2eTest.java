@@ -61,10 +61,10 @@ class EirB2cBillingComparisonE2eTest {
     // 99226126 (fibre → fibre + new eir TV) — a strong BUG-028 regression case: three DISCOUNT lines
     // (one fibre + two new TV, incl. a prorata) that ALL share the DISCOUNT category. Before the fix they
     // collapsed to a single DISCOUNT key; now each is kept, so DISCOUNT_EXPIRY sums the two real TV
-    // discounts. The new eir TV base line is a SUBSCRIPTION, which maps to UNEXPLAINED by current design,
-    // so it surfaces as a (traceable) residual — see TASK-BE-067.
+    // discounts. The new eir TV base line (a SUBSCRIPTION that appeared) is attributed to SERVICE_ADDED
+    // (TASK-BE-067), so the whole change is explained with no residual.
     @Test
-    void account99226126_newTvService_keepsEveryDiscountLine_baseIsResidual() {
+    void account99226126_newTvService_keepsEveryDiscountLine_isFullyExplained() {
         InvoiceComparison result = compareSeptemberVsAugust("99226126", "2609129000000009", "2608129000000040",
                 13998, 7347);
 
@@ -75,16 +75,16 @@ class EirB2cBillingComparisonE2eTest {
         assertEquals(-783L, impact.get(BillingCauseType.DISCOUNT_EXPIRY),
                 "BOTH new TV discounts kept: −€2.83 prorata + −€5.00 (BUG-028: not collapsed)");
         assertEquals(999L, impact.get(BillingCauseType.OPTION_CHANGE), "eir TV Extra pack");
-        assertEquals(1999, result.unexplainedAmount().minorUnits(),
-                "new eir TV base subscription €19.99 → SUBSCRIPTION maps to UNEXPLAINED (TASK-BE-067)");
+        assertEquals(1999L, impact.get(BillingCauseType.SERVICE_ADDED), "new eir TV base €19.99 (TASK-BE-067)");
+        assertEquals(0, result.unexplainedAmount().minorUnits(), "nothing unexplained");
     }
 
     // 99226337 (fibre + TV → fibre + TV + new mobile 5G) — the richest invoice: multiple DISCOUNT lines
     // across three sections, prorata lines appearing AND disappearing. BUG-028 proof: the three real
     // discount deltas are all kept (DISCOUNT_EXPIRY = +€0.64 − €5.66 − €10.00). The new eir Mobile 5G base
-    // line is a SUBSCRIPTION → the €64.99 residual.
+    // line (a SUBSCRIPTION that appeared) is attributed to SERVICE_ADDED (TASK-BE-067) — no residual.
     @Test
-    void account99226337_newMobile5gService_keepsEveryDiscountAndProrata_baseIsResidual() {
+    void account99226337_newMobile5gService_keepsEveryDiscountAndProrata_isFullyExplained() {
         InvoiceComparison result = compareSeptemberVsAugust("99226337", "2609129000000011", "2608129000000042",
                 14689, 18112);
 
@@ -95,8 +95,9 @@ class EirB2cBillingComparisonE2eTest {
                 "mobile 5G prorata +€36.83 minus the Aug TV prorata −€2.58 that rolled off");
         assertEquals(-1502L, impact.get(BillingCauseType.DISCOUNT_EXPIRY),
                 "three discount deltas kept: +€0.64 − €5.66 − €10.00 (BUG-028: not collapsed)");
-        assertEquals(6499, result.unexplainedAmount().minorUnits(),
-                "new eir Mobile Connect Plus 5G base €64.99 → SUBSCRIPTION maps to UNEXPLAINED (TASK-BE-067)");
+        assertEquals(6499L, impact.get(BillingCauseType.SERVICE_ADDED),
+                "new eir Mobile Connect Plus 5G base €64.99 (TASK-BE-067)");
+        assertEquals(0, result.unexplainedAmount().minorUnits(), "nothing unexplained");
     }
 
     private InvoiceComparison compareSeptemberVsAugust(String accountId, String septemberId, String augustId,

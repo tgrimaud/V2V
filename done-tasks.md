@@ -3,6 +3,33 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — TASK-BE-067 — Attribute an appearing/removed subscription (new/removed service) to a business cause
+
+**Summary:**
+
+- Follow-up of the BUG-028 multi-account E2E, which showed a NEW service's base line (classified
+  `SUBSCRIPTION`) landed in the `UNEXPLAINED` residual (99226126 +€19.99 eir TV, 99226337 +€64.99 mobile 5G)
+  even though it is perfectly explainable ("you added a service").
+- **Domain:** added `BillingCauseType.SERVICE_ADDED` / `SERVICE_REMOVED`. `InvoiceComparisonService.cause`
+  now takes the line's `ChangeKind`: a `SUBSCRIPTION` that **APPEARED → SERVICE_ADDED**, **DISAPPEARED →
+  SERVICE_REMOVED** (named, voiceable, counted as explained → residual drops), while an in-place **CHANGED**
+  subscription **stays `UNEXPLAINED`** (opaque recurring move still gates confidence/escalation, BR-003).
+  Non-subscription categories unchanged. Deterministic, no LLM.
+- **Explanation:** `BillingExplanationComposer` voices the new causes in FR/EN ("l'ajout d'un nouveau
+  service" / "a new service added"; "la suppression d'un service" / "a service removed").
+- **Evidence:** E2E `EirB2cBillingComparisonE2eTest` for 99226126 + 99226337 now assert `SERVICE_ADDED`
+  (€19.99 / €64.99) with **residual €0.00**; new domain tests for SERVICE_ADDED/REMOVED; the opaque-change
+  tests re-modelled as a CHANGED subscription (comparison + confidence gate); composer FR/EN wording test.
+  Backend **715** + ArchUnit green. Adversarial review **93/100** (`docs/qa/task-be-067-adversarial-review.md`).
+  ADR-0003 amended. Not merged (awaiting user).
+
+### Files changed
+- `backend/src/main/java/com/voicesupport/billing/domain/model/BillingCauseType.java` — +2 causes.
+- `backend/src/main/java/com/voicesupport/billing/domain/service/InvoiceComparisonService.java` — `cause(category, kind)`.
+- `backend/src/main/java/com/voicesupport/billing/domain/service/BillingExplanationComposer.java` — FR/EN wording.
+- `backend/src/test/.../service/{InvoiceComparisonServiceTest,ComparisonConfidenceServiceTest,BillingExplanationComposerTest}.java`, `.../pdf/EirB2cBillingComparisonE2eTest.java`.
+- `docs/architecture/adrs/ADR-0003-…md`, `docs/qa/task-be-067-adversarial-review.md`, `product-backlog/{tasks/billing-tasks.md,backlog-index.md}`.
+
 ## 2026-10-05 — BUG-028 — eir B2C parser emitted `code=null` → comparison collapsed same-category lines
 
 **Summary:**
