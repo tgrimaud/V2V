@@ -3,6 +3,13 @@
 > Ticket: TASK-INFRA-017 · Sprint 14 (Billing Identity + BSS/PDF Evidence + Deterministic Comparison) · Status: **request finalized — ready to send** (refreshed 2026-09-16 after the live validation on test account 5)
 > Audience: Galaxion / BSS billing owners + our backend/product team.
 
+> **Reconciliation note (2026-10-05, TASK-INFRA-018):** the "archive token for line-level detail"
+> framed below as the top blocker is **superseded**. Galaxion confirmed line-level detail is
+> **B2B-only** and V1 is **B2C-only**, so the token is moot for V1; the B2C line-level path is the
+> **raw invoice PDF** (ADR-0005 PDF→JSON), since built and validated on real anonymized B2C PDFs
+> (TASK-BE-064/065/066, BUG-028, TASK-BE-067). The only live piece left is a Galaxion `getInvoice`
+> raw-PDF fetch for a B2C account (TASK-BE-063). Read the P1 "archive token" ask below as historical.
+
 ## 1. Purpose
 
 We are building the V1 billing assistant: it explains to a customer **why an

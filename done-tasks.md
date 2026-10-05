@@ -3,6 +3,24 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-05 — TASK-INFRA-018 — Forward-port the B2C billing-granularity finding; delete stale branch
+
+**Summary:**
+
+- The stale ticket branch `task/TASK-INFRA-018-b2c-billing-granularity` (2 docs-only commits from
+  2026-09-17, 155 behind mainline, never merged) carried a durable Galaxion finding missing from
+  mainline: **line-level invoice detail is B2B-only**, and since **V1 is B2C-only** the archive token is
+  moot — the B2C line-level source must be the **raw PDF**.
+- **Forward-ported + reconciled** that finding onto `feat/restart-from-scratch` (not copied verbatim —
+  the branch's "parked / merge-ready / pivotal open question" status was superseded by the real-PDF work
+  since built): the pivotal "is a raw PDF usable for B2C?" is now answered **yes in practice**
+  (TASK-BE-064/065/066 + BUG-028 + TASK-BE-067, validated €0 residual over 3 B2C accounts); live Galaxion
+  `getInvoice` B2C fetch remains the only open piece (TASK-BE-063). Updated
+  `eir-billing-services-contract.md`, OQ-003 in `v1-open-questions.md`, `billing-tasks.md` (new
+  ✅ Resolved TASK-INFRA-018 section + the `source=eir` "still open" note), and a reconciliation note in
+  `galaxion-coordination-request.md`.
+- Deleted the superseded branch (local + remote) after the forward-port.
+
 ## 2026-10-05 — TASK-OPS-011 — Skip the post-deploy KB sync when no KB source changed
 
 **Summary:**

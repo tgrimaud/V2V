@@ -127,11 +127,20 @@ First real calls against the Eir dev services (VPN), `galaxion-user-type: SYSTEM
 - **Date/period:** `effectiveDate` `2026-09-01T00:00:00` (no `Z`), `billPeriod` `202608` (yyyyMM) —
   `parseDate` (first 10 chars) handles both.
 
-**Still blocked / open:**
-- `GET …/{invoice}/details` → `200` but **empty** (`{"accountId":"5","invoiceNumber":…}`), no lines.
-- `GET …/{invoice}/detail-report` (CSV) and `…/summary-report` (PDF) → **HTTP 412**
-  `archive-file-token-is-null` — both need an **archive token** we don't have → line-level extraction
-  (fine-grained cause attribution) is blocked until that token/flow is provided.
+**Line-level detail is B2B-only (Galaxion, 2026-09-16; TASK-INFRA-018):**
+- The line-level `billing-service` endpoints — `GET …/{invoice}/details` (→ `200` but **empty** on
+  account 5), `…/detail-report` (CSV) and `…/summary-report` (PDF) (→ **HTTP 412**
+  `archive-file-token-is-null`) — return data **only for B2B accounts**. Test account 5 is
+  **B2C/residential**, so the archive token does not merely need generating: for a B2C account it does
+  not exist, which makes it **moot for V1** (V1 = B2C-only, decision 2026-09-16).
+- **Resolution for V1 B2C (implemented since):** the raw invoice PDF is the line-level source. We
+  obtained real anonymized B2C PDFs and built the ADR-0005 PDF→JSON deterministic extraction +
+  comparison (TASK-BE-064/065/066, BUG-028, TASK-BE-067), validated end-to-end on three B2C accounts
+  (`EirB2cBillingComparisonE2eTest`, €0.00 residual) — the LLM never reads the PDF. The coarse
+  `billing-enquiry` breakdown (recurring/oneOff/usage/vat/total) is the fallback; a change it cannot
+  attribute stays `UNEXPLAINED` and escalates (fail-closed). So INFRA-018's pivotal "is a raw PDF
+  usable for B2C?" is answered **yes, in practice** (via supplied PDFs); a live Galaxion `getInvoice`
+  B2C fetch is still the only piece pending for a fully live path (OQ-003 / TASK-BE-063).
 - Error format is **RFC7807** `application/problem+json` (`errorCode`, `title`, `status`, `detail`,
   `sources`) — use for degraded-mode handling.
 - Account 5 has a **single invoice** → no two-invoice comparison possible; need another account or a
@@ -140,8 +149,9 @@ First real calls against the Eir dev services (VPN), `galaxion-user-type: SYSTEM
 ## Missing Inputs / Open Questions
 
 - ~~Is `int64` in cents?~~ **Resolved: cents** (account 5). Confirm currency field is absent → EUR default holds.
-- The **archive token** required by `detail-report` / `summary-report` (412 without it) — how is it obtained?
-- Real shape of the **CSV** `detail-report` columns (blocked by the token above).
+- ~~How is the **archive token** obtained?~~ **Superseded (2026-09-16):** line-level detail is
+  **B2B-only** (see above); for the B2C V1 target the token does not apply.
+- Real shape of the **CSV** `detail-report` columns — only relevant if a B2B path ever enters scope.
 - Does `invoiceAmount` include previous balance / payments, or only current-period lines?
 - Line-level catalogue to separate `DISCOUNT_EXPIRY` / `OPTION_CHANGE` / `PRORATION` inside
   `recurringAmount` (needs the CSV/PDF lines + a code/type catalogue).

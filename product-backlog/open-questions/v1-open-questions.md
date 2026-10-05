@@ -107,6 +107,24 @@ Still pending on this OQ:
   billing-period entity in the model).
 - History depth, freshness, and confidentiality/masking limits (unchanged).
 
+### Material finding (2026-09-16) — line-level detail is B2B-only; V1 B2C uses the raw PDF (TASK-INFRA-018)
+
+Galaxion confirmed the **line-level** `billing-service` endpoints
+(`/api/v1/invoices/{invoice_number}/{details,detail-report,summary-report}`) return data **only for
+B2B accounts**. Dev test account 5 is **B2C/residential**, which is why `details` is empty and
+`detail-report`/`summary-report` return HTTP 412 `archive-file-token-is-null`. **V1 is B2C-only**
+(decision 2026-09-16), so the archived line detail and its archive token **do not apply** to the V1
+audience; the coarse `billing-enquiry` breakdown (recurring/oneOff/usage/vat/total) is all the
+*structured API* gives for B2C → intra-`recurringAmount` deltas would stay `UNEXPLAINED` and escalate.
+
+**Resolution (implemented since):** the pivotal sub-question — *is a raw invoice PDF usable for a B2C
+account?* — is answered **yes in practice**. We obtained real anonymized B2C PDFs and built the
+ADR-0005 PDF→JSON deterministic extraction + comparison (TASK-BE-064/065/066, BUG-028, TASK-BE-067),
+validated end-to-end on three B2C accounts (`EirB2cBillingComparisonE2eTest`, €0.00 residual); the LLM
+never reads the PDF. The remaining live piece is a Galaxion `getInvoice` raw-PDF fetch for a B2C
+account (vs. the supplied sample PDFs) — tracked under TASK-BE-063 / the live Galaxion path. Coarse
+`billing-enquiry` + escalate remains the fail-closed fallback when no PDF is available.
+
 ---
 
 ## OQ-004 - Invoice PDF Extraction Reliability And Fixture Coverage
