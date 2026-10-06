@@ -3,6 +3,28 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — Pilot deploy v0.9.5 (TASK-BE-069 rollout) + TASK-OPS-017 — KB-sync timeout
+
+**Summary:**
+
+- Rolled **`v0.9.5`** (image `0.9.5`, built by CI from the TASK-BE-069 merge) to the eir-ai4cc-tst
+  pilot via `ansible-playbook deploy.yml --limit backend -e kb_sync_force=true`. Both backend nodes
+  (`vla-ai4cc-t03/t04`) now run `ghcr.io/tgrimaud/voice-support-backend:0.9.5`, `health=healthy`.
+- Post-deploy KB sync (measured): `[KB-SYNC] op=syncAll processed=769 ingested=154 skipped=527
+  deleted=88 excluded=88 duration_ms=3085610` (~51 min). The **154 eir articles are live** (856 chunks),
+  and **88 internal CSV articles (49 EN + 39 FR) were excluded at ingestion AND deleted** from the
+  shared pgvector store — the TASK-BE-069 defense-in-depth confirmed in production. VIP `.11` retrieval
+  PASSES on eir topics (webmail setup, moving home).
+- **Incident + fix (TASK-OPS-017):** the deploy's "Wait for the KB sync" task failed on a **false
+  client-side timeout** — `kb_sync_timeout` was 2400 s (40 min) but the bilingual-CSV + eir sync took
+  ~51 min; the backend finished server-side regardless. Raised `kb_sync_timeout` 2400→3900,
+  `kb_sync_async_seconds` 2700→4200, `kb_sync_poll_retries` 90→140 in `group_vars/backend.yml`
+  (headroom above the measured figure, documented in-comment). The second node was then deployed with
+  `-e kb_sync_after_deploy=false` (shared store already populated), so no second 51-min sync.
+- **Known limitation (Low):** the 3 EN FAQ `fr`→`en` metadata fix did NOT apply — `content_hash` is
+  body-only, so the front-matter edit left the body unchanged → `markdown skipped=3`, stored metadata
+  stayed `fr`. To apply: delete the 3 rows (or touch the body) + re-sync. Noted in the TASK-BE-069 review.
+
 ## 2026-10-06 — TASK-BE-069 — KB ingest-time audience filter + eir help-centre corpus (unified canonical markdown, merged)
 
 **Summary:**
