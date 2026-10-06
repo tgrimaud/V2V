@@ -67,7 +67,8 @@ class StubBackendAdapter:
         yield AnswerStreamEvent(kind=CHUNK, text=STUB_ANSWER_TEXT)
         yield AnswerStreamEvent(kind=DONE, text=STUB_ANSWER_TEXT, grounded=True)
 
-    def warm_up(self) -> bool:
+    def warm_up(self, correlation_id: str | None = None) -> bool:
         # No cold models offline: warm-up is a symmetric no-op so the connect-time trigger
         # (TASK-WEB-021) is harmless in dev/tests and mirrors the HTTP adapter's contract.
+        # Accepts the optional correlation id (TASK-OPS-015 V2) to match the HTTP signature.
         return True

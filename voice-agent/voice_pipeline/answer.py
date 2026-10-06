@@ -314,8 +314,11 @@ class AnswerProcessor(FrameProcessor):
         warm = getattr(self._backend, "warm_up", None)
         if not callable(warm):
             return
+        # Pass the connection's correlation id (TASK-OPS-015 V2) so the warm-up hop joins the
+        # same trace as the first turn; the telemetry below already tags this same id.
+        correlation_id = getattr(self._envelope, "correlation_id", None)
         try:
-            warmed = await asyncio.to_thread(warm)
+            warmed = await asyncio.to_thread(warm, correlation_id)
         except Exception:  # noqa: BLE001 - warm-up is best-effort; never break the connect
             warmed = False
         self._emit_backend_warmup(bool(warmed))

@@ -139,16 +139,21 @@ class HttpBackendAdapter:
             new_path = f"{base}/converse-stream"
         return urllib.parse.urlunsplit((parts.scheme, parts.netloc, new_path, "", ""))
 
-    def warm_up(self) -> bool:
+    def warm_up(self, correlation_id: str | None = None) -> bool:
         """Best-effort connect-time warm-up of the backend models (TASK-BE-017 / lever 2).
 
         POSTs to the warm-up endpoint derived from the converse URL so the first real
         turn does not pay the cold LLM + embedding cost. Runs off the per-turn critical
         path; never raises and never leaks the key — any fault returns False (not warmed).
+
+        When the connection's `correlation_id` is passed (TASK-OPS-015 V2), the hop carries
+        the same `X-Correlation-Id` + deterministic `traceparent` as a real turn, so the
+        warm-up backend span joins the turn's trace instead of starting an orphan trace.
         """
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["x-api-key"] = self._api_key
+        self._inject_trace(headers, correlation_id)
         try:
             response = self._transport(self._warm_up_url(), headers, b"", WARM_UP_TIMEOUT_S)
         except Exception:  # noqa: BLE001 - warm-up is best-effort; a fault must never surface
@@ -169,19 +174,24 @@ class HttpBackendAdapter:
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["x-api-key"] = self._api_key
-        # Propagate the turn's correlation id as a header too (not a secret), so the backend's
-        # request filter logs the same id from the very first line — one id end to end even
-        # before the controller reads it from the body (the body value stays authoritative).
-        if request.correlation_id:
-            headers["X-Correlation-Id"] = request.correlation_id
-            # W3C trace context (TASK-OPS-007): a deterministic traceparent derived from the
-            # correlation id so the backend continues the SAME trace id — a voice turn and its
-            # backend spans land in one trace in the collector. Sampled flag = 01 so a
-            # voice-initiated call is kept even under a low backend sampling probability.
-            traceparent = derive_traceparent(request.correlation_id)
-            if traceparent:
-                headers["traceparent"] = traceparent
+        self._inject_trace(headers, request.correlation_id)
         return headers
+
+    @staticmethod
+    def _inject_trace(headers: dict[str, str], correlation_id: str | None) -> None:
+        # Propagate the correlation id as a header too (not a secret), so the backend's request
+        # filter logs the same id from the very first line — one id end to end even before the
+        # controller reads it from the body (the body value stays authoritative). The W3C
+        # traceparent (TASK-OPS-007) is a deterministic derivation of the correlation id so the
+        # backend continues the SAME trace id — a voice turn and its backend spans land in one
+        # trace in the collector. Sampled flag = 01 so a voice-initiated call is kept even under
+        # a low backend sampling probability. Shared by the turn hop and the warm-up hop (V2).
+        if not correlation_id:
+            return
+        headers["X-Correlation-Id"] = correlation_id
+        traceparent = derive_traceparent(correlation_id)
+        if traceparent:
+            headers["traceparent"] = traceparent
 
     def _payload(self, request: AnswerRequest) -> bytes:
         body = {

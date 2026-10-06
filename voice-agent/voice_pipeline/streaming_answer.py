@@ -37,6 +37,7 @@ from conversation_backend import (
     StreamControl,
     degraded_answer,
 )
+from voice_common.sanitization import sanitize_error
 from voice_common.telemetry import Timer
 
 # US-036 slice span names — mirror voice_pipeline.answer / voice_common.pipeline_timing
@@ -129,8 +130,14 @@ class StreamedAnswerRunner:
             state.deadline_exceeded = True
         except Exception as exc:  # noqa: BLE001 - a raising adapter degrades safely, never crashes the turn
             control.abort()
-            state.error_code = state.error_code or "stream_error"
-            state.error_reason = state.error_reason or type(exc).__name__
+            # TASK-OPS-015 V3: reduce the raising adapter fault through the shared sanitizer
+            # (stable backend_timeout/backend_error code + redacted reason) instead of the raw
+            # exception type name, matching the yielded-ERROR path. A code already set by a prior
+            # ERROR/DONE event wins (keep the backend's own code).
+            if state.error_code is None:
+                sanitized = sanitize_error(exc, domain="backend")
+                state.error_code = sanitized.reason_code
+                state.error_reason = sanitized.reason
         finally:
             control.abort()
         result = self._finalize(request, state)

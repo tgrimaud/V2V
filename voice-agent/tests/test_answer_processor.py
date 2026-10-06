@@ -127,14 +127,16 @@ class _WarmBackend:
         self._warmed = warmed
         self._raises = raises
         self.warm_up_calls = 0
+        self.warm_up_correlation_ids: list[str | None] = []
 
     def answer(self, request: AnswerRequest) -> AnswerResult:
         return AnswerResult(
             text="ok", provider=self.name, outcome=AnswerOutcome.SUCCESS, correlation_id=request.correlation_id
         )
 
-    def warm_up(self) -> bool:
+    def warm_up(self, correlation_id: str | None = None) -> bool:
         self.warm_up_calls += 1
+        self.warm_up_correlation_ids.append(correlation_id)
         if self._raises:
             raise RuntimeError("warm-up boom")
         return self._warmed
@@ -224,6 +226,8 @@ class BackendWarmUpTriggerTest(unittest.IsolatedAsyncioTestCase):
         await self._run_start(processor)
         # THEN warm_up is called exactly once, off the critical path
         self.assertEqual(backend.warm_up_calls, 1)
+        # AND it receives the connection's correlation id so the hop joins the turn trace (V2)
+        self.assertEqual(backend.warm_up_correlation_ids, ["corr-1"])
         # AND a success warm-up event + count metric are recorded with the correlation id
         event = next(r for r in telemetry.events() if r.name == BACKEND_WARMUP_EVENT)
         self.assertEqual(event.attributes["outcome"], "success")

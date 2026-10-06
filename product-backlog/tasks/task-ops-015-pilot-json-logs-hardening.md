@@ -1,7 +1,7 @@
 # TASK-OPS-015 — Harden pilot log sanitization (JSON logs + follow-up polish)
 
 **Type:** Technical task (operations / observability hardening)
-**Status:** ✅ **V1(a) merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — pilot voice tier pinned to `VOICE_LOG_FORMAT=json`. V1(b)/V2/V3 remain scoped follow-ups below (not started).
+**Status:** ✅ **V1(a) merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — pilot voice tier pinned to `VOICE_LOG_FORMAT=json`. 🚧 **V1(b)/V2/V3 done** on `task/TASK-OPS-015-followups-v1b-v2-v3` (off `feat/restart-from-scratch`) — voice-agent suite 730 tests OK + behave 15/43/194; awaiting user validation (not merged).
 **Priority:** Medium
 **Epic:** EPIC-012 (pilot operations)
 **Surfaced by:** `docs/qa/2026-10-05-full-codebase-adversarial-review.md` (findings V1/V2/V3).
@@ -40,9 +40,9 @@ tracebacks verbatim. The pilot ran with `voice_log_format: ""` (text), so the ni
 ## Acceptance
 
 - [x] Pilot voice `.env` renders `VOICE_LOG_FORMAT=json`; YAML valid.
-- [ ] (V1b) text-mode logs also scrubbed + unit test — *follow-up*.
-- [ ] (V2) warm-up hop carries `traceparent` — *follow-up*.
-- [ ] (V3) `streaming_answer` uses `sanitize_error` — *follow-up*.
+- [x] (V1b) text-mode logs also scrubbed + unit test — **done** on `task/TASK-OPS-015-followups-v1b-v2-v3`: `SanitizingTextFormatter` scrubs message + line-by-line exception/stack, stamps the correlation id; `configure_logging` installs it on the text default. Tests in `test_logging_config.py`.
+- [x] (V2) warm-up hop carries `traceparent` — **done**: `HttpBackendAdapter.warm_up(correlation_id)` injects `X-Correlation-Id` + deterministic `traceparent` (shared `_inject_trace`); `AnswerProcessor._warm_backend` passes the envelope correlation id. Tests in `test_http_backend.py` / `test_answer_processor.py`.
+- [x] (V3) `streaming_answer` uses `sanitize_error` — **done**: the raising-adapter branch reduces the fault through `sanitize_error(domain="backend")` (stable code + redacted reason) instead of the raw type name. Tests in `test_streaming_answer.py`.
 
 ## Observability / runtime impact
 
