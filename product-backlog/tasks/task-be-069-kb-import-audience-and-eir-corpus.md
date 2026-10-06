@@ -1,7 +1,8 @@
 # TASK-BE-069 — KB import: ingest-time audience filter + eir help-centre corpus via unified canonical markdown
 
 **Type:** Technical task (KB ingestion — backend + data/tooling)
-**Status:** 🚧 In progress on `task/TASK-BE-069-kb-import-audience-and-eir-corpus` (off `feat/restart-from-scratch`).
+**Status:** 🚧 Done on `task/TASK-BE-069-kb-import-audience-and-eir-corpus` (off `feat/restart-from-scratch`) — audience ingest-filter + unified recursive markdown connector + 154-file eir corpus converted; backend `mvn test` 723 green (incl. ArchUnit), eir script 11 tests green. Awaiting user validation (not merged).
+**Adversarial review 92/100 (Pass, 2026-10-06)** — no blocking finding. Non-blocking: deploy wiring of `knowledge-base/eir/` to the pilot deferred (Medium, follow-up); old-KB `language` now authoritative (Low, re-sync); line-based extraction precision (Low); `--min-chars` drops nav-index pages (Low, verified no real content lost). Full review: `docs/qa/task-be-069-adversarial-review.md`.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Related:** ADR-0034 (KB audience boundary, fail-closed retrieval), ADR-0030 (domain classification),
@@ -62,16 +63,18 @@ Three asks, one coherent KB-ingestion deliverable:
 
 ## Acceptance
 
-- [ ] `MarkdownFolderConnector` parses `audience`/`language` front-matter and recurses; relative-path
+- [x] `MarkdownFolderConnector` parses `audience`/`language` front-matter and recurses; relative-path
       `source_id`; unit tests for front-matter parsing, recursion and the audience/language defaults.
-- [ ] `KnowledgeSyncService` does not store `audience=internal` docs; `SyncReport` exposes an
-      `excluded` count; exclusion is logged. Unit test with a mixed customer/internal connector fake.
-- [ ] Preprocessing script converts the core eir subset to canonical markdown; boilerplate removed
-      (no nav/footer/cookie text in the body); domain derived from URL; `language: en`,
-      `audience: customer`. Spot-check N files for body-only, correct domain.
-- [ ] The 3 existing KB files carry `audience: customer` and still ingest unchanged.
-- [ ] `backend/`: `mvn test` green (incl. ArchUnit); voice-agent suite unaffected.
-- [ ] Adversarial review ≥ 90/100, persisted to `docs/qa/task-be-069-adversarial-review.md` + pointer line here.
+- [x] `KnowledgeSyncService` does not store `audience=internal` docs; `SyncReport` exposes an
+      `excluded` count; exclusion is logged (`voice_support.kb_sync_audience_excluded` + `[KB-SYNC]
+      op=audience-excluded`). Unit tests: exclusion + customer→internal stale cleanup.
+- [x] Preprocessing script converts the core eir subset to canonical markdown; boilerplate removed
+      (0 images / 0 footer / 0 dangling tails in body); domain derived from URL; `language: en`,
+      `audience: customer`. Spot-checked billing/fibre/mobile — body-only, correct domain. 154 files
+      (billing 9, commercial 10, support 135); 834 device tutorials + 21 nav-index pages excluded.
+- [x] The 3 existing KB files carry `audience: customer` and still ingest unchanged.
+- [x] `backend/`: `mvn test` 723 green (incl. ArchUnit); voice-agent suite unaffected (no files touched).
+- [x] Adversarial review 92/100 (Pass), persisted to `docs/qa/task-be-069-adversarial-review.md` + pointer line here.
 
 ## Observability / runtime impact
 
