@@ -26,4 +26,8 @@ public interface SyncObserverPort {
     // the resumable state is visible; errorCode is a sanitized, low-cardinality reason. Sync stays
     // fail-fast (already-ingested documents are committed and skipped on the next idempotent run).
     void syncFailed(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode);
+
+    // ADR-0034/TASK-BE-069: a document was excluded at ingestion by the audience boundary (never
+    // embedded or stored on the customer answer engine). Makes the internal partition auditable.
+    void audienceExcluded(String sourceType, String sourceId, String audience);
 }

@@ -77,4 +77,51 @@ class MarkdownFolderConnectorTest {
         // WHEN fetching THEN it degrades gracefully to an empty list
         assertTrue(connector.fetchAll().isEmpty());
     }
+
+    @Test
+    void shouldReadAudienceLanguageAndUrlFromFrontMatter(@TempDir Path dir) throws IOException {
+        // GIVEN a file declaring audience, language and url (TASK-BE-069 unified canonical format)
+        write(dir, "a.md", "---\ndomain: support\nlanguage: en\naudience: internal\n"
+                + "url: https://www.eir.ie/x\n---\n\n# A\n\nBody.");
+        MarkdownFolderConnector connector = new MarkdownFolderConnector(dir.toString(), "fr");
+
+        // WHEN fetching
+        SourceDocument doc = connector.fetchAll().get(0);
+
+        // THEN audience/language/url come from the front-matter (language overrides the default)
+        assertEquals("internal", doc.audience());
+        assertEquals("en", doc.language());
+        assertEquals("https://www.eir.ie/x", doc.url());
+    }
+
+    @Test
+    void shouldDefaultAudienceToCustomerAndLanguageToConnectorDefault(@TempDir Path dir) throws IOException {
+        // GIVEN a file with no audience/language front-matter (the hand-written KB case)
+        write(dir, "a.md", "---\ndomain: billing\n---\n\n# A\n\nBody.");
+        MarkdownFolderConnector connector = new MarkdownFolderConnector(dir.toString(), "fr");
+
+        // WHEN fetching
+        SourceDocument doc = connector.fetchAll().get(0);
+
+        // THEN audience falls back to customer (ADR-0034) and language to the connector default
+        assertEquals("customer", doc.audience());
+        assertEquals("fr", doc.language());
+    }
+
+    @Test
+    void shouldRecurseIntoSubfoldersWithRelativePathSourceId(@TempDir Path dir) throws IOException {
+        // GIVEN a file at the root and one in a sub-corpus folder (knowledge-base/eir/)
+        write(dir, "root.md", "# Root\n\nR.");
+        Path sub = dir.resolve("eir");
+        Files.createDirectories(sub);
+        write(sub, "x.md", "---\ndomain: support\nlanguage: en\n---\n\n# X\n\nBody.");
+        MarkdownFolderConnector connector = new MarkdownFolderConnector(dir.toString(), "fr");
+
+        // WHEN fetching
+        List<String> ids = connector.fetchAll().stream().map(SourceDocument::sourceId).toList();
+
+        // THEN the sub-folder file is included with a folder-relative source_id (no collision)
+        assertTrue(ids.contains("root.md"));
+        assertTrue(ids.contains(Path.of("eir", "x.md").toString()));
+    }
 }

@@ -30,6 +30,7 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
     private static final String SYNC_TIMER = "voice_support.kb_sync";
     private static final String SYNC_FAILURES = "voice_support.kb_sync_failures";
     private static final String SYNC_SKIPPED = "voice_support.kb_sync_skipped";
+    private static final String AUDIENCE_EXCLUDED = "voice_support.kb_sync_audience_excluded";
 
     private final MeterRegistry registry;
     private final int progressEvery;
@@ -74,10 +75,19 @@ public class LoggingSyncObserverAdapter implements SyncObserverPort {
                 .record(Duration.ofMillis(durationMs));
         double chunksPerSec = durationMs > 0 ? totalChunks * 1000.0 / durationMs : 0.0;
         log.info("[KB-SYNC] op=sync-detail source_type={} processed={} ingested={} skipped={} "
-                        + "deleted={} total_chunks={} duration_ms={} chunks_per_sec={}",
+                        + "deleted={} excluded={} total_chunks={} duration_ms={} chunks_per_sec={}",
                 sourceType, report.processed(), report.ingested(), report.skipped(),
-                report.deleted(), totalChunks, durationMs,
+                report.deleted(), report.excluded(), totalChunks, durationMs,
                 String.format(Locale.ROOT, "%.1f", chunksPerSec));
+    }
+
+    @Override
+    public void audienceExcluded(String sourceType, String sourceId, String audience) {
+        // ADR-0034/BUG-005/TASK-BE-069: make the excluded internal partition auditable after a sync.
+        registry.counter(AUDIENCE_EXCLUDED, "source_type", sourceType).increment();
+        log.info("[KB-SYNC] op=audience-excluded source_type={} source_id={} audience={} "
+                        + "(not embedded/stored on the customer answer engine)",
+                sourceType, sourceId, audience);
     }
 
     @Override

@@ -60,10 +60,19 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
         Set<String> seenIds = new HashSet<>();
         int ingested = 0;
         int skipped = 0;
+        int excluded = 0;
         int totalChunks = 0;
 
         try {
             for (SourceDocument document : documents) {
+                if (isInternal(document)) {
+                    // ADR-0034/TASK-BE-069: internal/agent-facing content is excluded at ingestion
+                    // (defense-in-depth over the fail-closed retrieval filter) and is NOT added to
+                    // seenIds, so a document that flips customer->internal is cleaned up by removeStale.
+                    excluded++;
+                    observer.audienceExcluded(sourceType, document.sourceId(), document.audience());
+                    continue;
+                }
                 seenIds.add(document.sourceId());
                 if (isUnchanged(document)) {
                     skipped++;
@@ -76,7 +85,7 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
                 }
             }
             int deleted = removeStale(sourceType, seenIds);
-            SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted);
+            SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted, excluded);
             observer.syncCompleted(sourceType, report, totalChunks, elapsedMs(start));
             return report;
         } catch (RuntimeException failure) {
@@ -89,6 +98,12 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
 
     private static String errorCode(RuntimeException failure) {
         return failure.getClass().getSimpleName();
+    }
+
+    private static final String INTERNAL_AUDIENCE = "internal";
+
+    private boolean isInternal(SourceDocument document) {
+        return INTERNAL_AUDIENCE.equals(document.audience());
     }
 
     private boolean isUnchanged(SourceDocument document) {

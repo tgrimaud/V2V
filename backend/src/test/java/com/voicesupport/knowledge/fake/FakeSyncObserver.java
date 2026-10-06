@@ -20,10 +20,14 @@ public class FakeSyncObserver implements SyncObserverPort {
     public record Skip(String sourceType, String sourceId, int skippedChunks) {
     }
 
+    public record AudienceExclusion(String sourceType, String sourceId, String audience) {
+    }
+
     public final List<Batch> batches = new ArrayList<>();
     public final List<Completion> completions = new ArrayList<>();
     public final List<Failure> failures = new ArrayList<>();
     public final List<Skip> skips = new ArrayList<>();
+    public final List<AudienceExclusion> audienceExclusions = new ArrayList<>();
 
     @Override
     public void batchStored(String sourceType, String sourceId, int chunkCount, long elapsedMs) {
@@ -43,5 +47,10 @@ public class FakeSyncObserver implements SyncObserverPort {
     @Override
     public void syncFailed(String sourceType, int ingestedSoFar, int totalChunksSoFar, long durationMs, String errorCode) {
         failures.add(new Failure(sourceType, ingestedSoFar, totalChunksSoFar, durationMs, errorCode));
+    }
+
+    @Override
+    public void audienceExcluded(String sourceType, String sourceId, String audience) {
+        audienceExclusions.add(new AudienceExclusion(sourceType, sourceId, audience));
     }
 }
