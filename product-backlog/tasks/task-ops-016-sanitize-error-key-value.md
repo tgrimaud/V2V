@@ -1,7 +1,8 @@
 # TASK-OPS-016 — Redact `key=value` tokens in `sanitize_error` (match the log scrubber)
 
 **Type:** Technical task (privacy / sanitization hardening — voice runtime)
-**Status:** 📋 Open (backlog, not started) — no branch yet.
+**Status:** 🚧 Done on `task/TASK-OPS-016-sanitize-error-key-value` (off `feat/restart-from-scratch`) — `key=value` redaction factored into `_redact_token` (shared by both entry points); voice-agent suite 732 OK + behave 15/43/194. Awaiting user validation (not merged).
+**Adversarial review 96/100 (Pass, 2026-10-06)** — no blocking finding; privacy hardening, de-duplicates the `key=value` split, prior redaction tests all still green. Residual (accepted, Info): nested `a=b=c` redacts only after the first `=` (unchanged from prior behavior). Full review: `docs/qa/task-ops-016-adversarial-review.md`.
 **Priority:** Low
 **Epic:** EPIC-012 (pilot operations / observability hardening)
 **Surfaced by:** `docs/qa/task-ops-015-followups-adversarial-review.md` (Security & Privacy note) and
@@ -37,13 +38,20 @@ messages rarely embed `key=secret`), hence Low priority — but it is an inconsi
 
 ## Acceptance
 
-- [ ] `sanitize_error(RuntimeError("upstream rejected key=sk-topsecret9999")).reason` redacts the
-      value (`key=<redacted-id>`), not just bare `sk-...` tokens.
-- [ ] `scrub_message` behaviour unchanged (regression test still green).
-- [ ] Technical tokens in `_SAFE_TOKENS` (e.g. `pcm_16000`, `audio/pcm`) stay readable, including
-      when they appear as a `key=value` value.
-- [ ] New unit tests in `tests/` cover the `key=value` redaction on the `sanitize_error` path.
-- [ ] Voice-agent suite + behave green.
+- [x] `sanitize_error(RuntimeError("upstream rejected key=sk-topsecret9999")).reason` redacts the
+      value (`key=<redacted-id>`), not just bare `sk-...` tokens. (`test_sanitization.py::test_key_value_secret_is_redacted_on_error_reason_path`)
+- [x] `scrub_message` behaviour unchanged (regression test still green — `test_logging_config.py::test_text_mode_scrubs_secret_and_path` exercises `key=…` on the log path).
+- [x] Technical tokens in `_SAFE_TOKENS` (e.g. `pcm_16000`, `audio/pcm`) stay readable, including
+      when they appear as a `key=value` value. (`test_key_value_with_safe_token_value_is_preserved`)
+- [x] New unit tests in `tests/` cover the `key=value` redaction on the `sanitize_error` path.
+- [x] Voice-agent suite + behave green (732 OK; 15/43/194).
+
+## Implementation notes
+
+- Moved the `key=value` value-side redaction from the log-only `_scrub_log_token` **into** `_redact_token`,
+  and extracted the per-token heuristics into `_redact_core`. Both `scrub_message` (log path) and `_redact`
+  (`sanitize_error` path) now call `_redact_token`, so they treat `key=secret` identically. `_scrub_log_token`
+  removed (no external refs). `_SAFE_TOKENS` / `_MAX_*` caps / reason codes unchanged.
 
 ## Observability / runtime impact
 
