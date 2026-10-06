@@ -4,7 +4,7 @@
 
 - **Bug ID:** BUG-029
 - **Title:** `closeDoneDialog` re-POSTs `in_progress` and drops empty-feedback runs after "Done"
-- **Status:** Fixed (Option A), awaiting user validation (not merged) — **Adversarial review 94/100 (Pass, 2026-10-06)**, no blocking finding; residual (accepted): no JS test harness for the viewer → guarded by inline comment + manual check. Full review: `docs/qa/bug-029-adversarial-review.md`
+- **Status:** ✅ **Merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — Fixed (Option A). **Adversarial review 94/100 (Pass, 2026-10-06)**, no blocking finding; residual (accepted): no JS test harness for the viewer → guarded by inline comment + manual check. Full review: `docs/qa/bug-029-adversarial-review.md`
 - **Severity:** Low
 - **Priority:** P3
 - **Detected by:** Adversarial review (independent Bugbot pass during TASK-OPS-015 V1b/V2/V3)

@@ -3,6 +3,21 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — BUG-029 — eval-viewer "OK" downgraded complete→in_progress (merged)
+
+**Summary:**
+
+- Surfaced by the independent Bugbot pass during the TASK-OPS-015 V1b/V2/V3 review (out of that ticket's scope).
+- `skill-creator` eval-viewer: `closeDoneDialog()` (the completion-overlay OK button) re-ran the filtered
+  auto-save (`saveCurrentFeedback`, `status:"in_progress"` + non-empty runs only), overwriting the
+  `status:"complete"` submission `showDoneDialog()` had just written (all runs incl. empty "looks good") and
+  erasing the completion signal the skill-creator workflow reads.
+- Fix (Option A): `closeDoneDialog()` only hides the overlay; the completed submission stays authoritative.
+  `saveCurrentFeedback` remains used by the typing/navigation auto-save (not orphaned). Guarded by an explicit
+  inline comment (no JS test harness exists for the static viewer).
+- Developer tooling only — no bot runtime/pilot/security/latency impact. Adversarial review **94/100 Pass**
+  (`docs/qa/bug-029-adversarial-review.md`). Merged `--no-ff` into `feat/restart-from-scratch`; branch deleted.
+
 ## 2026-10-06 — TASK-OPS-015 V1b/V2/V3 — Voice log/trace hardening follow-ups (merged)
 
 **Summary:**
