@@ -3,6 +3,30 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — TASK-BE-069 — KB ingest-time audience filter + eir help-centre corpus (unified canonical markdown, merged)
+
+**Summary:**
+
+- Three asks, one KB-ingestion deliverable: (1) import only `audience=customer` content, (2) ingest the
+  new eir help-centre `.md` corpus, (3) unify the old KB into the same import method.
+- Backend: `KnowledgeSyncService` now **skips `audience=internal` at ingestion** (defense-in-depth over the
+  ADR-0034 fail-closed retrieval filter) — `SyncReport.excluded` + `SyncObserverPort.audienceExcluded`
+  (`voice_support.kb_sync_audience_excluded` counter + `[KB-SYNC] op=audience-excluded` log). Refactored
+  `syncConnector` into `processDocument` + `Progress` to hold the 20-line budget.
+- `MarkdownFolderConnector` unified + **recursive**: reads `audience`/`language`/`url` front-matter,
+  recurses into `knowledge-base/eir/`, relative-path `source_id`. The 3 hand-written FAQ files now carry
+  `audience: customer` + authoritative `language: en` (latent `fr`→`en` fix on the language-filter-ON pilot).
+- Tooling: `scripts/kb_eir/convert_eir_kb.py` one-shot converter (eir raw `.md` → canonical clean markdown,
+  domain from URL path, boilerplate stripped) + 11 unit tests; **154-file** converted corpus under
+  `knowledge-base/eir/` (billing 9 / commercial 10 / support 135; 834 device tutorials + 21 nav-index pages
+  deferred/dropped).
+- Pilot deploy **verified against `deploy/`**: the Ansible `compose_tier` role already copies `knowledge-base/`
+  recursively, bind-mounts it (`KB_MARKDOWN_PATH=/app/kb-assets/knowledge-base`) and runs a gated post-deploy
+  `POST /api/knowledge/sync` → the corpus rolls automatically on the next backend-image deploy (`v0.9.5`),
+  no new Ansible code.
+- backend `mvn test` **723 green** incl. ArchUnit; eir script **11 green**. Adversarial review **92/100 Pass**
+  (`docs/qa/task-be-069-adversarial-review.md`). Merged into `feat/restart-from-scratch` (`--no-ff`).
+
 ## 2026-10-06 — TASK-OPS-016 — Redact `key=value` tokens in `sanitize_error` (merged)
 
 **Summary:**
