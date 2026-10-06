@@ -3,6 +3,28 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — TASK-OPS-015 V1b/V2/V3 — Voice log/trace hardening follow-ups (merged)
+
+**Summary:**
+
+- The three follow-ups scoped in TASK-OPS-015, implemented on `task/TASK-OPS-015-followups-v1b-v2-v3`.
+- **V1b (text-mode log scrub):** new `SanitizingTextFormatter` (`voice_common/logging_config.py`) scrubs the
+  message (`formatMessage`) + exception/stack **line by line** (keeps tracebacks multi-line) and stamps the
+  in-scope correlation id (`[%(correlation_id)s]`). `configure_logging` installs it on the text default, so
+  text mode is sanitized by default — not only JSON. (Replaces the prior "leave handlers untouched" no-op.)
+- **V2 (warm-up trace parity):** `HttpBackendAdapter.warm_up(correlation_id)` injects `X-Correlation-Id` +
+  the deterministic `traceparent` via a shared `_inject_trace` helper (also used by `_headers`);
+  `AnswerProcessor._warm_backend` passes the envelope correlation id so the warm-up hop joins the turn
+  trace instead of starting an orphan. `stub_backend.warm_up` signature matched.
+- **V3 (streaming fault sanitization):** the raising-adapter branch in `StreamedAnswerRunner.run` reduces the
+  fault through `sanitize_error(domain="backend")` (stable `backend_*` code + redacted reason) instead of the
+  raw exception type name; a code already set by a prior ERROR/DONE event still wins.
+- Tests +7 (logging_config, http_backend, answer_processor, streaming_answer). Voice-agent suite **730 OK**;
+  behave **15/43/194**. Adversarial review **95/100 Pass** (`docs/qa/task-ops-015-followups-adversarial-review.md`);
+  independent Bugbot review clean on-scope (its only finding was a pre-existing out-of-scope `skill-creator`
+  eval-viewer issue, not in this branch's diff). Merged `--no-ff` into `feat/restart-from-scratch`; branch deleted.
+  Strictly adds redaction + trace continuity; no backend change.
+
 ## 2026-10-06 — TASK-OPS-015 + TASK-BE-068 — Pilot log-sanitization hardening + size-budget refactor (merged)
 
 **Summary:**

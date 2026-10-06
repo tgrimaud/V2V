@@ -1,7 +1,7 @@
 # TASK-OPS-015 — Harden pilot log sanitization (JSON logs + follow-up polish)
 
 **Type:** Technical task (operations / observability hardening)
-**Status:** ✅ **V1(a) merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — pilot voice tier pinned to `VOICE_LOG_FORMAT=json`. 🚧 **V1(b)/V2/V3 done** on `task/TASK-OPS-015-followups-v1b-v2-v3` (off `feat/restart-from-scratch`) — voice-agent suite 730 tests OK + behave 15/43/194; awaiting user validation (not merged).
+**Status:** ✅ **V1(a) merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — pilot voice tier pinned to `VOICE_LOG_FORMAT=json`. ✅ **V1(b)/V2/V3 merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — voice-agent suite 730 tests OK + behave 15/43/194. **Ticket fully done.**
 **Adversarial review 95/100 (Pass, 2026-10-06)** — no blocking finding; V1b/V2/V3 strictly add log redaction + warm-up trace continuity, +7 tests. Residual (accepted): V1b installs a sanitizing root handler on the text default (was a no-op), symmetric with the JSON path, single startup call. Full review: `docs/qa/task-ops-015-followups-adversarial-review.md`.
 **Priority:** Medium
 **Epic:** EPIC-012 (pilot operations)
