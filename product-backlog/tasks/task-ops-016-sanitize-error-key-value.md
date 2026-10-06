@@ -1,7 +1,7 @@
 # TASK-OPS-016 — Redact `key=value` tokens in `sanitize_error` (match the log scrubber)
 
 **Type:** Technical task (privacy / sanitization hardening — voice runtime)
-**Status:** 🚧 Done on `task/TASK-OPS-016-sanitize-error-key-value` (off `feat/restart-from-scratch`) — `key=value` redaction factored into `_redact_token` (shared by both entry points); voice-agent suite 732 OK + behave 15/43/194. Awaiting user validation (not merged).
+**Status:** ✅ **Merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — `key=value` redaction factored into `_redact_token` (shared by both entry points); voice-agent suite 732 OK + behave 15/43/194.
 **Adversarial review 96/100 (Pass, 2026-10-06)** — no blocking finding; privacy hardening, de-duplicates the `key=value` split, prior redaction tests all still green. Residual (accepted, Info): nested `a=b=c` redacts only after the first `=` (unchanged from prior behavior). Full review: `docs/qa/task-ops-016-adversarial-review.md`.
 **Priority:** Low
 **Epic:** EPIC-012 (pilot operations / observability hardening)

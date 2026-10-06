@@ -3,6 +3,24 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — TASK-OPS-016 — Redact `key=value` tokens in `sanitize_error` (merged)
+
+**Summary:**
+
+- Surfaced by the TASK-OPS-015 V1b/V2/V3 review (Security & Privacy note): `scrub_message` (log path)
+  split `key=value` and redacted the value, but `sanitize_error._redact` split on whitespace only, so
+  `key=sk-...` slipped through on the error-reason path (used by STT/TTS/backend adapters + the streaming
+  runner since V3). Bare secret-prefixed tokens/paths/UUIDs/long ids were already redacted.
+- Fix: moved the `key=value` value-side redaction from the log-only `_scrub_log_token` **into**
+  `_redact_token`, extracted the per-token heuristics into `_redact_core`. Both `scrub_message` and
+  `_redact` now call `_redact_token`, so `key=secret` is redacted identically on both paths.
+  `_scrub_log_token` removed (no other refs); `_SAFE_TOKENS` / `_MAX_*` caps / reason codes unchanged.
+  `stt_validation.sanitization` is a thin wrapper over `voice_common`, so the fix covers STT/TTS/backend.
+- +2 tests (`test_sanitization.py`); all prior redaction tests still green. Voice-agent suite **732 OK**;
+  behave **15/43/194**. Adversarial review **96/100 Pass** (`docs/qa/task-ops-016-adversarial-review.md`).
+  Merged `--no-ff` into `feat/restart-from-scratch`; branch deleted. Privacy hardening; no runtime-behavior,
+  latency or architecture change.
+
 ## 2026-10-06 — BUG-029 — eval-viewer "OK" downgraded complete→in_progress (merged)
 
 **Summary:**
