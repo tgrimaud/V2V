@@ -21,9 +21,12 @@
   `kb_sync_async_seconds` 2700→4200, `kb_sync_poll_retries` 90→140 in `group_vars/backend.yml`
   (headroom above the measured figure, documented in-comment). The second node was then deployed with
   `-e kb_sync_after_deploy=false` (shared store already populated), so no second 51-min sync.
-- **Known limitation (Low):** the 3 EN FAQ `fr`→`en` metadata fix did NOT apply — `content_hash` is
-  body-only, so the front-matter edit left the body unchanged → `markdown skipped=3`, stored metadata
-  stayed `fr`. To apply: delete the 3 rows (or touch the body) + re-sync. Noted in the TASK-BE-069 review.
+- **FAQ `fr`→`en` fix (applied live):** the first sync left the 3 EN FAQ at `language=fr` (body-only
+  `content_hash` → `markdown skipped=3`). Fixed by a targeted re-ingest: `DELETE` the 3 FAQ from
+  `vector_store` (44 chunks) + `kb_source_state`, then `POST /api/knowledge/sync/markdown`
+  (`ingested=3 skipped=154`). Verified `billing/commercial/telecom-faq.md` now `language=en`; store
+  language split en 4508 / fr 4008 (total 8516 chunks, 100% customer). Deeper optional fix: include
+  front-matter in `content_hash` so metadata-only edits re-ingest automatically.
 
 ## 2026-10-06 — TASK-BE-069 — KB ingest-time audience filter + eir help-centre corpus (unified canonical markdown, merged)
 
