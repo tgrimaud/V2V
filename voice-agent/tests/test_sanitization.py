@@ -53,6 +53,19 @@ class RedactionTest(unittest.TestCase):
         self.assertIn("<redacted-id>", result.reason)
         self.assertNotIn("CUST0009812", result.reason)
 
+    def test_key_value_secret_is_redacted_on_error_reason_path(self) -> None:
+        # TASK-OPS-016: `key=secret` must be redacted on the sanitize_error path too (not only the
+        # log scrubber). The value side is redacted; the key stays readable.
+        result = sanitize_error(RuntimeError("upstream rejected key=sk-topsecret9999 retry"))
+        self.assertIn("key=<redacted-id>", result.reason)
+        self.assertNotIn("sk-topsecret9999", result.reason)
+        self.assertIn("upstream", result.reason)
+
+    def test_key_value_with_safe_token_value_is_preserved(self) -> None:
+        # A `key=value` whose value is a known technical token stays readable (diagnostics).
+        result = sanitize_error(ValueError("rejected format=pcm_16000 unsupported"))
+        self.assertIn("format=pcm_16000", result.reason)
+
     def test_plain_words_and_short_numbers_are_preserved(self) -> None:
         result = sanitize_error(RuntimeError("HTTP 401 unauthorized, insufficient credits"))
         self.assertEqual(result.reason, "HTTP 401 unauthorized, insufficient credits")

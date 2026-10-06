@@ -94,24 +94,10 @@ def scrub_message(message: str) -> str:
     """
     if not message:
         return message
-    redacted = " ".join(_scrub_log_token(token) for token in message.split()).strip()
+    redacted = " ".join(_redact_token(token) for token in message.split()).strip()
     if len(redacted) > _MAX_LOG_LEN:
         return redacted[:_MAX_LOG_LEN].rstrip() + "..."
     return redacted
-
-
-def _scrub_log_token(token: str) -> str:
-    """Redact a whitespace token, also covering `key=value` pairs common in log lines.
-
-    `sanitize_error` splits on whitespace only, so a `key=secret` token would slip through.
-    For logs we additionally redact the value side of a `key=value` token, keeping the key
-    readable. Leaves `sanitize_error`'s own tokenization untouched (this helper is log-only).
-    """
-    if "=" in token:
-        key, sep, value = token.partition("=")
-        if value:
-            return f"{key}{sep}{_redact_token(value)}"
-    return _redact_token(token)
 
 
 def _redact(message: str) -> str:
@@ -123,6 +109,19 @@ def _redact(message: str) -> str:
 
 
 def _redact_token(token: str) -> str:
+    # `key=value`: redact only the value side, keep the key readable. Applied before the
+    # per-token heuristics so a `key=sk-...` value is caught even though the whole token is not
+    # path/id-shaped. Shared by the log path (`scrub_message`) AND the error-reason path
+    # (`_redact` -> `sanitize_error`) so both treat `key=secret` identically (TASK-OPS-016);
+    # previously only the log path split on `=`.
+    if "=" in token:
+        key, sep, value = token.partition("=")
+        if value:
+            return f"{key}{sep}{_redact_core(value)}"
+    return _redact_core(token)
+
+
+def _redact_core(token: str) -> str:
     core = token.strip(_STRIP_CHARS)
     if not core:
         return token
