@@ -147,8 +147,12 @@ no un-ticketed debt markers.
    runnable code" claim (both tiers run).
 2. **(Code, hygiene)** V1/V4/V5 log-sanitization + CancelledError + HMAC-length
    edges — small, isolated fixes; ticket as a backend/voice hardening follow-up.
-3. **(Code, budget)** B1/B2 size-budget extractions when those files are next
-   touched.
+3. **(Code, budget — DONE, ticketed TASK-BE-068)** B1/B2 size-budget extractions
+   applied: re-counted by non-blank lines (only 4 classes genuinely >200, not 8);
+   `InputGuardrail.check` + `AbstractChatClientAnswerAdapter` methods decomposed;
+   `BillingConfig`→`BillingAdapterConfig`, `ConversationConfig`→`ConversationMemoryConfig`,
+   `BackendTelemetry`→`MeterEmitter`, `ConverseStreamSession`→`SseStreamWriter`. All
+   ≤200 non-blank; `mvn test` green incl. ArchUnit; behavior-preserving.
 4. **(Done this pass)** Stale "not merged" billing statuses + broken BUG-025
    link corrected and committed.
 
