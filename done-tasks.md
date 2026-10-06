@@ -3,6 +3,27 @@
 > **Scope: Voice Support Bot only.** This is the ledger for all `voice-support-bot`
 > work. Do not log bot work in the workspace-root `BMad/done-tasks.md`.
 
+## 2026-10-06 — TASK-OPS-015 + TASK-BE-068 — Pilot log-sanitization hardening + size-budget refactor (merged)
+
+**Summary:**
+
+- Surfaced by the full-codebase adversarial review (`docs/qa/2026-10-05-full-codebase-adversarial-review.md`).
+- **TASK-OPS-015 (V1a):** pilot voice tier flipped to `VOICE_LOG_FORMAT=json` (`deploy/ansible/group_vars/voice.yml`)
+  so the JSON formatter scrubs both `message` and `exc_info` — the text default printed raw tracebacks on
+  `exc_info=True` error/drain paths. V1(b) text-mode scrub, V2 warm-up `traceparent`, V3 streaming `sanitize_error`
+  scoped as follow-ups; audit V4 (`_stop_filler` broad except) / V5 (Genesys HMAC length) verified as
+  by-design / already-hardened (not bugs).
+- **TASK-BE-068 (B1/B2):** behavior-preserving `code-guidelines` refactor — `InputGuardrail.check` → ordered
+  lazy `Optional.or(...)` chain; `AbstractChatClientAnswerAdapter` prompt-assembly helpers; splits
+  `BillingConfig`→`BillingAdapterConfig` and `ConversationConfig`→`ConversationMemoryConfig`; extracted
+  `MeterEmitter` (from `BackendTelemetry`) and `SseStreamWriter` (from `ConverseStreamSession`). All touched
+  classes ≤200 non-blank lines, 3 methods ≤20. Added 2 `ApplicationContextRunner` wiring slices
+  (`BillingConfigWiringTest`, `ConversationMemoryConfigWiringTest`) covering the cross-config bean injection
+  (no `@SpringBootTest` in the repo). Adversarial review **97/100 Pass** (`docs/qa/task-be-068-adversarial-review.md`).
+- Both merged `--no-ff` into `feat/restart-from-scratch` (OPS-015 first, then BE-068 `2e536a0`; shared-ledger
+  conflicts resolved by union); post-merge backend suite **718 tests BUILD SUCCESS** incl. 3 ArchUnit suites.
+  Both ticket branches deleted (local + remote). No API/bean/contract/telemetry change; no runtime-behavior change.
+
 ## 2026-10-05 — TASK-INFRA-018 — Forward-port the B2C billing-granularity finding; delete stale branch
 
 **Summary:**

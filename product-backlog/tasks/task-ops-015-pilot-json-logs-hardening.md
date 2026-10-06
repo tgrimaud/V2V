@@ -1,7 +1,7 @@
 # TASK-OPS-015 — Harden pilot log sanitization (JSON logs + follow-up polish)
 
 **Type:** Technical task (operations / observability hardening)
-**Status:** 🚧 In progress on `task/TASK-OPS-015-pilot-json-logs` (off `feat/restart-from-scratch`) — **V1(a) implemented** (pilot voice tier pinned to `VOICE_LOG_FORMAT=json`); V1(b)/V2/V3 scoped as follow-ups below. Awaiting user validation (not merged).
+**Status:** ✅ **V1(a) merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff`; branch deleted) — pilot voice tier pinned to `VOICE_LOG_FORMAT=json`. V1(b)/V2/V3 remain scoped follow-ups below (not started).
 **Priority:** Medium
 **Epic:** EPIC-012 (pilot operations)
 **Surfaced by:** `docs/qa/2026-10-05-full-codebase-adversarial-review.md` (findings V1/V2/V3).

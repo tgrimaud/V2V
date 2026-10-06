@@ -1,7 +1,7 @@
 # TASK-BE-068 — Reduce method/class size-budget overruns (adversarial review B1/B2)
 
 **Type:** Technical task (backend refactor — `code-guidelines` hygiene, behavior-preserving)
-**Status:** 🚧 Done on `task/TASK-BE-068-size-budget-refactor` (off `feat/restart-from-scratch`) — backend `mvn test` green (incl. 3 ArchUnit suites). Awaiting user validation (not merged).
+**Status:** ✅ **Merged into `feat/restart-from-scratch`** (2026-10-06, `--no-ff` `2e536a0`; branch deleted) — backend `mvn test` BUILD SUCCESS (718 tests, incl. 3 ArchUnit suites + 2 config-split wiring slices).
 **Adversarial review 97/100 (Pass, 2026-10-06)** — no blocking finding; behavior-preserving (per-change audit). The only Medium finding (config-split wiring not covered by a context test) was **closed**: added `BillingConfigWiringTest` + `ConversationMemoryConfigWiringTest` (`ApplicationContextRunner` slices loading each split together, asserting the moved + cross-config consuming beans resolve). No residual. Full review: `docs/qa/task-be-068-adversarial-review.md`.
 **Priority:** Low
 **Epic:** EPIC-012
