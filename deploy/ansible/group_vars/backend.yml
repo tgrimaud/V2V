@@ -136,8 +136,10 @@ kb_sync_timeout: 2400          # async worker's own HTTP read timeout (s)
 kb_sync_async_seconds: 2700    # async job max lifetime (s)
 kb_sync_poll_retries: 90       # async_status polls
 kb_sync_poll_delay: 30         # seconds between polls
-# Deploy gate: the aggregate SyncReport.processed must be >= this (markdown baseline is 3,
-# the EN corpus adds ~306) to prove the CSV corpus was seen and the RAG is not markdown-only.
+# Deploy gate: the aggregate SyncReport.processed must be >= this. Markdown baseline is now 157
+# (3 hand-written FAQ + 154 converted eir help-centre pages, TASK-BE-069) and the EN corpus adds
+# ~306. As the markdown count grows this gate proves "RAG non-empty" more than "the CSV was seen";
+# raise the floor if a CSV-specific proof is needed.
 kb_sync_min_processed: 50
 
 # JVM / resource sizing (4 vCPU / 8 GB VM, shared with the ollama sidecar).

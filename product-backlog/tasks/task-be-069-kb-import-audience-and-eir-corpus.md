@@ -2,7 +2,7 @@
 
 **Type:** Technical task (KB ingestion — backend + data/tooling)
 **Status:** 🚧 Done on `task/TASK-BE-069-kb-import-audience-and-eir-corpus` (off `feat/restart-from-scratch`) — audience ingest-filter + unified recursive markdown connector + 154-file eir corpus converted; backend `mvn test` 723 green (incl. ArchUnit), eir script 11 tests green. Awaiting user validation (not merged).
-**Adversarial review 92/100 (Pass, 2026-10-06)** — no blocking finding. Non-blocking: deploy wiring of `knowledge-base/eir/` to the pilot deferred (Medium, follow-up); old-KB `language` now authoritative (Low, re-sync); line-based extraction precision (Low); `--min-chars` drops nav-index pages (Low, verified no real content lost). Full review: `docs/qa/task-be-069-adversarial-review.md`.
+**Adversarial review 92/100 (Pass, 2026-10-06)** — no blocking finding. Deploy verified against `deploy/`: the pilot already copies `knowledge-base/` recursively + mounts it (`KB_MARKDOWN_PATH`) + runs a gated post-deploy sync, so the eir corpus ships automatically **once the recursive-connector backend image is rolled** (bump `IMAGE_TAG`) — no new Ansible code. Non-blocking: image roll required (Low); latent FAQ `fr`→`en` fix on next pilot sync, language-filter is ON (Low); line-based extraction precision (Low); `--min-chars` drops nav-index pages (Low, verified no real content lost); `kb_sync_min_processed` comment to refresh (Low). Full review: `docs/qa/task-be-069-adversarial-review.md`.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Related:** ADR-0034 (KB audience boundary, fail-closed retrieval), ADR-0030 (domain classification),
