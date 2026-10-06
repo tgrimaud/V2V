@@ -46,8 +46,12 @@ public class MarkdownFolderConnector implements KnowledgeSourceConnector {
             log.warn("[KB-SYNC] markdown folder not found: {}", folder.toAbsolutePath());
             return List.of();
         }
-        try (Stream<Path> files = Files.list(folder)) {
+        // Walk recursively (TASK-BE-069) so a converted sub-corpus (e.g. knowledge-base/eir/) is
+        // picked up by the same connector; the source_id is the folder-relative path to avoid
+        // filename collisions across subfolders. Files directly in the folder keep their bare name.
+        try (Stream<Path> files = Files.walk(folder)) {
             return files
+                    .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".md"))
                     .sorted()
                     .map(this::toDocument)
@@ -62,12 +66,13 @@ public class MarkdownFolderConnector implements KnowledgeSourceConnector {
         try {
             String raw = Files.readString(path, StandardCharsets.UTF_8);
             ParsedMarkdown parsed = parseFrontMatter(raw);
-            String sourceId = path.getFileName().toString();
+            String sourceId = folder.relativize(path).toString();
             String title = parsed.title != null ? parsed.title : firstHeading(parsed.body, sourceId);
+            String language = parsed.language != null ? parsed.language : defaultLanguage;
             Instant updatedAt = Files.getLastModifiedTime(path).toInstant();
             return SourceDocument.create(
-                    SOURCE_TYPE, sourceId, title, null,
-                    parsed.body, parsed.domain, defaultLanguage, updatedAt);
+                    SOURCE_TYPE, sourceId, title, parsed.url,
+                    parsed.body, parsed.domain, parsed.audience, language, updatedAt);
         } catch (IOException e) {
             log.warn("[KB-SYNC] skipping unreadable markdown file {}: {}", path, e.getMessage());
             return null;
@@ -77,11 +82,17 @@ public class MarkdownFolderConnector implements KnowledgeSourceConnector {
     private ParsedMarkdown parseFrontMatter(String raw) {
         Matcher matcher = FRONT_MATTER.matcher(raw);
         if (!matcher.matches()) {
-            return new ParsedMarkdown(null, null, raw);
+            return new ParsedMarkdown(null, null, null, null, null, raw);
         }
         Object loaded = new Yaml().load(matcher.group(1));
         Map<String, Object> data = loaded instanceof Map<?, ?> map ? castMap(map) : Map.of();
-        return new ParsedMarkdown(asString(data.get("domain")), asString(data.get("title")), matcher.group(2));
+        return new ParsedMarkdown(
+                asString(data.get("domain")),
+                asString(data.get("title")),
+                asString(data.get("audience")),
+                asString(data.get("language")),
+                asString(data.get("url")),
+                matcher.group(2));
     }
 
     @SuppressWarnings("unchecked")
@@ -102,6 +113,7 @@ public class MarkdownFolderConnector implements KnowledgeSourceConnector {
         return fallback;
     }
 
-    private record ParsedMarkdown(String domain, String title, String body) {
+    private record ParsedMarkdown(
+            String domain, String title, String audience, String language, String url, String body) {
     }
 }

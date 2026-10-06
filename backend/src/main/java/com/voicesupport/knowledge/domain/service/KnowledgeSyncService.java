@@ -58,37 +58,61 @@ public class KnowledgeSyncService implements SyncKnowledgeUseCase {
         long start = System.nanoTime();
         List<SourceDocument> documents = connector.fetchAll();
         Set<String> seenIds = new HashSet<>();
-        int ingested = 0;
-        int skipped = 0;
-        int totalChunks = 0;
-
+        Progress progress = new Progress();
         try {
             for (SourceDocument document : documents) {
-                seenIds.add(document.sourceId());
-                if (isUnchanged(document)) {
-                    skipped++;
-                } else {
-                    StoreResult result = reingest(document);
-                    totalChunks += result.stored();
-                    if (result.isComplete()) {
-                        ingested++;
-                    }
-                }
+                processDocument(sourceType, document, seenIds, progress);
             }
             int deleted = removeStale(sourceType, seenIds);
-            SyncReport report = new SyncReport(documents.size(), ingested, skipped, deleted);
-            observer.syncCompleted(sourceType, report, totalChunks, elapsedMs(start));
+            SyncReport report = new SyncReport(
+                    documents.size(), progress.ingested, progress.skipped, deleted, progress.excluded);
+            observer.syncCompleted(sourceType, report, progress.totalChunks, elapsedMs(start));
             return report;
         } catch (RuntimeException failure) {
             // Fail-fast is intentional (ADR-0030): committed documents are skipped on the next
             // idempotent run. Emit the failure so the aborted run is observable and resumable.
-            observer.syncFailed(sourceType, ingested, totalChunks, elapsedMs(start), errorCode(failure));
+            observer.syncFailed(sourceType, progress.ingested, progress.totalChunks, elapsedMs(start), errorCode(failure));
             throw failure;
         }
     }
 
+    private void processDocument(String sourceType, SourceDocument document, Set<String> seenIds, Progress p) {
+        if (isInternal(document)) {
+            // ADR-0034/TASK-BE-069: internal/agent-facing content is excluded at ingestion (defense
+            // in depth over the fail-closed retrieval filter) and is NOT added to seenIds, so a
+            // document that flips customer->internal is cleaned up by removeStale.
+            p.excluded++;
+            observer.audienceExcluded(sourceType, document.sourceId(), document.audience());
+            return;
+        }
+        seenIds.add(document.sourceId());
+        if (isUnchanged(document)) {
+            p.skipped++;
+            return;
+        }
+        StoreResult result = reingest(document);
+        p.totalChunks += result.stored();
+        if (result.isComplete()) {
+            p.ingested++;
+        }
+    }
+
+    // Mutable per-connector tallies so the loop body and the fail-fast catch share progress.
+    private static final class Progress {
+        private int ingested;
+        private int skipped;
+        private int excluded;
+        private int totalChunks;
+    }
+
     private static String errorCode(RuntimeException failure) {
         return failure.getClass().getSimpleName();
+    }
+
+    private static final String INTERNAL_AUDIENCE = "internal";
+
+    private boolean isInternal(SourceDocument document) {
+        return INTERNAL_AUDIENCE.equals(document.audience());
     }
 
     private boolean isUnchanged(SourceDocument document) {

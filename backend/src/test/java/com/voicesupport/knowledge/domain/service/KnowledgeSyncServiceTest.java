@@ -25,6 +25,10 @@ class KnowledgeSyncServiceTest {
         return SourceDocument.create(TYPE, id, id, null, body, "billing", "fr", Instant.EPOCH);
     }
 
+    private static SourceDocument internalDoc(String id, String body) {
+        return SourceDocument.create(TYPE, id, id, null, body, "billing", "internal", "fr", Instant.EPOCH);
+    }
+
     private KnowledgeSyncService serviceWith(
             FakeKnowledgeSourceConnector connector,
             FakeKnowledgeSourceStatePort state,
@@ -242,6 +246,54 @@ class KnowledgeSyncServiceTest {
         assertTrue(observer.batches.isEmpty());
         assertEquals(1, observer.completions.size());
         assertEquals(0, observer.completions.get(0).totalChunks());
+    }
+
+    @Test
+    void internal_audience_documents_are_excluded_at_ingestion() {
+        // GIVEN a customer document and an internal (agent-facing) document (ADR-0034 / TASK-BE-069)
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha."),
+                        internalDoc("secret.md", "# S\n\nInternal back office procedure.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+
+        // WHEN syncing
+        SyncReport report = serviceWith(connector, state, vectorStore).syncAll();
+
+        // THEN only the customer document is ingested; the internal one is counted excluded and
+        // never stored or committed to the ledger (defense-in-depth over the retrieval filter)
+        assertEquals(2, report.processed());
+        assertEquals(1, report.ingested());
+        assertEquals(1, report.excluded());
+        assertEquals(List.of("a.md"), state.listSourceIds(TYPE));
+        assertTrue(vectorStore.storedChunks.stream().noneMatch(c -> c.contains("secret.md")));
+        // AND the exclusion is observable (metric + structured log source)
+        assertEquals(1, observer.audienceExclusions.size());
+        assertEquals("secret.md", observer.audienceExclusions.get(0).sourceId());
+        assertEquals("internal", observer.audienceExclusions.get(0).audience());
+    }
+
+    @Test
+    void document_that_flips_customer_to_internal_is_removed_on_next_sync() {
+        // GIVEN a customer document already synced once
+        FakeKnowledgeSourceConnector connector = new FakeKnowledgeSourceConnector(
+                TYPE, List.of(doc("a.md", "# A\n\nAlpha.")));
+        FakeKnowledgeSourceStatePort state = new FakeKnowledgeSourceStatePort();
+        FakeVectorStorePort vectorStore = new FakeVectorStorePort();
+        KnowledgeSyncService service = serviceWith(connector, state, vectorStore);
+        service.syncAll();
+        assertEquals(List.of("a.md"), state.listSourceIds(TYPE));
+        vectorStore.deletedSources.clear();
+
+        // WHEN the same source is now classified internal
+        connector.setDocuments(List.of(internalDoc("a.md", "# A\n\nAlpha.")));
+        SyncReport report = service.syncAll();
+
+        // THEN it is excluded AND its previously-stored content is removed via the stale-ledger diff
+        assertEquals(1, report.excluded());
+        assertEquals(1, report.deleted());
+        assertTrue(state.listSourceIds(TYPE).isEmpty());
+        assertTrue(vectorStore.deletedSources.contains(TYPE + "/a.md"));
     }
 
     @Test

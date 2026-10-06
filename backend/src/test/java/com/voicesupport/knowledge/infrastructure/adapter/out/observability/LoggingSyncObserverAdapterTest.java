@@ -34,7 +34,7 @@ class LoggingSyncObserverAdapterTest {
         LoggingSyncObserverAdapter observer = new LoggingSyncObserverAdapter(registry, 500);
 
         // WHEN a connector sync completes
-        observer.syncCompleted(TYPE, new SyncReport(150, 150, 0, 0), 1901, 44504);
+        observer.syncCompleted(TYPE, new SyncReport(150, 150, 0, 0, 0), 1901, 44504);
 
         // THEN the full-sync timer is registered for that source type
         assertNotNull(registry.get("voice_support.kb_sync").tag("source_type", TYPE).timer());

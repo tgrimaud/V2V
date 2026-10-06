@@ -1,6 +1,7 @@
 ---
 domain: support
 language: en
+audience: customer
 ---
 
 # Knowledge Base — Telecom / ISP Support

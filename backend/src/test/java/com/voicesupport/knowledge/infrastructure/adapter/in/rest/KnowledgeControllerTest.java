@@ -34,12 +34,12 @@ class KnowledgeControllerTest {
             return new SyncKnowledgeUseCase() {
                 @Override
                 public SyncReport syncAll() {
-                    return new SyncReport(3, 3, 0, 0);
+                    return new SyncReport(3, 3, 0, 0, 0);
                 }
 
                 @Override
                 public SyncReport sync(String sourceType) {
-                    return new SyncReport(3, 0, 3, 0);
+                    return new SyncReport(3, 0, 3, 0, 0);
                 }
             };
         }

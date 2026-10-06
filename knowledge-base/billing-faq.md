@@ -1,6 +1,7 @@
 ---
 domain: billing
 language: en
+audience: customer
 ---
 
 # Knowledge Base — Billing and Subscriptions

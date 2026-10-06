@@ -99,9 +99,10 @@ public class KnowledgeController {
     private SyncReport timedSync(String op, String sourceType, Supplier<SyncReport> action) {
         long start = System.nanoTime();
         SyncReport report = action.get();
-        log.info("[KB-SYNC] op={} source_type={} processed={} ingested={} skipped={} deleted={} duration_ms={}",
+        log.info("[KB-SYNC] op={} source_type={} processed={} ingested={} skipped={} deleted={} "
+                        + "excluded={} duration_ms={}",
                 op, sourceType, report.processed(), report.ingested(), report.skipped(),
-                report.deleted(), elapsedMs(start));
+                report.deleted(), report.excluded(), elapsedMs(start));
         return report;
     }
 
