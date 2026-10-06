@@ -1061,8 +1061,12 @@
     }
 
     function closeDoneDialog() {
-      // Reset status back to in_progress
-      saveCurrentFeedback();
+      // BUG-029: "OK" acknowledges the completion overlay — it must NOT re-save. The prior
+      // saveCurrentFeedback() here downgraded the just-persisted status:"complete" (all runs)
+      // back to status:"in_progress" and dropped the empty "looks good" runs, erasing the
+      // completion signal the skill-creator workflow reads. Only hide the overlay; the submission
+      // from showDoneDialog() stays authoritative. (Re-opening for edits after Done would be a
+      // separate feature: a status:"in_progress" POST including ALL runs, not the filtered auto-save.)
       document.getElementById("done-overlay").classList.remove("visible");
     }
 
