@@ -212,6 +212,28 @@ class HttpBackendWarmUpTest(unittest.TestCase):
         self.assertEqual(call["headers"]["x-api-key"], API_KEY)
         self.assertEqual(call["body"], b"")
 
+    def test_warm_up_carries_correlation_id_and_traceparent_when_provided(self) -> None:
+        # GIVEN a warm-up triggered with the connection's correlation id (TASK-OPS-015 V2)
+        from voice_common.trace_context import derive_traceparent
+
+        transport = _CapturingTransport(HttpResponse(200, "{}"))
+        adapter = HttpBackendAdapter(ENDPOINT, transport=transport)
+        # WHEN warm-up runs with a correlation id
+        adapter.warm_up("corr-123")
+        # THEN the hop carries the same id + its deterministic traceparent (joins the turn trace)
+        headers = transport.calls[0]["headers"]
+        self.assertEqual(headers["X-Correlation-Id"], "corr-123")
+        self.assertEqual(headers["traceparent"], derive_traceparent("corr-123"))
+
+    def test_warm_up_without_correlation_id_sends_no_traceparent(self) -> None:
+        # GIVEN a warm-up with no correlation id (backward-compatible default)
+        transport = _CapturingTransport(HttpResponse(200, "{}"))
+        HttpBackendAdapter(ENDPOINT, transport=transport).warm_up()
+        # THEN no trace headers are added
+        headers = transport.calls[0]["headers"]
+        self.assertNotIn("traceparent", headers)
+        self.assertNotIn("X-Correlation-Id", headers)
+
     def test_warm_up_derives_from_a_converse_stream_url(self) -> None:
         # GIVEN a streaming converse URL
         transport = _CapturingTransport(HttpResponse(200, "{}"))

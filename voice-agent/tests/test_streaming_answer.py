@@ -262,6 +262,27 @@ class StreamedAnswerRunnerTest(unittest.IsolatedAsyncioTestCase):
         # THEN the already-vetted sentence stays spoken and the turn degrades (no crash)
         self.assertEqual(pushed, ["premiere phrase"])
         self.assertIs(result.outcome, AnswerOutcome.DEGRADED)
+        # AND the fault is reduced through the shared sanitizer (TASK-OPS-015 V3): a stable
+        # backend_* code + a redacted reason, not the raw exception type name.
+        self.assertEqual(result.error_code, "backend_error")
+        self.assertEqual(result.error_reason, "provider blew up mid-stream")
+
+    async def test_raising_adapter_redacts_secret_in_reason(self) -> None:
+        # GIVEN an adapter whose mid-stream fault message carries a secret token
+        class _SecretRaisingBackend:
+            name = "secret-raising"
+
+            def answer_stream(self, request, control=None):
+                yield AnswerStreamEvent(kind=CHUNK, text="premiere phrase")
+                raise RuntimeError("upstream rejected sk-topsecret9999")
+
+        runner = StreamedAnswerRunner(_SecretRaisingBackend(), TelemetryRecorder(), confidence_threshold=0.5)
+        # WHEN the turn runs
+        _, result = await _collect(runner, _request())
+        # THEN the secret never reaches the sanitized reason (V3 uses sanitize_error)
+        self.assertEqual(result.error_code, "backend_error")
+        self.assertNotIn("sk-topsecret9999", result.error_reason)
+        self.assertIn("<redacted-id>", result.error_reason)
 
     async def test_wall_clock_deadline_bounds_a_never_terminating_stream(self) -> None:
         # GIVEN a backend that yields one vetted sentence then never terminates (TASK-WEB-045)

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from voice_common.log_context import correlation_id_scope  # noqa: E402
 from voice_common.logging_config import (  # noqa: E402
     JsonLogFormatter,
+    SanitizingTextFormatter,
     configure_logging,
 )
 
@@ -94,18 +95,69 @@ class ConfigureLoggingTest(unittest.TestCase):
         line = stream.getvalue().strip()
         self.assertEqual(json.loads(line)["message"], "hello world")
 
-    def test_default_is_text_and_leaves_handlers_untouched(self) -> None:
-        # GIVEN no VOICE_LOG_FORMAT (default)
+    def test_default_text_installs_sanitizing_handler(self) -> None:
+        # GIVEN no VOICE_LOG_FORMAT (text default)
+        stream = io.StringIO()
         with mock.patch.dict("os.environ", {}, clear=False):
             import os
 
             os.environ.pop("VOICE_LOG_FORMAT", None)
-            before = self._root.handlers[:]
             # WHEN logging is configured
-            installed = configure_logging()
-        # THEN JSON is NOT installed and existing handlers are preserved
+            installed = configure_logging(stream=stream)
+        # THEN JSON is NOT reported, but a sanitizing text handler is installed
         self.assertFalse(installed)
-        self.assertEqual(self._root.handlers, before)
+        self.assertEqual(len(self._root.handlers), 1)
+        self.assertIsInstance(self._root.handlers[0].formatter, SanitizingTextFormatter)
+
+    def test_text_mode_scrubs_secret_and_path(self) -> None:
+        # GIVEN text mode and a line carrying a secret token + a path
+        stream = io.StringIO()
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os
+
+            os.environ.pop("VOICE_LOG_FORMAT", None)
+            configure_logging(stream=stream)
+        logging.getLogger("web_voice.cfg").warning("auth failed key=sk-abc123def456 file /etc/voice/secret.env")
+        line = stream.getvalue()
+        # THEN neither the secret nor the path survive the text line
+        self.assertNotIn("sk-abc123def456", line)
+        self.assertNotIn("/etc/voice/secret.env", line)
+        self.assertIn("<redacted-id>", line)
+        self.assertIn("<redacted-path>", line)
+        self.assertIn("auth", line)
+
+
+class SanitizingTextFormatterTest(unittest.TestCase):
+    def test_scrubs_message_and_stamps_correlation_id(self) -> None:
+        # GIVEN the text formatter and a correlation id in scope
+        formatter = SanitizingTextFormatter("%(levelname)s [%(correlation_id)s] %(message)s")
+        with correlation_id_scope("corr-77"):
+            out = formatter.format(_record("token sk-topsecret9999 here"))
+        # THEN the secret is redacted and the correlation id is stamped
+        self.assertNotIn("sk-topsecret9999", out)
+        self.assertIn("<redacted-id>", out)
+        self.assertIn("[corr-77]", out)
+
+    def test_no_correlation_id_renders_dash(self) -> None:
+        # GIVEN no correlation id in scope
+        formatter = SanitizingTextFormatter("[%(correlation_id)s] %(message)s")
+        out = formatter.format(_record("plain line"))
+        # THEN the join-key field renders a dash, not a crash
+        self.assertIn("[-]", out)
+
+    def test_multiline_exception_stays_multiline_and_scrubbed(self) -> None:
+        # GIVEN a record carrying a multi-line traceback with a secret
+        formatter = SanitizingTextFormatter("%(message)s")
+        try:
+            raise ValueError("bad token sk-topsecret9999 at /etc/voice/x.env")
+        except ValueError:
+            record = _record("stream failure", level=logging.ERROR, exc_info=sys.exc_info())
+        out = formatter.format(record)
+        # THEN the traceback keeps multiple lines (not collapsed) and is scrubbed
+        self.assertGreater(len(out.splitlines()), 1)
+        self.assertIn("Traceback", out)
+        self.assertNotIn("sk-topsecret9999", out)
+        self.assertNotIn("/etc/voice/x.env", out)
 
 
 if __name__ == "__main__":
