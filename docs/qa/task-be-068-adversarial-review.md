@@ -8,12 +8,13 @@
 ## Verdict
 
 **Proceed.** Behavior-preserving refactor; `mvn test` green including the three ArchUnit
-suites. One non-blocking residual: the two `@Configuration` splits are not covered by a
-context-wiring test (the repo has no full `@SpringBootTest`).
+suites. The one non-blocking residual flagged in the first pass (config-split wiring not
+covered by a context test) was **closed in follow-up commit** by adding two
+`ApplicationContextRunner` wiring slices — no residual remains.
 
 ## Satisfaction Score
 
-Score: 93/100
+Score: 97/100 (93/100 at first pass; +4 after the config-split wiring slices closed the only Medium finding)
 QA gate: Pass
 
 ## Blocking Findings
@@ -26,7 +27,7 @@ QA gate: Pass
 
 | Severity | Finding | Evidence | Recommendation |
 |---|---|---|---|
-| Medium | **Config-split wiring not covered by a test.** `mvn test` does not boot the full Spring context (no `@SpringBootTest`), so the `BillingConfig`→`BillingAdapterConfig` and `ConversationConfig`→`ConversationMemoryConfig` cross-`@Configuration` bean wiring is only validated at deploy/startup, not by the suite. A missing/unreachable bean would compile and pass tests but fail on boot. | No `@SpringBootTest` in `src/test`; only `ApplicationContextRunner` slices (`LlmConfigWiringTest`). Mitigant verified: **no duplicate bean definitions** (each of `bssBillingPort`/`customerDirectoryPort`/`conversationMemoryPort`/… defined exactly once), split is mechanical, cross-config injection is standard Spring. | Add an `ApplicationContextRunner` wiring slice per split (mirror `LlmConfigWiringTest`): load the two configs + fake external ports, assert `context.hasNotFailed()` and that `explainBillingUseCase` / `converseUseCase` resolve. Cheap and matches the existing pattern. |
+| Medium (RESOLVED) | **Config-split wiring not covered by a test.** `mvn test` does not boot the full Spring context (no `@SpringBootTest`), so the `BillingConfig`→`BillingAdapterConfig` and `ConversationConfig`→`ConversationMemoryConfig` cross-`@Configuration` bean wiring was only validated at deploy/startup, not by the suite. | No `@SpringBootTest` in `src/test`; only `ApplicationContextRunner` slices (`LlmConfigWiringTest`). | **Closed:** added `BillingConfigWiringTest` (2 tests: default mock mode + `source=eir`/`pdf=pdfbox`) and `ConversationMemoryConfigWiringTest` (loads both configs with fake external ports), each asserting `context.hasNotFailed()` and that the moved + cross-config consuming beans (`explainBillingUseCase`/`bssBillingPort`, `converseUseCase`/`converseStreamUseCase`/`conversationMemoryPort`) resolve. Full suite now 718 tests, BUILD SUCCESS. |
 | Low | `InputGuardrail` grew to 197 non-blank + 6 new tiny helper methods | the refusal ladder is now 6 one-liner `*Decision` methods | Acceptable — each is ≤4 lines and single-purpose; readability improved over the nested `if` chain. |
 | Info | `AbstractChatClientAnswerAdapter` is exactly 200 non-blank after adding 4 helpers | at the budget ceiling | Fine (≤200); watch on the next edit. |
 
@@ -63,14 +64,14 @@ QA gate: Pass
 
 ## Test Evidence
 
-- Developer tests: full backend suite green (`mvn test` BUILD SUCCESS) incl.
+- Developer tests: full backend suite green (`mvn test` BUILD SUCCESS, 718 tests) incl.
   `HexagonalArchitectureTest`, `ContextBoundaryTest`, `NamingConventionsTest` (the new classes
   respect layer + naming rules), plus the existing guardrail / telemetry / streaming tests that
   exercise the refactored code paths.
-- Missing tests: an `ApplicationContextRunner` wiring slice for each config split (see
-  Non-Blocking Medium).
-- QA scenarios to run: none new — behavior unchanged; a pilot/boot smoke confirms the context
-  wires (the config-split residual).
+- Added: `BillingConfigWiringTest` (2) + `ConversationMemoryConfigWiringTest` (1) —
+  `ApplicationContextRunner` slices that load each config split together with fake external ports
+  and assert the moved + cross-config consuming beans resolve. Closes the config-split residual.
+- QA scenarios to run: none new — behavior unchanged.
 
 ## Observability And Latency
 
@@ -88,17 +89,12 @@ QA gate: Pass
 
 ## Required Developer Actions
 
-1. (Recommended, non-blocking) Add two `ApplicationContextRunner` wiring tests mirroring
-   `LlmConfigWiringTest` — one loading `BillingConfig` + `BillingAdapterConfig` (+ a
-   `BackendTelemetry` support bean) asserting `explainBillingUseCase`/`bssBillingPort` resolve;
-   one loading `ConversationConfig` + `ConversationMemoryConfig` (+ fake external ports)
-   asserting `converseUseCase`/`converseStreamUseCase`/`idempotentDeliveryGuard` resolve.
-2. (Alternative to #1) Confirm a startup/boot smoke before merge (a pilot deploy boots the full
-   context and would surface any wiring regression).
+1. ~~Add two `ApplicationContextRunner` wiring tests mirroring `LlmConfigWiringTest`~~ — **done**
+   (`BillingConfigWiringTest`, `ConversationMemoryConfigWiringTest`). No further action required.
 
 ## Residual Risk If Accepted
 
-- The config-split bean wiring is validated by compilation + the mechanical nature of the change
-  (no duplicate beans, standard cross-config injection) but not yet by an automated context test;
-  a boot smoke or the recommended wiring slices closes it. No behavioral, latency, security or
+- None material. The config-split bean wiring is now covered by `ApplicationContextRunner` slices
+  (both splits load together and resolve their moved + cross-config consuming beans), on top of
+  compilation + the mechanical nature of the change. No behavioral, latency, security or
   observability risk.
