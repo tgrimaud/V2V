@@ -1,6 +1,7 @@
 ---
 domain: commercial
 language: en
+audience: customer
 ---
 
 # Knowledge Base — Commercial Offers and Moving Home
