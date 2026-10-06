@@ -10,18 +10,15 @@ import com.voicesupport.conversation.domain.model.valueobject.RoutableTurn;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.PrepareEscalationHandoffUseCase;
 import com.voicesupport.conversation.domain.service.IdempotentDeliveryGuard;
-import com.voicesupport.shared.exception.UpstreamUnavailableException;
+import com.voicesupport.conversation.infrastructure.adapter.in.rest.SseStreamWriter.SseSendException;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import com.voicesupport.shared.observability.CorrelationId;
 import com.voicesupport.shared.observability.Slices;
-import com.voicesupport.shared.web.rest.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
@@ -36,12 +33,8 @@ class ConverseStreamSession {
     private static final Logger log = LoggerFactory.getLogger(ConverseStreamSession.class);
     private static final String PROVIDER = "conversation";
     private static final String LISTEN_PROMPT = "Je vous écoute, posez-moi votre question.";
-    private static final String ERR_UPSTREAM = "ERR_UPSTREAM";
-    private static final String ERR_INTERNAL = "ERR_INTERNAL";
-    private static final String MSG_UPSTREAM = "A required service is temporarily unavailable. Please retry shortly.";
-    private static final String MSG_INTERNAL = "An unexpected error occurred.";
 
-    private final SseEmitter emitter;
+    private final SseStreamWriter sse;
     private final ConverseStreamUseCase converseStreamUseCase;
     private final IdempotentDeliveryGuard idempotentDeliveryGuard;
     private final PrepareEscalationHandoffUseCase prepareEscalationHandoffUseCase;
@@ -63,7 +56,7 @@ class ConverseStreamSession {
             BillingRoutingService billingTurnRouter,
             ConverseRequest request,
             String correlationId) {
-        this.emitter = emitter;
+        this.sse = new SseStreamWriter(emitter);
         this.converseStreamUseCase = converseStreamUseCase;
         this.idempotentDeliveryGuard = idempotentDeliveryGuard;
         this.prepareEscalationHandoffUseCase = prepareEscalationHandoffUseCase;
@@ -80,14 +73,14 @@ class ConverseStreamSession {
         String outcome = "success";
         try {
             stream();
-            emitter.complete();
+            sse.complete();
         } catch (SseSendException e) {
             outcome = "cancelled";
             log.info("[CONVERSE-STREAM] client_disconnected correlation_id={}", CorrelationId.current());
-            emitter.completeWithError(e);
+            sse.abort(e);
         } catch (RuntimeException e) {
             outcome = "error";
-            completeWithError(e);
+            sse.completeExceptionally(e);
         } finally {
             releaseReservationIfUnfinished(outcome);
             telemetry.recordLatency(Slices.BACKEND_REQUEST, PROVIDER, outcome, elapsed());
@@ -144,7 +137,7 @@ class ConverseStreamSession {
 
     private void finalizeTurn(GeneratedAnswer answer) {
         EscalationHandoffReference reference = prepareHandoffIfEscalated(answer);
-        send("done", StreamDoneEvent.from(answer, reference));
+        sse.send("done", StreamDoneEvent.from(answer, reference));
         logTurn(answer);
     }
 
@@ -165,8 +158,8 @@ class ConverseStreamSession {
     }
 
     private void emitListenPrompt() {
-        send("chunk", new StreamChunkEvent(LISTEN_PROMPT));
-        send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
+        sse.send("chunk", new StreamChunkEvent(LISTEN_PROMPT));
+        sse.send("done", StreamDoneEvent.from(GeneratedAnswer.fallback(LISTEN_PROMPT)));
     }
 
     // Confirms the idempotency reservation only when this turn completed successfully; a failed or
@@ -183,30 +176,7 @@ class ConverseStreamSession {
             firstChunkSent = true;
             telemetry.recordLatency(Slices.BACKEND_FIRST_TOKEN, PROVIDER, "success", elapsed());
         }
-        send("chunk", new StreamChunkEvent(text));
-    }
-
-    private void send(String event, Object payload) {
-        try {
-            emitter.send(SseEmitter.event().name(event).data(payload, MediaType.APPLICATION_JSON));
-        } catch (IOException | IllegalStateException e) {
-            throw new SseSendException(e);
-        }
-    }
-
-    private void completeWithError(RuntimeException e) {
-        boolean upstream = e instanceof UpstreamUnavailableException;
-        String code = upstream ? ERR_UPSTREAM : ERR_INTERNAL;
-        String message = upstream ? MSG_UPSTREAM : MSG_INTERNAL;
-        log.error("[CONVERSE-STREAM] code={} correlation_id={} type={}",
-                code, CorrelationId.current(), e.getClass().getSimpleName(), e);
-        try {
-            emitter.send(SseEmitter.event().name("error")
-                    .data(ErrorResponse.of(code, message, CorrelationId.current()), MediaType.APPLICATION_JSON));
-            emitter.complete();
-        } catch (IOException | IllegalStateException ignored) {
-            emitter.completeWithError(e);
-        }
+        sse.send("chunk", new StreamChunkEvent(text));
     }
 
     private void logTurn(GeneratedAnswer answer) {
@@ -230,11 +200,5 @@ class ConverseStreamSession {
 
     private String formatConfidence(Double confidence) {
         return confidence == null ? "n/a" : String.format(Locale.ROOT, "%.4f", confidence);
-    }
-
-    private static final class SseSendException extends RuntimeException {
-        private SseSendException(Throwable cause) {
-            super(cause);
-        }
     }
 }

@@ -133,16 +133,20 @@ public abstract class AbstractChatClientAnswerAdapter
             telemetry.recordLatency(Slices.LLM_WORDING, providerName(), "success", elapsed(start));
             telemetry.recordAnswerLength(providerName(), answerChars[0]);
         } catch (RuntimeException e) {
-            // A stalled stream trips the Reactor inter-signal timeout (TASK-BE-025); record it as a
-            // distinct `timeout` outcome so a hung provider is not conflated with a hard error and
-            // does not skew the success p95. Both degrade to the sanitized ERR_UPSTREAM path.
-            boolean timedOut = isTimeout(e);
-            telemetry.recordLatency(Slices.LLM_WORDING, providerName(), timedOut ? "timeout" : "error", elapsed(start));
-            String reason = timedOut
-                    ? "LLM streaming call timed out after " + streamTimeoutMs + " ms"
-                    : "LLM streaming call failed";
-            throw new UpstreamUnavailableException(reason, e);
+            throw streamFailure(e, start);
         }
+    }
+
+    // A stalled stream trips the Reactor inter-signal timeout (TASK-BE-025); record it as a distinct
+    // `timeout` outcome so a hung provider is not conflated with a hard error and does not skew the
+    // success p95. Both degrade to the sanitized ERR_UPSTREAM path.
+    private UpstreamUnavailableException streamFailure(RuntimeException e, long start) {
+        boolean timedOut = isTimeout(e);
+        telemetry.recordLatency(Slices.LLM_WORDING, providerName(), timedOut ? "timeout" : "error", elapsed(start));
+        String reason = timedOut
+                ? "LLM streaming call timed out after " + streamTimeoutMs + " ms"
+                : "LLM streaming call failed";
+        return new UpstreamUnavailableException(reason, e);
     }
 
     private java.util.stream.Stream<String> streamContent(String systemMessage, String question) {
@@ -179,31 +183,42 @@ public abstract class AbstractChatClientAnswerAdapter
 
     protected String buildSystemMessage(
             List<RetrievedEvidence> evidence, List<String> history, AnswerLanguage language) {
-        String context = evidence == null ? "" : evidence.stream()
+        String context = renderContext(evidence);
+        String historyBlock = historyBlock(history);
+        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
+        // Order matters: base prompt → history → concision → language directive LAST for recency
+        // (TASK-BE-015), so a strong trailing language instruction overrides the base prompt framing.
+        String systemMessage = systemPromptTemplate().replace(CONTEXT_PLACEHOLDER, context)
+                + historyBlock
+                + concisionSuffix(target)
+                + "\n\n" + target.llmDirective();
+        recordPromptTelemetry(target, systemMessage, context, historyBlock, evidence);
+        return systemMessage;
+    }
+
+    private static String renderContext(List<RetrievedEvidence> evidence) {
+        return evidence == null ? "" : evidence.stream()
                 .map(RetrievedEvidence::text)
                 .collect(Collectors.joining("\n---\n"));
-        String systemMessage = systemPromptTemplate().replace(CONTEXT_PLACEHOLDER, context);
-        String historyBlock = "";
-        if (history != null && !history.isEmpty()) {
-            historyBlock = HISTORY_HEADER + String.join("\n", history);
-            systemMessage += historyBlock;
-        }
-        // Concision directive before the language directive (TASK-BE-018): caps the spoken answer to
-        // the configured sentence budget in the answer language. Placed just before the language
-        // directive so the language instruction stays last for recency (see below).
-        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
+    }
+
+    private static String historyBlock(List<String> history) {
+        return history == null || history.isEmpty() ? "" : HISTORY_HEADER + String.join("\n", history);
+    }
+
+    // Concision directive (TASK-BE-018): caps the spoken answer to the configured sentence budget in
+    // the answer language. Empty when disabled (<= 0 sentences).
+    private String concisionSuffix(AnswerLanguage target) {
         String concision = target.concisionDirective(maxAnswerSentences);
-        if (!concision.isEmpty()) {
-            systemMessage += "\n\n" + concision;
-        }
-        // Answer-language directive last for recency (TASK-BE-015): a strong, explicit instruction
-        // at the end reliably overrides the French framing of the base prompt, so an English turn
-        // is answered in English even when the RAG context is English and the prompt is French.
-        systemMessage += "\n\n" + target.llmDirective();
+        return concision.isEmpty() ? "" : "\n\n" + concision;
+    }
+
+    private void recordPromptTelemetry(
+            AnswerLanguage target, String systemMessage, String context, String historyBlock,
+            List<RetrievedEvidence> evidence) {
         telemetry.recordAnswerLanguage(providerName(), target.code());
         int chunkCount = evidence == null ? 0 : evidence.size();
         telemetry.recordPromptSize(
                 providerName(), systemMessage.length(), context.length(), historyBlock.length(), chunkCount);
-        return systemMessage;
     }
 }

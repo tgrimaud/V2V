@@ -1,9 +1,7 @@
 package com.voicesupport.shared.observability;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.Tags;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,7 +44,7 @@ public class BackendTelemetry {
     // voice-support.observability.allowed-channels.
     private static final String DEFAULT_ALLOWED_CHANNELS = "web,web_voice,phone,whatsapp,genesys,api";
 
-    private final MeterRegistry registry;
+    private final MeterEmitter meters;
     // Bounds the `channel` tag to a known allow-list so a client-supplied value cannot explode
     // the metric time-series cardinality (unknown values collapse to `other`); the raw channel
     // stays visible in the [CONVERSE] log for debugging.
@@ -62,7 +60,7 @@ public class BackendTelemetry {
             MeterRegistry registry,
             @Value("${voice-support.observability.allowed-channels:" + DEFAULT_ALLOWED_CHANNELS + "}")
             String allowedChannelsCsv) {
-        this.registry = registry;
+        this.meters = new MeterEmitter(registry);
         this.allowedChannels = Arrays.stream(allowedChannelsCsv.split(","))
                 .map(String::trim).map(s -> s.toLowerCase(java.util.Locale.ROOT))
                 .filter(s -> !s.isBlank()).collect(Collectors.toUnmodifiableSet());
@@ -89,11 +87,7 @@ public class BackendTelemetry {
     // Records lengths and counts only — never prompt content — and carries the correlation id.
     public void recordPromptSize(String provider, int systemChars, int contextChars, int historyChars, int chunkCount) {
         String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
-        DistributionSummary.builder(PROMPT_CHARS)
-                .tag("provider", safeProvider)
-                .publishPercentiles(0.5, 0.95, 0.99)
-                .register(registry)
-                .record(systemChars);
+        meters.distribution(PROMPT_CHARS, Tags.of("provider", safeProvider), systemChars);
         log.info("[PROMPT] provider={} system_chars={} context_chars={} history_chars={} chunk_count={} "
                         + "correlation_id={}",
                 safeProvider, systemChars, contextChars, historyChars, chunkCount, CorrelationId.current());
@@ -105,11 +99,7 @@ public class BackendTelemetry {
     // only — never the answer text — and carries the correlation id.
     public void recordAnswerLength(String provider, int answerChars) {
         String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
-        DistributionSummary.builder(ANSWER_CHARS)
-                .tag("provider", safeProvider)
-                .publishPercentiles(0.5, 0.95, 0.99)
-                .register(registry)
-                .record(answerChars);
+        meters.distribution(ANSWER_CHARS, Tags.of("provider", safeProvider), answerChars);
         log.info("[ANSWER] provider={} answer_chars={} correlation_id={}",
                 safeProvider, answerChars, CorrelationId.current());
     }
@@ -121,11 +111,7 @@ public class BackendTelemetry {
     public void recordAnswerLanguage(String provider, String language) {
         String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
         String safeLanguage = language == null || language.isBlank() ? "n/a" : language;
-        Counter.builder(ANSWER_LANGUAGE)
-                .tag("provider", safeProvider)
-                .tag("language", safeLanguage)
-                .register(registry)
-                .increment();
+        meters.count(ANSWER_LANGUAGE, Tags.of("provider", safeProvider, "language", safeLanguage));
         log.info("[LANGUAGE] provider={} language={} correlation_id={}",
                 safeProvider, safeLanguage, CorrelationId.current());
     }
@@ -147,12 +133,7 @@ public class BackendTelemetry {
         String safeReason = reason == null || reason.isBlank()
                 ? "n/a" : reason.toLowerCase(java.util.Locale.ROOT);
         String channel = normalizeChannel(CorrelationId.currentChannel());
-        Counter.builder(GUARDRAIL_BLOCK)
-                .tag("verdict", safeVerdict)
-                .tag("reason", safeReason)
-                .tag("channel", channel)
-                .register(registry)
-                .increment();
+        meters.count(GUARDRAIL_BLOCK, Tags.of("verdict", safeVerdict, "reason", safeReason, "channel", channel));
         log.info("[GUARDRAIL] verdict={} reason={} channel={} correlation_id={}",
                 safeVerdict, safeReason, channel, CorrelationId.current());
     }
@@ -165,12 +146,8 @@ public class BackendTelemetry {
     public void recordChannelDelivery(String replyMode, boolean duplicate) {
         String channel = normalizeChannel(CorrelationId.currentChannel());
         String safeReplyMode = replyMode == null || replyMode.isBlank() ? "n/a" : replyMode;
-        Counter.builder(CHANNEL_DELIVERY)
-                .tag("channel", channel)
-                .tag("reply_mode", safeReplyMode)
-                .tag("duplicate", Boolean.toString(duplicate))
-                .register(registry)
-                .increment();
+        meters.count(CHANNEL_DELIVERY,
+                Tags.of("channel", channel, "reply_mode", safeReplyMode, "duplicate", Boolean.toString(duplicate)));
         log.info("[CHANNEL] channel={} reply_mode={} duplicate={} correlation_id={}",
                 channel, safeReplyMode, duplicate, CorrelationId.current());
     }
@@ -184,12 +161,8 @@ public class BackendTelemetry {
         String channel = normalizeChannel(CorrelationId.currentChannel());
         String safeOutcome = outcome == null || outcome.isBlank() ? "n/a" : outcome;
         String safeReason = reasonCode == null || reasonCode.isBlank() ? "n/a" : reasonCode;
-        Counter.builder(ESCALATION_HANDOFF)
-                .tag("outcome", safeOutcome)
-                .tag("reason_code", safeReason)
-                .tag("channel", channel)
-                .register(registry)
-                .increment();
+        meters.count(ESCALATION_HANDOFF,
+                Tags.of("outcome", safeOutcome, "reason_code", safeReason, "channel", channel));
         log.info("[HANDOFF] outcome={} reason_code={} channel={} handoff_id={} correlation_id={}",
                 safeOutcome, safeReason, channel, CorrelationId.sanitize(handoffId), CorrelationId.current());
     }
@@ -211,15 +184,10 @@ public class BackendTelemetry {
         String channel = normalizeChannel(CorrelationId.currentChannel());
         String safeProvider = provider == null || provider.isBlank() ? "n/a" : provider;
         String safeReason = reason == null || reason.isBlank() ? REASON_NONE : reason;
-        Timer.builder(TIMER)
-                .tag("slice", slice)
-                .tag("channel", channel)
-                .tag("provider", safeProvider)
-                .tag("outcome", outcome)
-                .tag("reason", safeReason)
-                .publishPercentiles(0.5, 0.95, 0.99)
-                .register(registry)
-                .record(Duration.ofNanos(elapsedNanos));
+        meters.timing(TIMER,
+                Tags.of("slice", slice, "channel", channel, "provider", safeProvider,
+                        "outcome", outcome, "reason", safeReason),
+                Duration.ofNanos(elapsedNanos));
         log.info("[TELEMETRY] slice={} channel={} provider={} outcome={} reason={} correlation_id={} duration_ms={}",
                 slice, channel, safeProvider, outcome, safeReason, CorrelationId.current(), elapsedNanos / 1_000_000);
     }

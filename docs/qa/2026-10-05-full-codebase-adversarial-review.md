@@ -145,7 +145,7 @@ no un-ticketed debt markers.
    README) and the ADR-0047 index status to "shipped", fixed the billing-explain
    cite to ADR-0052 (+ ADR-0055 routing), and corrected the dev-guide "only
    runnable code" claim (both tiers run).
-2. **(Hardening — ticketed TASK-OPS-015)** Re-verified against the real code:
+2. **(Hardening — ticketed TASK-OPS-015, merged)** Re-verified against the real code:
    **V1** is real (text-mode logs print raw tracebacks; JSON mode scrubs) → **V1(a)
    done**: pilot voice pinned to `VOICE_LOG_FORMAT=json`; V1(b) text-mode scrub +
    V2 warm-up `traceparent` + V3 `sanitize_error` are scoped follow-ups.
@@ -153,8 +153,13 @@ no un-ticketed debt markers.
    not mask barge-in `CancelledError`), and the Genesys HMAC compare already uses
    bytes (`genesys_auth.py:151`, "never a 500") so unequal length returns `False`,
    never raises.
-3. **(Code, budget)** B1/B2 size-budget extractions when those files are next
-   touched.
+3. **(Code, budget — DONE, ticketed TASK-BE-068, merged)** B1/B2 size-budget extractions
+   applied: re-counted by non-blank lines (only 4 classes genuinely >200, not 8);
+   `InputGuardrail.check` + `AbstractChatClientAnswerAdapter` methods decomposed;
+   `BillingConfig`→`BillingAdapterConfig`, `ConversationConfig`→`ConversationMemoryConfig`,
+   `BackendTelemetry`→`MeterEmitter`, `ConverseStreamSession`→`SseStreamWriter`. All
+   ≤200 non-blank; `mvn test` green incl. ArchUnit + 2 config-split wiring slices;
+   behavior-preserving (adversarial review 97/100).
 4. **(Done this pass)** Stale "not merged" billing statuses + broken BUG-025
    link corrected and committed.
 

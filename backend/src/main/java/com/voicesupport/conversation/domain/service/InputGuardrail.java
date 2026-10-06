@@ -7,6 +7,7 @@ import java.text.Normalizer;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -113,29 +114,57 @@ public class InputGuardrail {
             return GuardrailDecision.pass();
         }
         String trimmed = question.trim();
-        if (matchesAny(GREETING_PATTERNS, trimmed)) {
-            return GuardrailDecision.greeting(GuardrailMessages.greeting(language, alreadyGreeted));
-        }
-        if (isVague(trimmed)) {
-            return GuardrailDecision.clarify(GuardrailMessages.clarify(language));
-        }
-        if (trimmed.length() < MIN_QUESTION_LENGTH) {
-            return GuardrailDecision.pass();
-        }
-        if (matchesAny(INAPPROPRIATE_PATTERNS, trimmed) || isCyberOffense(trimmed)) {
-            return GuardrailDecision.inappropriate(GuardrailMessages.inappropriate(language));
-        }
-        if (matchesAny(OFF_TOPIC_PATTERNS, trimmed)) {
-            return GuardrailDecision.offTopic(GuardrailMessages.offTopic(language));
-        }
-        // BUG-025: a safe, generic problem opener with no concrete question is redirected to a
-        // targeted clarify rather than retrieving a middling match the grounding gate deflects to a
-        // hand-off. Runs after the unsafe/off-topic refusals so it can never soften a block.
+        // Ordered refusal ladder: the first matching rule wins. `tooShort` yields an explicit PASS
+        // so a sub-threshold turn short-circuits before the unsafe/off-topic/opener checks, exactly
+        // as the previous nested if-chain did.
+        return greetingDecision(trimmed, alreadyGreeted, language)
+                .or(() -> vagueDecision(trimmed, language))
+                .or(() -> tooShortDecision(trimmed))
+                .or(() -> unsafeDecision(trimmed, language))
+                .or(() -> offTopicDecision(trimmed, language))
+                .or(() -> problemOpenerDecision(trimmed, language))
+                .orElseGet(GuardrailDecision::pass);
+    }
+
+    private Optional<GuardrailDecision> greetingDecision(
+            String trimmed, boolean alreadyGreeted, AnswerLanguage language) {
+        return matchesAny(GREETING_PATTERNS, trimmed)
+                ? Optional.of(GuardrailDecision.greeting(GuardrailMessages.greeting(language, alreadyGreeted)))
+                : Optional.empty();
+    }
+
+    private Optional<GuardrailDecision> vagueDecision(String trimmed, AnswerLanguage language) {
+        return isVague(trimmed)
+                ? Optional.of(GuardrailDecision.clarify(GuardrailMessages.clarify(language)))
+                : Optional.empty();
+    }
+
+    private Optional<GuardrailDecision> tooShortDecision(String trimmed) {
+        return trimmed.length() < MIN_QUESTION_LENGTH
+                ? Optional.of(GuardrailDecision.pass())
+                : Optional.empty();
+    }
+
+    private Optional<GuardrailDecision> unsafeDecision(String trimmed, AnswerLanguage language) {
+        return matchesAny(INAPPROPRIATE_PATTERNS, trimmed) || isCyberOffense(trimmed)
+                ? Optional.of(GuardrailDecision.inappropriate(GuardrailMessages.inappropriate(language)))
+                : Optional.empty();
+    }
+
+    private Optional<GuardrailDecision> offTopicDecision(String trimmed, AnswerLanguage language) {
+        return matchesAny(OFF_TOPIC_PATTERNS, trimmed)
+                ? Optional.of(GuardrailDecision.offTopic(GuardrailMessages.offTopic(language)))
+                : Optional.empty();
+    }
+
+    // BUG-025: a safe, generic problem opener with no concrete question is redirected to a targeted
+    // clarify rather than retrieving a middling match the grounding gate deflects to a hand-off.
+    // Runs after the unsafe/off-topic refusals so it can never soften a block.
+    private Optional<GuardrailDecision> problemOpenerDecision(String trimmed, AnswerLanguage language) {
         return problemOpenerDetector.detect(trimmed)
                 .map(topic -> GuardrailDecision.clarify(
                         GuardrailMessages.problemOpenerClarify(language, topic == ProblemOpenerDetector.Topic.BILLING),
-                        "problem_opener"))
-                .orElseGet(GuardrailDecision::pass);
+                        "problem_opener"));
     }
 
     // A turn is vague when the whole utterance is a known continuer phrase, or when it is a short
