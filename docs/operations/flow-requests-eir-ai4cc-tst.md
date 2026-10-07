@@ -37,6 +37,26 @@ Opened per the 2026-08-13 request; recorded here for completeness.
 > HTTPS). They do **not** carry the live audio: WebRTC **media is UDP** and is not in
 > this request — see §2.
 
+### 1b. Public FQDN endpoint `monaco-telecom.net` (updated 2026-10-07) — to confirm
+
+The browser entry point moved to the **public FQDN**
+`https://vip-ai4cc-voice-t01.monaco-telecom.net/`, which resolves to the public edge
+IP **`195.78.22.228`** (expected to forward to the voice VIP `192.168.0.10:443` /
+`10.195.59.39`). This is a **new ingress destination** not covered by the §1 flow
+(which targets the internal Prod IP `10.195.59.39`).
+
+| Ip Src | Ip Dst | Hostname Dst | Port | Proto | Description |
+|--------|--------|--------------|------|-------|-------------|
+| `10.195.80.81` / `10.195.29.11` | `195.78.22.228` | `vip-ai4cc-voice-t01.monaco-telecom.net` | 443, 80 | TCP | Public edge → voice VIP (UI + WS tunnel + WebRTC signaling, HTTPS) |
+
+> **Status (2026-10-07, to validate):** `195.78.22.228` answers ICMP but **drops TCP
+> `:443`/`:80`** from outside the authorized sources, so the public forward/firewall
+> for this endpoint is **not confirmed open**. Netsec action needed: open TCP `:443`
+> (+`:80` redirect) from the two client sources to `195.78.22.228`, DNAT to the voice
+> VIP, and confirm the HAProxy TLS cert covers `vip-ai4cc-voice-t01.monaco-telecom.net`.
+> Until then, reach the bot via the internal name (`10.195.59.39` / `.prod.lan`) over
+> the Nice NAT or Wireguard VPN.
+
 ## 2. NEW request — WebRTC media (audio), remote clients
 
 **Why:** the §1 flows are TCP-only. A browser voice turn negotiates the audio as

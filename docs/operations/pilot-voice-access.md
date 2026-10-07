@@ -25,8 +25,20 @@ the media-plane decision lives in
 ## Scope
 
 - Environment: pilot `eir-ai4cc-tst` — voice bridges `vla-ai4cc-t01/t02.prod.lan`
-  (`.103/.104`), one bridge per VM, behind the voice VIP
-  `https://vip-ai4cc-voice-t01.prod.lan/` (`.10`, HAProxy TLS edge).
+  (`.103/.104`), one bridge per VM, behind the voice VIP (`.10`, HAProxy TLS edge).
+- **Access URL (updated 2026-10-07):** the browser entry point is now the public
+  FQDN **`https://vip-ai4cc-voice-t01.monaco-telecom.net/`** (resolves to the public
+  edge `195.78.22.228`, which forwards to the voice VIP). The internal name
+  `https://vip-ai4cc-voice-t01.prod.lan/` (Prodpriv `10.195.59.39` → mesh VIP
+  `192.168.0.10:443`) remains the same-subnet / VPN path to the same HAProxy edge.
+  > Public-edge ingress status **to validate**: as of 2026-10-07 the public IP
+  > `195.78.22.228` answered ICMP but **dropped TCP `:443`/`:80`** from outside the
+  > authorized sources, and the TLS cert coverage for the `monaco-telecom.net` name
+  > was not confirmed end-to-end. External HTTPS ingress is source-scoped to the ITSF
+  > Nice NAT (`10.195.80.81`) and the Wireguard VPN (`10.195.29.11`) — see
+  > [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md). Reach the bot
+  > from one of those sources (or the internal name over VPN) until the public forward
+  > + cert for `195.78.22.228` are confirmed open.
 - The voice bridge image runs one async HTTP+WS server bound to `0.0.0.0:8090`
   (aiohttp, ADR-0047 / TASK-WEB-038): UI + `/api/voice/*` REST + the live WebSocket at
   `/ws` + WebRTC signaling all on that single routed port. HAProxy terminates TLS on
@@ -42,8 +54,13 @@ TASK-WEB-038), so the browser reaches all of them through the same VIP origin.
 | Channel | Browser URL | Signaling / API endpoint | Media |
 |---------|-------------|--------------------------|-------|
 | **Live WebSocket (primary, ADR-0046)** | `https://<vip>/ws.html` (or `http://<bridge>:8090/ws.html` direct) | same-origin `wss://<vip>/ws` (tunnelled on the existing backend — ADR-0047) | PCM16/16 kHz over **one WS tunnel** (TCP, no TURN) |
-| Batch one-shot (validated) | `https://vip-ai4cc-voice-t01.prod.lan/` (serves `index.html`) | `POST /api/voice/turn` (PCM16 in → full-answer WAV out) | HTTP response body over HTTPS (through HAProxy) |
-| Streaming WebRTC (optional / same-subnet / dev) | `https://vip-ai4cc-voice-t01.prod.lan/webrtc.html` | `POST /api/voice/webrtc/offer` (SDP offer → SDP answer) | RTP/SRTP over **UDP**, peer-to-peer with the answering bridge — **not** through HAProxy; needs same-subnet or STUN/TURN |
+| Batch one-shot (validated) | `https://vip-ai4cc-voice-t01.monaco-telecom.net/` (serves `index.html`) | `POST /api/voice/turn` (PCM16 in → full-answer WAV out) | HTTP response body over HTTPS (through HAProxy) |
+| Streaming WebRTC (optional / same-subnet / dev) | `https://vip-ai4cc-voice-t01.monaco-telecom.net/webrtc.html` | `POST /api/voice/webrtc/offer` (SDP offer → SDP answer) | RTP/SRTP over **UDP**, peer-to-peer with the answering bridge — **not** through HAProxy; needs same-subnet or STUN/TURN |
+
+> `<vip>` = `vip-ai4cc-voice-t01.monaco-telecom.net` (public FQDN → `195.78.22.228`,
+> forwarded to the voice VIP). The internal name `vip-ai4cc-voice-t01.prod.lan`
+> (`10.195.59.39` → `192.168.0.10:443`) is the same-subnet / VPN alternative to the
+> same HAProxy edge.
 
 Notes:
 
