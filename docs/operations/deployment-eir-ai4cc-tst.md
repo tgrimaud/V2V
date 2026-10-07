@@ -288,7 +288,7 @@ the hard sequencing constraint. Detail + resolution evidence per item below.
 | 1b | Voice-VIP client reachability + confirmed VIP ports (backend `:8080` is a placeholder) | Platform | 🟢 Resolved (2026-08-13) — `:443`+`:80/TCP` opened from both sources to voice VIP `10.195.59.39`; backend VIP stays internal-only (not in ingress list, correct) | — |
 | 2 | Internet egress (Mistral/Gradium/GHCR/Ollama) | VSB + Platform | 🟢 Resolved (2026-08-04) | — |
 | 3 | Embeddings placement (local Ollama sidecar) | VSB / Arch | 🟢 Resolved (ADR-0039) | — |
-| 4 | TLS certificate + public FQDN for the voice VIP | Platform (PKI) | 🟡 Partial (2026-10-07) — public FQDN now exists: `vip-ai4cc-voice-t01.monaco-telecom.net` → `195.78.22.228` (edge → voice VIP). **To confirm:** public TCP `:443`/`:80` forward is currently dropped from outside the authorized sources, and cert coverage for the `monaco-telecom.net` name is unverified — see [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md) §1b | live HTTPS at the public FQDN |
+| 4 | TLS certificate + public FQDN for the voice VIP | Platform (PKI) | 🟢 Resolved (2026-10-07) — public FQDN `vip-ai4cc-voice-t01.monaco-telecom.net` → `195.78.22.228` → voice VIP serves HTTPS (`200`, incl. `/ws.html`) with a publicly-trusted Let's Encrypt cert (CN+SAN match, valid 2026-09-15 → 2026-12-14); verified end-to-end from the public internet — see [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md) §1b | — |
 | 5 | Container registry (private GHCR + read-only token) | VSB | 🟢 Resolved (2026-08-05) | — |
 | 6 | Secrets store + delivery (ansible-vault) | VSB | 🟢 Resolved (2026-08-04) | — |
 | 7 | PostgreSQL 18 + `vector` extension | Platform + VSB | 🟢 Resolved (2026-08-04) | — |

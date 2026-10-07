@@ -31,14 +31,13 @@ the media-plane decision lives in
   edge `195.78.22.228`, which forwards to the voice VIP). The internal name
   `https://vip-ai4cc-voice-t01.prod.lan/` (Prodpriv `10.195.59.39` → mesh VIP
   `192.168.0.10:443`) remains the same-subnet / VPN path to the same HAProxy edge.
-  > Public-edge ingress status **to validate**: as of 2026-10-07 the public IP
-  > `195.78.22.228` answered ICMP but **dropped TCP `:443`/`:80`** from outside the
-  > authorized sources, and the TLS cert coverage for the `monaco-telecom.net` name
-  > was not confirmed end-to-end. External HTTPS ingress is source-scoped to the ITSF
-  > Nice NAT (`10.195.80.81`) and the Wireguard VPN (`10.195.29.11`) — see
-  > [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md). Reach the bot
-  > from one of those sources (or the internal name over VPN) until the public forward
-  > + cert for `195.78.22.228` are confirmed open.
+  > Public-edge ingress **live (verified 2026-10-07):** the public forward to
+  > `195.78.22.228` → voice VIP serves the UI over HTTPS (`200`), including `/ws.html`,
+  > with a publicly-trusted **Let's Encrypt** cert (CN + SAN
+  > `vip-ai4cc-voice-t01.monaco-telecom.net`, valid 2026-09-15 → 2026-12-14). The
+  > internal name over the Nice NAT / Wireguard VPN remains available as the
+  > same-subnet / VPN path — see
+  > [`flow-requests-eir-ai4cc-tst.md`](flow-requests-eir-ai4cc-tst.md).
 - The voice bridge image runs one async HTTP+WS server bound to `0.0.0.0:8090`
   (aiohttp, ADR-0047 / TASK-WEB-038): UI + `/api/voice/*` REST + the live WebSocket at
   `/ws` + WebRTC signaling all on that single routed port. HAProxy terminates TLS on

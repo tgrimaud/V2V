@@ -49,13 +49,12 @@ IP **`195.78.22.228`** (expected to forward to the voice VIP `192.168.0.10:443` 
 |--------|--------|--------------|------|-------|-------------|
 | `10.195.80.81` / `10.195.29.11` | `195.78.22.228` | `vip-ai4cc-voice-t01.monaco-telecom.net` | 443, 80 | TCP | Public edge → voice VIP (UI + WS tunnel + WebRTC signaling, HTTPS) |
 
-> **Status (2026-10-07, to validate):** `195.78.22.228` answers ICMP but **drops TCP
-> `:443`/`:80`** from outside the authorized sources, so the public forward/firewall
-> for this endpoint is **not confirmed open**. Netsec action needed: open TCP `:443`
-> (+`:80` redirect) from the two client sources to `195.78.22.228`, DNAT to the voice
-> VIP, and confirm the HAProxy TLS cert covers `vip-ai4cc-voice-t01.monaco-telecom.net`.
-> Until then, reach the bot via the internal name (`10.195.59.39` / `.prod.lan`) over
-> the Nice NAT or Wireguard VPN.
+> **Status (2026-10-07): 🟢 Resolved — live.** The public forward
+> `195.78.22.228:443` → voice VIP is open and serves the UI over HTTPS (`200`,
+> including `/ws.html`) with a publicly-trusted **Let's Encrypt** cert (CN + SAN
+> `vip-ai4cc-voice-t01.monaco-telecom.net`, valid 2026-09-15 → 2026-12-14). Verified
+> end-to-end from the public internet. The internal name (`10.195.59.39` / `.prod.lan`
+> over the Nice NAT or Wireguard VPN) stays available as the same-subnet / VPN path.
 
 ## 2. NEW request — WebRTC media (audio), remote clients
 
