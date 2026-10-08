@@ -98,4 +98,31 @@ class AnswerLanguageTest {
         assertTrue(AnswerLanguage.FRENCH.concisionDirective(-1).isEmpty());
         assertFalse(AnswerLanguage.ENGLISH.concisionDirective(1).isEmpty());
     }
+
+    @Test
+    @DisplayName("the clarify directive asks exactly one question in the answer language, voicing no figure (TASK-BE-071)")
+    void clarifyDirectiveAsksOneQuestionNoFigure() {
+        // WHEN the per-language billing-clarify directive is requested
+        String french = AnswerLanguage.FRENCH.clarifyDirective();
+        String english = AnswerLanguage.ENGLISH.clarifyDirective();
+
+        // THEN it constrains the turn to a single question in that language and forbids amounts/dates
+        assertTrue(french.contains("UNE SEULE question"));
+        assertTrue(french.contains("en français"));
+        assertTrue(french.contains("montant"));
+        assertTrue(english.contains("EXACTLY ONE"));
+        assertTrue(english.contains("in English"));
+        assertTrue(english.contains("amount"));
+    }
+
+    @Test
+    @DisplayName("the hand-off sentence carries the exact OutputGuardrail-matched marker (TASK-BE-071)")
+    void handoffSentenceMatchesMarker() {
+        // THEN the per-language hand-off sentence contains that language's hand-off marker, so a
+        // cap-reached escalation is recognised downstream as a safe fallback.
+        assertTrue(AnswerLanguage.FRENCH.handoffMarkers().stream()
+                .anyMatch(marker -> AnswerLanguage.FRENCH.handoffSentence().contains(marker)));
+        assertTrue(AnswerLanguage.ENGLISH.handoffMarkers().stream()
+                .anyMatch(marker -> AnswerLanguage.ENGLISH.handoffSentence().contains(marker)));
+    }
 }

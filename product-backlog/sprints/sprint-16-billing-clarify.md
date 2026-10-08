@@ -54,7 +54,7 @@ Delivers **US-043** in two increments (delivery order chosen by the user, 2026-1
 | # | Ticket | Title | Role | Depends on | Status |
 |---|--------|-------|------|-----------|--------|
 | 1 | TASK-BE-070 | Increment D — broaden `ProblemOpenerDetector` billing path + one-question-at-a-time clarify (deterministic, no LLM) | Backend (guardrails) | — | 🟢 Open (deliver first) |
-| 2 | TASK-BE-071 | Increment C — deterministic trigger + clarify counter in memory (bounded) + bounded LLM follow-up; collected context → answer + ADR-0019 escalation | Backend (flow + prompt) | TASK-BE-070 | 🟢 Open (after D) |
+| 2 | TASK-BE-071 | Increment C — `BillingDiagnosticConversationService` decorator + memory-derived clarify streak (bounded, configurable, default 2) + bounded LLM follow-up (`ClarifyingQuestionGeneratorPort`, DEC-002-vetted); cap → `handoffSentence()` escalation with collected context; `voice_support.billing_clarify` telemetry; ADR-0056 | Backend (flow + prompt) | TASK-BE-070 | 🔵 Implemented, pending QA + user validation (review 93/100) |
 
 Full ticket detail: `tasks/task-be-070-billing-clarify-one-question-at-a-time.md`,
 `tasks/task-be-071-billing-diagnostic-bounded-llm-followup.md`.
@@ -76,9 +76,9 @@ Full ticket detail: `tasks/task-be-070-billing-clarify-one-question-at-a-time.md
 
 | OQ | Question | Owner | Status |
 |----|----------|-------|--------|
-| OQ-043-a | Max clarifying questions on voice (1/2/3) before answering/escalating | Product | Open — default assumption 2 (needed for C / TASK-BE-071, not D) |
+| OQ-043-a | Max clarifying questions on voice (1/2/3) before answering/escalating | Product | ✅ Resolved (2026-10-08) — **default 2** (user-chosen), configurable via `voice-support.conversation.billing-clarify.max-questions` / `CONVERSATION_BILLING_CLARIFY_MAX_QUESTIONS` |
 | OQ-043-b | Should the billing sub-types offered be configurable per deployment | Product | Open |
-| OQ-043-c | Does the multi-turn diagnostic (C) change the conversation contract enough to need an ADR | Architecture | Open — decide before TASK-BE-071 implementation |
+| OQ-043-c | Does the multi-turn diagnostic (C) change the conversation contract enough to need an ADR | Architecture | ✅ Resolved (2026-10-08) — yes: [ADR-0056](../../docs/architecture/adrs/ADR-0056-bounded-billing-clarify-dialogue.md) (bounded, memory-derived billing clarify dialogue) |
 
 ## Observability & Latency
 

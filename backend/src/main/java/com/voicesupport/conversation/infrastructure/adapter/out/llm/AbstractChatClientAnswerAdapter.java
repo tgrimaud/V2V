@@ -3,6 +3,7 @@ package com.voicesupport.conversation.infrastructure.adapter.out.llm;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
 import com.voicesupport.conversation.domain.model.valueobject.RetrievedEvidence;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.port.out.ClarifyingQuestionGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.StreamingAnswerGeneratorPort;
 import com.voicesupport.shared.concurrent.BoundedLlmCall;
 import com.voicesupport.shared.exception.UpstreamUnavailableException;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
 // never to the SDK. The LLM call is timed as the ADR-0018 LLM slice (TASK-BE-009) and bounded by
 // a hard timeout so a slow/hung provider degrades to a sanitized 503 (TASK-BE-012).
 public abstract class AbstractChatClientAnswerAdapter
-        implements AnswerGeneratorPort, StreamingAnswerGeneratorPort {
+        implements AnswerGeneratorPort, StreamingAnswerGeneratorPort, ClarifyingQuestionGeneratorPort {
 
     private static final String CONTEXT_PLACEHOLDER = "{context}";
     private static final String HISTORY_HEADER =
@@ -59,6 +60,25 @@ public abstract class AbstractChatClientAnswerAdapter
 
             CONTEXT:
             {context}
+            """;
+
+    // US-043 / TASK-BE-071: system prompt for a BOUNDED billing clarify turn (increment C). Unlike the
+    // grounded answer prompt it has NO CONTEXT and must NOT answer — it asks one short question so the
+    // customer's next turn is specific enough to ground. The deterministic trigger and the max-questions
+    // bound are enforced in the orchestration layer; the LLM only phrases the single allowed question.
+    protected static final String CLARIFY_SYSTEM_PROMPT = """
+            You are Bob, a friendly voice support assistant for Eir (broadband, mobile, billing). \
+            The customer has raised a BILLING problem but has not given enough detail to help yet.
+
+            Your ONLY job this turn is to ask ONE short, natural, friendly question to understand \
+            the problem, in a voice-friendly style.
+
+            RULES:
+            - Ask exactly ONE question; keep it short.
+            - Do NOT answer, do NOT explain, do NOT list several options.
+            - NEVER state or guess an amount, price, date, balance, plan or promotion.
+            - Build on what the customer already said in the history; do not repeat a question \
+            already asked.
             """;
 
     private final ChatClient chatClient;
@@ -111,6 +131,20 @@ public abstract class AbstractChatClientAnswerAdapter
 
     private String invoke(String systemMessage, String question) {
         return chatClient.prompt().system(systemMessage).user(question).call().content();
+    }
+
+    // US-043 / TASK-BE-071: a bounded billing clarify turn. Reuses the sync call + timeout budget but
+    // with the ask-one-question CLARIFY prompt (no RAG context) and the per-language clarify directive
+    // appended recency-last. Returns the raw question text; the orchestration layer vets it (DEC-002)
+    // and enforces the trigger/bound.
+    @Override
+    public String generateClarifyingQuestion(String question, List<String> history, AnswerLanguage language) {
+        AnswerLanguage target = language == null ? AnswerLanguage.ENGLISH : language;
+        String systemMessage = CLARIFY_SYSTEM_PROMPT + historyBlock(history) + "\n\n" + target.clarifyDirective();
+        String text = telemetry.time(Slices.LLM_WORDING, providerName(),
+                () -> BoundedLlmCall.run(timeoutMs, () -> invoke(systemMessage, question == null ? "" : question)));
+        telemetry.recordAnswerLanguage(providerName(), target.code());
+        return text == null ? "" : text.strip();
     }
 
     // Streaming generation (TASK-BE-007): drives the provider's reactive stream as a blocking Java

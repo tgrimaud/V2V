@@ -1,16 +1,16 @@
 package com.voicesupport.conversation.infrastructure.config;
 
 import com.voicesupport.conversation.application.service.AnswerService;
+import com.voicesupport.conversation.application.service.BillingDiagnosticConversationService;
 import com.voicesupport.conversation.application.service.ConversationService;
 import com.voicesupport.conversation.application.service.RetrievalGroundingService;
 import com.voicesupport.conversation.application.service.StreamingConversationService;
 import com.voicesupport.conversation.application.service.WarmUpService;
 import com.voicesupport.conversation.domain.port.in.AnswerQuestionUseCase;
-import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
-import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.in.GroundQueryUseCase;
 import com.voicesupport.conversation.domain.port.in.WarmUpUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.port.out.ClarifyingQuestionGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
 import com.voicesupport.conversation.domain.model.valueobject.AnswerLanguage;
@@ -19,6 +19,7 @@ import com.voicesupport.conversation.domain.service.EvidenceContextTrimmer;
 import com.voicesupport.conversation.domain.service.InputGuardrail;
 import com.voicesupport.conversation.domain.service.LanguageDetector;
 import com.voicesupport.conversation.domain.service.OutputGuardrail;
+import com.voicesupport.conversation.domain.service.ProblemOpenerDetector;
 import com.voicesupport.conversation.domain.service.RetrievalConfidenceGuardrail;
 import com.voicesupport.shared.observability.BackendTelemetry;
 import org.springframework.beans.factory.annotation.Value;
@@ -109,25 +110,34 @@ public class ConversationConfig {
     // escalation hand-off wiring in EscalationHandoffConfig — both extracted to keep this class within
     // the 200-line budget.
 
+    // US-043 / TASK-BE-071 (increment C): the stateful converse / converse-stream entry points are the
+    // billing-diagnostic decorator, which wraps the real ConversationService / StreamingConversationService
+    // delegates and adds a BOUNDED, LLM-worded billing clarify dialogue. The delegates stay plain objects
+    // (not beans) so a SINGLE decorator bean serves both the sync ConverseUseCase and the streaming
+    // ConverseStreamUseCase (it implements both ports) — exposing it as one bean keeps exactly one
+    // candidate per interface for type-based injection. max-questions is configurable (OQ-043-a,
+    // default 2); <= 0 disables the diagnostic (every turn flows to the plain pipeline, keeping the
+    // TASK-BE-070 single canned clarify).
     @Bean
-    public ConverseUseCase converseUseCase(
+    public BillingDiagnosticConversationService billingDiagnosticConversationService(
             AnswerQuestionUseCase answerQuestionUseCase,
-            ConversationMemoryPort conversationMemoryPort,
-            @Value("${voice-support.conversation.retrieval.top-k:5}") int topK) {
-        return new ConversationService(answerQuestionUseCase, conversationMemoryPort, topK);
-    }
-
-    @Bean
-    public ConverseStreamUseCase converseStreamUseCase(
             GroundQueryUseCase groundQueryUseCase,
             StreamingAnswerGeneratorPort streamingAnswerGeneratorPort,
             OutputGuardrail outputGuardrail,
             ConversationMemoryPort conversationMemoryPort,
             LanguageDetector languageDetector,
+            ClarifyingQuestionGeneratorPort clarifyingQuestionGeneratorPort,
             BackendTelemetry backendTelemetry,
-            @Value("${voice-support.conversation.retrieval.top-k:5}") int topK) {
-        return new StreamingConversationService(groundQueryUseCase, streamingAnswerGeneratorPort,
-                outputGuardrail, conversationMemoryPort, languageDetector, backendTelemetry, topK);
+            @Value("${voice-support.conversation.retrieval.top-k:5}") int topK,
+            @Value("${voice-support.conversation.billing-clarify.max-questions:2}") int maxQuestions) {
+        ConversationService answerDelegate =
+                new ConversationService(answerQuestionUseCase, conversationMemoryPort, topK);
+        StreamingConversationService streamDelegate = new StreamingConversationService(
+                groundQueryUseCase, streamingAnswerGeneratorPort, outputGuardrail,
+                conversationMemoryPort, languageDetector, backendTelemetry, topK);
+        return new BillingDiagnosticConversationService(
+                answerDelegate, streamDelegate, conversationMemoryPort, new ProblemOpenerDetector(),
+                clarifyingQuestionGeneratorPort, languageDetector, outputGuardrail, backendTelemetry, maxQuestions);
     }
 
     // Connect-time warm-up of the embedding + LLM (TASK-BE-017 / ADR-0037): the voice runtime calls
