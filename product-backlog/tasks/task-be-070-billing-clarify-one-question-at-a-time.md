@@ -2,6 +2,7 @@
 
 **Type:** Technical task (backend — conversation guardrails)
 **Status:** 🟢 Open (2026-10-08) — not started. Increment **D** of US-043 (deliver first; low risk).
+**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-070-billing-clarify` to be forked **off the sprint branch** when implementation starts.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Delivers:** US-043 (first increment). Target increment C is **TASK-BE-071** (build on top of this).

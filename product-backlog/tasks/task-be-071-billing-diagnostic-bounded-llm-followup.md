@@ -2,6 +2,7 @@
 
 **Type:** Technical task (backend — conversation flow + guardrails + LLM prompt)
 **Status:** 🟢 Open (2026-10-08) — not started. Increment **C** (target) of US-043; builds on TASK-BE-070.
+**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-071-billing-diagnostic` to be forked **off the sprint branch** after TASK-BE-070 merges into it.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Delivers:** US-043 (target behavior). **Depends on TASK-BE-070** (increment D) being merged first.
