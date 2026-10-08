@@ -1,8 +1,13 @@
 # TASK-BE-070 — Billing clarify increment D: broaden the opener detector + one question at a time
 
 **Type:** Technical task (backend — conversation guardrails)
-**Status:** 🟢 Open (2026-10-08) — not started. Increment **D** of US-043 (deliver first; low risk).
-**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-070-billing-clarify` to be forked **off the sprint branch** when implementation starts.
+**Status:** 🟡 In review (2026-10-08) — implemented on `task/TASK-BE-070-billing-clarify`; backend
+suite green (746 tests, 0 failures). Awaiting user validation + QA. Increment **D** of US-043.
+**Adversarial review 93/100 (Pass, 2026-10-08)** — no blocking finding; residual (accepted): deliberate
+billing broadening clarifies weak-marker billing openers (the user-reported fix), amount anchor is narrow
+(digit/"euro(s)"), payment-mechanic + multi-turn depth deferred to TASK-BE-071. Review:
+`docs/qa/task-be-070-adversarial-review.md`.
+**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-070-billing-clarify` forked off the sprint branch.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Delivers:** US-043 (first increment). Target increment C is **TASK-BE-071** (build on top of this).

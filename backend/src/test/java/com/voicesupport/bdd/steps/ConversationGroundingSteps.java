@@ -120,15 +120,19 @@ public class ConversationGroundingSteps {
         assertRefused(GuardrailDecision.Verdict.CLARIFY);
     }
 
-    // BUG-025: the opener clarify must be the TARGETED billing wording (options offered), not the
-    // generic "could you rephrase" clarify — both FR and EN wordings name the bill and "incorrect".
-    @Then("the clarification offers specific billing options")
-    public void clarificationOffersBillingOptions() {
+    // BUG-025 + US-043 / TASK-BE-070 (increment D): the opener clarify must be the TARGETED billing
+    // wording (it names the bill), as a single voice-friendly question — NOT the generic "could you
+    // rephrase" clarify and no longer a four-option enumeration. DEC-002: it carries no amount.
+    @Then("the clarification asks a single billing question")
+    public void clarificationAsksSingleBillingQuestion() {
         assertEquals(GuardrailDecision.Verdict.CLARIFY, result.decision().verdict());
+        assertEquals("problem_opener_billing", result.decision().reason());
         String message = result.decision().fallbackMessage();
         boolean namesBill = message.contains("votre facture") || message.toLowerCase().contains("your bill");
-        assertTrue(namesBill && message.contains("incorrect"),
-                "expected targeted billing clarify wording, got: " + message);
+        assertTrue(namesBill, "expected targeted billing clarify wording, got: " + message);
+        assertEquals(1, message.chars().filter(c -> c == '?').count(),
+                "expected a single question, got: " + message);
+        assertFalse(message.matches(".*\\d.*"), "clarify must not state a figure (DEC-002): " + message);
     }
 
     @Then("no knowledge retrieval is performed")
