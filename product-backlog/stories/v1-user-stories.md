@@ -1162,3 +1162,142 @@ Scenario: No selection uses the deployment default
 - OQ-042-b: Should changing the language mid-session reset the conversation memory bucket
   (avoid mixed-language history), or keep it? Default assumption: keep, since answers are
   forced to the new language anyway.
+
+## US-043 - Ask Clarifying Questions Before Answering A Billing Problem
+
+**Parent:** EPIC-005 (Answer engine / knowledge base) / related EPIC-006 (Web voice journey)
+**Classification:** V1 core — conversation quality; runtime-affecting (answer flow + guardrails).
+**Status:** Draft (2026-10-08) — surfaced by user feedback: on billing problems the bot answers
+too directly and just enumerates billing information instead of first understanding the problem.
+**Priority:** Medium
+**Delivery plan:** two increments (user-chosen 2026-10-08) — **D first** (TASK-BE-070: broaden the
+existing deterministic clarify to one targeted question at a time), **then C** (TASK-BE-071: a
+deterministic "billing problem + under-specified" trigger with a bounded, natural LLM follow-up).
+**Related:** BUG-025 (`ProblemOpenerDetector` + targeted clarify), DEC-002 (never state an amount
+not backed by evidence), ADR-0034 (audience boundary), TASK-BE-018 (voice concision budget),
+ADR-0019 (escalation hand-off with collected context). Depends on the live BSS/invoice integration
+remaining **out of scope** (billing data is target-only on the pilot).
+
+### User Story
+
+As a customer who reports a billing problem by voice or text,
+I want the assistant to ask me a few short questions to understand what is actually wrong,
+So that I get a relevant answer (or a well-prepared transfer) instead of a generic enumeration
+of my bill.
+
+### Context
+
+Today the pipeline is single-turn: a billing turn goes straight to retrieval and the assistant
+answers directly, concisely, from the knowledge base. A deterministic clarify exists (BUG-025) but
+only fires for a fully vague opener ("I have a problem with my bill") and asks four options in one
+breath; any turn with a concrete marker ("why did my bill go up") bypasses it and is answered in
+one shot. The result reads as "too direct / it just lists the bill".
+
+**Scope note:** on the pilot there is **no live invoice/BSS data**, so clarification mainly improves
+(a) retrieval relevance (a more specific question finds better knowledge) and (b) the quality of the
+context handed to a human advisor on escalation. It does **not** unlock customer-specific amounts
+(DEC-002 still forbids stating an amount not present in the evidence).
+
+### In Scope
+
+- When a billing problem is **under-specified**, the assistant asks a **short clarifying question**
+  (one at a time, voice-friendly) before answering.
+- A small, bounded number of clarifying questions, after which the assistant either answers from the
+  knowledge base or offers a human advisor.
+- The clarifying exchange works on both the web voice path and the text path, in French and English.
+- The collected problem details improve the eventual answer and the escalation context.
+
+### Out Of Scope
+
+- Any live invoice / BSS lookup or stating customer-specific amounts (target-only; DEC-002 unchanged).
+- A full intent/domain classifier for every topic (billing is the V1 focus; other topics keep today's
+  behavior beyond the existing generic opener clarify).
+- Changing which documents are retrieved (retrieval scope unchanged).
+
+### Business Rules
+
+- **BR1** — A billing turn that names a problem but lacks the detail needed to answer well triggers a
+  clarifying question rather than an immediate enumeration.
+- **BR2** — The assistant asks **one** short question per turn (no multi-question lists on the voice
+  channel) and never asks more than the configured maximum (bounded dialogue).
+- **BR3** — After the clarifying budget is reached, the assistant answers from the available evidence
+  or offers a human advisor; it never loops indefinitely.
+- **BR4** — A clarifying question never states or implies an amount, price or charge not present in the
+  evidence (DEC-002 preserved).
+- **BR5** — An explicit request for a human, an off-topic or unsafe turn, or a specific answerable
+  question are **not** intercepted by the clarifying flow (existing guardrail ladder wins).
+- **BR6** — The clarifying wording follows the session language (FR/EN), consistent with the rest of
+  the turn.
+
+### Degraded / Error States
+
+| Trigger | Expected product behavior |
+|---------|---------------------------|
+| Customer gives no usable detail after the max questions | Answer from the knowledge base if possible, otherwise offer a human advisor with the collected context |
+| Customer asks for a human during the clarifying flow | Stop clarifying and route to the escalation path immediately |
+| Knowledge base has nothing relevant even after clarifying | Offer a human advisor (no fabricated billing content) |
+
+### Acceptance Criteria
+
+```gherkin
+Feature: Clarifying questions for billing problems
+
+  Scenario: An under-specified billing problem is clarified before answering
+    Given the customer says their bill is a problem without saying what is wrong
+    When the assistant responds
+    Then it asks one short question to understand the problem
+    And it does not enumerate the bill yet
+    # BR: BR1, BR2, BR4
+
+  Scenario: The clarifying dialogue is bounded
+    Given the customer has already been asked the maximum number of clarifying questions
+    When the customer still has not given usable detail
+    Then the assistant answers from available knowledge or offers a human advisor
+    And it does not ask another clarifying question
+    # BR: BR3
+
+  Scenario: A specific billing question is answered directly
+    Given the customer asks a concrete, answerable billing question
+    When the assistant responds
+    Then it answers directly without an unnecessary clarifying question
+    # BR: BR5
+
+  Scenario: A request for a human is not intercepted
+    Given the customer asks to speak to an advisor during a billing problem
+    When the assistant responds
+    Then it routes to a human advisor instead of asking a clarifying question
+    # BR: BR5
+
+  Scenario: Clarifying wording follows the session language
+    Given the session language is French
+    When the assistant asks a clarifying question
+    Then the question is in French
+    # BR: BR6
+
+  Scenario: No invented amounts in a clarifying question
+    Given the assistant asks a clarifying question about the bill
+    Then the question contains no amount or price not present in the evidence
+    # BR: BR4
+```
+
+### Analytics / Tracking Requirements
+
+| Event / metric | Trigger | Purpose |
+|----------------|---------|---------|
+| Clarifying question asked | The assistant asks a billing clarifying question | Measure how often the flow triggers |
+| Clarifying questions per conversation | End of a billing conversation | Confirm the dialogue stays bounded |
+| Resolved-after-clarify vs escalated | A billing problem ends | Measure whether clarifying improves resolution |
+
+### Non-Functional Expectations
+
+- The clarifying turn must stay voice-friendly (short) and not degrade the voice latency SLO.
+- The flow must be observable per turn (correlation id; clarify count) so QA can verify the bound.
+
+### Open Questions
+
+- OQ-043-a: What is the right maximum number of clarifying questions on the voice channel (1, 2, or 3)
+  before answering/escalating? Decision owner: Product. Default assumption pending: 2.
+- OQ-043-b: Should the specific billing "sub-types" offered (increase / unrecognised charge / wrong
+  amount / payment issue) be configurable per deployment? Decision owner: Product.
+- OQ-043-c: Does the target C increment change the conversation contract enough to need an ADR
+  (multi-turn diagnostic state)? Decision owner: Architecture.
