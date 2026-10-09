@@ -19,6 +19,7 @@ import static io.cucumber.junit.platform.engine.Constants.GLUE_PROPERTY_NAME;
 @SelectClasspathResource("features/answer-concision.feature")
 @SelectClasspathResource("features/answer-language.feature")
 @SelectClasspathResource("features/answer-wording.feature")
+@SelectClasspathResource("features/billing-clarify.feature")
 @SelectClasspathResource("features/conversation-grounding.feature")
 @SelectClasspathResource("features/conversation-memory.feature")
 @SelectClasspathResource("features/csv-knowledge-ingestion.feature")
