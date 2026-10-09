@@ -56,20 +56,19 @@ final class GuardrailMessages {
                   + "Pouvez-vous la reformuler ou me donner un peu plus de détails ?";
     }
 
-    // BUG-025: a generic problem opener ("j'ai un problème avec ma facture", "I have a problem with
-    // my bill") carries a topic but no concrete question, so it retrieves a middling match and the
-    // post-generation grounding gate deflects it to a hand-off. Rather than transfer, ask a TARGETED
-    // clarify that offers concrete options so the customer's next turn is specific enough to ground.
+    // BUG-025 + US-043 / TASK-BE-070 (increment D): a generic problem opener ("j'ai un problème avec
+    // ma facture", "I have a problem with my bill") carries a topic but no concrete question, so it
+    // retrieves a middling match the grounding gate deflects to a hand-off. Rather than transfer or
+    // enumerate the whole bill, ask ONE short, voice-friendly clarifying question so the customer's
+    // next turn is specific enough to ground. The question is canned and never states an amount or
+    // price, so DEC-002 (no ungrounded figure) holds by construction.
     static String problemOpenerClarify(AnswerLanguage language, boolean billing) {
         if (billing) {
             return english(language)
-                    ? "I can help you with your bill. Could you tell me what the issue is: an amount "
-                      + "that looks incorrect, an increase compared to last month, a charge you don't "
-                      + "recognise, or a specific line on your invoice?"
-                    : "Je peux vous aider au sujet de votre facture. Pouvez-vous préciser ce qui pose "
-                      + "problème : un montant qui vous semble incorrect, une augmentation par rapport "
-                      + "au mois dernier, un prélèvement que vous ne reconnaissez pas, ou une ligne "
-                      + "précise de votre facture ?";
+                    ? "I can help you with your bill. Could you tell me in a few words what the "
+                      + "problem is?"
+                    : "Je peux vous aider au sujet de votre facture. Pouvez-vous me dire en quelques "
+                      + "mots ce qui pose problème ?";
         }
         return english(language)
                 ? "I can help. Could you tell me a bit more about what you need: is it about your bill, "

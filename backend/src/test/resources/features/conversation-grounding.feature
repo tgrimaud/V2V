@@ -43,16 +43,22 @@ Feature: Conversation grounding with guardrails
     Then the assistant clarifies the request
     And knowledge retrieval was attempted
 
-  Scenario: A generic billing opener is redirected to a targeted billing clarify before retrieval (BUG-025)
+  Scenario: A generic billing opener is redirected to a single billing clarify before retrieval (BUG-025)
     When the customer says "J'ai un problème avec ma facture"
     Then the assistant clarifies the request
-    And the clarification offers specific billing options
+    And the clarification asks a single billing question
     And no knowledge retrieval is performed
 
-  Scenario: A generic English billing opener is redirected to a targeted billing clarify (BUG-025)
+  Scenario: A generic English billing opener is redirected to a single billing clarify (BUG-025)
     When the customer says "I have a problem with my bill"
     Then the assistant clarifies the request
-    And the clarification offers specific billing options
+    And the clarification asks a single billing question
+    And no knowledge retrieval is performed
+
+  Scenario: An under-specified billing opener with a weak marker is clarified, not answered directly (US-043)
+    When the customer asks "Pourquoi ai-je un problème de facturation ?"
+    Then the assistant clarifies the request
+    And the clarification asks a single billing question
     And no knowledge retrieval is performed
 
   Scenario: A specific billing problem still reaches retrieval and is answered (BUG-025)

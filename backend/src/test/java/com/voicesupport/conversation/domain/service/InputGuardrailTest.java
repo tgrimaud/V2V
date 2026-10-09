@@ -327,17 +327,58 @@ class InputGuardrailTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            // A problem word WITH a concrete question marker (interrogative or number) is specific
-            // enough to retrieve — it must reach retrieval, not the opener clarify short-circuit.
-            "Pourquoi ai-je un problème de facturation ?",
+            // Still answerable -> reaches retrieval: a BILLING opener with a concrete AMOUNT anchor,
+            // and a non-billing opener with a marker (the GENERAL "any marker bypasses" rule is kept).
             "J'ai un problème : ma facture a augmenté de 10 euros",
-            "How do I fix the problem with my bill?"})
-    @DisplayName("BUG-025: a specific problem question still reaches retrieval (not clarified)")
+            "J'ai un problème, pourquoi donc ?"})
+    @DisplayName("US-043/BUG-025: an answerable problem question still reaches retrieval (not clarified)")
     void does_not_clarify_specific_problem_question(String question) {
-        GuardrailDecision decision = guardrail.check(question, true,
-                question.startsWith("How") ? AnswerLanguage.ENGLISH : AnswerLanguage.FRENCH);
+        GuardrailDecision decision = guardrail.check(question, true, AnswerLanguage.FRENCH);
 
         assertEquals(GuardrailDecision.Verdict.PASS, decision.verdict(), "should pass: " + question);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // US-043 / TASK-BE-070 (increment D): an under-specified BILLING opener with a weak
+            // interrogative marker (and no amount anchor) asks the ONE-question billing clarify
+            // instead of answering too directly; the reason is topic-tagged for US-043 analytics.
+            "Pourquoi ai-je un problème de facturation ?",
+            "J'ai un problème avec ma facture, pourquoi ?"})
+    @DisplayName("US-043: an under-specified FR billing opener with a weak marker asks the billing clarify")
+    void clarifies_underspecified_fr_billing_opener(String opener) {
+        GuardrailDecision decision = guardrail.check(opener, true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict(), "should clarify: " + opener);
+        assertEquals("problem_opener_billing", decision.reason());
+        assertTrue(decision.fallbackMessage().startsWith("Je peux vous aider au sujet de votre facture"),
+                "expected billing clarify wording, got: " + decision.fallbackMessage());
+    }
+
+    @Test
+    @DisplayName("US-043: an under-specified EN billing opener with a weak marker asks the billing clarify")
+    void clarifies_underspecified_en_billing_opener() {
+        GuardrailDecision decision = guardrail.check("How do I fix the problem with my bill?",
+                true, AnswerLanguage.ENGLISH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertEquals("problem_opener_billing", decision.reason());
+        assertTrue(decision.fallbackMessage().startsWith("I can help you with your bill"),
+                "expected billing clarify wording, got: " + decision.fallbackMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"J'ai un problème avec ma facture", "ma facture", "my bill",
+            "Pourquoi ai-je un problème de facturation ?"})
+    @DisplayName("US-043 (DEC-002): the billing clarify is a single question and never states an amount")
+    void billing_clarify_is_one_question_without_amount(String opener) {
+        AnswerLanguage language = opener.equals("my bill") ? AnswerLanguage.ENGLISH : AnswerLanguage.FRENCH;
+        String message = guardrail.check(opener, true, language).fallbackMessage();
+
+        // DEC-002: a canned clarify must carry no digit (no invented amount/price).
+        assertFalse(message.matches(".*\\d.*"), "clarify must not state a figure: " + message);
+        // One voice-friendly question: a single question mark, no enumerated option list.
+        assertEquals(1, message.chars().filter(c -> c == '?').count(), "expected one question: " + message);
     }
 
     @Test
@@ -350,12 +391,21 @@ class InputGuardrailTest {
     }
 
     @Test
-    @DisplayName("BUG-025: the opener clarify carries the problem_opener telemetry reason")
+    @DisplayName("BUG-025/US-043: a billing opener clarify carries the problem_opener_billing reason")
     void opener_clarify_carries_reason() {
         GuardrailDecision decision = guardrail.check("J'ai un problème avec ma facture", true, AnswerLanguage.FRENCH);
 
         assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
-        assertEquals("problem_opener", decision.reason());
+        assertEquals("problem_opener_billing", decision.reason());
+    }
+
+    @Test
+    @DisplayName("US-043: a general opener clarify carries the problem_opener_general reason")
+    void general_opener_clarify_carries_reason() {
+        GuardrailDecision decision = guardrail.check("J'ai un problème", true, AnswerLanguage.FRENCH);
+
+        assertEquals(GuardrailDecision.Verdict.CLARIFY, decision.verdict());
+        assertEquals("problem_opener_general", decision.reason());
     }
 
     @Test

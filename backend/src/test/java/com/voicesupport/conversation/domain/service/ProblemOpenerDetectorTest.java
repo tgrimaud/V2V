@@ -37,15 +37,30 @@ class ProblemOpenerDetectorTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            // A concrete question marker (interrogative or number) makes the turn specific enough to
-            // retrieve — the detector must NOT flag it as a generic opener.
-            "Pourquoi ai-je un problème de facturation ?",
+            // Still bypassed to retrieval: a BILLING opener carrying a concrete AMOUNT anchor is
+            // answerable (number or spelled-out "euro(s)"), and a non-billing opener keeps the
+            // GENERAL "any question marker bypasses" rule unchanged (US-043 / TASK-BE-070 D).
             "J'ai un problème : ma facture a augmenté de 10 euros",
-            "How do I fix the problem with my bill?",
+            "J'ai un souci, ma facture a monté de cinq euros",
+            "J'ai un problème, pourquoi donc ?",
             "Combien coûte le forfait fibre ?"})
-    @DisplayName("does not flag a specific question (question marker / number present)")
+    @DisplayName("does not flag an answerable question (billing amount anchor, or non-billing marker)")
     void ignores_specific_question(String question) {
         assertEquals(Optional.empty(), detector.detect(question), "question: " + question);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            // US-043 / TASK-BE-070 (increment D): an under-specified BILLING opener now reaches the
+            // clarify even with a WEAK interrogative marker and no amount anchor, instead of being
+            // answered too directly. A mutant that keeps the old "any marker bypasses" billing rule
+            // (or drops the CONCRETE_BILLING_ANCHOR guard) is caught here and by ignores_specific_question.
+            "Pourquoi ai-je un problème de facturation ?",
+            "How do I fix the problem with my bill?",
+            "J'ai un problème avec ma facture, pourquoi ?"})
+    @DisplayName("US-043: flags an under-specified billing opener with a weak marker as BILLING")
+    void flags_underspecified_billing_opener_with_weak_marker(String opener) {
+        assertEquals(Optional.of(Topic.BILLING), detector.detect(opener), "opener: " + opener);
     }
 
     @ParameterizedTest

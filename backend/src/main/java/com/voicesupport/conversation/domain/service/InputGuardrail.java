@@ -160,11 +160,16 @@ public class InputGuardrail {
     // BUG-025: a safe, generic problem opener with no concrete question is redirected to a targeted
     // clarify rather than retrieving a middling match the grounding gate deflects to a hand-off.
     // Runs after the unsafe/off-topic refusals so it can never soften a block.
+    // US-043 / TASK-BE-070: the clarify reason carries the opener topic (problem_opener_billing vs
+    // problem_opener_general) so QA/Ops can count billing clarifies separately (US-043 analytics).
     private Optional<GuardrailDecision> problemOpenerDecision(String trimmed, AnswerLanguage language) {
         return problemOpenerDetector.detect(trimmed)
-                .map(topic -> GuardrailDecision.clarify(
-                        GuardrailMessages.problemOpenerClarify(language, topic == ProblemOpenerDetector.Topic.BILLING),
-                        "problem_opener"));
+                .map(topic -> {
+                    boolean billing = topic == ProblemOpenerDetector.Topic.BILLING;
+                    return GuardrailDecision.clarify(
+                            GuardrailMessages.problemOpenerClarify(language, billing),
+                            billing ? "problem_opener_billing" : "problem_opener_general");
+                });
     }
 
     // A turn is vague when the whole utterance is a known continuer phrase, or when it is a short
