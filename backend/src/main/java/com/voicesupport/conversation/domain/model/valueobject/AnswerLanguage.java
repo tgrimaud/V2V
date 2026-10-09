@@ -78,6 +78,27 @@ public enum AnswerLanguage {
         return handoffMarkers;
     }
 
+    // US-043 / TASK-BE-071: per-turn directive for a BOUNDED billing clarify turn (increment C). The
+    // LLM must ask ONE short, natural clarifying question in the answer language and state no figure
+    // (DEC-002). Appended recency-last like llmDirective() so it overrides the base framing.
+    public String clarifyDirective() {
+        return this == FRENCH
+                ? "LANGUE : pose UNE SEULE question de clarification, courte et naturelle, UNIQUEMENT "
+                  + "en français. N'indique aucun montant, prix ni date ; ne donne pas de réponse, "
+                  + "pose seulement la question."
+                : "LANGUAGE: ask EXACTLY ONE short, natural clarifying question, ONLY in English. Do "
+                  + "not state any amount, price or date; do not answer, only ask the question.";
+    }
+
+    // US-043 / TASK-BE-071: the exact advisor hand-off sentence used when the billing clarify budget
+    // is exhausted (ADR-0019). It reproduces the hand-off wording embedded in llmDirective() verbatim
+    // so it carries the handoffMarkers() the OutputGuardrail / voice runtime recognise as an escalation.
+    public String handoffSentence() {
+        return this == FRENCH
+                ? "Je n'ai pas cette information, je vous transfère à un conseiller."
+                : "I don't have this information, I'll transfer you to an advisor.";
+    }
+
     // Config parsing (TASK-BE-015): maps a language code (e.g. "en"/"fr") to the enum, defaulting
     // to English (the Eir pilot default) for any unknown/blank value.
     public static AnswerLanguage fromCode(String code) {

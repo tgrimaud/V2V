@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.voicesupport.conversation.domain.port.in.ConverseStreamUseCase;
 import com.voicesupport.conversation.domain.port.in.ConverseUseCase;
 import com.voicesupport.conversation.domain.port.out.AnswerGeneratorPort;
+import com.voicesupport.conversation.domain.port.out.ClarifyingQuestionGeneratorPort;
 import com.voicesupport.conversation.domain.port.out.ConversationMemoryPort;
 import com.voicesupport.conversation.domain.port.out.DeliveryDeduplicationPort;
 import com.voicesupport.conversation.domain.port.out.KnowledgeRetrievalPort;
@@ -88,6 +89,11 @@ class ConversationMemoryConfigWiringTest {
         @Bean
         StreamingAnswerGeneratorPort streamingAnswerGeneratorPort() {
             return new FakeStreamingAnswerGeneratorPort();
+        }
+
+        @Bean
+        ClarifyingQuestionGeneratorPort clarifyingQuestionGeneratorPort() {
+            return (question, history, language) -> "Could you tell me more?";
         }
     }
 }

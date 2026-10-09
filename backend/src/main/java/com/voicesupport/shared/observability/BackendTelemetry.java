@@ -29,6 +29,7 @@ public class BackendTelemetry {
     private static final String ANSWER_CHARS = "voice_support.answer_chars";
     private static final String ANSWER_LANGUAGE = "voice_support.answer_language";
     private static final String GUARDRAIL_BLOCK = "voice_support.guardrail_block";
+    private static final String BILLING_CLARIFY = "voice_support.billing_clarify";
     private static final String CHANNEL_DELIVERY = "voice_support.channel_delivery";
     private static final String ESCALATION_HANDOFF = "voice_support.escalation_handoff";
     private static final String OUTCOME_SUCCESS = "success";
@@ -136,6 +137,20 @@ public class BackendTelemetry {
         meters.count(GUARDRAIL_BLOCK, Tags.of("verdict", safeVerdict, "reason", safeReason, "channel", channel));
         log.info("[GUARDRAIL] verdict={} reason={} channel={} correlation_id={}",
                 safeVerdict, safeReason, channel, CorrelationId.current());
+    }
+
+    // US-043 / TASK-BE-071: bounded billing clarify observability. Counts clarify-dialogue events
+    // (voice_support.billing_clarify, tagged event asked|cap_escalated + language + channel) plus a
+    // [BILLING-CLARIFY] structured log carrying the current clarify count and the correlation id, so
+    // QA/Ops can measure how often the bot clarifies, the per-conversation depth, and the cap-hit rate
+    // (US-043 analytics). Records technical dimensions only — never the transcript or the question text.
+    public void recordBillingClarify(String event, String language, int count) {
+        String channel = normalizeChannel(CorrelationId.currentChannel());
+        String safeEvent = event == null || event.isBlank() ? "n/a" : event;
+        String safeLanguage = language == null || language.isBlank() ? "n/a" : language;
+        meters.count(BILLING_CLARIFY, Tags.of("event", safeEvent, "language", safeLanguage, "channel", channel));
+        log.info("[BILLING-CLARIFY] event={} language={} count={} channel={} correlation_id={}",
+                safeEvent, safeLanguage, count, channel, CorrelationId.current());
     }
 
     // Normalized channel envelope observability (TASK-BE-037, ADR-0009): counts inbound channel

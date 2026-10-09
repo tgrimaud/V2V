@@ -1,8 +1,33 @@
 # TASK-BE-071 — Billing clarify increment C: deterministic trigger + bounded LLM follow-up
 
 **Type:** Technical task (backend — conversation flow + guardrails + LLM prompt)
-**Status:** 🟢 Open (2026-10-08) — not started. Increment **C** (target) of US-043; builds on TASK-BE-070.
-**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-071-billing-diagnostic` to be forked **off the sprint branch** after TASK-BE-070 merges into it.
+**Status:** 🔵 Implemented, pending QA + user validation (2026-10-08). Increment **C** (target) of US-043; builds on TASK-BE-070.
+**Adversarial review 93/100 (Pass, 2026-10-08)** — no blocking finding; residual (accepted): memory-derived streak resets on an interleaved non-opener turn (by design); pilot clarify improves retrieval/escalation context only, not amount accuracy (no live BSS); per-sub-type clarify deferred (OQ-043-b). Review: [`docs/qa/task-be-071-adversarial-review.md`](../../docs/qa/task-be-071-adversarial-review.md). ADR: [ADR-0056](../../docs/architecture/adrs/ADR-0056-bounded-billing-clarify-dialogue.md).
+**Sprint:** Sprint 16 (`feat/sprint-16-billing-clarify`). Ticket branch `task/TASK-BE-071-billing-diagnostic` forked **off the TASK-BE-070 branch** (C depends on D's un-merged code); git reconciles at the sprint merge.
+
+## Implementation (2026-10-08)
+
+Delivered as a `BillingDiagnosticConversationService` **decorator** implementing both
+`ConverseUseCase` + `ConverseStreamUseCase`, wrapping the real `ConversationService` /
+`StreamingConversationService` delegates (the only bean per converse port, wired in
+`ConversationConfig`). Deviations from the pre-implementation plan, all improving on it:
+- **Clarify count is a streak derived from `ConversationMemoryPort`** (trailing turns whose stored
+  customer text is still a billing opener) — no new counter state / no memory-contract change.
+- **No retrieval deflection by construction:** the clarify is produced *before* delegating, so the
+  confidence/grounding gate never runs on a clarify turn (stronger than "mirror the opener clarify").
+- **Cap → escalation:** at the cap the turn returns `AnswerLanguage.handoffSentence()` (LOW_CONFIDENCE
+  ⇒ `EscalationReason`), carrying the collected context (ADR-0019).
+- LLM wording via a new out-port `ClarifyingQuestionGeneratorPort` on `AbstractChatClientAnswerAdapter`
+  (`CLARIFY_SYSTEM_PROMPT`, no RAG context, `AnswerLanguage.clarifyDirective()` appended recency-last),
+  **DEC-002-vetted** by the existing `OutputGuardrail`.
+- Configurable `voice-support.conversation.billing-clarify.max-questions` (env
+  `CONVERSATION_BILLING_CLARIFY_MAX_QUESTIONS`, default **2**; `<= 0` disables ⇒ TASK-BE-070 behaviour).
+- Telemetry `voice_support.billing_clarify` (`asked`/`cap_escalated`, tags language+channel); clarify
+  LLM call timed on `llm_wording`.
+
+Tests: `BillingDiagnosticConversationServiceTest` (12), `ClarifyingQuestionAdapterTest` (4),
+`AnswerLanguageTest` (+2), updated `ConversationMemoryConfigWiringTest`. Full backend suite **751 green**
+(incl. ArchUnit). Pure domain Spring-free; manual fakes, GIVEN/WHEN/THEN, no Mockito.
 **Priority:** Medium
 **Epic:** EPIC-005 (Answer engine / knowledge base)
 **Delivers:** US-043 (target behavior). **Depends on TASK-BE-070** (increment D) being merged first.

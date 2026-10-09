@@ -245,6 +245,14 @@ voice-support:
     # call — so "vas-y" no longer retrieves a weak internal match. Comparison is lowercased and
     # accent-folded. Extend per deployment/language without a rebuild.
     vague-markers: ${CONVERSATION_VAGUE_MARKERS:vas-y,vas y,allez-y,allez y,continue,continuez,poursuis,poursuivez,ensuite,la suite,go,go on,go ahead,ok,okay,d'accord,dac,dacc,alors,donc,bah,ben,euh,hmm,voila,voilà,et}
+    # US-043 / TASK-BE-071 (increment C): bounded billing clarify dialogue. When a billing problem is
+    # under-specified the assistant asks ONE short, LLM-worded clarifying question at a time (never an
+    # amount — DEC-002), up to max-questions per episode, then answers from the KB or hands off to an
+    # advisor (ADR-0019). The trigger and the bound are deterministic; the clarify streak is derived
+    # from conversation memory (no extra state). Default 2 (OQ-043-a). Set to 0 to disable the
+    # diagnostic (keeps the TASK-BE-070 single canned clarify). Tune per deployment without a rebuild.
+    billing-clarify:
+      max-questions: ${CONVERSATION_BILLING_CLARIFY_MAX_QUESTIONS:2}
     # Answer-language default (TASK-BE-015, ADR-0031). The assistant answers in the language of the
     # customer's question (FR/EN); this default is used only when a turn is too ambiguous to detect
     # and no session language is established yet. English for the Eir pilot; set to fr for a French
